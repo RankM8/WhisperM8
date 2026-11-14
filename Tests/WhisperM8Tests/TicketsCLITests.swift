@@ -35,6 +35,8 @@ final class TicketsCLITests: XCTestCase {
         var directory = "/Users/g/repos/whisperm8"
         var stdin = ""
         var files: [String: String] = [:]
+        var data: [String: Data] = [:]
+        var existing: Set<String> = []
     }
 
     private func makeWorld() -> World {
@@ -77,6 +79,8 @@ final class TicketsCLITests: XCTestCase {
             currentDirectory: { world.directory },
             readStdin: { world.stdin },
             readFile: { world.files[$0] },
+            readData: { path, limit in world.data[path].flatMap { $0.count <= limit ? $0 : nil } },
+            fileExists: { world.existing.contains($0) },
             now: { Date(timeIntervalSince1970: 1_794_000_000) }
         )
     }
@@ -132,8 +136,9 @@ final class TicketsCLITests: XCTestCase {
     func testParseWriteCommands() throws {
         XCTAssertEqual(try TicketsCLIArguments.parse(["link", "WM8-12", "--no-status", "--chat", "840b"]),
                        .link(key: "WM8-12", chat: "840b", keepStatus: true))
-        XCTAssertEqual(try TicketsCLIArguments.parse(["done", "WM8-12", "--status", "Merge-bereit", "--note", "Branch steht."]),
-                       .done(key: "WM8-12", chat: nil, status: "Merge-bereit", note: .literal("Branch steht."), force: false))
+        XCTAssertEqual(try TicketsCLIArguments.parse(["done", "WM8-12", "--no-summary", "--status", "Merge-bereit", "--note", "Branch steht."]),
+                       .done(key: "WM8-12", chat: nil, status: "Merge-bereit", note: .literal("Branch steht."), force: false,
+                             summary: { var summary = TicketsDoneSummary(); summary.skip = true; return summary }()))
         XCTAssertEqual(try TicketsCLIArguments.parse(["comment", "WM8-12", "-"]), .comment(key: "WM8-12", text: .stdin), "- heißt stdin, ist keine Option")
         XCTAssertEqual(try TicketsCLIArguments.parse(["note", "WM8-12", "@stand.md"]), .note(key: "WM8-12", text: .file("stand.md")))
         XCTAssertEqual(try TicketsCLIArguments.parse(["comment", "WM8-12", "--", "@Giuliano bitte prüfen"]),
@@ -232,7 +237,7 @@ final class TicketsCLITests: XCTestCase {
             self.context(TicketFixtures.ticket(12, status: "In Progress", description: "**Stand 13.11.2026:** in Arbeit.\n\n## Ziel\nText",
                                                links: [TicketFixtures.link(self.jon)]))
         }
-        let output = try await run(["done", "WM8-12", "--status", "merge-bereit", "--note", "Branch steht."], world)
+        let output = try await run(["done", "WM8-12", "--no-summary", "--status", "merge-bereit", "--note", "Branch steht."], world)
         XCTAssertEqual(output.exitCode, 0)
         XCTAssertEqual(writes(world).count, 3)
         XCTAssertEqual(writes(world)[0], "saveLink id-12 6 Jon beendet")
@@ -245,7 +250,7 @@ final class TicketsCLITests: XCTestCase {
     func testDoneWithUnknownStatusChangesNothing() async throws {
         let world = makeWorld()
         world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12, status: "In Progress", links: [TicketFixtures.link(self.jon)])) }
-        let output = try await run(["done", "WM8-12", "--status", "Fertig"], world)
+        let output = try await run(["done", "WM8-12", "--no-summary", "--status", "Fertig"], world)
         XCTAssertEqual(output.exitCode, TicketsCLIExit.notFound)
         XCTAssertTrue(output.stderr.contains("Möglich: Backlog, Todo, In Progress, Merge-bereit, Done, Canceled"))
         XCTAssertTrue(writes(world).isEmpty, "erst prüfen, dann schreiben")
@@ -255,7 +260,7 @@ final class TicketsCLITests: XCTestCase {
         let world = makeWorld()
         world.caller = jarvis
         world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12, status: "Merge-bereit")) }
-        let output = try await run(["done", "WM8-12", "--status", "Done", "--chat", "7493"], world)
+        let output = try await run(["done", "WM8-12", "--no-summary", "--status", "Done", "--chat", "7493"], world)
         XCTAssertEqual(writes(world), ["setStatus id-12 s4"], "keine Verknüpfung anlegen, nur um sie zu beenden")
         XCTAssertTrue(output.stdout.contains("war nicht (mehr) verknüpft"), "nichts behaupten, was nicht passiert ist")
     }
@@ -265,7 +270,7 @@ final class TicketsCLITests: XCTestCase {
         world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12, status: "In Progress", links: [TicketFixtures.link(self.jon)])) }
 
         // Arbeitender Chat: Absage, bevor irgendetwas geschrieben ist.
-        let viaDone = try await run(["done", "WM8-12", "--status", "Done"], world)
+        let viaDone = try await run(["done", "WM8-12", "--no-summary", "--status", "Done"], world)
         XCTAssertEqual(viaDone.exitCode, TicketsCLIExit.conflict)
         XCTAssertTrue(viaDone.stderr.contains("setzt der Supervisor"), viaDone.stderr)
         let viaStatus = try await run(["status", "WM8-12", "Done"], world)
@@ -273,7 +278,7 @@ final class TicketsCLITests: XCTestCase {
         XCTAssertTrue(writes(world).isEmpty)
 
         // Abgeben darf er.
-        _ = try await run(["done", "WM8-12", "--status", "Merge-bereit"], world)
+        _ = try await run(["done", "WM8-12", "--no-summary", "--status", "Merge-bereit"], world)
         XCTAssertEqual(writes(world), ["saveLink id-12 6 Jon beendet", "setStatus id-12 s3"])
 
         // Der Supervisor, ein Mensch im Terminal und ein ausdrückliches --force dürfen.
@@ -303,16 +308,16 @@ final class TicketsCLITests: XCTestCase {
     func testSecondDoneKeepsTheEndTime() async throws {
         let world = makeWorld()
         world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12, status: "Merge-bereit", links: [TicketFixtures.link(self.jon, active: false)])) }
-        _ = try await run(["done", "WM8-12"], world)
+        _ = try await run(["done", "WM8-12", "--no-summary"], world)
         XCTAssertTrue(writes(world).isEmpty, "schon beendet: die Zeit der Verknüpfung bleibt")
     }
 
     func testDoneWithUnreadableNoteChangesNothing() async throws {
         let world = makeWorld()
         world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12, status: "In Progress", links: [TicketFixtures.link(self.jon)])) }
-        let missing = try await run(["done", "WM8-12", "--note", "@fehlt.md", "--status", "Merge-bereit"], world)
+        let missing = try await run(["done", "WM8-12", "--no-summary", "--note", "@fehlt.md", "--status", "Merge-bereit"], world)
         XCTAssertEqual(missing.exitCode, TicketsCLIExit.usage)
-        let blank = try await run(["done", "WM8-12", "--note", "   "], world)
+        let blank = try await run(["done", "WM8-12", "--no-summary", "--note", "   "], world)
         XCTAssertEqual(blank.exitCode, TicketsCLIExit.usage)
         XCTAssertTrue(writes(world).isEmpty, "die Verknüpfung darf nicht schon beendet sein, wenn der Text fehlt")
     }
@@ -380,6 +385,197 @@ final class TicketsCLITests: XCTestCase {
         }
         _ = try await run(["unlink", "WM8-10"], world)
         XCTAssertEqual(writes(world), ["removeLink att-jon"])
+    }
+
+    // MARK: Abschluss, Entscheidung, Kästchen
+
+    func testDoneAsksForASummary() async throws {
+        let world = makeWorld()
+        world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12, status: "In Progress", links: [TicketFixtures.link(self.jon)])) }
+        let missing = try await run(["done", "WM8-12", "--status", "Merge-bereit"], world)
+        XCTAssertEqual(missing.exitCode, TicketsCLIExit.usage)
+        XCTAssertTrue(missing.stderr.contains("--built") && missing.stderr.contains("--no-summary"), missing.stderr)
+        XCTAssertTrue(writes(world).isEmpty, "ohne Zusammenfassung wird nichts umgestellt")
+        XCTAssertThrowsError(try TicketsCLIArguments.parse(["done", "WM8-12", "--no-summary", "--built", "x"]))
+    }
+
+    func testDoneWritesTheCompletionBeforeAnythingElse() async throws {
+        let world = makeWorld()
+        world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12, status: "In Progress", links: [TicketFixtures.link(self.jon)])) }
+        let output = try await run(["done", "WM8-12", "--status", "Merge-bereit", "--built", "Schalter und Einstellungen",
+                                    "--commit", "dfda8d7c", "--not", "die Ansicht", "--test", "Schalter an", "--test", "Key eintragen"], world)
+        XCTAssertEqual(output.exitCode, 0, output.stderr)
+        let calls = writes(world)
+        XCTAssertEqual(calls.count, 3)
+        XCTAssertTrue(calls[0].hasPrefix("comment id-12 **Abschluss · "), calls[0])
+        XCTAssertTrue(calls[0].contains("· 6 Jon**") && calls[0].contains("**Gebaut:** Schalter und Einstellungen"), calls[0])
+        XCTAssertTrue(calls[0].contains("**Commit:** dfda8d7c") && calls[0].contains("**Nicht Teil davon:** die Ansicht"))
+        XCTAssertTrue(calls[0].contains("- [ ] Schalter an\n- [ ] Key eintragen"))
+        XCTAssertEqual(Array(calls[1...]), ["saveLink id-12 6 Jon beendet", "setStatus id-12 s3"])
+        XCTAssertTrue(output.stdout.contains("Abschluss steht am Ticket"))
+    }
+
+    func testDoneUploadsAnImageOnlyIfItIsOne() async throws {
+        let world = makeWorld()
+        world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12, status: "In Progress", links: [TicketFixtures.link(self.jon)])) }
+        world.data["bild.png"] = Data(repeating: 1, count: 2_000)
+        world.data["gross.png"] = Data(repeating: 1, count: TicketImage.maxBytes + 1)
+        world.data["verlauf.jsonl"] = Data(repeating: 1, count: 10)
+
+        for bad in ["verlauf.jsonl", "gross.png", "fehlt.png"] {
+            let output = try await run(["done", "WM8-12", "--built", "x", "--image", bad], world)
+            XCTAssertEqual(output.exitCode, TicketsCLIExit.usage, bad)
+        }
+        XCTAssertTrue(writes(world).isEmpty, "nichts hochgeladen, nichts umgestellt")
+
+        let output = try await run(["done", "WM8-12", "--built", "x", "--image", "bild.png"], world)
+        XCTAssertEqual(output.exitCode, 0, output.stderr)
+        let calls = writes(world)
+        XCTAssertEqual(calls.first, "upload bild.png image/png 2000")
+        XCTAssertTrue(calls[1].contains("![Bild](https://uploads.linear.app/test/bild.png)"), calls[1])
+    }
+
+    func testDecideWritesTheFixedShape() async throws {
+        let world = makeWorld()
+        world.source.onTicket = { _ in self.context(TicketFixtures.ticket(81)) }
+        world.source.onPerson = { _ in self.giuliano }
+        let output = try await run(["decide", "WM8-81", "--question", "Wo lebt die Ansicht?", "--option", "Umschalter",
+                                    "--option", "eigenes Fenster", "--chosen", "Umschalter"], world)
+        XCTAssertEqual(output.exitCode, 0, output.stderr)
+        let comment = try XCTUnwrap(writes(world).first)
+        XCTAssertTrue(comment.hasPrefix("comment id-81 **Entscheidung · "))
+        XCTAssertTrue(comment.contains("**Frage:** Wo lebt die Ansicht?"))
+        XCTAssertTrue(comment.contains("**Möglichkeiten:**\n* Umschalter\n* eigenes Fenster"))
+        XCTAssertTrue(comment.contains("**Gewählt:** Umschalter"))
+        XCTAssertTrue(comment.hasSuffix("**Entschieden von:** Giuliano Costa"), "ohne --by die Person, der der Zugang gehört")
+
+        let named = try await run(["decide", "WM8-81", "--question", "F", "--option", "a", "--option", "b", "--chosen", "a",
+                                   "--by", "Richard"], world)
+        XCTAssertTrue(named.stdout.contains("Richard"))
+        for bad in [["decide", "WM8-81", "--question", "F", "--option", "a", "--chosen", "a"],
+                    ["decide", "WM8-81", "--option", "a", "--option", "b", "--chosen", "a"],
+                    ["decide", "WM8-81", "--question", "F", "--option", "a", "--option", "b"]] {
+            XCTAssertThrowsError(try TicketsCLIArguments.parse(bad), "\(bad)")
+        }
+    }
+
+    private let criteria = "**Stand:** x\n\n## Fertig, wenn\n\n- [ ] Board steht\n- [x] Karte zeigt den Chat\n- [ ] Detail da\n\n## Hinweise\nText"
+
+    func testCheckListsAndTicksBoxes() async throws {
+        let world = makeWorld()
+        world.source.onTicket = { _ in self.context(TicketFixtures.ticket(81, description: self.criteria)) }
+        let listed = try await run(["check", "WM8-81"], world)
+        XCTAssertEqual(listed.stdout, "1  [ ] Board steht\n2  [x] Karte zeigt den Chat\n3  [ ] Detail da")
+        XCTAssertTrue(writes(world).isEmpty, "anzeigen ändert nichts")
+
+        let ticked = try await run(["check", "WM8-81", "1", "detail"], world)
+        XCTAssertEqual(ticked.exitCode, 0, ticked.stderr)
+        XCTAssertEqual(ticked.stdout, "WM8-81: 2 Kästchen abgehakt (3 von 3 erledigt).")
+        let written = try XCTUnwrap(writes(world).first)
+        XCTAssertTrue(written.contains("- [x] Board steht\n- [x] Karte zeigt den Chat\n- [x] Detail da"))
+        XCTAssertTrue(written.contains("**Stand:** x") && written.hasSuffix("## Hinweise\nText"), "der Rest der Beschreibung bleibt")
+
+        let reopened = try await run(["check", "WM8-81", "2", "--uncheck"], world)
+        XCTAssertEqual(reopened.stdout, "WM8-81: 1 Kästchen wieder offen (0 von 3 erledigt).")
+    }
+
+    func testCheckRefusesWhatItCannotPlace() async throws {
+        let world = makeWorld()
+        world.source.onTicket = { _ in self.context(TicketFixtures.ticket(81, description: self.criteria)) }
+        let missing = try await run(["check", "WM8-81", "9"], world)
+        XCTAssertEqual(missing.exitCode, TicketsCLIExit.notFound)
+        let ambiguous = try await run(["check", "WM8-81", "a"], world)
+        XCTAssertEqual(ambiguous.exitCode, TicketsCLIExit.conflict)
+        let unchanged = try await run(["check", "WM8-81", "2"], world)
+        XCTAssertEqual(unchanged.exitCode, 0)
+        XCTAssertTrue(unchanged.stdout.contains("nichts geändert"))
+        XCTAssertTrue(writes(world).isEmpty)
+
+        world.source.onTicket = { _ in self.context(TicketFixtures.ticket(81, description: "ohne")) }
+        let none = try await run(["check", "WM8-81", "1"], world)
+        XCTAssertEqual(none.exitCode, TicketsCLIExit.notFound)
+    }
+
+    func testCriteriaProgressShowsInOutputs() async throws {
+        let world = makeWorld()
+        world.source.onTicket = { _ in self.context(TicketFixtures.ticket(81, description: self.criteria)) }
+        world.source.onBoard = { _ in TicketFixtures.snapshot([TicketFixtures.ticket(81, status: "In Progress", description: self.criteria)]) }
+        let shown = try await run(["show", "WM8-81"], world)
+        XCTAssertTrue(shown.stdout.contains("Fertig, wenn: 1 von 3 abgehakt"), shown.stdout)
+        let board = try await run(["board"], world)
+        XCTAssertTrue(board.stdout.contains("In Progress 1/3"), board.stdout)
+        let json = try await run(["board", "--json"], world)
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.stdout.utf8)) as? [String: Any])
+        let ticket = try XCTUnwrap((object["tickets"] as? [[String: Any]])?.first)
+        XCTAssertEqual(ticket["criteria"] as? [String: Int], ["done": 1, "total": 3])
+    }
+
+    func testStartedColumnGroupsByStatusOfTheTeam() async throws {
+        let world = makeWorld()
+        var waiting = TicketFixtures.ticket(3, title: "gemergt", priority: 1)
+        waiting.status = TicketStatus(id: "s6", name: "Wartet aufs Ausliefern", kind: .started, position: 3.5)
+        world.source.onBoard = { _ in
+            TicketFixtures.snapshot([
+                waiting,
+                TicketFixtures.ticket(2, status: "Merge-bereit", title: "abgegeben", priority: 2),
+                TicketFixtures.ticket(1, status: "In Progress", title: "läuft", priority: 4),
+                TicketFixtures.ticket(4, status: "In Progress", title: "läuft dringend", priority: 1),
+            ])
+        }
+        let output = try await run(["board"], world)
+        let keys = output.stdout.split(separator: "\n").filter { $0.hasPrefix("  WM8-") }.map { String($0.dropFirst(2).prefix(5)) }
+        XCTAssertEqual(keys, ["WM8-4", "WM8-1", "WM8-2", "WM8-3"],
+                       "erst nach Status in der Reihenfolge des Teams, darin nach Priorität; „Wartet aufs Ausliefern“ ist nicht erledigt")
+        XCTAssertTrue(output.stdout.contains("Wartet aufs Ausliefern"))
+    }
+
+    // MARK: Ordnung im Prüfbericht
+
+    func testDoctorReportsHygieneAsHints() async throws {
+        let world = makeWorld()
+        let now = Date(timeIntervalSince1970: 1_794_000_000)
+        world.source.onBoard = { _ in
+            TicketFixtures.snapshot([
+                TicketFixtures.ticket(1, status: "In Progress", description: "## Fertig, wenn\n- [ ] x", updatedAt: now),
+                TicketFixtures.ticket(2, status: "Todo", description: "", project: nil, updatedAt: now.addingTimeInterval(-30 * 86_400)),
+            ])
+        }
+        let output = try await run(["doctor"], world)
+        XCTAssertEqual(output.exitCode, 0, "Hinweise lassen den Bericht grün: \(output.stdout)")
+        XCTAssertTrue(output.stdout.contains("ACHTE  Ordnung WM8    1 ohne Projekt: WM8-2"), output.stdout)
+        XCTAssertTrue(output.stdout.contains("1 eingeplant oder in Arbeit, aber ohne „Fertig, wenn“: WM8-2"))
+        XCTAssertTrue(output.stdout.contains("1 in Arbeit, aber nie hing ein Chat daran: WM8-1"))
+        XCTAssertTrue(output.stdout.contains("1 seit über 3 Wochen unberührt: WM8-2"))
+    }
+
+    func testSetupAndDoctorCheckTheAreasTable() async throws {
+        let world = makeWorld()
+        world.source.onBoard = { _ in TicketFixtures.snapshot([]) }
+        let table = "| Bereich | Ordner | Linear-Projekt |\n|---|---|---|\n| Diktat | `docs/features/dictation` | Diktat |\n| Tickets | `docs/features/tickets.md` | Tickets |"
+        world.files[project + "/docs/features/tickets.md"] = table
+        world.files[project + "/docs/ohne.md"] = "keine Tabelle"
+        world.existing = [project + "/docs/features/dictation"]
+        world.source.onProjects = { _ in ["Diktat", "Tickets", "Controller"] }
+
+        let wrong = try await run(["setup", "--team", "WM8", "--project", project, "--areas", "docs/ohne.md"], world)
+        XCTAssertEqual(wrong.exitCode, TicketsCLIExit.notFound)
+        XCTAssertTrue(world.config.areasFileByProjectPath.isEmpty)
+        XCTAssertThrowsError(try TicketsCLIArguments.parse(["setup", "--areas", "x.md"]), "braucht --project und --team")
+
+        let set = try await run(["setup", "--team", "WM8", "--project", project, "--areas", "docs/features/tickets.md"], world)
+        XCTAssertEqual(set.exitCode, 0, set.stderr)
+        XCTAssertEqual(world.config.areasFileByProjectPath, [project: "docs/features/tickets.md"])
+
+        let report = try await run(["doctor"], world)
+        XCTAssertEqual(report.exitCode, 0)
+        XCTAssertTrue(report.stdout.contains("ACHTE  Bereiche WM8   Projekt „Controller“ steht nicht in der Tabelle"), report.stdout)
+        XCTAssertTrue(report.stdout.contains("Doku fehlt: docs/features/tickets.md (Tickets)"))
+        XCTAssertFalse(report.stdout.contains("Doku fehlt: docs/features/dictation"))
+
+        world.existing.insert(project + "/docs/features/tickets.md")
+        world.source.onProjects = { _ in ["Diktat", "Tickets"] }
+        let clean = try await run(["doctor"], world)
+        XCTAssertTrue(clean.stdout.contains("ok     Bereiche WM8   2 Bereiche stimmen mit docs/features/tickets.md überein"), clean.stdout)
     }
 
     // MARK: Anlegen und zuordnen
@@ -583,7 +779,7 @@ final class TicketsCLITests: XCTestCase {
         // Der Aufrufer steht im WhisperM8-Projekt (auch in einem Arbeitsordner darunter).
         world.directory = project + "/.claude/worktrees/ticket-board"
         let commands: [[String]] = [
-            ["link", "DS-5"], ["done", "DS-5", "--status", "Merge-bereit"], ["unlink", "DS-5"], ["status", "DS-5", "Todo"],
+            ["link", "DS-5"], ["done", "DS-5", "--no-summary", "--status", "Merge-bereit"], ["unlink", "DS-5"], ["status", "DS-5", "Todo"],
             ["note", "DS-5", "Stand"], ["comment", "DS-5", "Text"], ["assign", "DS-5", "me"], ["label", "DS-5", "--add", "Bug"],
             ["new", "Titel", "--team", "DS"],
         ]
@@ -774,7 +970,7 @@ final class TicketsCLITests: XCTestCase {
         world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12)) }
         world.files["gross.log"] = String(repeating: "a", count: TicketsText.maxBytes + 1)
         world.files["passt.md"] = String(repeating: "ä", count: TicketsText.maxBytes / 2)
-        for command in [["comment", "WM8-12", "@gross.log"], ["note", "WM8-12", "@gross.log"], ["done", "WM8-12", "--note", "@gross.log"],
+        for command in [["comment", "WM8-12", "@gross.log"], ["note", "WM8-12", "@gross.log"], ["done", "WM8-12", "--no-summary", "--note", "@gross.log"],
                         ["new", "Titel", "--description", "@gross.log"]] {
             let output = try await run(command, world)
             XCTAssertEqual(output.exitCode, TicketsCLIExit.usage, "\(command)")

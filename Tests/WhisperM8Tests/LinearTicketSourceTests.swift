@@ -9,11 +9,17 @@ final class LinearTicketSourceTests: XCTestCase {
     private final class Stub: @unchecked Sendable {
         var requests: [(query: String, variables: [String: Any], authorization: String?)] = []
         var replies: [(needle: String, status: Int, body: String)] = []
+        /// Anfragen, die keine GraphQL-Anfrage sind (Hochladen einer Datei).
+        var uploads: [URLRequest] = []
         var failure: Error?
 
         func client(key: String? = "lin_api_test") -> LinearGraphQLClient {
             LinearGraphQLClient(apiKey: { key }, transport: { [self] request in
                 if let failure { throw failure }
+                if request.httpMethod == "PUT" {
+                    uploads.append(request)
+                    return (Data(), 200)
+                }
                 let body = (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any] ?? [:]
                 let query = body["query"] as? String ?? ""
                 requests.append((query, body["variables"] as? [String: Any] ?? [:], request.value(forHTTPHeaderField: "Authorization")))
@@ -268,6 +274,37 @@ final class LinearTicketSourceTests: XCTestCase {
         stored = "lin_api_b"
         cache.invalidate("whisperm8")
         XCTAssertEqual(cache.value(for: "whisperm8", read), "lin_api_b")
+    }
+
+    // MARK: Projekte, letzte Änderung, Bild
+
+    func testProjectsOfATeamAndUpdatedAt() async throws {
+        let stub = Stub()
+        stub.replies = [
+            ("projects(first: 100)", 200, #"{"data":{"teams":{"nodes":[{"projects":{"nodes":[{"name":"Tickets","state":"started"},{"name":"Alt","state":"completed"},{"name":"diktat","state":"planned"}]}}]}}}"#),
+        ]
+        let projects = try await LinearTicketSource(client: stub.client()).projects(team: "WM8")
+        XCTAssertEqual(projects, ["diktat", "Tickets"], "abgeschlossene Projekte zählen nicht")
+        XCTAssertEqual(LinearTicketSource.date("2026-11-14T03:57:12.345Z")?.timeIntervalSince1970, 1_794_628_632.345)
+        XCTAssertNotNil(LinearTicketSource.date("2026-11-14T03:57:12Z"))
+        XCTAssertNil(LinearTicketSource.date("gestern"))
+    }
+
+    func testImageUploadAsksForAnAddressThenSendsTheFile() async throws {
+        let stub = Stub()
+        stub.replies = [
+            ("fileUpload", 200, #"{"data":{"fileUpload":{"success":true,"uploadFile":{"uploadUrl":"https://storage.example/put?sig=1","assetUrl":"https://uploads.linear.app/a/bild.png","headers":[{"key":"x-goog-meta","value":"1"}]}}}}"#),
+        ]
+        let source = LinearTicketSource(client: stub.client())
+        let url = try await source.uploadImage(Data(repeating: 7, count: 12), fileName: "bild.png", contentType: "image/png")
+        XCTAssertEqual(url, "https://uploads.linear.app/a/bild.png")
+        XCTAssertEqual(stub.requests.first?.variables["size"] as? Int, 12)
+        let put = try XCTUnwrap(stub.uploads.first)
+        XCTAssertEqual(put.url?.host, "storage.example")
+        XCTAssertEqual(put.httpMethod, "PUT")
+        XCTAssertEqual(put.value(forHTTPHeaderField: "x-goog-meta"), "1")
+        XCTAssertEqual(put.value(forHTTPHeaderField: "Content-Type"), "image/png")
+        XCTAssertNil(put.value(forHTTPHeaderField: "Authorization"), "der Key geht nie an den Speicher-Dienst")
     }
 
     // MARK: Kindprozess

@@ -10,7 +10,9 @@ enum TicketsCLIArguments: Equatable {
     case show(key: String, json: Bool)
     case mine(chat: String?, json: Bool)
     case link(key: String, chat: String?, keepStatus: Bool)
-    case done(key: String, chat: String?, status: String?, note: TicketsText?, force: Bool)
+    case done(key: String, chat: String?, status: String?, note: TicketsText?, force: Bool, summary: TicketsDoneSummary)
+    case decide(key: String, TicketsDecideOptions)
+    case check(key: String, references: [String], uncheck: Bool)
     case unlink(key: String, chat: String?)
     case status(key: String, name: String, force: Bool)
     case note(key: String, text: TicketsText)
@@ -18,7 +20,7 @@ enum TicketsCLIArguments: Equatable {
     case new(TicketsNewOptions)
     case assign(key: String, person: String)
     case label(key: String, add: [String], remove: [String])
-    case setup(keyFromStdin: Bool, project: String?, team: String?, workspace: String?, reassign: Bool)
+    case setup(keyFromStdin: Bool, project: String?, team: String?, workspace: String?, reassign: Bool, areas: String?)
     case doctor(json: Bool)
 
     enum ParseError: Error, Equatable {
@@ -38,15 +40,18 @@ enum TicketsCLIArguments: Equatable {
     /// Schreibende Befehle: Mit `--json` kommt ihre Meldung als Objekt.
     var isWrite: Bool {
         switch self {
-        case .link, .done, .unlink, .status, .note, .comment, .new, .assign, .label, .setup: return true
+        case .link, .done, .unlink, .status, .note, .comment, .new, .assign, .label, .setup, .decide: return true
+        // Ohne Verweise zeigt `check` nur die Kästchen.
+        case .check(_, let references, _): return !references.isEmpty
         case .help, .board, .list, .show, .mine, .doctor: return false
         }
     }
 
     var ticketKey: String? {
         switch self {
-        case .show(let key, _), .link(let key, _, _), .done(let key, _, _, _, _), .unlink(let key, _), .status(let key, _, _),
-             .note(let key, _), .comment(let key, _), .assign(let key, _), .label(let key, _, _):
+        case .show(let key, _), .link(let key, _, _), .done(let key, _, _, _, _, _), .unlink(let key, _), .status(let key, _, _),
+             .note(let key, _), .comment(let key, _), .assign(let key, _), .label(let key, _, _), .decide(let key, _),
+             .check(let key, _, _):
             return key
         case .help, .board, .list, .mine, .new, .setup, .doctor:
             return nil
@@ -76,6 +81,16 @@ enum TicketsCLIArguments: Equatable {
             let found = rest[index + 1]
             rest.removeSubrange(index...(index + 1))
             used.insert(name)
+            return found
+        }
+        /// Eine Option, die mehrfach stehen darf (`--option A --option B`).
+        func values(_ name: String) throws -> [String] {
+            var found: [String] = []
+            while let index = rest.firstIndex(of: name) {
+                guard index + 1 < rest.count else { throw ParseError.usage("\(name) braucht einen Wert") }
+                found.append(rest[index + 1])
+                rest.removeSubrange(index...(index + 1))
+            }
             return found
         }
         let json = flag("--json")
@@ -137,8 +152,36 @@ enum TicketsCLIArguments: Equatable {
         case "done":
             let chat = try value("--chat"), status = try value("--status"), note = try value("--note").map(TicketsText.init)
             let force = flag("--force")
-            return .done(key: try key(try positional(1, "tickets done <Ticket> [--status S] [--note TEXT]")[0]),
-                         chat: chat, status: status, note: note, force: force)
+            var summary = TicketsDoneSummary()
+            summary.built = try value("--built").map(TicketsText.init)
+            summary.commit = try value("--commit")
+            summary.notIncluded = try value("--not").map(TicketsText.init)
+            summary.testSteps = try values("--test")
+            summary.image = try value("--image")
+            summary.skip = flag("--no-summary")
+            if summary.skip, summary.hasContent { throw ParseError.usage("--no-summary und eine Zusammenfassung schließen sich aus") }
+            return .done(key: try key(try positional(1, "tickets done <Ticket> --built TEXT [--status S] [--note TEXT]")[0]),
+                         chat: chat, status: status, note: note, force: force, summary: summary)
+        case "decide":
+            var options = TicketsDecideOptions()
+            options.question = try value("--question") ?? ""
+            options.options = try values("--option")
+            options.chosen = try value("--chosen") ?? ""
+            options.by = try value("--by")
+            options.note = try value("--note")
+            let ticket = try key(try positional(1, "tickets decide <Ticket> --question F --option A --option B --chosen W")[0])
+            let blank = { (text: String) in text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            guard !blank(options.question), !blank(options.chosen) else { throw ParseError.usage("--question und --chosen angeben") }
+            guard options.options.filter({ !blank($0) }).count >= 2 else {
+                throw ParseError.usage("Mindestens zwei Möglichkeiten angeben: --option A --option B")
+            }
+            return .decide(key: ticket, options)
+        case "check":
+            let uncheck = flag("--uncheck")
+            if let option = rest.first(where: { $0.hasPrefix("--") }) { throw ParseError.usage("Unbekannte Option: \(option)") }
+            let parts = rest + literal
+            guard let first = parts.first else { throw ParseError.usage("Erwartet: tickets check <Ticket> [Nummer oder Text …]") }
+            return .check(key: try key(first), references: Array(parts.dropFirst()), uncheck: uncheck)
         case "unlink":
             let chat = try value("--chat")
             return .unlink(key: try key(try positional(1, "tickets unlink <Ticket> [--chat REF]")[0]), chat: chat)
@@ -178,11 +221,13 @@ enum TicketsCLIArguments: Equatable {
             return .label(key: try key(try positional(1, "tickets label <Ticket> --add a,b --remove c")[0]), add: add, remove: remove)
         case "setup":
             let stdin = flag("--key-stdin"), project = try value("--project"), team = try value("--team")
-            let workspace = try value("--workspace"), reassign = flag("--reassign")
+            let workspace = try value("--workspace"), reassign = flag("--reassign"), areas = try value("--areas")
             guard project == nil || team != nil else { throw ParseError.usage("--project braucht --team") }
             guard !reassign || team != nil else { throw ParseError.usage("--reassign braucht --team") }
-            _ = try positional(0, "tickets setup [--key-stdin] [--team T [--project ORDNER]] [--workspace W] [--reassign]")
-            return .setup(keyFromStdin: stdin, project: project, team: team?.uppercased(), workspace: workspace, reassign: reassign)
+            guard areas == nil || project != nil else { throw ParseError.usage("--areas braucht --project und --team") }
+            _ = try positional(0, "tickets setup [--key-stdin] [--team T [--project ORDNER [--areas DATEI]]] [--workspace W] [--reassign]")
+            return .setup(keyFromStdin: stdin, project: project, team: team?.uppercased(), workspace: workspace, reassign: reassign,
+                          areas: areas)
         case "doctor":
             _ = try positional(0, "tickets doctor [--json]")
             return .doctor(json: json)
@@ -211,6 +256,31 @@ enum TicketsText: Equatable {
             self = .literal(raw)
         }
     }
+}
+
+/// Zusammenfassung beim Abgeben (`tickets done`).
+struct TicketsDoneSummary: Equatable {
+    var built: TicketsText?
+    var commit: String?
+    var notIncluded: TicketsText?
+    var testSteps: [String] = []
+    /// Pfad eines Bildes, das mit hochgeladen wird.
+    var image: String?
+    /// Abgeben ohne Zusammenfassung (Arbeit ohne Bau: Analyse, Entscheidung).
+    var skip = false
+
+    var hasContent: Bool {
+        built != nil || commit != nil || notIncluded != nil || !testSteps.isEmpty || image != nil
+    }
+}
+
+struct TicketsDecideOptions: Equatable {
+    var question = ""
+    var options: [String] = []
+    var chosen = ""
+    /// Wer entschieden hat; ohne Angabe die Person, der der Zugang gehört.
+    var by: String?
+    var note: String?
 }
 
 struct TicketsListFilter: Equatable {
@@ -272,8 +342,14 @@ enum TicketsCLICommand {
       whisperm8 tickets link <Ticket> [--chat REF] [--no-status]
                 Hängt den Chat ans Ticket. Ein Ticket, das noch nicht in Arbeit
                 ist, wechselt auf den ersten „in Arbeit“-Status.
-      whisperm8 tickets done <Ticket> [--status S] [--note TEXT] [--chat REF]
-                Beendet die Verknüpfung; setzt auf Wunsch Status und Stand-Zeile.
+      whisperm8 tickets done <Ticket> --built TEXT [--commit REF] [--not TEXT]
+                             [--test SCHRITT]… [--image BILD] [--status S]
+                             [--note TEXT] [--chat REF]
+                Gibt das Ticket ab: schreibt den Abschluss als Kommentar (was
+                gebaut wurde, Commit, was nicht dazugehört, Schritte für den
+                Handtest als Kästchen, auf Wunsch ein Bild), beendet die
+                Verknüpfung und setzt auf Wunsch Status und Stand-Zeile.
+                Arbeit ohne Bau (Analyse, Entscheidung): --no-summary
       whisperm8 tickets unlink <Ticket> [--chat REF]   Falsch verknüpft: entfernen.
 
     STATUS UND TEXT
@@ -290,6 +366,17 @@ enum TicketsCLICommand {
                 Höchstens 64 KB. Der Text geht an das Ticket-System: keine
                 Schlüssel, keine Kundeninhalte, keine rohen Logs.
 
+    ENTSCHEIDUNG UND KÄSTCHEN
+      whisperm8 tickets decide <Ticket> --question FRAGE --option A --option B…
+                               --chosen WAHL [--by NAME] [--note TEXT]
+                Hält eine Entscheidung in festem Aufbau als Kommentar fest:
+                Frage, Möglichkeiten, Gewählt, wer, wann. Nur für
+                Entscheidungen, die wirklich gefallen sind.
+      whisperm8 tickets check <Ticket>                 zeigt die Kästchen unter „Fertig, wenn“
+      whisperm8 tickets check <Ticket> <Nr | Text>… [--uncheck]
+                Hakt einzelne Kästchen ab (oder öffnet sie wieder). Ein
+                Stück des Textes genügt, wenn es auf genau eines passt.
+
     ANLEGEN UND ZUORDNEN
       whisperm8 tickets new <Titel> [--description TEXT] [--project VORHABEN]
                             [--status S] [--priority high] [--labels a,b]
@@ -305,8 +392,15 @@ enum TicketsCLICommand {
                 Ordner dem Team. Ohne --workspace wird nachgesehen, wo es das
                 Team gibt. Ein schon zugeordnetes Kürzel wird nur mit
                 --reassign einem anderen Workspace zugeordnet.
+      whisperm8 tickets setup --team T --project ORDNER --areas DATEI
+                Nennt die Datei im Projekt (relativ), in der die Tabelle
+                Bereich, Ordner, Projekt steht; doctor prüft sie.
       whisperm8 tickets setup                          zeigt die Einrichtung
-      whisperm8 tickets doctor [--json]                prüft Zugänge, Zuordnung und App
+      whisperm8 tickets doctor [--json]                prüft Zugänge, Zuordnung und App,
+                dazu die Ordnung: Tickets ohne Projekt, ohne „Fertig, wenn“,
+                in Arbeit ohne Chat, seit Wochen unberührt, und die Tabelle
+                der Bereiche gegen Projekte und Doku-Ordner. Hinweise („ACHTE“)
+                lassen den Bericht grün.
 
     MEHRERE WORKSPACES
       Das Team steckt in der Ticket-Nummer (ABC-12), der Workspace folgt aus
@@ -366,6 +460,10 @@ struct TicketsCLIEnvironment {
     var currentDirectory: () -> String
     var readStdin: () -> String
     var readFile: (String) -> String?
+    /// Rohdaten einer Datei (Bild), höchstens `limit` Bytes; `nil`, wenn sie
+    /// fehlt oder größer ist.
+    var readData: (_ path: String, _ limit: Int) -> Data?
+    var fileExists: (String) -> Bool
     var now: () -> Date
 
     static var live: TicketsCLIEnvironment {
@@ -397,6 +495,13 @@ struct TicketsCLIEnvironment {
                 // Über der Grenze genügt die Länge; ein mitten im Zeichen abgeschnittenes Ende zählt nicht als unlesbar.
                 return data.count > TicketsText.maxBytes ? String(decoding: data, as: UTF8.self) : String(data: data, encoding: .utf8)
             },
+            readData: { path, limit in
+                guard let handle = FileHandle(forReadingAtPath: (path as NSString).expandingTildeInPath) else { return nil }
+                defer { try? handle.close() }
+                guard let data = try? handle.read(upToCount: limit + 1), data.count <= limit else { return nil }
+                return data
+            },
+            fileExists: { FileManager.default.fileExists(atPath: $0) },
             now: Date.init
         )
     }

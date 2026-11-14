@@ -222,10 +222,22 @@ enum TicketBoardLayout {
     /// Spalten des Boards: in Arbeit, als Nächstes, Backlog. Der Eingang (Triage)
     /// steht bei „als Nächstes“. Innerhalb nach Priorität, bei Gleichstand das
     /// Ticket mit Agent zuerst.
+    ///
+    /// „In Arbeit“ fasst mehrere Status zusammen (etwa in Arbeit, wartet auf den
+    /// Merge, gemergt und wartet aufs Ausliefern). Dort stehen die Tickets
+    /// zuerst nach ihrem Status in der Reihenfolge des Teams, damit jede dieser
+    /// Stufen als Gruppe zusammensteht.
     static func columns(_ entries: [TicketBoardEntry]) -> [TicketBoardColumn] {
         let kinds: [TicketStatusKind] = [.started, .unstarted, .backlog]
         return kinds.map { kind in
-            let rows = entries.filter { column(for: $0.ticket.status.kind) == kind }.sorted(by: order)
+            var rows = entries.filter { column(for: $0.ticket.status.kind) == kind }.sorted(by: order)
+            if kind == .started {
+                // Stabil: Innerhalb eines Status bleibt die Reihenfolge nach Priorität.
+                rows = rows.enumerated().sorted { lhs, rhs in
+                    let lp = lhs.element.ticket.status.position, rp = rhs.element.ticket.status.position
+                    return lp != rp ? lp < rp : lhs.offset < rhs.offset
+                }.map(\.element)
+            }
             return TicketBoardColumn(kind: kind, entries: rows)
         }
     }

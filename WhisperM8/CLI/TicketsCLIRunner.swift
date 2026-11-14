@@ -192,7 +192,7 @@ enum TicketsCLIRunner {
             }
             return lines.joined(separator: "\n")
 
-        case .done(let key, let chatRef, let status, let note, let force):
+        case .done(let key, let chatRef, let status, let note, let force, let summary):
             let chat = try callerChat(chatRef, env)
             let source = try access.source(forKey: key)
             let context = try await source.ticket(key: key)
@@ -201,6 +201,16 @@ enum TicketsCLIRunner {
             let target = try status.map { try resolveStatus($0, in: context) }
             if let target { try guardCompletion(target, key: key, force: force, env) }
             let noteText = try note.map { try text($0, env) }
+            var completion = try completionRecord(summary, chat: chat, key: key, env)
+            let image = try summary.image.map { try imageFile($0, env) }
+            // Der Abschluss zuerst: Scheitert er, ist am Ticket noch nichts umgestellt.
+            if var record = completion {
+                if let image {
+                    record.imageURL = try await source.uploadImage(image.data, fileName: image.name, contentType: image.type)
+                }
+                completion = record
+                try await source.addComment(ticketID: context.ticket.id, body: TicketRecordText.completion(record, at: env.now()))
+            }
             // Nur eine laufende Verknüpfung beenden; eine schon beendete behält ihre Zeit.
             let wasActive = context.ticket.activeLinks.contains { $0.chatID == chat.id }
             if wasActive {
@@ -216,7 +226,55 @@ enum TicketsCLIRunner {
             }
             let linked = wasActive ? "Verknüpfung mit „\(chat.shortName)“ beendet."
                 : "„\(chat.shortName)“ war nicht (mehr) verknüpft."
-            return "\(key): \(linked) Status: \((target ?? context.ticket.status).name)"
+            let recorded = completion == nil ? "" : " Abschluss steht am Ticket."
+            return "\(key): \(linked)\(recorded) Status: \((target ?? context.ticket.status).name)"
+
+        case .decide(let key, let options):
+            let source = try access.source(forKey: key)
+            let context = try await source.ticket(key: key)
+            let by: String
+            if let named = options.by?.trimmingCharacters(in: .whitespaces), !named.isEmpty {
+                by = named
+            } else {
+                by = try await source.person(matching: "me").name
+            }
+            let body = TicketRecordText.decision(
+                TicketRecordText.Decision(question: options.question, options: options.options.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty },
+                                          chosen: options.chosen, by: by, note: options.note),
+                at: env.now())
+            guard body.utf8.count <= TicketsText.maxBytes else {
+                throw Failure(exitCode: TicketsCLIExit.usage, message: "Text zu lang (mehr als \(TicketsText.maxBytes / 1024) KB). Nichts gesendet.")
+            }
+            try await source.addComment(ticketID: context.ticket.id, body: body)
+            return "\(key): Entscheidung festgehalten (\(by))."
+
+        case .check(let key, let references, let uncheck):
+            let source = try access.source(forKey: key)
+            let context = try await source.ticket(key: key)
+            let items = TicketChecklist.items(in: context.ticket.description)
+            if references.isEmpty {
+                guard !items.isEmpty else { return "\(key) hat keine Kästchen." }
+                return items.map { "\(String($0.number).padding(toLength: 3, withPad: " ", startingAt: 0))[\($0.isDone ? "x" : " ")] \($0.text)" }
+                    .joined(separator: "\n")
+            }
+            let result: (description: String, changed: [TicketChecklistItem])
+            do {
+                result = try TicketChecklist.setting(references, done: !uncheck, in: context.ticket.description)
+            } catch TicketChecklist.Failure.noItems {
+                throw Failure(exitCode: TicketsCLIExit.notFound, message: "\(key) hat keine Kästchen.")
+            } catch TicketChecklist.Failure.notFound(let reference) {
+                throw Failure(exitCode: TicketsCLIExit.notFound,
+                              message: "Kein Kästchen passt auf „\(reference)“. Anzeigen: whisperm8 tickets check \(key)")
+            } catch TicketChecklist.Failure.ambiguous(let reference, let hits) {
+                throw Failure(exitCode: TicketsCLIExit.conflict,
+                              message: "„\(reference)“ passt auf mehrere Kästchen: " + hits.map { "\($0.number)" }.joined(separator: ", ")
+                                + ". Nummer angeben.")
+            }
+            let word = uncheck ? "wieder offen" : "abgehakt"
+            guard !result.changed.isEmpty else { return "\(key): schon \(word), nichts geändert." }
+            try await source.setDescription(ticketID: context.ticket.id, description: result.description)
+            let progress = TicketChecklist.progress(in: result.description)
+            return "\(key): \(result.changed.count) Kästchen \(word) (\(progress?.done ?? 0) von \(progress?.total ?? 0) erledigt)."
 
         case .unlink(let key, let chatRef):
             let chat = try callerChat(chatRef, env)
@@ -281,9 +339,9 @@ enum TicketsCLIRunner {
             if !remove.isEmpty { parts.append("−" + remove.joined(separator: ", ")) }
             return "\(key): Labels \(parts.joined(separator: " "))"
 
-        case .setup(let keyFromStdin, let project, let team, let workspace, let reassign):
+        case .setup(let keyFromStdin, let project, let team, let workspace, let reassign, let areas):
             return try await setup(keyFromStdin: keyFromStdin, project: project, team: team, workspace: workspace,
-                                   reassign: reassign, env)
+                                   reassign: reassign, areas: areas, env)
 
         case .doctor(let json):
             // Wird in `execute` behandelt (Bericht immer nach stdout).
@@ -387,7 +445,7 @@ enum TicketsCLIRunner {
     // MARK: Einrichten und prüfen
 
     private static func setup(keyFromStdin: Bool, project: String?, team: String?, workspace: String?,
-                              reassign: Bool, _ env: TicketsCLIEnvironment) async throws -> String {
+                              reassign: Bool, areas: String?, _ env: TicketsCLIEnvironment) async throws -> String {
         var lines: [String] = []
         var config = env.config()
         var changed = false
@@ -478,6 +536,17 @@ enum TicketsCLIRunner {
                     : ((env.currentDirectory() as NSString).appendingPathComponent(project) as NSString).standardizingPath
                 config.set(team: team, forProject: path)
                 lines.append("\(TicketConfig.normalized(path)) gehört zum Team \(team) im Workspace „\(target)“.")
+                if let areas {
+                    let root = TicketConfig.normalized(path)
+                    let file = (root as NSString).appendingPathComponent(areas)
+                    guard let text = env.readFile(file), TicketAreasTable.parse(text) != nil else {
+                        throw Failure(exitCode: TicketsCLIExit.notFound, message: """
+                        In \(areas) steht keine Tabelle mit den Spalten Bereich, Ordner und Projekt. Nichts geändert.
+                        """)
+                    }
+                    config.areasFileByProjectPath[root] = areas
+                    lines.append("Tabelle der Bereiche: \(areas)")
+                }
             } else {
                 lines.append("Team \(team) liegt im Workspace „\(target)“.")
             }
@@ -496,6 +565,7 @@ enum TicketsCLIRunner {
             }
             for (path, team) in config.teamsByProjectPath.sorted(by: { $0.key < $1.key }) {
                 lines.append("Zuordnung: \(path) → \(team) (\(config.workspace(forTeam: team) ?? "kein Workspace"))")
+                if let areas = config.areasFileByProjectPath[path] { lines.append("  Tabelle der Bereiche: \(areas)") }
             }
             let mapped = Set(config.teamsByProjectPath.values)
             for (team, name) in config.workspacesByTeam.sorted(by: { $0.key < $1.key }) where !mapped.contains(team) {
@@ -503,6 +573,85 @@ enum TicketsCLIRunner {
             }
         }
         return lines.joined(separator: "\n")
+    }
+
+    // MARK: Abschluss
+
+    /// Die Zusammenfassung beim Abgeben. Sie ist Pflicht, damit am Ticket steht,
+    /// was gebaut wurde, ohne dass jemand den Chat-Verlauf lesen muss.
+    private static func completionRecord(_ summary: TicketsDoneSummary, chat: TicketChat, key: String,
+                                         _ env: TicketsCLIEnvironment) throws -> TicketRecordText.Completion? {
+        if summary.skip { return nil }
+        guard let built = summary.built else {
+            throw Failure(exitCode: TicketsCLIExit.usage, message: """
+            Zum Abgeben gehört eine kurze Zusammenfassung:
+              whisperm8 tickets done \(key) --built "was gebaut wurde" [--commit abc1234] [--not "was nicht dazugehört"] \
+            [--test "Schritt für den Handtest"]… [--image bild.png]
+            Arbeit ohne Bau (Analyse, Entscheidung): --no-summary
+            """)
+        }
+        return TicketRecordText.Completion(
+            chat: chat.shortName, built: try text(built, env), commit: summary.commit,
+            notIncluded: try summary.notIncluded.map { try text($0, env) },
+            testSteps: summary.testSteps.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty })
+    }
+
+    private static func imageFile(_ path: String, _ env: TicketsCLIEnvironment) throws -> (data: Data, name: String, type: String) {
+        guard let type = TicketImage.contentType(forPath: path) else {
+            throw Failure(exitCode: TicketsCLIExit.usage, message: "--image nimmt nur Bilder (png, jpg, gif, webp): \(path)")
+        }
+        guard let data = env.readData(path, TicketImage.maxBytes), !data.isEmpty else {
+            throw Failure(exitCode: TicketsCLIExit.usage,
+                          message: "Bild nicht lesbar oder größer als \(TicketImage.maxBytes / 1024 / 1024) MB: \(path)")
+        }
+        return (data, (path as NSString).lastPathComponent, type)
+    }
+
+    // MARK: Ordnung
+
+    /// Hinweise zur Ordnung eines Teams. Kein Fehler: Der Bericht bleibt grün.
+    static func hygiene(team: String, tickets: [Ticket], now: Date) -> [Check] {
+        TicketHygiene.findings(in: tickets, now: now).map { finding in
+            let what: String
+            switch finding.kind {
+            case .noProject: what = "ohne Projekt"
+            case .noCriteria: what = "eingeplant oder in Arbeit, aber ohne „Fertig, wenn“"
+            case .startedWithoutChat: what = "in Arbeit, aber nie hing ein Chat daran"
+            case .stale: what = "seit über \(TicketHygiene.staleAfterDays / 7) Wochen unberührt"
+            }
+            let shown = finding.keys.prefix(8).joined(separator: ", ") + (finding.keys.count > 8 ? " und \(finding.keys.count - 8) weitere" : "")
+            return Check(name: "Ordnung \(team)", ok: true, warning: true, detail: "\(finding.keys.count) \(what): \(shown)")
+        }
+    }
+
+    /// Prüft die Tabelle Bereich, Ordner, Projekt aus der Doku des Projekts
+    /// gegen das Ticket-Werkzeug und das Dateisystem.
+    private static func areas(team: String, workspace: String, config: TicketConfig, _ env: TicketsCLIEnvironment) async -> [Check] {
+        var checks: [Check] = []
+        for root in config.projectPaths(forTeam: team) {
+            guard let file = config.areasFileByProjectPath[root] else { continue }
+            let name = "Bereiche \(team)"
+            guard let text = env.readFile((root as NSString).appendingPathComponent(file)),
+                  let areas = TicketAreasTable.parse(text) else {
+                checks.append(Check(name: name, ok: true, warning: true, detail: "Tabelle in \(file) nicht lesbar"))
+                continue
+            }
+            let projects: [String]
+            do {
+                projects = try await env.source(workspace).projects(team: team)
+            } catch {
+                checks.append(Check(name: name, ok: false, detail: (error as? TicketSourceError)?.message ?? "\(error)"))
+                continue
+            }
+            let findings = TicketAreasTable.findings(areas: areas, projects: projects) { path in
+                env.fileExists((root as NSString).appendingPathComponent(path))
+            }
+            if findings.isEmpty {
+                checks.append(Check(name: name, ok: true, detail: "\(areas.count) Bereiche stimmen mit \(file) überein"))
+            }
+            checks += findings.map { Check(name: name, ok: true, warning: true, detail: $0) }
+        }
+        return checks
     }
 
     /// Fehler der Quelle mit dem Namen des Workspaces, wenn mehrere im Spiel sind.
@@ -579,6 +728,8 @@ enum TicketsCLIRunner {
                 let open = snapshot.tickets.filter { !$0.status.kind.isClosed }
                 checks.append(Check(name: "Team \(team)", ok: true,
                                     detail: "\(open.count) offene Tickets, \(open.filter { !$0.activeLinks.isEmpty }.count) mit Agent (\(workspace))"))
+                checks += hygiene(team: team, tickets: snapshot.tickets, now: env.now())
+                checks += await areas(team: team, workspace: workspace, config: config, env)
             } catch {
                 checks.append(Check(name: "Team \(team)", ok: false, detail: (error as? TicketSourceError)?.message ?? "\(error)"))
             }
@@ -663,6 +814,8 @@ enum TicketsCLIFormatter {
         if let milestone = ticket.milestone { object["milestone"] = milestone }
         if let assignee = ticket.assignee { object["assignee"] = assignee.name }
         if let url = ticket.url { object["url"] = url }
+        if let criteria = ticket.criteria { object["criteria"] = ["done": criteria.done, "total": criteria.total] }
+        if let updatedAt = ticket.updatedAt { object["updatedAt"] = ISO8601DateFormatter().string(from: updatedAt) }
         return object
     }
 
@@ -716,7 +869,8 @@ enum TicketsCLIFormatter {
                 let ticket = entry.ticket
                 var marks = ticket.status.name
                 if ticket.isBlocked { marks += ", blockiert" }
-                lines.append("  \(pad(ticket.key, 8))\(pad(ticket.title, 50)) | \(pad(marks, 24)) | \(pad(ticket.assignee?.name.components(separatedBy: " ").first ?? "–", 9)) | \(agentText(entry))")
+                if let criteria = ticket.criteria { marks += " \(criteria.done)/\(criteria.total)" }
+                lines.append("  \(pad(ticket.key, 8))\(pad(ticket.title, 50)) | \(pad(marks, 30)) | \(pad(ticket.assignee?.name.components(separatedBy: " ").first ?? "–", 9)) | \(agentText(entry))")
             }
             lines.append("")
         }
@@ -774,6 +928,7 @@ enum TicketsCLIFormatter {
             "Vorhaben: \(ticket.project ?? "–")\(ticket.milestone.map { " · \($0)" } ?? "") | Labels: \(ticket.labels.isEmpty ? "–" : ticket.labels.joined(separator: ", "))",
             "Agent: \(agentText(agents))",
         ]
+        if let criteria = ticket.criteria { lines.append("Fertig, wenn: \(criteria.done) von \(criteria.total) abgehakt") }
         let earlier = ticket.links.filter { !$0.isActive }
         if !earlier.isEmpty {
             lines.append("Früher: " + earlier.map { "\($0.title.replacingOccurrences(of: "Chat: ", with: "")) (\($0.subtitle.components(separatedBy: " · ").first ?? ""))" }.joined(separator: "; "))

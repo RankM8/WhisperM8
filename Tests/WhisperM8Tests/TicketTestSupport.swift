@@ -17,6 +17,8 @@ final class TicketSourceStub: TicketSource, @unchecked Sendable {
         TicketAccount(userName: "Giuliano Costa", workspace: "WhisperM8 (linear.app/whisperm8)", workspaceKey: "whisperm8", isAdmin: true)
     }
     var onTeams: () async throws -> [String] = { ["WM8"] }
+    var onProjects: (String) async throws -> [String] = { _ in [] }
+    var onUpload: (Data, String, String) async throws -> String = { _, name, _ in "https://uploads.linear.app/test/\(name)" }
     /// Fehler für alle schreibenden Operationen (`nil` = gelingt).
     var writeError: TicketSourceError?
 
@@ -53,6 +55,11 @@ final class TicketSourceStub: TicketSource, @unchecked Sendable {
     func person(matching query: String) async throws -> TicketPerson { note("person \(query)"); return try await onPerson(query) }
     func account() async throws -> TicketAccount { note("account"); return try await onAccount() }
     func teams() async throws -> [String] { note("teams"); return try await onTeams() }
+    func projects(team: String) async throws -> [String] { note("projects \(team)"); return try await onProjects(team) }
+    func uploadImage(_ data: Data, fileName: String, contentType: String) async throws -> String {
+        try write("upload \(fileName) \(contentType) \(data.count)")
+        return try await onUpload(data, fileName, contentType)
+    }
 }
 
 enum TicketFixtures {
@@ -71,10 +78,12 @@ enum TicketFixtures {
 
     static func ticket(_ number: Int, status: String = "Todo", title: String? = nil, description: String = "",
                        priority: Int = 3, assignee: TicketPerson? = nil, project: String? = "Neustart",
-                       labels: [String] = [], links: [TicketChatLink] = [], blocked: Bool = false) -> Ticket {
+                       labels: [String] = [], links: [TicketChatLink] = [], blocked: Bool = false,
+                       updatedAt: Date? = nil) -> Ticket {
         Ticket(id: "id-\(number)", key: "WM8-\(number)", title: title ?? "Ticket \(number)", description: description,
                priority: priority, status: self.status(status), project: project, milestone: nil, assignee: assignee,
-               labels: labels, links: links, isBlocked: blocked, url: "https://linear.app/x/issue/WM8-\(number)")
+               labels: labels, links: links, isBlocked: blocked, url: "https://linear.app/x/issue/WM8-\(number)",
+               updatedAt: updatedAt)
     }
 
     static func link(_ chat: UUID, active: Bool = true, id: String? = nil) -> TicketChatLink {
