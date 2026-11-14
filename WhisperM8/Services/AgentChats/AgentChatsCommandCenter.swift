@@ -113,6 +113,11 @@ enum AgentChatsCommand: Equatable {
     /// einem anderen Fenster oder laufen ihre Chats dort, kommt nichts nach
     /// vorn und kein Dialog (Insel am Controller, L2 „Wohin“).
     case switchToProject(UUID)
+    /// Dieses Fenster nach vorn holen und zum Schlüsselfenster machen
+    /// (Aufwecken durch den Controller, WM8-92): Sonst stellt macOS beim
+    /// Aktivieren das zuletzt aktive Fenster der App wieder her, etwa die
+    /// Einstellungen, und die Tasten des Controllers landen dort.
+    case makeKeyWindow
 }
 
 /// Was ein Fenster über sich sagt, wenn eine Eingabe eintrifft. Wird im
