@@ -33,7 +33,7 @@ export type BoardEntry = {
   status: string
   statusSince: string | null
   otherOwners: string[]
-  /** Fortschritt aus den Kästchen am Ticket (4 von 7). Fehlt, solange die Quelle ihn nicht liefert. */
+  /** Fortschritt aus den Kästchen am Ticket (4 von 7). Fehlt, solange die Quelle ihn nicht liefert; der Kasten zeigt ihn seit WM8-99 nicht. */
   progress?: { done: number; total: number }
 }
 
