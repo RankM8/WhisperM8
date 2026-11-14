@@ -24,9 +24,22 @@ peer_config_dir() {
     if [[ "$1" == main ]]; then echo "$HOME/.claude"; else echo "$PEER_PROFILES/$1"; fi
 }
 
+# Bricht ab, wenn der Konto-Ordner fehlt. Sonst legte Claude dort ein leeres
+# Konto an, und die App zeigte es als Geister-Konto.
+peer_require_account() {
+    local dir conf; dir="$(peer_config_dir "$1")"
+    # Hauptkonto: Konfiguration liegt in ~/.claude.json, sonst im Profil-Ordner.
+    if [[ "$1" == main ]]; then conf="$HOME/.claude.json"; else conf="$dir/.claude.json"; fi
+    if [[ ! -d "$dir" || ! -f "$conf" ]]; then
+        echo "Konto „$1“ fehlt ($dir) — Abbruch, damit kein leeres Konto entsteht" >&2
+        return 1
+    fi
+}
+
 # peer_start <name> <konto> <permission-mode> [settings-json-datei] [zusatz-env...]
 peer_start() {
     local name="$1" account="$2" mode="$3" settings="${4:-}"
+    peer_require_account "$account" || return 1
     shift 4 2>/dev/null || shift $#
     local envs=(HOME="$HOME" USER="$USER" PATH="$PATH" TERM=xterm-256color LANG="${LANG:-de_DE.UTF-8}" SHELL=/bin/zsh)
     [[ "$account" != main ]] && envs+=(CLAUDE_CONFIG_DIR="$(peer_config_dir "$account")")
@@ -98,7 +111,10 @@ peer_wait_status() {
     return 1
 }
 
-# Settings-Datei mit Hook-Mitschnitt (UserPromptSubmit, Stop) ins Log <name>.hooks.jsonl.
+# Settings-Datei mit Hook-Mitschnitt (UserPromptSubmit, Stop, Notification) ins
+# Log <name>.hooks.jsonl. Erlaubt sind nur SendMessage und ListAgents; mehr
+# Rechte gibt das zweite Argument (JSON, ersetzt gleichnamige Schlüssel), etwa
+# '{"permissions":{"allow":["SendMessage","ListAgents","Bash(sleep 30)"]}}'.
 peer_hook_settings() {
     local name="$1" extra="${2:-}"
     local log="$PEER_DIR/logs/$name.hooks.jsonl" file="$PEER_DIR/$name.settings.json"
@@ -108,7 +124,7 @@ import json, sys
 path, cmd, extra = sys.argv[1], sys.argv[2], sys.argv[3]
 hook = [{"hooks": [{"type": "command", "command": cmd}]}]
 d = {"hooks": {"UserPromptSubmit": hook, "Stop": hook, "Notification": hook},
-     "permissions": {"allow": ["Bash(sleep:*)", "Bash(python3:*)", "Bash(echo:*)", "SendMessage", "ListAgents"]}}
+     "permissions": {"allow": ["SendMessage", "ListAgents"]}}
 if extra:
     d.update(json.loads(extra))
 json.dump(d, open(path, "w"), indent=1)
