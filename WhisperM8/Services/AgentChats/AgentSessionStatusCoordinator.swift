@@ -112,6 +112,11 @@ final class AgentSessionStatusCoordinator {
     var freshTranscriptBeforeTurnEnd: ((UUID, @escaping () -> Void) -> Void)?
     /// Stößt die Warteschlange eines Chats an (Tests: Spy).
     var deliverQueued: (UUID) -> Void = { AgentPromptQueueDelivery.shared.deliverNext(for: $0) }
+    /// Notfrist eines übernommenen Chats ohne Beleg, der bei der Abgabe nicht
+    /// ruhte (WM8-97). Lang, weil ein vorgemerkter Auftrag sonst in laufende
+    /// Arbeit oder einen Dialog ginge; ein arbeitender Chat meldet sich über
+    /// Registry, Hooks oder Verlauf ohnehin viel früher.
+    var adoptedUnconfirmedGraceSeconds: TimeInterval = 120
     /// Offene Abort-Verdachte (ESC beobachtet / `chats interrupt` gesendet),
     /// die nach `abortVerifySeconds` gegen Hook- und Transcript-Aktivität
     /// verifiziert werden.
@@ -419,17 +424,37 @@ final class AgentSessionStatusCoordinator {
     }
 
     /// Übernommener Chat (Neustart ohne Chatverlust): Der Prozess läuft schon.
-    /// Anders als `sessionLaunched` keine Startphase und keine Startfrist —
-    /// der Chat steht sofort auf „bereit“, den echten Zustand liefern danach
-    /// Registry, Hooks (ab dem übergebenen Cursor) oder der Verlauf. Hook- und
-    /// Registry-Zustand dieses Laufs sind ohnehin leer; nichts wird verworfen.
-    func sessionAdopted(sessionID: UUID) {
+    ///
+    /// WM8-97: Er bleibt im Startzustand, bis ein echtes Signal kommt
+    /// (Registry, Hook ab dem übergebenen Cursor oder Verlauf). Vorher galt er
+    /// sofort als „bereit“; die Registry-Quelle startet aber erst nach der
+    /// Übernahme, und bis zu ihrem ersten Abgleich stellten Warteschlange und
+    /// `chats send` auch in einen arbeitenden Chat oder einen offenen Dialog
+    /// zu. Im Startzustand halten beide an (`PromptDeliveryGate`,
+    /// `ChatsSendReadinessGuard`); der Übergang nach „bereit“ stößt die
+    /// Warteschlange an, ein Turn-Ende ebenso.
+    ///
+    /// Kommt gar kein Signal, gibt eine Notfrist frei. Ruhte der Chat laut
+    /// Manifest bei der Abgabe, ist es die übliche Startfrist; arbeitete er,
+    /// stand eine Frage offen oder ist der Zustand unbekannt, die lange
+    /// (`adoptedUnconfirmedGraceSeconds`), weil dort ein vorgemerkter Auftrag
+    /// Schaden anrichten könnte. Hook- und Registry-Zustand dieses Laufs sind
+    /// ohnehin leer; nichts wird verworfen.
+    func sessionAdopted(sessionID: UUID, handedOverStatus: AgentSessionRuntimeStatus? = nil) {
         adoptedSessions.insert(sessionID)
         apply(.processLaunched, to: sessionID)
-        apply(.launchGraceExpired, to: sessionID)
-        if !isTerminalSession(sessionID) {
-            attachWatch(sessionID: sessionID)
+        // Terminals haben weder Registry noch Hooks noch Verlauf: die Shell
+        // ist sofort bereit, wie beim normalen Start.
+        if isTerminalSession(sessionID) {
+            apply(.launchGraceExpired, to: sessionID)
+            return
         }
+        attachWatch(sessionID: sessionID)
+        let restedAtHandover = handedOverStatus == .idle
+        scheduleLaunchGrace(sessionID: sessionID,
+                            seconds: restedAtHandover ? launchGraceSeconds : adoptedUnconfirmedGraceSeconds)
+        Logger.agentStore.info(
+            "handover_adopted_unconfirmed session=\(sessionID.uuidString, privacy: .public) handedOver=\(handedOverStatus?.rawValue ?? "unknown", privacy: .public)")
     }
 
     /// Externe Session-ID wurde (nach)gebunden — Watch mit frischer ID.
@@ -1106,7 +1131,7 @@ final class AgentSessionStatusCoordinator {
         // Chat ist nach dem Start bereit: ein während `launching`
         // zurückgestellter Folgeauftrag geht jetzt raus (LR-CLI-003).
         if case .launching = oldState, case .ready = transition.state {
-            AgentPromptQueueDelivery.shared.deliverNext(for: sessionID)
+            deliverQueued(sessionID)
         }
     }
 
@@ -1154,7 +1179,7 @@ final class AgentSessionStatusCoordinator {
                 // vorgemerkte Folgeaufträge. Bewusst NICHT bei `inputRequested`:
                 // dort wartet der Chat auf die Antwort zu einer konkreten Frage —
                 // ein Folgeauftrag würde als diese Antwort gelesen.
-                AgentPromptQueueDelivery.shared.deliverNext(for: sessionID)
+                self.deliverQueued(sessionID)
             }
         case .inputRequested(let reason):
             if preferences.awaitingNotificationEnabled {
@@ -1272,9 +1297,9 @@ final class AgentSessionStatusCoordinator {
 
     // MARK: - Launch-Grace (stumme Hooks)
 
-    private func scheduleLaunchGrace(sessionID: UUID) {
+    private func scheduleLaunchGrace(sessionID: UUID, seconds: TimeInterval? = nil) {
         cancelLaunchGrace(sessionID: sessionID)
-        let seconds = launchGraceSeconds
+        let seconds = seconds ?? launchGraceSeconds
         launchGraceTasks[sessionID] = Task { [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
             guard !Task.isCancelled else { return }

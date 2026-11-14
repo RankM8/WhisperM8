@@ -213,12 +213,14 @@ final class ClaudeRegistryStatusTests: XCTestCase {
         XCTAssertEqual(f.poster.posted.count, 1)
     }
 
-    /// Neustart ohne Chatverlust: ein übernommener Chat steht sofort auf
-    /// „bereit“, ohne Startphase; der erste Registry-Eintrag ist kein Turn-Ende.
-    func testAdoptedChatSkipsLaunchPhaseAndReportsNoTurnEndOnFirstSight() throws {
+    /// Neustart ohne Chatverlust: Ein übernommener Chat bleibt bis zum ersten
+    /// echten Signal im Startzustand (WM8-97, Anzeige wie „ruht“); der erste
+    /// Registry-Eintrag ist kein Turn-Ende.
+    func testAdoptedChatWaitsForEvidenceAndReportsNoTurnEndOnFirstSight() throws {
         let f = try makeFixture()
         f.coordinator.sessionAdopted(sessionID: f.sessionID)
-        XCTAssertEqual(f.coordinator.statusStore.status(for: f.sessionID), .idle, "bereit, keine Startphase")
+        XCTAssertEqual(f.coordinator.statusStore.status(for: f.sessionID), .idle, "Anzeige wie „ruht“")
+        XCTAssertEqual(f.coordinator.lifecycleState(for: f.sessionID), .launching, "noch ohne Beleg")
         f.coordinator.handleRegistryRecord(record("busy"))
         XCTAssertEqual(f.coordinator.statusStore.status(for: f.sessionID), .working)
         XCTAssertTrue(f.poster.posted.isEmpty, "mitten im Turn übernommen: keine Meldung")

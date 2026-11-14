@@ -46,7 +46,7 @@ extension HandoverTakeService {
         }
         // Nicht `sessionLaunched` (Review Ende-Meldung): das setzte „startet
         // gerade“ samt Startfrist für einen Prozess, der längst läuft.
-        coordinator.sessionAdopted(sessionID: id)
+        coordinator.sessionAdopted(sessionID: id, handedOverStatus: Self.handedOverStatus(manifest))
         coordinator.restorePendingBinding(
             .init(pendingExternalID: manifest.pendingExternalSessionID,
                   forkExternalIDs: manifest.forkExternalSessionIDs ?? []),
@@ -63,15 +63,20 @@ extension HandoverTakeService {
                 [(sessionID: id, reason: pending.reason)],
                 targetProfile: pending.targetProfile, targetName: pending.targetName)
         }
-        // Ein Turn-Ende in der Lücke hat keinen Auftrag aus der Warteschlange
-        // ausgelöst. Einmal nachfassen, sobald der Status wieder bekannt ist;
-        // die Zustellung prüft selbst, ob der Chat ruht.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-            AgentPromptQueueDelivery.shared.deliverNext(for: id)
-        }
+        // Kein Nachfassen der Warteschlange nach fester Zeit mehr (WM8-97):
+        // Der Chat bleibt im Startzustand, bis ein echtes Signal kommt. Der
+        // Übergang nach „bereit“ oder ein Turn-Ende (auch eines in der Lücke,
+        // arbeitete der Chat bei der Abgabe) stößt die Zustellung an.
         Logger.agentStore.info(
             "handover_adopted session=\(id.uuidString, privacy: .public) pid=\(manifest.pid) gapBytes=\(taken.gapBytes)")
         return true
+    }
+
+    /// Status bei der Abgabe aus dem Manifest; ältere Manifeste kennen nur
+    /// „arbeitet seit“.
+    static func handedOverStatus(_ manifest: HandoverManifest) -> AgentSessionRuntimeStatus? {
+        if let raw = manifest.runtimeStatus, let status = AgentSessionRuntimeStatus(rawValue: raw) { return status }
+        return manifest.workingSince != nil ? .working : nil
     }
 
     private static func showEndedLive(_ taken: HandoverClient.TakenChat, session: AgentChatSession,

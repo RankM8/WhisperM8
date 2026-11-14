@@ -195,9 +195,11 @@ enum HandoverManifestFactory {
         manifest.hasComposerDraft = controller.composerDraft.fieldMayHaveText
         // „Arbeitet seit“ (Review Paket 4, Befund 7): Arbeitet der Chat, zählt
         // die neue App ab der Abgabe weiter; bis dahin zählt die alte App.
-        if AgentSessionStatusCoordinator.shared.statusStore.status(for: session.id) == .working {
+        let runtime = AgentSessionStatusCoordinator.shared.statusStore.status(for: session.id)
+        if runtime == .working {
             manifest.workingSince = handoverTime.timeIntervalSince1970
         }
+        manifest.runtimeStatus = runtime?.rawValue
         if let pending = AccountSwitchCoordinator.shared.pending[session.id] {
             manifest.pendingAccountSwitch = try? HandoverJSONValue(encoding: HandoverPendingAccountSwitch(pending))
         }

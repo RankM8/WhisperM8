@@ -212,6 +212,11 @@ struct HandoverManifest: Codable, Equatable {
     var hookCursor: UInt64?
     /// „Arbeitet seit“ (Sekunden seit 1970) für Statistik und Wach-Knopf.
     var workingSince: Double?
+    /// Laufzeitstatus bei der Abgabe (`AgentSessionRuntimeStatus`, z. B.
+    /// `idle`, `working`, `awaitingInput`). Kein Beleg für die neue App, nur
+    /// die Wahl der Notfrist, falls nach der Übernahme kein Signal kommt
+    /// (WM8-97). Fehlt bei Manifesten älterer Builds.
+    var runtimeStatus: String?
     /// Entwurf im Eingabefeld; `nil` = unbekannt, gilt dann als „Entwurf vorhanden“.
     var hasComposerDraft: Bool?
     /// Vorgemerkter Kontowechsel nach dem Turn (Entscheidung 9), undurchsichtig.
