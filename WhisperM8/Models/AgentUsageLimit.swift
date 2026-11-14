@@ -11,6 +11,13 @@ struct AgentUsageLimit: Codable, Equatable, Hashable {
     /// Zeitstempel der Limit-Zeile (macht die Angabe eindeutig, ohne bei
     /// jedem Poll eine neue zu erzeugen).
     var since: Date?
+    /// Macht Claude zum Ende von selbst weiter („continuing automatically
+    /// at …“)? Belegt in den Verläufen vom 11.–14.11.2026: Claude bietet es
+    /// fast immer an, bricht es aber ab, sobald eine neue Nachricht kommt
+    /// („Automatic continue cancelled“). Ungestört schreibt Claude zum Ende
+    /// selbst „Your claude.ai usage limit has reset. Continue the task …“.
+    /// `nil` = unbekannt.
+    var autoContinues: Bool? = nil
 
     /// Gilt das Limit noch? Ohne bekanntes Ende: ja, bis der Verlauf
     /// weitergeht.
@@ -19,10 +26,35 @@ struct AgentUsageLimit: Codable, Equatable, Hashable {
         return resetsAt > now
     }
 
-    init(resetsAt: Date?, kind: String, since: Date?) {
+    init(resetsAt: Date?, kind: String, since: Date?, autoContinues: Bool? = nil) {
         self.resetsAt = resetsAt
         self.kind = kind
         self.since = since
+        self.autoContinues = autoContinues
+    }
+
+    /// Wie `init?(event:)`, dazu aus den System-Zeilen nach der Limit-Zeile,
+    /// ob Claude von selbst weitermacht.
+    init?(event: AgentTranscriptEvent?, tail: String) {
+        self.init(event: event)
+        autoContinues = Self.autoContinueState(inTail: tail)
+    }
+
+    static let autoContinueArmedMarker = "continuing automatically at"
+    static let autoContinueCancelledMarker = "Automatic continue cancelled"
+
+    /// Pur: die jüngste Aussage nach der letzten Limit-Zeile. Abgebrochen
+    /// schlägt angeboten; keine Aussage → `nil`.
+    static func autoContinueState(inTail tail: String) -> Bool? {
+        for line in tail.split(omittingEmptySubsequences: true, whereSeparator: \.isNewline).reversed() {
+            if line.contains("\"usage_limit_reached\"") || line.contains("\"model_requires_usage_credits\"") {
+                return nil // bis zur Limit-Zeile keine Aussage
+            }
+            guard line.contains("\"system\"") else { continue }
+            if line.contains(autoContinueCancelledMarker) { return false }
+            if line.contains(autoContinueArmedMarker) { return true }
+        }
+        return nil
     }
 
     /// Aus dem letzten Ereignis des Verlaufs; `nil`, wenn es kein Limit ist.

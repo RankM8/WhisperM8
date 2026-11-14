@@ -149,14 +149,16 @@ enum ChatsOutput {
     /// ruhenden Status (WM8-69).
     static func statusText(_ status: AgentSessionRuntimeStatus?, session: AgentChatSession, now: Date) -> String {
         if let limit = session.usageLimit, limit.isActive(at: now) {
-            return "limit" + (limit.resetsAt.map { " bis " + ChatsUsageLimitFormat.clock($0, now: now) } ?? "")
+            let until = limit.resetsAt.map { " bis " + ChatsUsageLimitFormat.clock($0, now: now) } ?? ""
+            return "limit" + until + (limit.autoContinues == true ? ", dann weiter" : "")
         }
         return status?.rawValue ?? "unknown"
     }
 
     /// `kind` (five_hour, seven_day, model_requires_usage_credits), `resetsAt`.
     static func usageLimitJSON(_ limit: AgentUsageLimit) -> [String: Any] {
-        ["kind": limit.kind, "resetsAt": limit.resetsAt.map(iso) ?? NSNull()]
+        ["kind": limit.kind, "resetsAt": limit.resetsAt.map(iso) ?? NSNull(),
+         "autoContinues": limit.autoContinues.map { $0 as Any } ?? NSNull()]
     }
 
     /// Für `chats show`: welches Limit, bis wann.
@@ -168,6 +170,10 @@ enum ChatsOutput {
         default: kind = "Guthaben-Limit (\(limit.kind))"
         }
         let until = limit.resetsAt.map { " bis " + ChatsUsageLimitFormat.clock($0, now: now) } ?? ""
+        if limit.autoContinues == true {
+            return "Konto am \(kind)\(until), läuft dann von selbst weiter — Nachrichten werden vorgemerkt, "
+                + "eine Nachricht jetzt würde das Weitermachen abbrechen"
+        }
         return "Konto am \(kind)\(until) — Nachrichten werden vorgemerkt, nicht verbraucht"
     }
 

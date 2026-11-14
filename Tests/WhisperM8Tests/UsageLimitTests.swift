@@ -63,6 +63,43 @@ final class UsageLimitTests: XCTestCase {
         XCTAssertTrue(AgentUsageLimit(resetsAt: nil, kind: "x", since: nil).isActive(at: .distantFuture))
     }
 
+    // MARK: - Weitermachen zum Ende (Belege 11.–14.11.2026)
+
+    private let armed = #"{"type":"system","subtype":"informational","content":"Usage limit reached · continuing automatically at 4:20am · esc to cancel"}"#
+    private let cancelled = #"{"type":"system","subtype":"informational","content":"Automatic continue cancelled · /rate-limit-options to re-arm"}"#
+
+    func testAutoContinueIsReadFromTheSystemLinesAfterTheLimit() {
+        XCTAssertEqual(AgentUsageLimit.autoContinueState(inTail: [fiveHourLine, armed].joined(separator: "\n")), true)
+        XCTAssertEqual(AgentUsageLimit.autoContinueState(inTail: [fiveHourLine, armed, cancelled].joined(separator: "\n")), false,
+                       "eine neue Nachricht bricht das Weitermachen ab")
+        XCTAssertNil(AgentUsageLimit.autoContinueState(inTail: fiveHourLine))
+        // Eine ältere Aussage vor der letzten Limit-Zeile zählt nicht.
+        XCTAssertNil(AgentUsageLimit.autoContinueState(inTail: [armed, fiveHourLine].joined(separator: "\n")))
+    }
+
+    func testOwnCaseOrgMonthlySpendLimitIsAFiveHourLimit() {
+        // Eigener Verlauf 14.11.2026 02:39: „org's monthly spend limit“, gesperrt
+        // ist der Mehrverbrauch, das Ende nennt das 5-Stunden-Limit.
+        let own = #"{"type":"assistant","timestamp":"2026-11-14T02:39:40.000Z","isApiErrorMessage":true,"error":"rate_limit","apiError":"usage_limit_reached","quotaLimits":{"status":"rejected","resetsAt":1794637200,"rateLimitType":"five_hour","overageDisabledReason":"org_level_disabled_until"},"message":{"model":"<synthetic>","stop_reason":"stop_sequence","content":[{"type":"text","text":"You've hit your org's monthly spend limit · your 5-hour limit resets 7:20am (Europe/Zurich)"}]}}"#
+        let limit = AgentUsageLimit(event: AgentTranscriptParser.lastEvent(in: [own, cancelled].joined(separator: "\n"), provider: .claude),
+                                    tail: [own, cancelled].joined(separator: "\n"))
+        XCTAssertEqual(limit?.kind, "five_hour")
+        XCTAssertEqual(limit?.resetsAt, Date(timeIntervalSince1970: 1_794_637_200))
+        XCTAssertEqual(limit?.autoContinues, false)
+    }
+
+    func testTextsSayWhenClaudeContinuesOnItsOwn() {
+        let now = resets.addingTimeInterval(-600)
+        var limit = AgentUsageLimit(resetsAt: resets, kind: "five_hour", since: nil, autoContinues: true)
+        XCTAssertTrue(ChatsSendReadinessGuard.usageLimitMessage(limit, now: now)?.contains("von selbst weiter") == true)
+        var session = AgentChatSession(provider: .claude, projectID: UUID(), title: "t")
+        session.usageLimit = limit
+        XCTAssertTrue(ChatsOutput.statusText(.idle, session: session, now: now).hasSuffix(", dann weiter"))
+        XCTAssertTrue(ChatsOutput.usageLimitLine(limit, now: now).contains("läuft dann von selbst weiter"))
+        limit.autoContinues = false
+        XCTAssertFalse(ChatsSendReadinessGuard.usageLimitMessage(limit, now: now)?.contains("von selbst weiter") == true)
+    }
+
     // MARK: - Watcher und Store
 
     func testWatcherCarriesTheLimitAndClearsItWithANewTurn() {

@@ -1359,15 +1359,21 @@ final class AgentSessionStatusCoordinator {
             // Limit vorbei (der Verlauf geht weiter): Wartendes zustellen.
             AgentPromptQueueDelivery.shared.deliverNext(for: sessionID)
         } else if let resetsAt = limit?.resetsAt {
-            scheduleDeliveryAfterUsageLimit(sessionID: sessionID, resetsAt: resetsAt)
+            scheduleDeliveryAfterUsageLimit(sessionID: sessionID, resetsAt: resetsAt,
+                                            autoContinues: limit?.autoContinues == true)
         }
     }
 
     /// Nach dem Ende des Limits Vorgemerktes zustellen — auch wenn Claude
     /// nicht von selbst weitermacht („Automatic continue cancelled“) und
     /// deshalb kein Turn-Ende kommt.
-    private func scheduleDeliveryAfterUsageLimit(sessionID: UUID, resetsAt: Date) {
-        let delay = max(0, resetsAt.timeIntervalSinceNow) + 5
+    /// Macht Claude von selbst weiter, gilt das zuerst: Ein Auftrag aus der
+    /// Warteschlange zum Ende hätte das Weitermachen abgebrochen; er folgt dann
+    /// beim Turn-Ende des fortgesetzten Turns. Belegt kam Claudes eigene
+    /// Fortsetzung rund 10 min nach dem Ende — erst nach 20 min ohne neues
+    /// Ereignis stellt der Koordinator selbst zu.
+    private func scheduleDeliveryAfterUsageLimit(sessionID: UUID, resetsAt: Date, autoContinues: Bool) {
+        let delay = max(0, resetsAt.timeIntervalSinceNow) + (autoContinues ? 20 * 60 : 5)
         Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
             guard let self,

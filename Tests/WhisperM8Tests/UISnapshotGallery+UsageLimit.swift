@@ -7,11 +7,13 @@ import SwiftUI
 extension UISnapshotGallery {
     static func usageLimitFixtures() -> [Fixture] {
         let limit = AgentUsageLimit(resetsAt: Date().addingTimeInterval(95 * 60), kind: "five_hour", since: nil)
-        func row(_ title: String, _ status: AgentSessionRuntimeStatus?, limited: Bool = false) -> some View {
+        let continuing = AgentUsageLimit(resetsAt: Date().addingTimeInterval(95 * 60), kind: "five_hour", since: nil,
+                                         autoContinues: true)
+        func row(_ title: String, _ status: AgentSessionRuntimeStatus?, limit rowLimit: AgentUsageLimit? = nil) -> some View {
             HStack(spacing: 6) {
                 Text(title).font(.system(size: 12)).foregroundStyle(AgentTheme.textPrimary)
                 Spacer(minLength: 6)
-                if limited { AgentUsageLimitLabel(limit: limit) } else { AgentStatusIndicator(status: status) }
+                if let rowLimit { AgentUsageLimitLabel(limit: rowLimit) } else { AgentStatusIndicator(status: status) }
             }
             .padding(.horizontal, 10)
             .frame(height: 26)
@@ -24,7 +26,8 @@ extension UISnapshotGallery {
                         row("Fin · Insel: Tastatur", .working)
                         row("Dex · Ticket-Board", .awaitingInput)
                         row("Ole · Terminal-Tab", .idle)
-                        row("Gus · Chat am Limit", .idle, limited: true)
+                        row("Gus · Chat am Limit", .idle, limit: limit)
+                        row("Dex · läuft von selbst weiter", .idle, limit: continuing)
                     }
                     .frame(width: 280)
                     VStack(alignment: .leading, spacing: 8) {

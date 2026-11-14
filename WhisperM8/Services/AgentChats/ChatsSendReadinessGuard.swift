@@ -50,6 +50,11 @@ enum ChatsSendReadinessGuard {
     static func usageLimitMessage(_ limit: AgentUsageLimit?, now: Date = Date()) -> String? {
         guard let limit, limit.isActive(at: now) else { return nil }
         let until = limit.resetsAt.map { " bis \(ChatsUsageLimitFormat.clock($0, now: now))" } ?? ""
+        if limit.autoContinues == true {
+            return "Konto am Nutzungslimit\(until); Claude macht dann von selbst weiter. Ein Prompt jetzt würde "
+                + "verbraucht und das automatische Weitermachen abbrechen. Nutze `chats enqueue` (stellt nach dem "
+                + "fortgesetzten Turn zu) oder wechsle das Konto."
+        }
         return "Konto am Nutzungslimit\(until) — der Prompt würde verbraucht, ohne dass der Chat arbeitet. "
             + "Nutze `chats enqueue` (stellt nach dem Limit zu) oder wechsle das Konto."
     }

@@ -681,6 +681,17 @@ ist, trägt der Chat `usageLimit` (Art und Ende). Dann gilt:
   von selbst weitermacht.
 - `new` warnt auf stderr, wenn ein anderer Chat desselben Kontos gerade am
   Limit steht.
+- Weitermachen zum Ende (belegt in den Verläufen vom 11.–14.11.2026): Claude
+  bietet nach der Limit-Zeile „continuing automatically at …“ an und schreibt
+  zum Ende selbst „Your claude.ai usage limit has reset. Continue the task …“
+  (einmal belegt, rund 10 min nach dem Ende). Jede neue Nachricht an den Chat
+  erzeugt aber eine weitere Limit-Zeile und bricht das ab („Automatic continue
+  cancelled“). `usageLimit.autoContinues` sagt, was zuletzt galt; Anzeige und
+  Meldungen lauten dann „läuft um … weiter“. Die Warteschlange stellt in dem
+  Fall erst nach dem fortgesetzten Turn zu (spätestens 20 min nach dem Ende),
+  sonst 5 s nach dem Ende.
+- Der Zustand endet von selbst: mit der Endzeit oder sobald ein neuer Turn im
+  Verlauf beginnt.
 - Codex- und GPT-Chats: noch nicht erkannt (kein belegter Limit-Fall im
   Bestand; Codex führt `rate_limits` in `token_count`, ohne echten Treffer).
 - Der Kontowechsel behandelt einen Chat am Limit noch wie bisher (Folgepaket:

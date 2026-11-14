@@ -3831,6 +3831,16 @@
         }
       }
     },
+    "Claude continues on its own then. A message now would cancel that; queued messages follow afterwards.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude macht dann von selbst weiter. Eine Nachricht jetzt würde das abbrechen; vorgemerkte Nachrichten folgen danach."
+          }
+        }
+      }
+    },
     "Claude logins need renewal": {
       "localizations": {
         "de": {
@@ -4767,6 +4777,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Job dauerhaft als interaktiven Codex-Chat fortsetzen (exklusiv — `agent send` ist danach deaktiviert)"
+          }
+        }
+      }
+    },
+    "Continues at %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Läuft um %@ weiter"
           }
         }
       }

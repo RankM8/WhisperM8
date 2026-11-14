@@ -550,7 +550,7 @@ final class AgentSessionRuntimeWatcher {
             workingCopy: workingCopy(in: tail, entry: entry),
             // Liegt die Limit-Zeile außerhalb des Tails (kein Ereignis), bleibt
             // der letzte Stand; ein neueres Ereignis hebt das Limit auf.
-            usageLimit: lastEvent == nil ? entry.cachedUsageLimit : AgentUsageLimit(event: lastEvent)
+            usageLimit: lastEvent == nil ? entry.cachedUsageLimit : AgentUsageLimit(event: lastEvent, tail: tail)
         )
     }
 

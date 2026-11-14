@@ -199,9 +199,11 @@ enum AgentUsageLimitText {
         return formatter.string(from: date)
     }
 
-    /// Kurz und immer sichtbar: „Limit until 04:20“ bzw. „Usage limit“.
+    /// Kurz und immer sichtbar: „Continues at 04:20“, wenn Claude von selbst
+    /// weitermacht, sonst „Limit until 04:20“ bzw. „Usage limit“.
     static func short(_ limit: AgentUsageLimit, now: Date = Date()) -> String {
         guard let resetsAt = limit.resetsAt else { return String(localized: "Usage limit") }
+        if limit.autoContinues == true { return String(localized: "Continues at \(clock(resetsAt, now: now))") }
         return String(localized: "Limit until \(clock(resetsAt, now: now))")
     }
 
@@ -211,7 +213,11 @@ enum AgentUsageLimitText {
     }
 
     static func help(_ limit: AgentUsageLimit, now: Date = Date()) -> String {
-        label(limit, now: now) + " — " + String(localized: "Messages are queued, not used up. Switch the account to continue now.")
+        if limit.autoContinues == true {
+            return label(limit, now: now) + " — "
+                + String(localized: "Claude continues on its own then. A message now would cancel that; queued messages follow afterwards.")
+        }
+        return label(limit, now: now) + " — " + String(localized: "Messages are queued, not used up. Switch the account to continue now.")
     }
 }
 
