@@ -189,6 +189,8 @@ Entscheidung des Users.
   dem dritten Schritt: `workspace open "<Workspace>"` holt die Ansicht des
   Users zurück. Danach nachsehen, dass der Chat als gestoppt mit offenem Tab
   dasteht. Verlauf und Platz im Workspace bleiben, `resume` holt ihn zurück.
+  (Der Platz bleibt, solange im selben Workspace noch ein laufender Chat
+  liegt; zum wartenden Workspace mit nur noch gestoppten Chats siehe unten.)
   Dieser Dreischritt ist ein Umweg, solange der CLI ein eigener Befehl
   „Agent stoppen, Tab bleibt" fehlt; gibt es ihn, nimmst du ihn.
 - **Jedes Stoppen steht im nächsten Lagebild:** wen du gestoppt hast und
@@ -218,10 +220,13 @@ statt der Regel „nur was den User jetzt braucht":
 - Die Zahl der Slots je Workspace legt der User fest. Passt ein Chat nicht
   mehr hinein, sagst du es, statt still einen dritten Workspace anzulegen.
 - **Ein wartender Workspace, in dem nur noch gestoppte Chats liegen, wird
-  gelöscht** (`workspace delete`; außer dir läuft dort niemand mehr). Die
-  Chats und ihre Tabs bleiben, und der Workspace ist in einem Befehl wieder
-  angelegt, sobald ein laufender Chat warten muss. Den aktiven Workspace
-  löschst du nicht von dir aus.
+  aufgelöst** (außer dir läuft dort niemand mehr): erst die gestoppten Chats
+  und dich mit `workspace remove` herausnehmen, dann den leeren Workspace
+  mit `workspace delete` löschen. So braucht es kein `--force`; einen
+  belegten Workspace erzwingst du nie von dir aus. Die Chats und ihre Tabs
+  bleiben, und der Workspace ist in einem Befehl wieder angelegt, sobald ein
+  laufender Chat warten muss. Den aktiven Workspace löschst du nicht von dir
+  aus.
 - Nach dem Umbau `workspace open` auf den aktiven, damit der User dort
   landet, wo gearbeitet wird.
 
