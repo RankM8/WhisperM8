@@ -202,6 +202,7 @@ extension AgentChatsView {
                 TitlebarIconButton(systemImage: "sidebar.left", help: isSidebarVisible ? String(localized: "Hide sidebar") : String(localized: "Show sidebar"), isActive: isSidebarVisible) {
                     isSidebarVisible.toggle()
                 }
+                TicketsModeButton(windowStore: windowStore, windowID: windowID)
 
                 if !headerTabs.isEmpty {
                     ScrollViewReader { proxy in

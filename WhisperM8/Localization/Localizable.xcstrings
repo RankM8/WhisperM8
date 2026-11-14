@@ -2721,6 +2721,16 @@
         }
       }
     },
+    "Back to chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück zu den Chats"
+          }
+        }
+      }
+    },
     "Back to password managers and the Keychain.": {
       "localizations": {
         "de": {
@@ -16644,6 +16654,16 @@
         }
       }
     },
+    "Show tickets": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tickets anzeigen"
+          }
+        }
+      }
+    },
     "Show tickets in Agent Chats": {
       "localizations": {
         "de": {
@@ -18440,16 +18460,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Der GPT-Proxy ist nicht erreichbar: %@"
-          }
-        }
-      }
-    },
-    "The Tickets view itself arrives with a later update. Access and projects set up here already work for the whisperm8 tickets command.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Die Ansicht „Tickets“ selbst kommt mit einem späteren Update. Zugang und Projekte, die du hier einrichtest, gelten schon jetzt für den Befehl whisperm8 tickets."
           }
         }
       }
@@ -20950,6 +20960,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ist ein anderes Programm vorne, holt ein Stick oder eine Taste das Agent-Chats-Fenster nach vorn. Diese erste Eingabe bewirkt sonst nichts. %@ wirkt weiter im anderen Programm. Braucht den Schalter darüber."
+          }
+        }
+      }
+    },
+    "While the switch is on, a ticket button sits in the title band of the Agent Chats window, next to the sidebar button. It switches between chats and tickets.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Solange der Schalter an ist, steht in der Titelzone des Agent-Chats-Fensters ein Ticket-Knopf, neben dem Knopf für die Seitenleiste. Er wechselt zwischen Chats und Tickets."
           }
         }
       }

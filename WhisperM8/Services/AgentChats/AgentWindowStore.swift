@@ -70,6 +70,10 @@ final class AgentWindowStore {
     /// Geschrieben nur von `AgentWindowStore+GridTabClose`.
     var dismissedProjectViewSessionIDs: [UUID: Set<UUID>] = [:]
 
+    /// Fenster, die statt der Chats die Ticket-Ansicht zeigen. Flüchtig.
+    /// Geschrieben nur von `AgentWindowStore+Tickets`.
+    var ticketsModeWindowIDs: Set<UUID> = []
+
     /// Offene Tabs ALLER Fenster zum App-Start — Snapshot BEVOR Restore/
     /// User-Interaktion den State verändern. Basis des Summary-Start-Abgleichs
     /// („nur zuvor aktive Tabs prüfen, nie die Historie").
@@ -971,6 +975,7 @@ final class AgentWindowStore {
     /// verwenden (Review-Finding: das konnte im sichtbaren Grid einen
     /// Nicht-Slot selektieren).
     func navigateToSession(_ sessionID: UUID, in windowID: UUID) {
+        setTicketsMode(false, in: windowID)
         if let entity = activeGridWorkspace(in: windowID),
            window(for: windowID).showsGrid,
            entity.slotIndex(of: sessionID) != nil {

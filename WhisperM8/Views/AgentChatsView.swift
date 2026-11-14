@@ -2372,7 +2372,9 @@ struct AgentChatsView: View {
         VStack(spacing: 0) {
             projectChatStrip
 
-            if isGridActive {
+            if isTicketsModeActive {
+                ticketsWorkspace
+            } else if isGridActive {
                 // Split-Grid: alle offenen Tabs als bündige Panes — ersetzt
                 // nur den Detail-Bereich; Sidebar/Tab-Strip bleiben
                 // unverändert. Siehe AgentChatsView+Grid.swift.

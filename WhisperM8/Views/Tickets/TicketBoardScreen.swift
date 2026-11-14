@@ -202,36 +202,32 @@ struct TicketBoardScreen: View {
     /// Projekt, dessen Tickets gezeigt werden; `nil` ohne gewähltes Projekt.
     let projectPath: String?
     let projectName: String
-    @State private var controller: TicketBoardController
+    /// Der Schalter ging aus, während die Ansicht offen war: Das Fenster
+    /// kehrt zu den Chats zurück.
+    var onDisabled: (() -> Void)?
+    /// Entsteht erst beim Erscheinen: Das Fenster baut diese Ansicht bei jeder
+    /// Neuauswertung neu zusammen, und dabei soll nichts angelegt werden.
+    @State private var controller: TicketBoardController?
     @State private var windowVisible = true
     /// Zählt, wie oft das Fenster aktiv wurde: Danach wird die Zuordnung neu
     /// gelesen, etwa nach dem Einrichten in den Einstellungen.
     @State private var windowActivations = 0
     @AppStorage(PreferenceKeys.ticketBoardEnabled) private var enabled = false
 
-    private let source: TicketChatStatusSource
-    private let actions: TicketBoardActions
-
     /// Ohne Angaben gelten die Wege der App; Tests und Bilder setzen eigene ein.
-    @MainActor
-    init(projectPath: String?, projectName: String, environment: TicketBoardEnvironment? = nil,
-         source: TicketChatStatusSource? = nil, actions: TicketBoardActions? = nil) {
-        self.projectPath = projectPath
-        self.projectName = projectName
-        self.source = source ?? .live
-        self.actions = actions ?? .live
-        _controller = State(initialValue: TicketBoardController(environment: environment ?? .live))
-    }
+    var environment: TicketBoardEnvironment?
+    var source: TicketChatStatusSource?
+    var actions: TicketBoardActions?
 
     var body: some View {
         Group {
             if !enabled {
                 TicketBoardEmptyState(kind: .disabled, actions: screenActions)
-            } else {
+            } else if let controller {
                 switch controller.phase {
                 case .ready:
                     TicketBoardView(title: String(localized: "Tickets · \(controller.title)"), model: controller.viewModel,
-                                    load: controller.load, source: source, actions: screenActions)
+                                    load: controller.load, source: source ?? .live, actions: screenActions)
                 case .noProject:
                     TicketBoardEmptyState(kind: .noProject, actions: screenActions)
                 case .notMapped:
@@ -243,6 +239,8 @@ struct TicketBoardScreen: View {
                 case .unreachable(let problem):
                     TicketBoardEmptyState(kind: .unreachable(problem), actions: screenActions)
                 }
+            } else {
+                TicketBoardEmptyState(kind: .loading, actions: screenActions)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -251,12 +249,15 @@ struct TicketBoardScreen: View {
         // Ein Schlüssel für alles, was den Abruf an- oder abschaltet.
         .task(id: Activation(enabled: enabled, visible: windowVisible, project: projectPath, activations: windowActivations)) {
             if enabled, windowVisible {
+                let controller = controller ?? TicketBoardController(environment: environment ?? .live)
+                if self.controller == nil { self.controller = controller }
                 await controller.show(projectPath: projectPath, projectName: projectName)
             } else {
-                controller.hide()
+                controller?.hide()
+                if !enabled { onDisabled?() }
             }
         }
-        .onDisappear { controller.hide() }
+        .onDisappear { controller?.hide() }
     }
 
     private struct Activation: Equatable {
@@ -267,8 +268,8 @@ struct TicketBoardScreen: View {
     }
 
     private var screenActions: TicketBoardActions {
-        var actions = actions
-        actions.refresh = { [controller] in controller.refresh() }
+        var actions = actions ?? .live
+        actions.refresh = { [controller] in controller?.refresh() }
         return actions
     }
 }
