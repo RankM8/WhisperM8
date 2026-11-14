@@ -106,6 +106,12 @@ und Kopf. Grün heißt auch hier nur „arbeitet“. Der Zustand kommt aus der A
 **Verknüpfung:** Quelle der Wahrheit ist der Anhang am Ticket. Die App legt in Stufe 1 keine eigene Zuordnung
 an. So bleiben Skript und App deckungsgleich, und eine zweite Installation sieht dasselbe.
 
+**Chats ohne offenes Ticket:** Die Leiste zeigt laufende Chats, an denen kein offenes Ticket hängt. War der
+Chat an einem inzwischen erledigten Ticket, steht dort „zuletzt an WM8-29 (Done)“, sonst „noch nie verknüpft“.
+Supervisor-Chats (Titel beginnt mit „Jarvis“) betreuen andere Chats und brauchen kein Ticket; sie stehen
+getrennt und zählen nicht als Lücke. So verhält sich `ticket board` seit dem 14.11.2026. Für die App ist die
+Erkennung am Titel nur der Anfang; sauberer wäre ein Merkmal an der Sitzung.
+
 **Werkzeug austauschbar:** Die Oberfläche kennt nur `TicketSource` und die Modelle. Für Jira bräuchte es eine
 zweite Quelle, die Verknüpfung läge dort in einem Remote-Link statt in einem Anhang.
 
