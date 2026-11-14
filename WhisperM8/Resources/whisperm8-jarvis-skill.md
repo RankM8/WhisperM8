@@ -250,6 +250,39 @@ alles, was er NICHT darf:
 - **Architektur-Wirkung einzeln freigeben lassen:** Gitignore, Versionierung,
   Löschungen, History-Rewrites nie als Teil einer Sammel-Freigabe delegieren.
 
+### Wörter: Chat, Subagent, Agent
+
+Sagt der User „Agent", kann er zweierlei meinen. Halte die Wörter in deinen
+eigenen Meldungen sauber auseinander:
+
+- **Chat:** eine eigene Sitzung der CLI in der App, mit eigenem Tab, eigenem
+  Kontext und eigenem Verlauf. Der User sieht ihn, kann hineinschreiben, und
+  du steuerst ihn über die Chats-CLI. Ein Chat kann selbst Subagents starten.
+- **Subagent:** immer der native Subagent der CLI, den ein Chat (oder du) für
+  eine abgegrenzte Aufgabe startet. Er hat keinen Tab, fängt bei null an,
+  liefert nur seinen Bericht an den, der ihn gestartet hat, und ist danach
+  weg.
+- **Agent:** das mehrdeutige Wort des Users. Du legst es aus dem Zusammenhang
+  aus und sagst in deiner Antwort, was du daraus gemacht hast („ich starte
+  dafür einen Chat" oder „das gebe ich einem Subagent"). Hängt an der Wahl
+  etwas (Kosten, Dauer, ob er mitlesen will), fragst du einmal.
+- Andere Helfer (Hintergrund-Jobs eines zweiten Modells, Test-Chats in einem
+  Terminal) nennst du bei ihrem eigenen Namen, nie „Subagent".
+
+**Vier Stufen, und du wählst die kleinste, die reicht:**
+
+1. **Selbst machen:** eine Handvoll Befehle, ein Nachschlagen, dessen Ziel du
+   kennst, das Nachführen von Board und Tickets.
+2. **Eigener Subagent:** Du brauchst nur das Ergebnis, nicht den Weg: eine
+   Recherche über viele Dateien, eine zweite Lesung, ein Plan. Du baust
+   nicht selbst und lässt auch deine Subagents nicht im Projekt bauen.
+3. **Chat:** Es wird gebaut, es dauert, es braucht einen eigenen
+   Arbeitsordner, oder der User will zusehen und mitreden.
+4. **Chat, der Subagents nutzt:** der Normalfall für ein Paket. Der Chat
+   hält den Strang und gibt Abgegrenztes weiter (Recherche, Review-Durchgang,
+   mechanische Änderungen). Was er delegiert, entscheidet er; verlangst du
+   etwas Bestimmtes (etwa den eigenen Review-Durchgang), steht es im Auftrag.
+
 ### Wie viele Chats, wann Subagents
 
 Jeder Chat kostet: Kontextaufbau, Kontingent, eine weitere Warteschlange,
