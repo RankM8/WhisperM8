@@ -12274,12 +12274,12 @@
         }
       }
     },
-    "On a restart through make dev, running chats and terminal tabs are handed to a small helper process and taken back by the new app. If anything goes wrong, the chats are resumed as before. Quitting with Cmd+Q still ends all chats. The GPT router then runs as its own service; the change takes effect at the next app start.": {
+    "On a restart through make dev, running chats and terminal tabs are handed to a small helper process and taken back by the new app. If anything goes wrong, the chats are resumed as before. Quitting with Cmd+Q still ends all chats. The GPT router then runs as its own service; the change takes effect at the next app start. So far this only works when WhisperM8 is rebuilt with make dev; an update through Homebrew still ends the chats.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Bei einem Neustart über make dev gehen laufende Chats und Terminal-Tabs an einen kleinen Hilfsprozess und kommen in der neuen App zurück. Geht dabei etwas schief, werden die Chats wie bisher fortgesetzt. Beenden mit Cmd+Q beendet weiterhin alle Chats. Der GPT-Router läuft dann als eigener Dienst; die Änderung wirkt ab dem nächsten App-Start."
+            "value": "Bei einem Neustart über make dev gehen laufende Chats und Terminal-Tabs an einen kleinen Hilfsprozess und kommen in der neuen App zurück. Geht dabei etwas schief, werden die Chats wie bisher fortgesetzt. Beenden mit Cmd+Q beendet weiterhin alle Chats. Der GPT-Router läuft dann als eigener Dienst; die Änderung wirkt ab dem nächsten App-Start. Wirkt bisher nur, wenn WhisperM8 mit make dev neu gebaut wird; ein Update über Homebrew beendet die Chats weiter."
           }
         }
       }

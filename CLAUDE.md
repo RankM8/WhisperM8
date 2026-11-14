@@ -183,7 +183,7 @@ Labs-Gruppe der Einstellungen, erweiterte Agent-Funktionen hinter `agentAdvanced
 `unifiedPillEnabled` (vereinte Pille; aus = getrennte Diktat- und Status-Pille).
 Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`, `ticketBoardEnabled`,
 `mcpAutoSyncEnabled`, `agentStatusPulseEnabled` (alter Puls, nur A/B-Messung), `restartKeepsChatsEnabled`
-(Labs-Schalter „Neustart ohne Chatverlust“: gebaut, Pflichttest Teil a grün am 14.11.2026, ab Werk aus, wirkt ab
+(Labs-Schalter „Neustart ohne Chatverlust“: gebaut, Pflichttest Teil a grün, ab Werk aus, wirkt ab
 dem nächsten App-Start; [Plan](docs/plans/neustart-ohne-chatverlust.md)).
 
 ## Dependencies (Package.swift)
