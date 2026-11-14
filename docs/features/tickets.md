@@ -37,8 +37,10 @@ Agent-Chats-Fenster, nur lesend) wird gebaut: [`../plans/ticket-board.md`](../pl
 | Wer sitzt woran | `tickets board` |
 | Gefiltert | `tickets list --mine`, `--unassigned`, `--person NAME`, `--no-agent`, `--with-agent`, `--project`, `--status` |
 | Ein Ticket | `tickets show WM8-12` |
-| Chat ans Ticket | `tickets link WM8-12`, `tickets done WM8-12 --status "Merge-bereit" --note "…"`, `tickets unlink WM8-12` |
+| Chat ans Ticket | `tickets link WM8-12`, `tickets done WM8-12 --built "…" --status "Merge-bereit"`, `tickets unlink WM8-12` |
 | Status und Text | `tickets status`, `tickets note` (Stand-Zeile), `tickets comment` |
+| Entscheidung festhalten | `tickets decide WM8-12 --question "…" --option "A" --option "B" --chosen "A"` |
+| Kästchen unter „Fertig, wenn“ | `tickets check WM8-12` (zeigen), `tickets check WM8-12 2 "Detail"` (abhaken), `--uncheck` |
 | Anlegen und zuordnen | `tickets new`, `tickets assign`, `tickets label` |
 | Einrichten und prüfen | `tickets setup`, `tickets doctor` |
 
@@ -55,19 +57,73 @@ WhisperM8 selbst gilt, steht hier:
 |---|---|
 | Werkzeug | Linear, Workspace „WhisperM8“ (`linear.app/whisperm8`, Kürzel `whisperm8`) |
 | Team | `WM8`, zugeordnet dem Projektordner des Repos |
-| Status | Backlog · Todo · In Progress · Merge-bereit · Done · Canceled |
+| Status | Backlog · Todo · In Progress · Merge-bereit · Wartet aufs Ausliefern · Done · Canceled |
 | Labels | `Handtest` und `Entscheidung` (wartet auf den Nutzer), `Selbst erfasst` (vom Supervisor von sich aus angelegt, nicht beauftragt), dazu `Bug`, `Feature`, `Improvement` |
 | Vorhaben | je größerem Thema ein Projekt in Linear, bei Bedarf mit Meilensteinen |
 | Chat-Titel | `WM8-16 Fin · Insel: Tastatur-Entwurf`; ohne offenes Ticket `Ole · Terminal-Tab: …` |
 
 - **Eine Regel für „fertig“:** Der arbeitende Chat hängt sich an sein Ticket, gibt es als „Merge-bereit“ ab
-  (`tickets done <Ticket> --status "Merge-bereit" --note "…"`) und meldet das dem Supervisor. Auf „Done“ setzt
+  (`tickets done <Ticket> --built "…" --commit … --status "Merge-bereit"`) und meldet das dem Supervisor. Nach
+  dem Merge steht das Ticket auf „Wartet aufs Ausliefern“, bis die installierte App den Stand hat. Auf „Done“ setzt
   nur der Supervisor, nach Prüfung und Merge. Die Kommandozeile erinnert einen anderen Chat mit einer Absage
   daran (siehe „Grenzen“).
 - **Neue Tickets** legt der Supervisor an, nach dem Ja des Nutzers; was er von sich aus erfasst, trägt
   `Selbst erfasst`.
 - **Ansichten in Linear:** „Wartet auf mich“, „Handtests“, „Entscheidungen“, „Gerade in Arbeit“, „Als Nächstes“,
   „Blockiert“, „Mit Agent“, „Ohne Agent“, „Laufende Vorhaben“.
+
+### Bereiche, Doku und Projekte
+
+Ein Projekt in Linear ist ein dauerhafter Bereich der App, ein Vorhaben ist ein Meilenstein darin. Jedes offene
+Ticket hat genau ein Projekt. Diese Tabelle sagt, wo die Doku eines Bereichs liegt; `tickets doctor` prüft sie
+gegen Linear und das Dateisystem (eingerichtet mit `tickets setup --team WM8 --project <Ordner> --areas
+docs/features/tickets.md`).
+
+| Bereich | Ordner | Linear-Projekt |
+|---|---|---|
+| Diktat | `docs/features/dictation`, `docs/features/speech-callouts.md`, `docs/features/voice-gate.md` | Diktat |
+| Agent Chats | `docs/features/agent-chats` | Agent Chats |
+| Kommandozeile, Skills, Supervisor | `docs/features/agent-chats-cli.md`, `docs/features/jarvis-board.md`, `docs/features/cli` | Chats-CLI, Skills und Jarvis |
+| Konten und Zugänge | `docs/features/agent-chats/claude-konten.md`, `docs/features/agent-chats/gpt-konten.md` | Konten und Zugänge |
+| Tickets | `docs/features/tickets.md` | Tickets |
+| Controller | `docs/features/controller.md` | Controller |
+| Insel und Pille | `docs/features/notch.md` | Insel und Pille |
+| Einstellungen | `docs/features/settings` | Einstellungen |
+| App-Hülle und Neustart | `docs/features/app-shell` | App-Hülle und Neustart |
+| Werkzeuge | `docs/features/clipboard-history.md`, `docs/features/statistics.md`, `docs/features/keyboard-cleaning.md` | Werkzeuge |
+| Entwicklung und Release | `docs/DEVELOPMENT.md`, `docs/features/ui-testing.md`, `docs/features/performance-messung.md` | Entwicklung und Release |
+
+## Entscheidung, Abschluss, Kästchen
+
+Was sonst nur in einem Chat-Verlauf stünde, steht in festem Aufbau am Ticket. Beides ist in einer Minute
+gelesen und enthält keine Rohdaten aus dem Chat.
+
+- **Entscheidung** (`tickets decide`): ein Kommentar mit Überschrift „Entscheidung“ samt Datum und Uhrzeit,
+  dann Frage, Möglichkeiten, Gewählt und wer entschieden hat (ohne `--by` die Person, der der Zugang gehört).
+  Nur für Entscheidungen, die gefallen sind; mindestens zwei Möglichkeiten.
+- **Abschluss** (`tickets done`): Pflicht beim Abgeben. Ein Kommentar „Abschluss“ mit Zeit und Rufname des
+  Chats: was gebaut wurde (`--built`), Commit, was bewusst nicht dazugehört (`--not`), Schritte für den Handtest
+  als Kästchen (`--test`, mehrfach), auf Wunsch ein Bild (`--image`, nur png, jpg, gif, webp bis 5 MB). Der
+  Kommentar wird zuerst geschrieben; scheitert er, ist am Ticket nichts umgestellt. Für Arbeit ohne Bau
+  (Analyse, Entscheidung) gibt es `--no-summary`.
+- **Kästchen** (`tickets check`): die Punkte unter „Fertig, wenn“ (auch „Done when“, „Acceptance criteria“).
+  Abgehakt wird per Nummer oder mit einem Stück Text, das auf genau ein Kästchen passt; alle anderen Zeilen der
+  Beschreibung bleiben, wie sie sind. Hat ein Ticket keinen solchen Abschnitt, zählen alle Kästchen.
+- **Fortschritt:** Jedes Ticket trägt „erledigt von gesamt“ (`show`, `board`, in `--json` unter `criteria`).
+  Die Ansicht in der App zeigt ihn später auf der Karte.
+
+## Prüfung der Ordnung
+
+`tickets doctor` meldet neben Zugang und Zuordnung, was beim Aufräumen jemand ansehen sollte. Das sind
+Hinweise („ACHTE“), der Bericht bleibt grün:
+
+| Hinweis | Gemeint ist |
+|---|---|
+| ohne Projekt | offenes Ticket, das keinem Bereich zugeordnet ist |
+| ohne „Fertig, wenn“ | eingeplant oder in Arbeit, aber ohne den Abschnitt; im Backlog darf er fehlen |
+| in Arbeit, nie ein Chat | Status in Arbeit, aber keine Verknüpfung, auch keine beendete |
+| seit über 3 Wochen unberührt | eingeplant oder in Arbeit und in Linear 21 Tage nicht geändert |
+| Bereiche | Projekt fehlt in der Tabelle, steht nur in der Tabelle, hat keine Doku, oder die Doku fehlt |
 
 ## Einrichtung
 
@@ -167,6 +223,9 @@ Services/Tickets/TicketSource.swift          Grenze zum Ticket-Werkzeug, Fehler,
 Services/Tickets/LinearGraphQLClient.swift   ein Aufruf, Fehlerübersetzung; Key im Schlüsselbund
 Services/Tickets/LinearTicketSource.swift    die einzige Stelle, die Linear kennt
 Services/Tickets/TicketConfig.swift          Projektordner ↔ Team ↔ Workspace (tickets.json)
+Services/Tickets/TicketChecklist.swift       Kästchen unter „Fertig, wenn“ lesen und setzen
+Services/Tickets/TicketRecordText.swift      fester Aufbau für Entscheidung und Abschluss
+Services/Tickets/TicketHygiene.swift         Ordnung der Tickets, Tabelle der Bereiche, Bild-Typen
 Services/Tickets/TicketBoardStore.swift      Abzug mit Takt für die Ansicht
 Views/Tickets/TicketErrorText.swift          Fehler als übersetzter Satz für die Oberfläche
 Views/Settings/Models/TicketsSettingsModel.swift   Zustand und Regeln der Einstellungsseite
@@ -197,7 +256,8 @@ CLI/TicketsCLIRunner.swift                   Ausführung und Ausgabe
 - Netz: `https://api.linear.app/graphql`, wenn ein `tickets`-Befehl läuft oder wenn in der App der
   Labs-Schalter an ist (Einstellungen › Tickets, später die Ansicht).
 - Schreibzugriffe auf Linear lösen nur die Befehle `link`, `done`, `unlink`, `status`, `note`, `comment`, `new`,
-  `assign` und `label` aus.
+  `assign`, `label`, `decide` und `check` (mit Verweis) aus. `done --image` lädt zusätzlich eine Bilddatei zu
+  Linear hoch; der Key geht dabei nicht an den Speicher-Dienst.
 
 ## Grenzen
 
@@ -222,6 +282,6 @@ CLI/TicketsCLIRunner.swift                   Ausführung und Ausgabe
 
 ## Tests
 
-`TicketBoardModelTests`, `LinearTicketSourceTests`, `TicketBoardStoreTests`, `TicketConfigTests`,
+`TicketBoardModelTests`, `LinearTicketSourceTests`, `TicketBoardStoreTests`, `TicketConfigTests`, `TicketToolTests`,
 `TicketsCLITests`: pure Typen, Quelle gegen feste Antworten, Speicher mit eingespeister Wartefunktion,
 Kommandozeile gegen eine Quelle aus Closures. Kein Test braucht Netz, Schlüsselbund oder die App.

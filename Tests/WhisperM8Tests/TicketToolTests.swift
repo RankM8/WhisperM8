@@ -210,6 +210,20 @@ final class TicketToolTests: XCTestCase {
         XCTAssertTrue(fine.isEmpty)
     }
 
+    /// Die Tabelle dieses Projekts in `docs/features/tickets.md`: lesbar, und
+    /// jede genannte Doku gibt es. `tickets doctor` prüft dasselbe gegen Linear.
+    func testThisProjectsAreasTableIsReadableAndItsDocsExist() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let text = try String(contentsOf: root.appendingPathComponent("docs/features/tickets.md"), encoding: .utf8)
+        let areas = try XCTUnwrap(TicketAreasTable.parse(text), "Tabelle Bereich, Ordner, Linear-Projekt fehlt")
+        XCTAssertGreaterThanOrEqual(areas.count, 11)
+        XCTAssertEqual(Set(areas.map(\.project)).count, areas.count, "jedes Projekt steht einmal da")
+        let findings = TicketAreasTable.findings(areas: areas, projects: areas.map(\.project)) { path in
+            FileManager.default.fileExists(atPath: root.appendingPathComponent(path).path)
+        }
+        XCTAssertEqual(findings, [])
+    }
+
     func testOnlyImagesAreUploaded() {
         XCTAssertEqual(TicketImage.contentType(forPath: "/tmp/Bild.PNG"), "image/png")
         XCTAssertEqual(TicketImage.contentType(forPath: "a.jpeg"), "image/jpeg")
