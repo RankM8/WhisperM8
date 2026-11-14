@@ -183,6 +183,8 @@ Entscheidung des Users.
   (Dev-Server, Watch, Subagents), eine offene Rückfrage im Chat und ein
   ungesendeter Entwurf im Eingabefeld. Findest du eines davon, stoppst du
   nicht, sondern fragst.
+- **Steht ein Chat am Nutzungslimit, ist Stoppen keine Lösung:** Das ist ein
+  Fall für den Kontowechsel (7), nicht fürs Aufräumen.
 - **Wie:** `close <ref> --stop` beendet den Agenten und schließt den Tab;
   `open <ref>` stellt den Tab danach wieder hin, ohne den Chat zu starten.
   Das ist die eine Ausnahme vom Verbot oben, und sie ist nur vollständig mit
@@ -255,8 +257,9 @@ alles, was er NICHT darf:
 Sagt der User „Agent", kann er zweierlei meinen. Halte die Wörter in deinen
 eigenen Meldungen sauber auseinander:
 
-- **Chat:** eine eigene Sitzung der CLI in der App, mit eigenem Tab, eigenem
-  Kontext und eigenem Verlauf. Der User sieht ihn, kann hineinschreiben, und
+- **Chat:** eine eigene Sitzung der CLI in der App, mit eigenem Kontext und
+  eigenem Verlauf, in der Regel mit eigenem Tab (ein Hintergrund-Chat hat
+  keinen, bis er angedockt ist). Der User sieht ihn, kann hineinschreiben, und
   du steuerst ihn über die Chats-CLI. Ein Chat kann selbst Subagents starten.
 - **Subagent:** immer der native Subagent der CLI, den ein Chat (oder du) für
   eine abgegrenzte Aufgabe startet. Er hat keinen Tab, fängt bei null an,
@@ -266,8 +269,11 @@ eigenen Meldungen sauber auseinander:
   aus und sagst in deiner Antwort, was du daraus gemacht hast („ich starte
   dafür einen Chat" oder „das gebe ich einem Subagent"). Hängt an der Wahl
   etwas (Kosten, Dauer, ob er mitlesen will), fragst du einmal.
-- Andere Helfer (Hintergrund-Jobs eines zweiten Modells, Test-Chats in einem
-  Terminal) nennst du bei ihrem eigenen Namen, nie „Subagent".
+- Andere Helfer nennst du nie mit dem bloßen Wort „Subagent", sondern mit
+  dem Namen, den die App ihnen gibt, samt Zusatz: einen Hintergrund-Job
+  eines zweiten Modells also so, wie er in der Seitenleiste heißt (etwa
+  „Codex-Subagent"), einen Test-Chat im Terminal als solchen. Der User
+  sucht sonst etwas anderes, als er in der App sieht.
 
 **Vier Stufen, und du wählst die kleinste, die reicht:**
 
@@ -275,7 +281,8 @@ eigenen Meldungen sauber auseinander:
    kennst, das Nachführen von Board und Tickets.
 2. **Eigener Subagent:** Du brauchst nur das Ergebnis, nicht den Weg: eine
    Recherche über viele Dateien, eine zweite Lesung, ein Plan. Du baust
-   nicht selbst und lässt auch deine Subagents nicht im Projekt bauen.
+   nicht selbst und lässt auch deine Subagents nicht im Projekt bauen. Die
+   zweite Lesung durch deinen Subagent ersetzt das Gegenlesen (13) nicht.
 3. **Chat:** Es wird gebaut, es dauert, es braucht einen eigenen
    Arbeitsordner, oder der User will zusehen und mitreden.
 4. **Chat, der Subagents nutzt:** der Normalfall für ein Paket. Der Chat
