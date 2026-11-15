@@ -165,6 +165,13 @@ final class ControllerManager {
     /// Reihenfolge der Gesten auf dem Main Thread, damit nichts durchrutscht,
     /// das schon unterwegs war.
     private var discardUntilIdle = false
+    /// Schnappschuss, den Scroll-Gesten wiederverwenden (WM8-101), mit Zeit.
+    private var scrollSnapshot: (snapshot: ControllerAppSnapshot, at: TimeInterval)?
+    /// So alt darf der wiederverwendete Schnappschuss höchstens sein (0 heißt:
+    /// nie wiederverwenden, wie vor WM8-101; nur für die Messung im Test).
+    var scrollSnapshotMaxAge: TimeInterval = 0.25
+    /// Uhr für `scrollSnapshot`; Tests stellen sie selbst.
+    var uptime: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     private var systemPaused = false
 
     init(
@@ -337,9 +344,9 @@ final class ControllerManager {
     }
 
     /// Löst eine Geste im aktuellen Zustand auf und führt sie aus, sofern kein
-    /// Trockenlauf läuft.
-    private func resolve(_ gesture: ControllerGesture) -> ControllerResolution {
-        var snapshot = performer?.snapshot() ?? ControllerAppSnapshot(window: .none)
+    /// Trockenlauf läuft. `internal` für die Tests.
+    func resolve(_ gesture: ControllerGesture) -> ControllerResolution {
+        var snapshot = appSnapshot(for: gesture)
         snapshot.isPaused = isPaused
         snapshot.backgroundEnabled = preferences().isControllerBackgroundEnabled
         snapshot.wakeOnInputEnabled = preferences().isControllerWakeOnInputEnabled
@@ -354,6 +361,36 @@ final class ControllerManager {
             performer.perform(action, in: context)
         }
         return ControllerResolution(gesture: gesture, context: context, action: action, executed: true)
+    }
+
+    /// Zustand der App für diese Geste. Scrollen und Blättern (WM8-101)
+    /// verwenden einen Schnappschuss wieder, der höchstens 250 ms alt ist: Für
+    /// sie zählen nur Pause, Fenster, Dialog und ob ein Chat im Inhalt ist, und
+    /// beim schnellen Scrollen kommen bis zu 60 Gesten je Sekunde (jeder volle
+    /// Schnappschuss liest den unteren Bildschirmrand). Jede andere Geste zieht
+    /// ihn frisch und verwirft den gemerkten — Kreis, Kreuz und alles, was
+    /// sendet oder Escape schickt, entscheidet immer am Zustand des Drucks (der
+    /// Sendeschutz). Pause und Schalter setzt `resolve` ohnehin frisch.
+    private func appSnapshot(for gesture: ControllerGesture) -> ControllerAppSnapshot {
+        guard Self.reusesSnapshot(gesture) else {
+            scrollSnapshot = nil
+            return performer?.snapshot() ?? ControllerAppSnapshot(window: .none)
+        }
+        let now = uptime()
+        if let cached = scrollSnapshot, now >= cached.at, now - cached.at < scrollSnapshotMaxAge {
+            return cached.snapshot
+        }
+        let fresh = performer?.snapshot() ?? ControllerAppSnapshot(window: .none)
+        scrollSnapshot = (fresh, now)
+        return fresh
+    }
+
+    /// Nur fließendes Scrollen und Blättern.
+    static func reusesSnapshot(_ gesture: ControllerGesture) -> Bool {
+        switch gesture {
+        case .scroll, .inLayer(_, .scrollPage): return true
+        default: return false
+        }
     }
 
     private func remember(_ resolution: ControllerResolution) {

@@ -29,8 +29,14 @@ private final class FakeControllerSource: ControllerInputSource, @unchecked Send
 private final class SpyPerformer: ControllerActionPerforming {
     var current = ControllerAppSnapshot(chat: ControllerChatState(status: .idle, profile: .claude))
     private(set) var performed: [ControllerAction] = []
+    /// Volle Schnappschüsse; in der App liest jeder bei einem Claude- oder
+    /// Codex-Chat einmal den unteren Bildschirmrand (`controllerScreenRead`).
+    private(set) var snapshotCount = 0
 
-    func snapshot() -> ControllerAppSnapshot { current }
+    func snapshot() -> ControllerAppSnapshot {
+        snapshotCount += 1
+        return current
+    }
     func perform(_ action: ControllerAction, in context: ControllerContext) {
         performed.append(action)
         // Wie die echte App: Nach vorn geholt, ist sie aktiv.
@@ -295,6 +301,89 @@ final class ControllerManagerTests: XCTestCase {
         manager.togglePause()
         manager.play(.rejected)
         XCTAssertEqual(source.haptics.count, 1, "In der Pause schweigt der Controller")
+    }
+}
+
+/// Schnappschuss beim Scrollen wiederverwenden (WM8-101).
+@MainActor
+final class ControllerManagerScrollSnapshotTests: XCTestCase {
+    private var performer: SpyPerformer!
+    private var manager: ControllerManager!
+    private var clock: TimeInterval = 100
+
+    override func setUp() async throws {
+        performer = SpyPerformer()
+        manager = ControllerManager(source: FakeControllerSource(), preferences: { AppPreferences(defaults: .standard) })
+        manager.performer = performer
+        manager.isDryRun = true
+        manager.uptime = { [unowned self] in clock }
+    }
+
+    /// Scroll-Gesten, wie der Erkenner sie bei vollem Ausschlag liefert, mit Zeit.
+    private static func fullDeflectionScroll(seconds: TimeInterval) -> [(TimeInterval, ControllerGesture)] {
+        var recognizer = ControllerGestureRecognizer()
+        _ = recognizer.handle(.stick(.right, x: 0, y: -1), at: 0)
+        var result: [(TimeInterval, ControllerGesture)] = []
+        var time = 0.0
+        while let deadline = recognizer.nextDeadline, deadline < seconds {
+            time = max(time, deadline)
+            for gesture in recognizer.tick(at: time) { result.append((time, gesture)) }
+        }
+        return result
+    }
+
+    /// Schnappschüsse je Sekunde beim Rasen: vorher einer je Geste, jetzt
+    /// höchstens vier. Die Zahlen gehen in die Meldung.
+    func testScrollingReusesTheSnapshot() {
+        let gestures = Self.fullDeflectionScroll(seconds: 3)
+        func count(maxAge: TimeInterval) -> [Int] {
+            performer = SpyPerformer()
+            manager.performer = performer
+            manager.scrollSnapshotMaxAge = maxAge
+            var perSecond = [0, 0, 0]
+            for (time, gesture) in gestures {
+                clock = 100 + time
+                let before = performer.snapshotCount
+                _ = manager.resolve(gesture)
+                perSecond[min(2, Int(time))] += performer.snapshotCount - before
+            }
+            return perSecond
+        }
+        let before = count(maxAge: 0)
+        let after = count(maxAge: 0.25)
+        print("WM8-101 Schnappschüsse je Sekunde (0–1, 1–2, 2–3 s): vorher \(before), nachher \(after)")
+        XCTAssertGreaterThanOrEqual(before[2], 55, "vorher: einer je Geste, bei vollem Tempo rund 60")
+        XCTAssertTrue(after.allSatisfy { $0 <= 4 }, "\(after)")
+    }
+
+    /// Jede andere Geste liest frisch und verwirft den gemerkten Stand: Kreis
+    /// sieht nie einen alten Zustand.
+    func testOtherGesturesStayFresh() {
+        _ = manager.resolve(.scroll(lines: 1))
+        XCTAssertEqual(performer.snapshotCount, 1)
+        performer.current.chat?.status = .awaitingInput
+        clock += 0.01
+        let circle = manager.resolve(.tap(.circle))
+        XCTAssertEqual(performer.snapshotCount, 2, "Kreis zieht frisch")
+        guard case let .chat(state) = circle.context else { return XCTFail("chat erwartet") }
+        XCTAssertEqual(state.status, .awaitingInput)
+        clock += 0.01
+        _ = manager.resolve(.scroll(lines: 1))
+        XCTAssertEqual(performer.snapshotCount, 3, "nach einer anderen Geste wieder frisch")
+        clock += 0.01
+        _ = manager.resolve(.inLayer(.quickDraw, .scrollPage(step: 1)))
+        XCTAssertEqual(performer.snapshotCount, 3, "Blättern nutzt den gemerkten")
+        clock += 0.3
+        _ = manager.resolve(.scroll(lines: 1))
+        XCTAssertEqual(performer.snapshotCount, 4, "nach 250 ms frisch")
+    }
+
+    /// Die Pause gilt sofort, auch mit gemerktem Stand.
+    func testPauseIsAlwaysFresh() {
+        _ = manager.resolve(.scroll(lines: 1))
+        manager.togglePause()
+        clock += 0.01
+        XCTAssertEqual(manager.resolve(.scroll(lines: 1)).context, .paused)
     }
 }
 
