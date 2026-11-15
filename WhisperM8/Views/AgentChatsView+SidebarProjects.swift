@@ -16,6 +16,20 @@ extension AgentChatsView {
     ) -> some View {
         let isSearching = !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let foldOverrides = windowStore.stoppedFoldOverrides
+        // Fensterweite Werte für das Kontextmenü der Zeilen, einmal je Body
+        // gelesen (Schlüssel der Gruppen, siehe `SidebarGroupMenuState`).
+        let menuMultiSelection = multiSelection
+        let menuPinned = pinnedSessionIDs
+        let menuWorkspaces = windowStore.gridWorkspaces
+        let menuVisibleGrid = isGridActive ? activeGridWorkspaceEntity : nil
+        let menuClaudeProfiles = AccountMenuData.claudeProfiles.value
+        let menuGPTProfiles = AccountMenuData.gptProfiles.value
+        let menuBulkMove = AppPreferences.shared.isAccountBulkMoveEnabled
+        let menuPendingSwitches = AccountSwitchCoordinator.shared.pending.mapValues(\.targetName)
+        let menuUndoable = hasUndoableAccountMove
+        let menuStoppableJobs = Set(jobRuntimeModel.snapshotsBySessionID.compactMap { id, state in
+            state.isActive && state.supervisorPid != nil ? id : nil
+        })
         ForEach(Array(snapshot.visibleProjects.enumerated()), id: \.element.id) { index, project in
             if index == snapshot.firstCalmProjectIndex {
                 SidebarCalmProjectsBand()
@@ -42,11 +56,22 @@ extension AgentChatsView {
             let worktrees = snapshot.worktreesByProject[project.id] ?? []
             let isWorkspaceOpen = isGridActive && activeGridWorkspaceEntity?.sourceProjectID == project.id
             let occupancyLabel = projectViewOccupancyLabel(for: project, activeCount: activeIDs.count)
+            let groupIDs = SidebarProjectGroupInputs.sessionIDs(
+                blocks: blocks, subagentChildrenByParent: snapshot.subagentChildrenByParent)
+            let menuState = SidebarGroupMenuState.make(
+                groupSessionIDs: groupIDs, multiSelection: menuMultiSelection, pinnedSessionIDs: menuPinned,
+                gridWorkspaces: menuWorkspaces, visibleGrid: menuVisibleGrid,
+                claudeProfiles: menuClaudeProfiles, gptProfiles: menuGPTProfiles,
+                accountBulkMoveEnabled: menuBulkMove, pendingAccountSwitches: menuPendingSwitches,
+                hasUndoableAccountMove: menuUndoable, pendingLifecycle: pendingLifecycleSessions,
+                takenOverJobs: Set(groupIDs.filter { jobRuntimeModel.isTakenOver($0) }),
+                stoppableJobs: menuStoppableJobs
+            )
             SidebarSkippingGroup(key: SidebarProjectGroupKey(
                 project: project, blocks: blocks, inputs: inputs, isExpanded: isExpanded,
                 worktreeProjects: worktrees, activeSessionIDs: activeIDs, isWorkspaceOpen: isWorkspaceOpen,
                 workspaceOccupancyLabel: occupancyLabel, sidebarScope: effectiveScope,
-                isSearching: isSearching, stoppedFoldOverride: foldOverrides[project.id]
+                isSearching: isSearching, stoppedFoldOverride: foldOverrides[project.id], menu: menuState
             )) {
             ProjectChatGroup(
                 project: project,

@@ -69,9 +69,87 @@ final class SidebarProjectGroupInputsTests: XCTestCase {
             SidebarProjectGroupKey(
                 project: project, blocks: blocks, inputs: narrowed(blocks, selected: selected), isExpanded: true,
                 worktreeProjects: [], activeSessionIDs: [], isWorkspaceOpen: false, workspaceOccupancyLabel: nil,
-                sidebarScope: .all, isSearching: false, stoppedFoldOverride: nil)
+                sidebarScope: .all, isSearching: false, stoppedFoldOverride: nil, menu: Self.menu())
         }
         XCTAssertEqual(key(selected: UUID()), key(selected: UUID()))
         XCTAssertNotEqual(key(selected: nil), key(selected: blocks.rows[0].id))
+    }
+
+    // MARK: - Kontextmenü (Auflage aus dem Gegenlesen)
+
+    private static let groupSession = UUID()
+
+    static func menu(
+        multiSelection: Set<UUID> = [],
+        pinned: [UUID] = [],
+        workspaces: [AgentGridWorkspace] = [],
+        visibleGrid: AgentGridWorkspace? = nil,
+        claude: [ClaudeAccountProfile] = [],
+        gpt: [GPTAccountProfile] = [],
+        bulkMove: Bool = true,
+        pendingSwitches: [UUID: String] = [:],
+        undoable: Bool = false,
+        pendingLifecycle: Set<UUID> = [],
+        takenOver: Set<UUID> = [],
+        stoppable: Set<UUID> = []
+    ) -> SidebarGroupMenuState {
+        SidebarGroupMenuState.make(
+            groupSessionIDs: [groupSession], multiSelection: multiSelection, pinnedSessionIDs: pinned,
+            gridWorkspaces: workspaces, visibleGrid: visibleGrid, claudeProfiles: claude, gptProfiles: gpt,
+            accountBulkMoveEnabled: bulkMove, pendingAccountSwitches: pendingSwitches,
+            hasUndoableAccountMove: undoable, pendingLifecycle: pendingLifecycle,
+            takenOverJobs: takenOver, stoppableJobs: stoppable)
+    }
+
+    private func assertChanges(_ changed: SidebarGroupMenuState, _ what: String, line: UInt = #line) {
+        XCTAssertNotEqual(Self.menu(), changed, "\(what) muss den Schlüssel ändern", line: line)
+    }
+
+    func testMultiSelectionCountChangesTheKey() {
+        // Auswahl in anderen Gruppen: „N Tabs schließen“ zählt sie mit.
+        let a = UUID(), b = UUID()
+        XCTAssertNotEqual(Self.menu(multiSelection: [Self.groupSession, a]),
+                          Self.menu(multiSelection: [Self.groupSession, a, b]))
+    }
+
+    func testPinStateOfTheSelectionChangesTheKey() {
+        let other = UUID()
+        let selection: Set<UUID> = [Self.groupSession, other]
+        XCTAssertNotEqual(Self.menu(multiSelection: selection),
+                          Self.menu(multiSelection: selection, pinned: [other]))
+        XCTAssertEqual(Self.menu(), Self.menu(pinned: [other]), "ohne Auswahl zählt der Pin anderer Chats nicht")
+    }
+
+    func testWorkspaceListChangesTheKey() {
+        let workspace = AgentGridWorkspace(name: "WM8 Aktiv", slots: [nil, nil], capacity: 2)
+        assertChanges(Self.menu(workspaces: [workspace]), "neuer Workspace")
+        var renamed = workspace
+        renamed.name = "WM8 Wartet"
+        XCTAssertNotEqual(Self.menu(workspaces: [workspace]), Self.menu(workspaces: [renamed]), "umbenannt")
+        var filled = workspace
+        filled.slots = [Self.groupSession, nil]
+        XCTAssertNotEqual(Self.menu(workspaces: [workspace]), Self.menu(workspaces: [filled]), "Belegung (Haken)")
+    }
+
+    func testVisibleGridChangesTheKey() {
+        assertChanges(Self.menu(visibleGrid: AgentGridWorkspace(name: "Raster", slots: [nil], capacity: 1)),
+                      "sichtbares Raster")
+    }
+
+    func testAccountsChangeTheKey() {
+        let dir = URL(fileURLWithPath: "/tmp/demo")
+        assertChanges(Self.menu(claude: [ClaudeAccountProfile(name: "zweit", configDir: dir)]), "Claude-Konto")
+        assertChanges(Self.menu(gpt: [GPTAccountProfile(name: "zweit", configDir: dir)]), "GPT-Konto")
+        assertChanges(Self.menu(bulkMove: false), "Sammel-Umzug")
+        assertChanges(Self.menu(pendingSwitches: [Self.groupSession: "zweit"]), "vorgemerkter Kontowechsel")
+        assertChanges(Self.menu(undoable: true), "Rückgängig")
+    }
+
+    func testRuntimeStateOfGroupChatsChangesTheKey() {
+        assertChanges(Self.menu(pendingLifecycle: [Self.groupSession]), "Hintergrund-Aktion läuft")
+        assertChanges(Self.menu(takenOver: [Self.groupSession]), "Job übernommen")
+        assertChanges(Self.menu(stoppable: [Self.groupSession]), "Job stoppbar")
+        XCTAssertEqual(Self.menu(), Self.menu(pendingLifecycle: [UUID()], takenOver: [UUID()], stoppable: [UUID()]),
+                       "Zustand fremder Chats lässt die Gruppe in Ruhe")
     }
 }

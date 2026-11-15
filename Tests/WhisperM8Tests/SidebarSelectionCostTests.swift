@@ -102,7 +102,8 @@ final class SidebarSelectionCostTests: XCTestCase {
                         SidebarSkippingGroup(key: SidebarProjectGroupKey(
                             project: project, blocks: blocks, inputs: inputs, isExpanded: isExpanded,
                             worktreeProjects: [], activeSessionIDs: [], isWorkspaceOpen: false,
-                            workspaceOccupancyLabel: nil, sidebarScope: .all, isSearching: false, stoppedFoldOverride: nil
+                            workspaceOccupancyLabel: nil, sidebarScope: .all, isSearching: false, stoppedFoldOverride: nil,
+                            menu: SidebarProjectGroupInputsTests.menu()
                         )) {
                             ProjectChatGroup(
                                 project: project, blocks: blocks, isExpanded: isExpanded,
