@@ -505,6 +505,14 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.claudeRegistryStatusEnabled) }
     }
 
+    /// Fester Name je Claude-Chat (`claude --name`, WM8-85). Aus = Chats starten
+    /// wieder ohne Namen, etwa wenn eine Claude-Version die Option anders
+    /// behandelt. `defaults write com.whisperm8.app claudeNativeNameEnabled -bool NO`
+    var isClaudeNativeNameEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.claudeNativeNameEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.claudeNativeNameEnabled) }
+    }
+
     /// Doppelstart-Sperre für Codex (`CodexSessionRunningGuard`). Aus = Codex
     /// setzt wieder ohne Prüfung fort — für den Fall, dass eine künftige
     /// Codex-Version einen langlebigen Prozess mit `resume <id>` hält und
@@ -1173,6 +1181,7 @@ enum PreferenceKeys {
     static let gridAutoCompactEnabled = "gridAutoCompactEnabled"
     static let claudeRegistryStatusEnabled = "claudeRegistryStatusEnabled"
     static let codexStartGuardEnabled = "codexStartGuardEnabled"
+    static let claudeNativeNameEnabled = "claudeNativeNameEnabled"
     static let claudeSharedMemoryEnabled = "claudeSharedMemoryEnabled"
     static let claudeSharedMemoryMigrationDone = "claudeSharedMemoryMigrationDone"
     static let accountSwitchAfterTurnEnabled = "accountSwitchAfterTurnEnabled"

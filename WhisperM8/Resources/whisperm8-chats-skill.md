@@ -165,7 +165,9 @@ whisperm8 chats address <ref>          # → uds:/tmp/cc-socks/<pid>.sock
 whisperm8 chats address <ref> --json   # + nativer Name, Konto, Status, usageLimit
 ```
 Exit 0 = Adresse auf stdout. Exit 4 = nicht nativ erreichbar (Codex-Chat,
-läuft nicht, noch keine Session-ID) → CLI-Weg. Steht der
+läuft nicht, noch keine Session-ID) → CLI-Weg. Claude-Chats der App haben einen
+festen Namen (`claude --name`, etwa `gus-f0d79f2c`: Kopf des Titels plus acht
+Zeichen der ID); `ListAgents` zeigt ihn im eigenen Konto. Steht der
 Empfänger am Nutzungslimit (`usageLimit` in `--json`, sonst Warnung auf
 stderr), kommt eine Nachricht an, er arbeitet aber nicht: dann `enqueue`.
 

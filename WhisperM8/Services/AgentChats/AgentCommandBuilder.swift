@@ -306,6 +306,10 @@ struct AgentCommandBuilder {
     /// Notbremse `codexStartGuardEnabled`: aus = Codex setzt ohne
     /// Doppelstart-Prüfung und ohne Reservierung fort.
     var codexStartGuardEnabled = true
+    /// Claude-Chats mit festem Namen starten (`--name`, WM8-85). Ab Werk aus,
+    /// damit Tests feste Argumentlisten behalten; der Startweg der App
+    /// schaltet es ein.
+    var nativeNameEnabled = false
 
     /// Liefert die Login-Shell des Users für `.terminal`-Sessions.
     /// Default liest `$SHELL` (von launchd auch für GUI-Apps gesetzt) und
@@ -362,6 +366,57 @@ struct AgentCommandBuilder {
             result.append(current)
         }
         return result
+    }
+
+    /// Fester Name eines Claude-Chats für Claudes eigene Nachrichten
+    /// (`claude --name`, WM8-85): der Kopf des Titels bis „·“ oder „:“ als
+    /// Kürzel, dazu acht Zeichen der Chat-ID. Die ID macht ihn eindeutig und
+    /// stabil, der Kopf lesbar; `ListAgents` zeigt ihn im selben Konto.
+    static func nativeName(for session: AgentChatSession) -> String {
+        // Nie aus einem Titel ableiten, der selbst schon dieser Name ist: Sonst
+        // wüchse er bei jedem Start (…-1a2b3c4d-1a2b3c4d, Vic zu WM8-85).
+        var title = session.title
+        let suffix = "-" + nativeIDSuffix(session.id)
+        while title.lowercased().hasSuffix(suffix) { title = String(title.dropLast(suffix.count)) }
+        let head = title.components(separatedBy: CharacterSet(charactersIn: "·:")).first ?? ""
+        let folded = head.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "de_DE"))
+            .lowercased()
+        var slug = ""
+        for scalar in folded.unicodeScalars {
+            if CharacterSet.alphanumerics.contains(scalar), scalar.isASCII {
+                slug.unicodeScalars.append(scalar)
+            } else if !slug.isEmpty, !slug.hasSuffix("-") {
+                slug += "-"
+            }
+        }
+        while slug.hasSuffix("-") { slug.removeLast() }
+        slug = String(slug.prefix(24))
+        while slug.hasSuffix("-") { slug.removeLast() }
+        let id = String(session.id.uuidString.prefix(8)).lowercased()
+        return slug.isEmpty ? "chat-\(id)" : "\(slug)-\(id)"
+    }
+
+    static func nativeIDSuffix(_ id: UUID) -> String {
+        String(id.uuidString.prefix(8)).lowercased()
+    }
+
+    /// Ist das der feste Name dieses Chats (auch mit einem anderen Titelkopf
+    /// als heute)? Für die Titel-Übernahme (`AgentSessionAutoNamer`).
+    static func isOwnNativeName(_ value: String, sessionID: UUID) -> Bool {
+        let lower = value.lowercased()
+        return lower == "chat-" + nativeIDSuffix(sessionID) || lower.hasSuffix("-" + nativeIDSuffix(sessionID))
+            && looksLikeNativeName(lower)
+    }
+
+    /// Sieht wie ein Name aus, den die App vergibt (`kopf-1a2b3c4d`, nur
+    /// Kleinbuchstaben, Ziffern, Bindestriche). Für Stellen ohne Chat-ID
+    /// (Indexer); ein echtes /rename hat praktisch nie diese Form.
+    static func looksLikeNativeName(_ value: String) -> Bool {
+        value.range(of: #"^[a-z0-9]+(-[a-z0-9]+)*-[0-9a-f]{8}$"#, options: .regularExpression) != nil
+    }
+
+    static func argumentsContainNameFlag(_ arguments: [String]) -> Bool {
+        arguments.contains { $0 == "--name" || $0 == "-n" || $0.hasPrefix("--name=") }
     }
 
     static func argumentsContainResumeFlag(_ arguments: [String]) -> Bool {
@@ -902,6 +957,10 @@ struct AgentCommandBuilder {
                 "resume_blocked_session_starting session=\(resumeSessionID, privacy: .public) holder=\(holder, privacy: .private)"
             )
             throw AgentCommandError.sessionStartingElsewhere(title: session.title, otherChat: holder)
+        }
+
+        if nativeNameEnabled, !Self.argumentsContainNameFlag(arguments) {
+            arguments.append(contentsOf: ["--name", Self.nativeName(for: session)])
         }
 
         if let resumeSessionID {

@@ -16,6 +16,16 @@ struct ClaudeCLIVersion: Comparable, Equatable {
     /// funktionierende Version ist nicht ermittelt — bewusst konservativ.
     static let minimumRegistryVersion = ClaudeCLIVersion(components: [2, 1, 302])
 
+    /// Erste Version, an der `claude --name` belegt ist (Messung 15.11.2026,
+    /// WM8-85, zusammen mit `--resume`). Ältere Versionen bekommen keinen
+    /// Namen: Kennt eine Version die Option nicht, startete kein Chat.
+    static let minimumNativeNameVersion = ClaudeCLIVersion(components: [2, 1, 325])
+
+    static func supportsNativeName(_ version: ClaudeCLIVersion?) -> Bool {
+        guard let version else { return false }
+        return version >= minimumNativeNameVersion
+    }
+
     /// Liest die erste Zahlenfolge `x.y.z` aus einer Ausgabe wie
     /// `2.1.303 (Claude Code)`.
     init?(parsing output: String) {

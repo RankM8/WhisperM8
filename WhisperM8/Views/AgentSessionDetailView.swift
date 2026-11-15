@@ -683,6 +683,9 @@ struct AgentSessionDetailView: View {
             // Codex bekommt das nicht (kein Hook-API).
             var builder = AgentCommandBuilder()
             builder.backgroundAttachAllowed = allowsBackgroundAttach
+            // Fester Name nur mit Notbremse an und belegter Claude-Version (WM8-85).
+            builder.nativeNameEnabled = AppPreferences.shared.isClaudeNativeNameEnabled
+                && ClaudeCLIVersion.supportsNativeName(ClaudeCLIVersionProbe.shared.installedVersion())
             let localID = launchSession.id
             builder.runningSessionProcessResolver = { sessionID in
                 ClaudeSessionRunningGuard.runningForegroundProcess(sessionID: sessionID, in: runningRecords, localID: localID)

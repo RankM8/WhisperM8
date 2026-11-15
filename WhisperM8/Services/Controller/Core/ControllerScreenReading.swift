@@ -317,9 +317,36 @@ enum ControllerScreenReading {
     static func isRule(_ line: String) -> Bool {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         guard trimmed.count >= 10 else { return false }
-        let ruleCharacters: Set<Character> = ["─", "━", "╭", "╮", "╰", "╯"]
         let ruleCount = trimmed.filter { ruleCharacters.contains($0) }.count
-        return ruleCount * 10 >= trimmed.count * 9
+        if ruleCount * 10 >= trimmed.count * 9 { return true }
+        return isNamedRule(line)
+    }
+
+    private static let ruleCharacters: Set<Character> = ["─", "━", "╭", "╮", "╰", "╯"]
+    /// Längster Name, den eine Linie tragen darf.
+    static let maxRuleLabel = 48
+
+    /// Claude schreibt den Namen der Sitzung (`claude --name`, WM8-85) in die
+    /// obere Linie des Eingabefelds. Gemessen an 2.1.325:
+    /// - 160 und 40 Spalten: „───── wm8-100-gus-nachrichten-f0d79f2c ─“
+    /// - 30 Spalten: „ wm8-100-gus-nachrichten-f0… ─“ — gekürzt, links keine Linie.
+    /// Erlaubt ist genau ein kurzer Text mit Leerzeichen davor und danach,
+    /// rechts mindestens ein Linienzeichen, links mindestens drei; links
+    /// keines nur, wenn Claude den Namen gekürzt hat (endet auf „…“, ohne
+    /// Leerzeichen darin).
+    static func isNamedRule(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        let characters = Array(trimmed)
+        let leading = characters.prefix { ruleCharacters.contains($0) }.count
+        let trailing = characters.reversed().prefix { ruleCharacters.contains($0) }.count
+        guard trailing >= 1, leading + trailing < characters.count else { return false }
+        let middle = characters[leading..<(characters.count - trailing)]
+        guard middle.last == " ", leading == 0 || middle.first == " " else { return false }
+        let label = String(middle).trimmingCharacters(in: .whitespaces)
+        guard !label.isEmpty, label.count <= maxRuleLabel,
+              !label.contains(where: { ruleCharacters.contains($0) }) else { return false }
+        if leading >= 3 { return true }
+        return leading == 0 && line.first == " " && label.hasSuffix("…") && !label.contains(" ")
     }
 
     /// Spalte, an der der Text nach dem Prompt-Zeichen beginnt.
