@@ -239,12 +239,13 @@ final class KeyboardIslandDispatcherTests: XCTestCase {
         XCTAssertFalse(monitor.consumeDictationHotkeyUp(), "das Ende des gewöhnlichen Diktats läuft durch")
     }
 
-    /// Ist das Loslassen von ⌥ verloren gegangen, gehört Return dem Prompt:
-    /// Die Insel schließt ohne Wechsel, Return läuft weiter.
-    func testReturnWithoutOptionPassesThrough() {
+    /// Ist das Loslassen von ⌥ verloren gegangen, schließt Return die Insel
+    /// ohne Wechsel und wird verschluckt wie Esc: Ins Terminal durchgereicht
+    /// bestätigte es womöglich eine offene Freigabe.
+    func testReturnWithoutOptionIsSwallowed() {
         window.backTarget = ControllerBackTarget(kind: .chat, title: "Chat", id: chats[3])
         press(K.tab)
-        XCTAssertFalse(press(K.returnKey, []))
+        XCTAssertTrue(press(K.returnKey, []))
         XCTAssertFalse(dispatcher.isKeyboardIslandOpen)
         XCTAssertTrue(window.commands.isEmpty)
     }

@@ -44,13 +44,13 @@ final class KeyboardIslandKeysTests: XCTestCase {
     }
 
     /// Ohne ⌥ ist das Loslassen an uns vorbeigegangen: abbrechen, Taste läuft
-    /// weiter. Auch Return: Es gehört dann dem Prompt, nicht der alten
-    /// Markierung (Gegenlesen Paket 1). Nur Esc bricht ab und bleibt bei uns.
+    /// weiter. Return wechselt dann nicht zur alten Markierung und wird wie Esc
+    /// verschluckt: durchgereicht bestätigte es womöglich eine offene Freigabe.
     func testKeyWithoutOptionMeansMissedRelease() {
         XCTAssertEqual(KeyboardIslandKeys.action(keyCode: K.tab, modifiers: []), .cancelAndPassThrough)
         XCTAssertEqual(KeyboardIslandKeys.action(keyCode: K.w, modifiers: []), .cancelAndPassThrough)
-        XCTAssertEqual(KeyboardIslandKeys.action(keyCode: K.returnKey, modifiers: []), .cancelAndPassThrough)
-        XCTAssertEqual(KeyboardIslandKeys.action(keyCode: K.keypadEnter, modifiers: [.function]), .cancelAndPassThrough)
+        XCTAssertEqual(KeyboardIslandKeys.action(keyCode: K.returnKey, modifiers: []), .cancel)
+        XCTAssertEqual(KeyboardIslandKeys.action(keyCode: K.keypadEnter, modifiers: [.function]), .cancel)
         XCTAssertEqual(KeyboardIslandKeys.action(keyCode: K.escape, modifiers: []), .cancel)
     }
 

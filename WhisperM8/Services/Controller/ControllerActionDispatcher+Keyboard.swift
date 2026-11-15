@@ -44,7 +44,9 @@ extension ControllerActionDispatcher {
         guard var session = built, var whereTo = session.model.whereTo else { return false }
         whereTo.markPreviousForKeyboard()
         session.model.content = .whereTo(whereTo)
-        makeKeyboardCommands(for: &session)
+        // Die Tastenzeile (Menü-Angaben, Schalter, Layout) entsteht erst, wenn
+        // die Insel erscheint oder ein Buchstabe kommt: ⌥Tab kurz getippt
+        // braucht sie nie (`ensureKeyboardCommands`).
         session.revealed = false
         islandGeneration += 1
         islandState = session
@@ -54,7 +56,9 @@ extension ControllerActionDispatcher {
 
     /// Nach 0,2 s noch offen: jetzt zeigen.
     func revealKeyboardIsland() {
-        guard isKeyboardIslandOpen, var state = islandState, !state.revealed else { return }
+        guard isKeyboardIslandOpen, islandState?.revealed == false else { return }
+        ensureKeyboardCommands()
+        guard var state = islandState else { return }
         state.revealed = true
         islandState = state
         present()

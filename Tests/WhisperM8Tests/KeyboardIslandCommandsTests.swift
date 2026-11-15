@@ -81,8 +81,11 @@ final class KeyboardIslandCommandsTests: XCTestCase {
         work.forEach { $0() }
     }
 
-    func testOpeningBuildsCommandRowForCurrentChat() {
+    /// ⌥Tab baut nur die Liste; die Tastenzeile entsteht beim Erscheinen.
+    func testCommandRowIsBuiltWhenIslandAppears() {
         press(K.tab)
+        XCTAssertNil(commands, "⌥Tab kurz getippt braucht die Tastenzeile nie")
+        dispatcher.revealKeyboardIsland()
         XCTAssertEqual(commands?.chatTitle, "Controller Insel")
         XCTAssertEqual(commands?.letter(.stayAwake), "Q", "Buchstabe des aktuellen Layouts")
         XCTAssertEqual(commands?.letter(.sendNow), "S")
@@ -180,6 +183,7 @@ final class KeyboardIslandCommandsTests: XCTestCase {
         dictation.phase = .recording
         dictation.targetSessionID = chats[1]
         press(K.tab)
+        dispatcher.revealKeyboardIsland()
         XCTAssertTrue(commands?.dictating == true)
         press(.sendNow)
         XCTAssertEqual(beeps, 1)
@@ -232,5 +236,90 @@ final class KeyboardIslandCommandsTests: XCTestCase {
         XCTAssertFalse(press(0, []), "Tippen schließt und läuft weiter")
         XCTAssertNil(ui.menu)
         XCTAssertFalse(ui.menuByKeyboard)
+    }
+}
+
+/// Offene Codex-Freigabe (nur am Bildschirm zu sehen, WM8-67/WM8-107): Weder
+/// S in der Tastatur-Insel noch R1 + Kreuz noch das Paddle schicken etwas —
+/// Enter oder „Weiter“ bestätigte sie sonst.
+@MainActor
+final class CodexApprovalSendGuardTests: XCTestCase {
+    private var window: ControllerWindowFake!
+    private var terminals: ControllerTerminalSpy!
+    private var dispatcher: ControllerActionDispatcher!
+    private var haptics: [ControllerHapticPattern] = []
+    private var beeps = 0
+    private let chat = UUID()
+
+    override func setUp() async throws {
+        window = ControllerWindowFake()
+        let center = AgentChatsCommandCenter(keyWindowID: { [unowned self] in window.id })
+        _ = center.register(windowID: window.id, handler: window.handler)
+        terminals = ControllerTerminalSpy()
+        dispatcher = ControllerActionDispatcher(
+            chats: center, terminals: terminals, dictation: ControllerDictationSpy(),
+            environment: ControllerEnvironmentSpy(), ui: ControllerUIModel(), island: ControllerIslandSpy())
+        dispatcher.islandChatRows = { order, current in
+            order.map { ControllerIslandChatRow(id: $0, title: "Chat", status: .idle, detail: "", isCurrent: $0 == current) }
+        }
+        haptics = []
+        beeps = 0
+        dispatcher.playHaptic = { [unowned self] in haptics.append($0) }
+        dispatcher.keyboardRejected = { [unowned self] in beeps += 1 }
+        window.selected = chat
+        window.rows = [AgentChatsListRow(row: .chat(chat))]
+    }
+
+    /// Codex ruht, der Entwurfs-Merker meldet Text — und unten steht eine Freigabe.
+    private func codex(approval: Bool, draft: Bool = true) {
+        var state = ControllerTerminalState(
+            isRunning: true, profile: .codex, status: .idle, statusSince: nil,
+            draftSuspected: draft, lastEnterAt: nil, lastEscapeAt: nil)
+        state.fieldMayHaveText = draft
+        state.screen = approval ? ControllerScreenSnapshot(codexApproval: true) : nil
+        terminals.states[chat] = state
+    }
+
+    func testQuickCrossTreatsApprovalLikeQuestion() {
+        codex(approval: false)
+        XCTAssertEqual(dispatcher.quickCross(terminals.states[chat]!), .send, "ohne Freigabe: Enter")
+        codex(approval: true)
+        XCTAssertNil(dispatcher.quickCross(terminals.states[chat]!))
+        codex(approval: true, draft: false)
+        XCTAssertNil(dispatcher.quickCross(terminals.states[chat]!), "auch „Weiter“ nicht")
+    }
+
+    func testKeyboardSendNowRejected() {
+        codex(approval: true)
+        let monitor = KeyboardIslandMonitor()
+        monitor.attach(dispatcher)
+        monitor.isEnabled = { true }
+        monitor.schedule = { _, _ in }
+        monitor.keyDown(keyCode: KeyboardIslandKeys.KeyCode.tab, modifiers: [.option])
+        monitor.keyDown(keyCode: KeyboardIslandCommand.sendNow.keyCode, modifiers: [.option])
+        XCTAssertTrue(terminals.keys.isEmpty)
+        XCTAssertTrue(terminals.texts.isEmpty)
+        XCTAssertGreaterThanOrEqual(beeps, 1)
+    }
+
+    /// Die Freigabe erscheint erst, nachdem die Lage gelesen wurde: Der letzte
+    /// Blick in `sendOrContinue` hält Enter trotzdem zurück.
+    func testStaleSetupStillChecksScreen() {
+        codex(approval: false)
+        let setup = dispatcher.menuSetup(for: .chat(chat))
+        XCTAssertEqual(setup.quickCross, .send)
+        codex(approval: true)
+        dispatcher.sendOrContinue(setup: setup) {}
+        XCTAssertTrue(terminals.keys.isEmpty)
+        XCTAssertEqual(haptics, [.rejected])
+    }
+
+    func testControllerCrossAndPaddleRejected() {
+        codex(approval: true)
+        dispatcher.performQuickDraw(.continueWork)
+        dispatcher.paddleSendNowOrContinue()
+        XCTAssertTrue(terminals.keys.isEmpty)
+        XCTAssertTrue(terminals.texts.isEmpty)
+        XCTAssertEqual(haptics.filter { $0 == .rejected }.count, 2)
     }
 }

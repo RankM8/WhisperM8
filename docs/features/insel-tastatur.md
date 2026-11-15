@@ -43,8 +43,8 @@ Ort ein Chat war). So führt ⌥Tab kurz getippt genau dorthin, wo L2 getippt hi
 Erkannt wird über den keyCode, nicht über das Zeichen: Mit ⌥ liefert das Layout andere Zeichen. Andere
 Tasten bei gehaltenem ⌥ schluckt die Insel, damit kein ⌥-Zeichen ins Terminal rutscht. Kommt eine Taste
 ohne ⌥ an, ist uns das Loslassen entgangen (Menü-Tracking, Mission Control mit gehaltenem ⌥): Die Insel
-schließt ohne Wechsel, die Taste läuft normal weiter — auch Return, das dann dem Prompt gehört. Nur Esc
-bricht ab und bleibt bei uns. Ein ⌥-Loslassen, das wir nicht gesehen haben, schließt ebenso ohne Wechsel.
+schließt ohne Wechsel, die Taste läuft normal weiter. Return und Esc schließen nur und werden
+verschluckt: Ein durchgereichtes Return bestätigte womöglich eine offene Freigabe im Chat. Ein ⌥-Loslassen, das wir nicht gesehen haben, schließt ebenso ohne Wechsel.
 
 **Geht nicht** (W ohne wartenden Chat, R ohne geschlossenen Chat, Leertaste auf einem Workspace,
 gescheiterter Wechsel): macOS-Warnton, die Insel bleibt offen (Entscheidung Giuliano, 15.11.2026).
@@ -68,6 +68,9 @@ Insel), nicht auf die markierte Zeile. Darunter „App“.
 | C | Zwischenablage-Verlauf (schließt die Insel) | R1 + ▼ |
 | ? | Spickzettel der Schreib-Tasten statt der Liste; noch mal ? zurück | — |
 
+- **Codex-Freigabe:** Steht bei Codex eine Freigabe am Bildschirm offen (auch hochgescrollt), schicken
+  S, R1 + Kreuz und das Paddle nichts (Warnton bzw. „geht nicht“): Enter oder „Weiter“ bestätigte sie
+  sonst. Geprüft in `quickCross` und zuletzt noch einmal in `sendOrContinue`.
 - **Regeln:** dieselben wie bei den R1-Rauten (`ControllerQuickDrawSlots`, `ControllerMenuModel`):
   Rückfrage offen, Chat arbeitet, Shell. Was nicht geht, steht ausgegraut da und gibt den Warnton.
   Befehle schließen die Insel nach einer kurzen Markierung, N und A lassen sie offen.
@@ -149,8 +152,10 @@ Hotkey (ab Werk ⌥Leertaste), gelesen beim Erscheinen der Leiste; ohne Hotkey f
 | Layout | `KeyboardIsland/KeyboardLayoutLetters.swift` | Buchstabe je keyCode im aktuellen Layout (`UCKeyTranslate`, nur Main Thread) |
 
 Leistung: Der Monitor prüft bei geschlossener Insel nur keyCode und Modifier; Einstellungen und
-Schnappschuss liest er erst bei ⌥Tab. Das Erscheinen misst dasselbe Signpost wie am Controller
-(`controller.islandShow`).
+Schnappschuss liest er erst bei ⌥Tab. ⌥Tab baut nur die Liste; Menü-Angaben, Schalterstände und die
+Layout-Abfrage der Tastenzeile entstehen erst, wenn die Insel nach 0,2 s erscheint oder ein Buchstabe
+kommt (`ensureKeyboardCommands`), ⌥Tab kurz getippt braucht sie nie. Beide Schritte misst dasselbe
+Signpost wie am Controller (`controller.islandShow`, Budget 33 ms).
 
 ## Prüfen
 

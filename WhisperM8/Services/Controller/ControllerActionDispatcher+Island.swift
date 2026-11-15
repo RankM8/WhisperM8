@@ -316,6 +316,13 @@ extension ControllerActionDispatcher {
     /// Chat, offene Rückfrage oder Ansicht: „geht nicht“. `onHit` läuft, bevor
     /// etwas rausgeht (die Raute leuchtet kurz auf).
     func sendOrContinue(setup: ControllerMenuSetup, onHit: () -> Void) {
+        // Zuletzt noch einmal am Bildschirm: Steht bei Codex eine Freigabe
+        // offen, bestätigte Enter (oder „Weiter“ mit Enter) sie. Der Stand im
+        // `setup` kann älter sein (Insel offen, Freigabe erscheint danach).
+        // Gilt für R1 + Kreuz, das Paddle und S in der Tastatur-Insel (WM8-104).
+        if let sessionID = setup.sessionID, terminals.state(of: sessionID)?.screen?.codexApproval == true {
+            return playHaptic(.rejected)
+        }
         switch setup.quickCross {
         case let cross? where cross != .continueWork:
             guard let sessionID = setup.sessionID, sessionID == selectedSessionID else {

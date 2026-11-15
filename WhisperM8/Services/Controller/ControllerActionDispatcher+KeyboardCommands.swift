@@ -37,8 +37,17 @@ extension ControllerActionDispatcher {
 
     var keyboardCommands: ControllerKeyboardCommands? { islandState?.model.keyboard }
 
+    /// Baut die Tastenzeile, falls noch nicht geschehen; gemessen wie das
+    /// Öffnen der Insel (`controller.islandShow`).
+    func ensureKeyboardCommands() {
+        guard isKeyboardIslandOpen, var state = islandState, state.model.keyboard == nil else { return }
+        PerfBudgets.controllerIslandShow.withInterval { makeKeyboardCommands(for: &state) }
+        islandState = state
+    }
+
     /// Ein Buchstabe der Tastenzeile.
     func keyboardIslandCommand(_ command: KeyboardIslandCommand) {
+        ensureKeyboardCommands()
         guard isKeyboardIslandOpen, let commands = keyboardCommands,
               islandState?.model.whereTo?.tab == .chats else { return keyboardRejected() }
         // Offene Karte oder Spickzettel: Nur L schließt die Karte wieder.
@@ -189,6 +198,7 @@ extension ControllerActionDispatcher {
 
     /// ?: Spickzettel der Schreib-Tasten an und aus (nur im Reiter „Chats“).
     func toggleKeyboardCheatSheet() {
+        ensureKeyboardCommands()
         guard isKeyboardIslandOpen, var state = islandState, var commands = state.model.keyboard,
               commands.slots.card == nil, state.model.whereTo?.tab == .chats else { return keyboardRejected() }
         commands.cheatSheet.toggle()

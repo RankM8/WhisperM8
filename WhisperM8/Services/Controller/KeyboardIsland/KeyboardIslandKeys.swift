@@ -69,12 +69,14 @@ enum KeyboardIslandKeys {
     static func action(keyCode: UInt16, modifiers: NSEvent.ModifierFlags, characters: String? = nil) -> Action {
         let mods = modifiers.intersection(relevantModifiers)
         // Esc gilt auch ohne ⌥: Es bricht nur ab und darf das Terminal nie
-        // erreichen. Return ohne ⌥ heißt dagegen, das Loslassen ist uns
-        // entgangen (etwa Mission Control mit gehaltenem ⌥): Dann gehört
-        // Return dem Prompt und darf nicht zur alten Markierung wechseln.
+        // erreichen. Return ohne ⌥ heißt, das Loslassen ist uns entgangen
+        // (etwa Mission Control mit gehaltenem ⌥): Es wechselt nicht zur alten
+        // Markierung und wird wie Esc verschluckt — durchgereicht bestätigte es
+        // womöglich eine offene Freigabe im Chat (Gegenlesen Paket 2).
         if keyCode == KeyCode.escape { return .cancel }
-        guard mods.contains(.option) else { return .cancelAndPassThrough }
-        if keyCode == KeyCode.returnKey || keyCode == KeyCode.keypadEnter { return .commit }
+        let isReturn = keyCode == KeyCode.returnKey || keyCode == KeyCode.keypadEnter
+        guard mods.contains(.option) else { return isReturn ? .cancel : .cancelAndPassThrough }
+        if isReturn { return .commit }
         // Mit ⌘ oder ⌃ ist es ein anderes Kürzel (⌃⌥Tab, ⌘⌥←): nicht für uns,
         // aber auch nicht ins Terminal, solange die Insel offen ist.
         guard mods.isDisjoint(with: [.command, .control]) else { return .ignore }

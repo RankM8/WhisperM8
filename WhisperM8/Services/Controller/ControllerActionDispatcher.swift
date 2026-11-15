@@ -651,9 +651,13 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         guard terminal.isRunning else { return nil }
         let fieldHasText = ControllerScreenReading.fieldHasText(
             screen: terminal.screen, tracker: terminal.fieldMayHaveText || terminal.draftSuspected)
+        // Codex meldet Freigaben nie als „wartet“; offen sieht man sie nur am
+        // Bildschirm (WM8-67, hochgescrollt WM8-107). Dann gilt sie wie eine
+        // Rückfrage: Kreuz bzw. S schickt nichts.
+        let dialogOpen = terminal.status == .awaitingInput || terminal.screen?.codexApproval == true
         return ControllerQuickDrawSlots.crossAction(
             profile: terminal.profile, busy: isBusy(terminal),
-            dialogOpen: terminal.status == .awaitingInput, viewOpen: terminal.screen?.openView != nil,
+            dialogOpen: dialogOpen, viewOpen: terminal.screen?.openView != nil,
             fieldHasText: fieldHasText, queuedOwnPrompts: terminal.queuedOwnPrompts,
             onlyRecalledPrompt: terminal.onlyRecalledPrompt)
     }
