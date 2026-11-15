@@ -57,6 +57,9 @@ final class StallWatchdog: @unchecked Sendable {
     var now: () -> TimeInterval = {
         TimeInterval(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000
     }
+    /// Test-Hook: Uhr, die im Schlaf weiterläuft (`mach_continuous_time`).
+    var continuousNow: () -> TimeInterval = SleepGap.continuousNow
+    private var lastCheck: SleepGap.Stamp?
 
     /// Entscheidet, ob eine laufende Blockade gemeldet wird. Rein und
     /// testbar: erste Meldung ab der Schwelle, danach bei jeder Verdopplung.
@@ -114,7 +117,14 @@ final class StallWatchdog: @unchecked Sendable {
     /// Sichtbar fuer Tests — im Betrieb ruft nur der Timer.
     func check() {
         let current = now()
+        let stamp = SleepGap.Stamp(uptime: current, continuous: continuousNow())
         lock.lock()
+        // Schlaf selbst erkennen, ohne auf die Aufwach-Meldung des Main
+        // Threads zu warten (die kommt erst nach dem ersten Aufhol-Hänger).
+        if let lastCheck, SleepGap.slept(from: lastCheck, to: stamp) {
+            suppressedUntil = max(suppressedUntil, current + MainThreadStallMonitor.wakeGrace)
+        }
+        lastCheck = stamp
         let elapsed = current - lastBeat
         let previous = lastReported
         let report = current >= suppressedUntil
@@ -147,5 +157,26 @@ final class StallWatchdog: @unchecked Sendable {
                 "main_thread_blocked_ongoing durationMs=\(Int(elapsed * 1000), privacy: .public) open=\(open, privacy: .public)"
             )
         }
+    }
+}
+
+/// Erkennt einen Schlaf des Macs zwischen zwei Zeitpunkten: Die Uhr mit
+/// Schlaf (`mach_continuous_time`) läuft weiter, die ohne
+/// (`mach_absolute_time`, `DispatchTime`) steht still. Liegen beide um mehr
+/// als `threshold` auseinander, hat der Mac dazwischen geschlafen (WM8-101).
+enum SleepGap {
+    struct Stamp: Equatable {
+        var uptime: TimeInterval
+        var continuous: TimeInterval
+    }
+
+    static let threshold: TimeInterval = 1.0
+
+    static let continuousNow: () -> TimeInterval = {
+        TimeInterval(clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW)) / 1_000_000_000
+    }
+
+    static func slept(from earlier: Stamp, to later: Stamp) -> Bool {
+        (later.continuous - earlier.continuous) - (later.uptime - earlier.uptime) > threshold
     }
 }

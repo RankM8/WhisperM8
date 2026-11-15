@@ -75,12 +75,23 @@ struct PerformanceBudget {
         /// Auf dem Main Thread begonnen: dann führt `MainThreadIntervalLedger`
         /// Buch, damit Hänger-Meldungen ihren Verursacher nennen (WM8-101).
         fileprivate let onMain: Bool
+        fileprivate let name: StaticString?
         fileprivate var ended = false
 
-        fileprivate init(state: OSSignpostIntervalState?, startedAt: TimeInterval?, onMain: Bool = false) {
+        fileprivate init(state: OSSignpostIntervalState?, startedAt: TimeInterval?, onMain: Bool = false,
+                         name: StaticString? = nil) {
             self.state = state
             self.startedAt = startedAt
             self.onMain = onMain
+            self.name = name
+        }
+
+        /// Ein Token, das nie beendet wurde (verworfene Messung, Task
+        /// abgebrochen), schließt sich im Register. Sonst stünde sein Name
+        /// für immer in `open=` und die Liste wüchse (WM8-101, Uli).
+        deinit {
+            guard onMain, !ended, let name else { return }
+            MainThreadIntervalLedger.shared.didEnd(name, start: nil, end: nil)
         }
 
         /// EIN geteiltes Token für alle abgeschalteten Detail-Messpunkte.
@@ -102,6 +113,11 @@ struct PerformanceBudget {
     /// Messdichte-Stufe. Default `.always`, damit bestehende Messpunkte sich
     /// nicht ändern; neue dichte Messpunkte müssen `.detail` explizit setzen.
     var tier: PerfTier = .always
+    /// `true` für Intervalle, die Wartezeit messen statt Arbeit (Latenz bis
+    /// zur Rückkehr auf den Main Thread, „bis die Pane eingehängt ist“). Sie
+    /// sind die Folge eines Hängers, nicht die Ursache, und kommen deshalb
+    /// nicht ins `MainThreadIntervalLedger` (WM8-101).
+    var measuresWaiting = false
     /// Test-Hook: deterministische Uhr. Liefert Sekunden seit Systemstart.
     ///
     /// Bewusst `DispatchTime` und nicht `Date`: Eine Wanduhr springt bei
@@ -137,9 +153,9 @@ struct PerformanceBudget {
     func begin() -> Token {
         guard isActive else { return .inactive }
         let state = signposter.beginInterval(name, id: signposter.makeSignpostID())
-        let onMain = Thread.isMainThread
+        let onMain = !measuresWaiting && Thread.isMainThread
         if onMain { MainThreadIntervalLedger.shared.didBegin(name) }
-        return Token(state: state, startedAt: now(), onMain: onMain)
+        return Token(state: state, startedAt: now(), onMain: onMain, name: name)
     }
 
     func end(_ token: Token) {
@@ -258,7 +274,8 @@ enum PerfBudgets {
     /// wenig, bei einer Untersuchung zeigt sie zusammen mit
     /// `MainThreadStallMonitor`, ob der MainActor der Engpass war.
     static let sidebarStatusPollLatency = PerformanceBudget(
-        name: "sidebar.statusPollLatency", budget: 0.250, signposter: PerfSignposts.sidebar, tier: .detail
+        name: "sidebar.statusPollLatency", budget: 0.250, signposter: PerfSignposts.sidebar, tier: .detail,
+        measuresWaiting: true
     )
     static let sidebarModelBuild = PerformanceBudget(name: "sidebar.modelBuild", budget: 0.0167, signposter: PerfSignposts.sidebar)
 
@@ -304,9 +321,11 @@ enum PerfBudgets {
     // Grid-Workspace (Budgets aus docs/plans/grid-workspace-plan.html, Abschnitt 05;
     // Freigabe-Gates sind p95-Werte, Einzelverletzungen sind Hinweise, keine Fehler).
     /// Grid-Aufbau: showsGrid → alle erwarteten Terminal-Panes attached.
-    static let gridBuild = PerformanceBudget(name: "grid.build", budget: 0.050, signposter: PerfSignposts.grid)
+    static let gridBuild = PerformanceBudget(name: "grid.build", budget: 0.050, signposter: PerfSignposts.grid,
+                                             measuresWaiting: true)
     /// Pane-Fokuswechsel: Selektionsänderung → makeFirstResponder angewendet.
-    static let gridFocusSwitch = PerformanceBudget(name: "grid.focusSwitch", budget: 0.033, signposter: PerfSignposts.grid)
+    static let gridFocusSwitch = PerformanceBudget(name: "grid.focusSwitch", budget: 0.033, signposter: PerfSignposts.grid,
+                                                   measuresWaiting: true)
     /// Ein ANGEWANDTER (coalesced) Divider-Layout-Tick inkl. Folge-Layout —
     /// nicht jeder Maus-Event (die werden gesammelt).
     static let gridDividerTick = PerformanceBudget(name: "grid.dividerTick", budget: 0.016, signposter: PerfSignposts.grid)
@@ -329,6 +348,11 @@ enum PerfBudgets {
     /// Ende von `applicationDidFinishLaunching` bis nach dem ersten Commit
     /// des Agent-Chats-Fensters. Einmal je Start.
     static let launchFirstWindow = PerformanceBudget(name: "launch.firstWindow", budget: 0.500, signposter: PerfSignposts.chats)
+    /// Änderung des Workspace-Stands (`AgentWorkspaceUIModel.workspace`) bis
+    /// nach dem nächsten Commit: der Fensterbody läuft neu, ohne dass sich die
+    /// Auswahl ändert. Messlauf 15.11.: 8 von 9 unbenannten Hängern im Betrieb
+    /// lagen so. Häufig (jede Store-Mutation), deshalb Detail-Stufe.
+    static let workspaceApply = PerformanceBudget(name: "workspace.apply", budget: 0.050, signposter: PerfSignposts.chats, tier: .detail)
 
     // Statistik
     /// Ein inkrementeller Lauf des Protokoll-Lesers (`StatisticsLogScanner`):
@@ -348,7 +372,8 @@ enum PerfBudgets {
     /// Überschreitung heißt: Der Main Thread hing während des Übergangs.
     /// Nur in der Detail-Stufe.
     static let unifiedPillMorph = PerformanceBudget(
-        name: "pill.morph", budget: 0.450, signposter: PerfSignposts.recording, tier: .detail)
+        name: "pill.morph", budget: 0.450, signposter: PerfSignposts.recording, tier: .detail,
+        measuresWaiting: true)
     /// Status-Pille neu zeichnen (Zustandswechsel, gedrosselt). Nur in der Detail-Stufe.
     static let unifiedPillRender = PerformanceBudget(
         name: "pill.unifiedRender", budget: 0.008, signposter: PerfSignposts.sidebar, tier: .detail)

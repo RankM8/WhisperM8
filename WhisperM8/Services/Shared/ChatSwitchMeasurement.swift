@@ -41,11 +41,43 @@ enum ChatSwitchMeasurement {
         }
     }
 
-    /// Unterscheiden sich die Auswahlen zweier Stände? Billig: ein Eintrag je
-    /// Fenster plus die globale Auswahl.
+    /// Zeigt ein Fenster danach etwas anderes? Auswahl, Raster an oder aus,
+    /// anderer Workspace. Ein Workspace-Wechsel ohne Auswahlwechsel baut
+    /// ebenso alle Panes um (Messlauf 15.11.: 6 Panes abgebaut, 1,4 s, ohne
+    /// Messpunkt). Billig: ein Eintrag je Fenster plus die globale Auswahl.
     nonisolated static func selectionDiffers(_ lhs: AgentUIState, _ rhs: AgentUIState) -> Bool {
         lhs.selectedSessionID != rhs.selectedSessionID
-            || lhs.windows.map(\.selectedSessionID) != rhs.windows.map(\.selectedSessionID)
+            || lhs.windows.map(ViewSignature.init) != rhs.windows.map(ViewSignature.init)
+    }
+
+    private struct ViewSignature: Equatable {
+        let selected: UUID?
+        let showsGrid: Bool
+        let workspace: UUID?
+
+        init(_ window: AgentChatWindowState) {
+            selected = window.selectedSessionID
+            showsGrid = window.showsGrid
+            workspace = window.activeWorkspaceID
+        }
+    }
+}
+
+/// Misst eine Änderung des Workspace-Stands bis nach dem nächsten Commit
+/// (`PerfBudgets.workspaceApply`). Mehrere Änderungen im selben Durchgang
+/// gehören zu einer Messung.
+@MainActor
+enum WorkspaceApplyMeasurement {
+    private static var pending: PerformanceBudget.Token?
+
+    static func workspaceChanged() {
+        guard pending == nil, PerfBudgets.workspaceApply.isActive else { return }
+        let token = PerfBudgets.workspaceApply.begin()
+        pending = token
+        MainRunLoopCommit.afterNextCommit {
+            PerfBudgets.workspaceApply.end(token)
+            pending = nil
+        }
     }
 }
 

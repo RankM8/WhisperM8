@@ -50,18 +50,28 @@ der Meldung noch offenen. `main_thread_blocked_ongoing` nennt mit `open=`, welch
 Intervall WÄHREND einer laufenden Blockade offen ist. Buch führt
 `MainThreadIntervalLedger`, gefüttert von `PerformanceBudget.begin/end`; es kostet
 je Main-Thread-Intervall zwei kurze Lock-Abschnitte. Steht `recent=-`, lief eine
-Stelle ohne Messpunkt.
+Stelle ohne Messpunkt. Ein Token, das nie beendet wird, schließt sich in seinem
+`deinit` im Register.
+
+Budgets mit `measuresWaiting: true` messen Wartezeit statt Arbeit und kommen nicht
+ins Register: `sidebar.statusPollLatency`, `grid.build`, `grid.focusSwitch`,
+`pill.morph`. Sie sind die Folge eines Hängers, nicht die Ursache (Messlauf
+15.11.2026: `statusPollLatency` stand bei 20 von 31 Hängern vorn).
 
 Hänger in den ersten 15 s nach dem Aufwachen des Macs heißen
 `main_thread_wake_stall` (Stufe info), damit sie in keiner Hänger-Zählung landen; der
-Watchdog schweigt in dieser Zeit. Am 14.11. waren das 18 von 21 Meldungen eines
+Watchdog schweigt in dieser Zeit. Den Schlaf erkennen Monitor und Watchdog selbst
+(`SleepGap`: `mach_continuous_time` läuft im Schlaf weiter, `mach_absolute_time`
+nicht); die Aufwach-Meldung von `NSWorkspace` käme erst über den Main Thread, also
+nach dem ersten Aufhol-Hänger. Am 14.11. waren das 18 von 21 Meldungen eines
 Vormittags.
 
 Neue Messpunkte, Kategorie `perf.chats`:
 
 | Name | Budget | Stufe | misst |
 | -- | -- | -- | -- |
-| `chat.switch` | 100 ms | immer | Auswahlwechsel im `AgentWindowStore` bis nach dem nächsten Commit von Core Animation: Body, Layout und Zeichnen des Fensters samt Seitenleiste |
+| `chat.switch` | 100 ms | immer | Auswahl-, Raster- oder Workspace-Wechsel im `AgentWindowStore` bis nach dem nächsten Commit von Core Animation: Body, Layout und Zeichnen des Fensters samt Seitenleiste |
+| `workspace.apply` | 50 ms | Detail | neuer Workspace-Stand in `AgentWorkspaceUIModel` bis nach dem nächsten Commit (Fensterbody ohne Auswahlwechsel) |
 | `launch.firstWindow` | 500 ms | immer | Ende von `applicationDidFinishLaunching` bis nach dem ersten Commit des Agent-Chats-Fensters (verworfen nach 30 s) |
 | `pane.attach` | 50 ms | Detail | Umhängen einer Terminal-Ansicht bis nach dem nächsten Commit |
 | `terminal.resize` | 16 ms | Detail | `setFrameSize` einer Terminal-Ansicht samt Umbruch des Puffers |

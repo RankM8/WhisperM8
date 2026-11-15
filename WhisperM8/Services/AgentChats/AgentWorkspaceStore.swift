@@ -403,6 +403,7 @@ final class AgentWorkspaceUIModel {
 
     private(set) var workspace: AgentWorkspace {
         didSet {
+            WorkspaceApplyMeasurement.workspaceChanged()
             guard workspace.projects != oldValue.projects else { return }
             let parents = AgentProjectDisplay.parentByProjectID(projects: workspace.projects)
             if parents != projectParents { projectParents = parents }
