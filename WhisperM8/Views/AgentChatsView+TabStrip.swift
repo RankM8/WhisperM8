@@ -344,9 +344,8 @@ extension AgentChatsView {
                                     .accessibilityHidden(true)
                             }
                         }
-                        // Sichtbare Frame des Strips → Viewport-Breite (Überlauf)
-                        // + X-Spanne (window-relativ) fürs Hit-Test-Gating des
-                        // Mausrad-Monitors.
+                        // X-Spanne des Strips (window-relativ) fürs Hit-Test-
+                        // Gating des Mausrad-Monitors.
                         .background(
                             GeometryReader { geo in
                                 Color.clear.preference(
@@ -357,7 +356,6 @@ extension AgentChatsView {
                         )
                         .onPreferenceChange(TabStripFrameKey.self) { frame in
                             stripFrameInWindow = frame
-                            stripViewportWidth = frame.width
                         }
                         // Bei Tab-Wechsel (⌘⌥←/→, ⌘1–⌘9, Sidebar) den aktiven Tab
                         // in Sicht scrollen, falls die Bar überläuft. Hält außerdem
@@ -412,6 +410,7 @@ extension AgentChatsView {
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .help("All tabs and tab groups")
+                .accessibilityLabel("All tabs and tab groups")
 
                 Menu {
                     newChatMenuContent

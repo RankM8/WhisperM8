@@ -33,35 +33,19 @@ extension AgentChatsView {
             }
 
             if searching {
-                captionRow(text: "Search shows all chats", action: nil, actionLabel: nil)
+                captionRow(text: "Search shows all chats")
             }
         }
         .padding(.horizontal, 8)
         .padding(.bottom, 6)
     }
 
-    @ViewBuilder
-    func captionRow(text: LocalizedStringKey, action: (() -> Void)?, actionLabel: LocalizedStringKey?) -> some View {
+    func captionRow(text: LocalizedStringKey) -> some View {
         HStack(spacing: 4) {
             Text(text)
                 .font(.system(size: 11))
                 .foregroundStyle(AgentTheme.textTertiary)
             Spacer(minLength: 0)
-            if let action, let actionLabel {
-                Button(action: action) {
-                    Text(actionLabel)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(AgentTheme.textSecondary)
-                        // Trefferfläche größer als der Text, Layout unverändert.
-                        .padding(.vertical, 5)
-                        .padding(.leading, 10)
-                        .contentShape(Rectangle())
-                        .padding(.vertical, -5)
-                        .padding(.leading, -10)
-                }
-                .buttonStyle(.plain)
-                .help("Clear filter — show all chats")
-            }
         }
     }
 
@@ -94,15 +78,18 @@ struct SidebarScopeSegments: View {
             ForEach(SidebarScope.allCases) { scope in
                 let isOn = self.scope == scope
                 Button { onSelect(scope) } label: {
+                    // Kein Verkleinern (Regel ≥ 11 pt): Die Zahl bleibt fest,
+                    // bei Enge wird das Wort gekürzt.
                     HStack(spacing: 3) {
                         Text(scope.label)
                             .font(.system(size: 11, weight: isOn ? .semibold : .medium))
+                            .truncationMode(.tail)
                         Text(verbatim: "\(AgentChatsView.scopeCount(scope, in: counts))")
                             .font(.system(size: 11, weight: .medium).monospacedDigit())
                             .opacity(0.7)
+                            .fixedSize()
                     }
                     .lineLimit(1)
-                    .minimumScaleFactor(0.85)
                     .foregroundStyle(isOn ? AgentTheme.textPrimary : AgentTheme.textSecondary)
                     .frame(maxWidth: .infinity, minHeight: 22)
                         .background {

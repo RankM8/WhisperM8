@@ -370,9 +370,6 @@ struct AgentChatsView: View {
     /// das Fenster ziehen; der `TitleBandPointerTracker` hält `isMovable`
     /// danach aktuell. Klasse im @State: Messungen lösen keinen Neuaufbau aus.
     @State var windowDragAreaCache = WindowDragAreaCache()
-    /// Sichtbare Breite des Tab-Strip-ScrollViews + Gesamtbreite seines Inhalts.
-    /// Differenz > 0 ⇒ Überlauf ⇒ Chevron-Overflow-Menü einblenden.
-    @State var stripViewportWidth: CGFloat = 0
     @State private var renameTargetID: UUID?
     @State private var renameDraft: String = ""
     @State var renameProjectTargetID: UUID?
