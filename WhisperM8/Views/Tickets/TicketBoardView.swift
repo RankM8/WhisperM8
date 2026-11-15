@@ -59,6 +59,13 @@ struct TicketBoardView: View {
                 TicketBoardHeader(title: title, mode: $model.mode, load: load, refresh: actions.refresh)
                 HStack(alignment: .center, spacing: 8) {
                     TicketBoardFilterBar(filter: $model.filter, counts: presentation.counts, projects: presentation.projects)
+                    if model.copied == .link {
+                        // ⌘C auf dem Board: Dort gibt es keinen Link-Knopf, der „Kopiert“ zeigen könnte.
+                        Label("Link copied", systemImage: "checkmark")
+                            .font(.system(size: 11.5, weight: .medium))
+                            .foregroundStyle(AgentTheme.textSecondary)
+                            .fixedSize()
+                    }
                     TicketCopyButton(kind: .list, copied: model.copied) { model.copyList(title: listTitle) }
                 }
                 TicketBoardProblemLine(load: load)

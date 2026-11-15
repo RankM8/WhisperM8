@@ -13,6 +13,23 @@ final class TicketCopyTests: XCTestCase {
         XCTAssertEqual(TicketCopyText.link(ticket), "WM8-104 Insel per Tastatur bauen", "nur https-Adressen")
     }
 
+    func testControlAndFormatCharactersNeverReachTheClipboard() {
+        var ticket = TicketFixtures.ticket(7, title: "Vorher\u{1B}[201~danach")
+        ticket.url = "https://linear.app/whisperm8/issue/WM8-7"
+        let link = TicketCopyText.link(ticket)
+        XCTAssertFalse(link.unicodeScalars.contains("\u{1B}"), "ESC beendete sonst ein Bracketed Paste im Terminal")
+        XCTAssertEqual(link.components(separatedBy: "\n").first, "WM8-7 Vorher [201~danach")
+        ticket.title = "Rechnung \u{202E}fdp.exe"
+        XCTAssertEqual(TicketCopyText.link(ticket).components(separatedBy: "\n").first, "WM8-7 Rechnung fdp.exe", "Bidi-Umkehr fällt weg")
+        ticket.title = "Zwei\nZeilen\r\nund\u{2028}mehr"
+        XCTAssertEqual(TicketCopyText.link(ticket).components(separatedBy: "\n").count, 2, "Titel bleibt eine Zeile")
+        XCTAssertEqual(TicketCopyText.link(ticket).components(separatedBy: "\n").first, "WM8-7 Zwei Zeilen und mehr")
+        let list = TicketCopyText.list(title: "Liste\u{1B}", sections: [.init(title: "To\u{202E}do", tickets: [ticket])])
+        XCTAssertFalse(list.unicodeScalars.contains { $0.properties.generalCategory == .control && $0 != "\n" })
+        XCTAssertFalse(list.unicodeScalars.contains { $0.properties.generalCategory == .format })
+        XCTAssertEqual(TicketCopyText.flat("Ü-Umlaut und Emoji 🎫 bleiben"), "Ü-Umlaut und Emoji 🎫 bleiben")
+    }
+
     func testListKeepsOrderAndDropsEmptySections() {
         let one = TicketFixtures.ticket(1, title: "Eins"), two = TicketFixtures.ticket(2, title: "Zwei")
         let text = TicketCopyText.list(title: "Tickets · whisperm8", sections: [
@@ -69,7 +86,8 @@ final class TicketCopyTests: XCTestCase {
 
     func testDoctorFindsRuleStatusesTheTeamDoesNotHave() {
         let rule = TicketTeamRule(statusMeanings: ["Merge-bereit": .waitsForMe, "Merge-breit": .waitsForMe, "Done": .done])
-        XCTAssertEqual(TicketTeamRuleChange.unknownStatuses(in: rule, statuses: TicketFixtures.statuses), ["Done", "Merge-breit"],
-                       "Tippfehler und erledigte Status")
+        let problems = TicketTeamRuleChange.statusProblems(in: rule, statuses: TicketFixtures.statuses)
+        XCTAssertEqual(problems.map(\.name), ["Done", "Merge-breit"], "Tippfehler und erledigte Status")
+        XCTAssertEqual(problems.map(\.closed), [true, false], "geschlossen ist etwas anderes als „gibt es nicht“")
     }
 }

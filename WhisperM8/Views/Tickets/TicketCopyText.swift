@@ -42,9 +42,21 @@ enum TicketCopyText {
         return raw
     }
 
-    /// Ein Titel ist eine Zeile.
-    private static func flat(_ text: String) -> String {
-        text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.joined(separator: " ")
+    /// Ein Titel ist eine Zeile, und zwar eine harmlose. Titel stammen von
+    /// anderen, und eingefügt wird oft in ein Terminal: Ein ESC käme in der
+    /// Eingabe eines Chats als Taste an (dort „Abbrechen“), `ESC[201~` beendete
+    /// ein Bracketed Paste vorzeitig, Bidi-Zeichen (U+202E) drehten die Anzeige
+    /// um. Deshalb wird jedes Steuer- und Formatzeichen (Kategorien Cc und Cf,
+    /// dazu Zeilen- und Absatztrenner) zu einem Leerzeichen; Leerraum wird zusammengefasst.
+    static func flat(_ text: String) -> String {
+        var scalars = String.UnicodeScalarView()
+        for scalar in text.unicodeScalars {
+            switch scalar.properties.generalCategory {
+            case .control, .format, .lineSeparator, .paragraphSeparator: scalars.append(" ")
+            default: scalars.append(scalar)
+            }
+        }
+        return String(scalars).split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 }
 

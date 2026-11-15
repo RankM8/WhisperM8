@@ -491,7 +491,10 @@ gezeigten Stands.
   Terminal, kopiert ⌘C wie gewohnt. ⌘⇧C bleibt der Zwischenablage-Verlauf (Entscheidung Giuliano, 15.11.2026).
   „Liste kopieren“ (Knopf neben den Filtern, in der Triage über der Liste) kopiert die gezeigten Tickets in ihrer
   Reihenfolge, je Ticket eine Zeile mit Adresse: auf dem Board Spalte für Spalte samt dem, was unter „N weitere“
-  steht, in der Liste nach Projekt, in der Triage ihre Liste. Nur Nummer, Titel und Adresse, nie Ticket-Text. Die
+  steht, in der Liste nach Projekt, in der Triage ihre Liste. Nur Nummer, Titel und Adresse, nie Ticket-Text.
+  Steuer- und Formatzeichen im Titel (ESC, Bidi-Umkehr) werden zu Leerzeichen: Eingefügt wird oft in ein Terminal,
+  und `ESC[201~` beendete dort ein Bracketed Paste. Auf dem Board zeigt „Link kopiert“ neben „Liste kopieren“, dass
+  ⌘C gegriffen hat. Die
   Schreibvorgänge sind beansprucht (`ClipboardInternalWrites.claim`) und landen nicht im Zwischenablage-Verlauf.
 - **Verlauf:** die Kommentare, neueste zuerst. Entscheidungen und Abschlüsse (`tickets decide`, `tickets done`)
   stehen mit einer Kopfzeile in Akzent und ◆. Höchstens die neuesten 40 Kommentare, 200 Zeilen je Kommentar,

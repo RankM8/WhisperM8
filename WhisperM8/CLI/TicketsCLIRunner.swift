@@ -915,9 +915,10 @@ enum TicketsCLIRunner {
                 if let cost = LinearCostMeter.describe(from: costBefore, to: LinearCostMeter.shared.snapshot) {
                     checks.append(Check(name: "Budget \(team)", ok: true, detail: cost))
                 }
-                for name in TicketTeamRuleChange.unknownStatuses(in: config.rule(forTeam: team), statuses: snapshot.statuses) {
+                for problem in TicketTeamRuleChange.statusProblems(in: config.rule(forTeam: team), statuses: snapshot.statuses) {
+                    let what = problem.closed ? "ist im Team geschlossen und bekommt keine Spalte" : "gibt es im Team nicht"
                     checks.append(Check(name: "Regel \(team)", ok: true, warning: true,
-                                        detail: "Status „\(name)“ der Regel gibt es im Team nicht (offen). Korrigieren: whisperm8 tickets setup --team \(team) --status \"\(name)=\""))
+                                        detail: "Status „\(problem.name)“ der Regel \(what). Wegnehmen: whisperm8 tickets setup --team \(team) --status \"\(problem.name)=\""))
                 }
                 checks += hygiene(team: team, tickets: snapshot.tickets, now: env.now())
                 checks += await areas(team: team, workspace: workspace, config: config, env)

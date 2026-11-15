@@ -24333,6 +24333,16 @@
           }
         }
       }
+    },
+    "Link copied": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link kopiert"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
