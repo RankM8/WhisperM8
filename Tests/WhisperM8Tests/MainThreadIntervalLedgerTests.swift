@@ -224,6 +224,99 @@ final class MainThreadIntervalLedgerTests: XCTestCase {
         XCTAssertEqual(runs, 1)
     }
 
+    // MARK: - Messung schärfen (Ulis Folgepunkte)
+
+    @MainActor
+    func testWaitingIntervalsStayOutOfTheLedger() {
+        var waiting = PerformanceBudget(name: "test.waiting", budget: 10, signposter: PerfSignposts.chats,
+                                        measuresWaiting: true)
+        var clock: TimeInterval = 100
+        waiting.now = { clock }
+        let token = waiting.begin()
+        XCTAssertTrue(ledger.openNames().isEmpty, "Wartezeit ist kein Verursacher")
+        clock += 2
+        waiting.end(token)
+        XCTAssertTrue(ledger.entries(overlapping: 0, 1_000).isEmpty)
+        for budget in [PerfBudgets.sidebarStatusPollLatency, PerfBudgets.gridBuild,
+                       PerfBudgets.gridFocusSwitch, PerfBudgets.unifiedPillMorph] {
+            XCTAssertTrue(budget.measuresWaiting, "\(budget.name)")
+        }
+        XCTAssertFalse(PerfBudgets.chatSwitch.measuresWaiting)
+    }
+
+    @MainActor
+    func testForgottenTokenClosesInDeinit() {
+        do {
+            _ = Self.probe.begin()          // nie beendet, fällt hier weg
+        }
+        XCTAssertTrue(ledger.openNames().isEmpty, "sonst bliebe der Name für immer in open=")
+    }
+
+    func testSleepGapIsPure() {
+        let before = SleepGap.Stamp(uptime: 100, continuous: 500)
+        XCTAssertFalse(SleepGap.slept(from: before, to: .init(uptime: 102, continuous: 502)))
+        XCTAssertFalse(SleepGap.slept(from: before, to: .init(uptime: 102, continuous: 502.9)))
+        XCTAssertTrue(SleepGap.slept(from: before, to: .init(uptime: 100.3, continuous: 1_400)))
+    }
+
+    func testWatchdogDetectsSleepWithoutTheMainThread() {
+        let watchdog = StallWatchdog()
+        var clock: TimeInterval = 100
+        var continuous: TimeInterval = 900
+        watchdog.now = { clock }
+        watchdog.continuousNow = { continuous }
+        var reports: [TimeInterval] = []
+        watchdog.onBlock = { reports.append($0) }
+
+        watchdog.beat()
+        watchdog.check()
+        clock += 0.25
+        continuous += 1_800.25           // eine halbe Stunde Deckel zu
+        watchdog.check()
+        clock += 2                       // Aufholen, Main Thread steht
+        continuous += 2
+        watchdog.check()
+        XCTAssertTrue(reports.isEmpty)
+
+        clock += MainThreadStallMonitor.wakeGrace
+        continuous += MainThreadStallMonitor.wakeGrace
+        watchdog.check()
+        XCTAssertEqual(reports.count, 1, "nach der Schonfrist wieder ein echter Hänger")
+    }
+
+    @MainActor
+    func testMonitorDetectsSleepBeforeTheWakeNotification() {
+        let monitor = MainThreadStallMonitor.shared
+        monitor.stop()
+        var clock: TimeInterval = 7_000
+        var continuous: TimeInterval = 9_000
+        var reports: [Bool] = []
+        monitor.now = { clock }
+        monitor.continuousNow = { continuous }
+        monitor.onFreeze = { _, _, _, afterWake in reports.append(afterWake) }
+        defer {
+            restore(monitor)
+            monitor.continuousNow = SleepGap.continuousNow
+        }
+
+        monitor.tick()
+        clock += 1.6                     // erster Tick nach dem Aufwachen, 1,5 s Aufholen
+        continuous += 3_601.6
+        monitor.tick()
+        XCTAssertEqual(reports, [true])
+    }
+
+    func testWorkspaceSwitchCountsAsChatSwitch() {
+        let windowID = UUID()
+        let state = AgentUIState(windows: [AgentChatWindowState(id: windowID, isPrimary: true)], primaryWindowID: windowID)
+        var other = state
+        other.windows[0].activeWorkspaceID = UUID()
+        XCTAssertTrue(ChatSwitchMeasurement.selectionDiffers(state, other))
+        var grid = state
+        grid.windows[0].showsGrid = true
+        XCTAssertTrue(ChatSwitchMeasurement.selectionDiffers(state, grid))
+    }
+
     @MainActor
     private func restore(_ monitor: MainThreadStallMonitor) {
         monitor.stop()

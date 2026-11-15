@@ -92,6 +92,9 @@ final class MainThreadStallMonitor {
     var onFreeze: ((TimeInterval, String, String, Bool) -> Void)?
     /// Zeitpunkt (Uhr `now`) des letzten Aufwachens, `nil` seit dem Start keins.
     private(set) var lastWake: TimeInterval?
+    /// Test-Hook: Uhr, die im Schlaf weiterläuft (`SleepGap`).
+    var continuousNow: () -> TimeInterval = SleepGap.continuousNow
+    private var lastStamp: SleepGap.Stamp?
     private var wakeObserver: NSObjectProtocol?
     let ledger = MainThreadIntervalLedger.shared
     /// Test-Hook: Meldung einer noch LAUFENDEN Blockade (vom Watchdog).
@@ -133,6 +136,7 @@ final class MainThreadStallMonitor {
         timer = nil
         lastTick = nil
         lastWake = nil
+        lastStamp = nil
         if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
         wakeObserver = nil
         watchdog.stop()
@@ -160,6 +164,12 @@ final class MainThreadStallMonitor {
         // zwar SICHTBAR, waehrend es passiert.
         watchdog.beat(throttled: isThrottled())
         defer { lastTick = current }
+        // Schlaf zwischen zwei Ticks selbst erkennen: Die Aufwach-Meldung von
+        // NSWorkspace kommt erst über den Main Thread, also nach dem ersten
+        // Aufhol-Hänger (Hinweis Uli, WM8-101).
+        let stamp = SleepGap.Stamp(uptime: current, continuous: continuousNow())
+        if let lastStamp, SleepGap.slept(from: lastStamp, to: stamp) { noteWake() }
+        lastStamp = stamp
         guard let previous = lastTick else { return }
 
         // Verspaetung = tatsaechlicher Abstand minus Soll-Abstand. Untergrenze
