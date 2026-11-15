@@ -1,6 +1,6 @@
 ---
 name: gpt-coworker
-description: Session-weiter Delegations-Modus — NUR bei explizitem Aufruf laden (/gpt-coworker oder "GPT-Coworker-Modus an"). Danach gibt das Orchestrierungsmodell klar definierte Tasks aktiv an GPT-Subagents ab (implementieren, planen, reviewen, Zweitmeinungen — parallel), um Kontext und Claude-Limits zu sparen. Beim Aktivieren PFLICHT: den Skill codex-subagent mitladen (enthält die Spawn-Mechanik — die beiden gehören zusammen). NICHT laden für einzelne GPT-Subagent-Aufrufe oder Codex-Jobs — das ist codex-subagent allein.
+description: Session-weiter Delegations-Modus — NUR bei explizitem Aufruf laden (/gpt-coworker oder "GPT-Coworker-Modus an"). Danach gibt das Orchestrierungsmodell klar definierte Tasks aktiv an Subagents ab, um Main-Kontext zu sparen: Umsetzung und Reviews mit Opus, einfache Fan-outs mit Sonnet, GPT-Subagents als bewusste Zweitmeinung (parallel). Beim Aktivieren PFLICHT: den Skill codex-subagent mitladen (enthält die Spawn-Mechanik — die beiden gehören zusammen). NICHT laden für einzelne GPT-Subagent-Aufrufe oder Codex-Jobs — das ist codex-subagent allein.
 ---
 
 # GPT-Coworker: aktiv abgeben statt alles selbst machen
@@ -18,26 +18,26 @@ Dieser Modus gilt ab Aufruf **session-weit**, bis der User ihn beendet
 
 ## Arbeitsannahme (vom User so festgelegt)
 
-- **GPT hat deutlich höhere Limits als Claude.** Lieber ein GPT-Agent zu
-  viel als zu wenig: Zweitmeinungen, parallele Reviews und
-  Planungs-Perspektiven schonen Claude-Limits und Main-Kontext. Gratis
-  sind sie nicht (Gotcha „Kosten" in codex-subagent): bei größeren
+- **GPT ist die bewusste Zweitmeinung, nicht der Normalfall.** Es sieht
+  anderes als ein Claude-Modell und hat eigene, höhere Limits; als
+  unabhängige Gegenprüfung neben der Claude-Arbeit ist es deshalb wertvoll.
+  Gratis ist es nicht (Gotcha „Kosten" in codex-subagent): bei größeren
   Fan-outs die Agent-Spanne nennen, sinnlose Doppel-Spawns vermeiden.
-- **Rollen nach Vergleichsläufen:** Als Gegenprüfer war ein Claude-Modell
-  (Sonnet, effort high) schneller und gründlicher als GPT: Es rechnete
-  Behauptungen am Repo nach, statt sie zu übernehmen, und stufte
+- **Aus Vergleichsläufen:** Claude-Modelle rechneten als Gegenprüfer
+  Behauptungen am Repo nach, statt sie zu übernehmen, und stuften
   Schweregrade realistischer ein. GPT ergänzte andere Gesichtspunkte, und
   seine Verwerfungen waren verlässlich. GPT, das GPT prüft, übersieht
   systematisch.
 
-## Folgerung: wer was macht
+## Folgerung: wer was macht (vom User festgelegt)
 
-- **Sonnet (effort high) macht die Hauptarbeit** (Reviews, Fixes).
-- **GPT ist die unabhängige Zweitmeinung** (Gegenprüfung, parallele
-  Perspektiven).
-- **Opus** für Kernpfade, Schiedsrichter und Abnahme.
-- **Nie prüft das bauende Modell.** Zweitprüfung immer durch ein anderes
-  Modell.
+- **Opus** macht Umsetzung, Architektur, Reviews, Verifikation und Abnahme.
+- **Sonnet** nur für einfache, mechanische Fan-outs (Suchen,
+  Zusammenfassen); sag dazu, dass du es nimmst.
+- **GPT** nur auf Wunsch des Users oder als bewusste Zweitmeinung
+  (Gegenprüfung, eine weitere Perspektive).
+- **Nie prüft das Modell, das gebaut hat.** Die Zweitprüfung macht immer
+  ein anderes Modell.
 - **Workflow-Betrieb:** Nachrichten der Hauptsitzung können in laufende
   Workflow-Agenten gelangen (bei jedem Modell) und dort sogar eine zweite
   Instanz starten. Ergebnis deshalb immer auf Vollständigkeit prüfen (je ID
@@ -48,11 +48,11 @@ Skill; die Folgerung oben ändert sich nur, wenn er sie ändert.
 
 ## GPT spawnen
 
-Wo nach der Folgerung GPT drankommt, gilt `subagent_type: "gpt"`.
-Claude-Subagents (Fable/Opus/Sonnet) nimmst du für die Hauptarbeit und für
-jedes Zweiturteil gegen einen GPT-Befund. GPT geht nur über den Agent-TYP,
-nie über den `model`-Parameter (Gotcha „Model-Parameter-Whitelist" in
-codex-subagent).
+Wo nach der Folgerung GPT drankommt, gilt `subagent_type: "gpt"`. Für alles
+andere nimmst du Claude-Subagents nach der Folgerung (Opus, für einfache
+Fan-outs Sonnet), auch für jedes Zweiturteil gegen einen GPT-Befund. GPT
+geht nur über den Agent-TYP, nie über den `model`-Parameter (Gotcha
+„Model-Parameter-Whitelist" in codex-subagent).
 
 ## Delegations-Reflex
 
@@ -64,7 +64,8 @@ Gut abgebbar:
   Schreibrecht im Working Tree, inkl. Tests laufen lassen.
 - **Reviews** (Code, Pläne, Diffs) — default 2 unabhängige Reviewer aus
   verschiedenen Modellen.
-- **Planung** — 2–3 parallele GPT-Perspektiven statt einer eigenen.
+- **Planung** — 2–3 parallele Perspektiven statt einer eigenen, eine davon
+  gern von GPT als Zweitmeinung.
 - **Zweitmeinungen** — parallel zur eigenen Arbeit starten, nicht danach.
 - **Recherche/Exploration** in Code oder Doku, deren Ergebnis sich in
   wenigen Absätzen zurückmelden lässt (spart Main-Kontext am meisten).

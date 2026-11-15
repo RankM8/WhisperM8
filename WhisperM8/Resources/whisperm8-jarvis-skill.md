@@ -510,7 +510,9 @@ Höchstens eine Ansage pro Turn; `muted`/`debounced` nie wiederholen.
 - Für einen eigenen Watch ohne Board: eine Schleife über
   `chats since --cursor <c>` (Cursor aus `chats snapshot`) statt
   `wait --until attention`, das auch bei harmlosem Working/Idle-Geflacker
-  weckt.
+  weckt. Die Schleife schlägt nur bei `needsYou`, `awaitingInput`,
+  `stopped` und `errored` an; `freshDone` nimmst du erst auf, wenn du auf
+  einen bestimmten Abschluss wartest. Sonst weckt sie bei jedem Wechsel.
 - Nach jedem Auftrag, Wecken und Anstoßen **verifizieren, dass der Chat
   wirklich arbeitet** — ein „✓ delivered" heißt nicht, dass der Turn lief
   (Session-Limit, Kontext-Fehler). Bei Claude: Status UND wachsender

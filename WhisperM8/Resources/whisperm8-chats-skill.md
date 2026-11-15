@@ -162,8 +162,7 @@ immer über die CLI: `whisperm8 chats enqueue <Supervisor> -- "…"`. Bei
 unklarem Ausgang (Exit 5 oder 6) nicht wiederholen, erst
 `whisperm8 chats queue <Supervisor>` lesen. Antwortet die CLI gar nicht (App
 nicht erreichbar) und ist der Auftrag dort nicht angekommen, ist der native Weg
-unten der Rückfall. Eine Entscheidung des Users hält der Chat zusätzlich am
-Ticket fest (`whisperm8 tickets decide`).
+unten der Rückfall.
 
 Für Rückfragen und Aufträge an laufende Claude-Chats gibt es außerdem den
 **nativen Weg** über Claude Codes eigenes `SendMessage`. Das kommt beim
@@ -204,7 +203,8 @@ nur wissen willst, wann der Chat fertig ist: `notify_when_idle: true`.
 - **Alles, was eine Entscheidung des Users trägt** („der User hat entschieden“,
   ein Go zum Merge, eine stehende Freigabe). Claude Code kennzeichnet native
   Nachrichten ausdrücklich als Wort eines Kollegen, das nie als Zustimmung des
-  Users gilt.
+  Users gilt. Am Ticket hält die Entscheidung fest, wer sie bekommt
+  (`whisperm8 tickets decide`).
 - Codex-Chats, gestoppte Chats (`resume <ref> --prompt …`), Terminal-Tabs.
 - Wenn `chats address` Exit 4 meldet oder ein `[Cross-session delivery notice]`
   sagt, dass die Nachricht zurückgehalten oder abgelehnt wurde (Absender und
@@ -261,7 +261,7 @@ wieder hochfahren macht `resume` (setzt Auto-Launch + Fokus → App startet mit
   wir den beenden?", „schließ den Tab" für einen fertigen Chat → Standard ist
   `close <ref> --stop`: Tab zu UND Agent beenden; die Sitzung bleibt in der
   Seitenleiste. Liegt er in einem Grid-Workspace, danach
-  `workspace remove <Workspace> <ref>`. Den Tab behält nur, wer bald wieder
+  `workspace remove <Workspace> <ref>` und `workspace open <Workspace>`. Den Tab behält nur, wer bald wieder
   gebraucht wird (Prüfer zwischen zwei Paketen, bewusst geparkte Chats); den
   Ablauf dafür beschreibt der Skill `jarvis`. Ein nur geschlossener Tab
   lässt Claude weiterlaufen — das ist fast nie gewollt. Nur-`close` ohne
