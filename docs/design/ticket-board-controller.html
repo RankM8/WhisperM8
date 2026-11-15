@@ -1,0 +1,1016 @@
+<!DOCTYPE html>
+<!--
+  Klick-Entwurf zu WM8-91 „Ticket-Board mit dem Controller öffnen und bedienen“.
+  Plan: docs/plans/ticket-board-controller.md. Kein App-Code.
+  Baut auf docs/design/ticket-board-alltag.html (Board, Triage, Board-Chat) und
+  docs/design/controller-insel.html / insel-tastatur.html (Dynamic Island, Leiste) auf.
+  Tickets und Chats aus dem Team WM8 (Stand 15.11.2026). Die Teams KUN und SHOP, ihre Tickets
+  und der Produkt-Chat „Pia“ sind erfunden. Der Text im Terminal ist nachgestellt.
+-->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Board per Controller</title>
+<style>
+  :root {
+    --bg:#f2f2f4; --panel:#ffffff; --ink:#1c1c1e; --ink2:#5f6064; --ink3:#76777c; --line:rgba(0,0,0,.09);
+    --win:#ffffff; --sidebar:#eeeef0; --header:#f2f2f4; --term:#fbfbfc; --border:rgba(0,0,0,.08);
+    --field:#ffffff; --field-line:rgba(0,0,0,.14); --sel:rgba(127,127,127,.14); --hl:rgba(94,106,210,.10);
+    --accent:#5e6ad2; --accent-ink:#ffffff; --working:#3fa873; --awaiting:#a87816; --error:#d6473d;
+    --warn-bg:rgba(201,150,42,.12); --ok-bg:rgba(63,168,115,.10);
+    --shadow:0 14px 40px rgba(0,0,0,.18); --card:#ffffff; --lane:#f6f6f8;
+    --pad:#e7e7eb; --padkey:#ffffff; --padkey-line:rgba(0,0,0,.16);
+  }
+  :root[data-theme="dark"] {
+    --bg:#17181b; --panel:#1f2023; --ink:#f1f1f3; --ink2:#a4a5ab; --ink3:#8b8c92; --line:rgba(255,255,255,.09);
+    --win:#0f0f10; --sidebar:#131415; --header:#121213; --term:#0f0f10; --border:rgba(255,255,255,.08);
+    --field:#1c1c1f; --field-line:rgba(255,255,255,.14); --sel:rgba(255,255,255,.08); --hl:rgba(124,132,232,.14);
+    --accent:#7c84e8; --accent-ink:#ffffff; --working:#4cc38a; --awaiting:#e9b949; --error:#e5594f;
+    --warn-bg:rgba(233,185,73,.12); --ok-bg:rgba(76,195,138,.12);
+    --shadow:0 14px 40px rgba(0,0,0,.5); --card:#18191b; --lane:#141517;
+    --pad:#232428; --padkey:#2c2d31; --padkey-line:rgba(255,255,255,.16);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#17181b; --panel:#1f2023; --ink:#f1f1f3; --ink2:#a4a5ab; --ink3:#8b8c92; --line:rgba(255,255,255,.09);
+      --win:#0f0f10; --sidebar:#131415; --header:#121213; --term:#0f0f10; --border:rgba(255,255,255,.08);
+      --field:#1c1c1f; --field-line:rgba(255,255,255,.14); --sel:rgba(255,255,255,.08); --hl:rgba(124,132,232,.14);
+      --accent:#7c84e8; --accent-ink:#ffffff; --working:#4cc38a; --awaiting:#e9b949; --error:#e5594f;
+      --warn-bg:rgba(233,185,73,.12); --ok-bg:rgba(76,195,138,.12);
+      --shadow:0 14px 40px rgba(0,0,0,.5); --card:#18191b; --lane:#141517;
+      --pad:#232428; --padkey:#2c2d31; --padkey-line:rgba(255,255,255,.16);
+    }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.45 -apple-system,"SF Pro Text",system-ui,sans-serif; background:var(--bg); color:var(--ink); }
+  button { font:inherit; color:inherit; }
+  code { font:12px "SF Mono",ui-monospace,monospace; }
+  header.page { display:flex; align-items:center; gap:16px; padding:18px 28px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header.page h1 { font-size:16px; margin:0; font-weight:600; }
+  header.page p { margin:0; color:var(--ink2); }
+  header.page .sp { margin-left:auto; display:flex; gap:10px; flex-wrap:wrap; }
+  main { padding:22px 28px 80px; max-width:1640px; }
+  h2 { margin:30px 0 10px; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink3); font-weight:600; }
+  .rules { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 18px; color:var(--ink2); }
+  .rules b { color:var(--ink); }
+  .rules ol, .rules ul { margin:6px 0 0; padding-left:20px; } .rules li { margin:3px 0; }
+  .cap { color:var(--ink2); max-width:115ch; margin:12px 2px 0; min-height:40px; }
+  .cap b { color:var(--ink); }
+
+  .btn { border:1px solid var(--field-line); background:var(--field); color:var(--ink); border-radius:7px; padding:3px 9px; cursor:pointer; font-size:12px; white-space:nowrap; display:inline-flex; align-items:center; gap:6px; }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); font-weight:600; }
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(330px,1fr)); gap:10px 22px; margin:0 0 14px; }
+  .ctl { display:flex; flex-direction:column; gap:5px; }
+  .ctl .lab { font-size:11px; color:var(--ink3); text-transform:uppercase; letter-spacing:.05em; font-weight:600; }
+  .seg { display:inline-flex; flex-wrap:wrap; gap:2px; padding:2px; background:var(--sel); border-radius:8px; width:max-content; max-width:100%; }
+  .seg button { border:0; background:transparent; padding:4px 10px; border-radius:6px; font-size:12px; color:var(--ink2); cursor:pointer; font-weight:500; }
+  .seg button.on { background:var(--panel); color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.12); font-weight:600; }
+  .seg button .star { color:var(--accent); font-weight:700; margin-left:3px; }
+
+  .stage { display:grid; grid-template-columns:minmax(0,1fr) 300px; gap:18px; align-items:start; }
+
+  /* Fenster */
+  .win { position:relative; height:660px; background:var(--win); border:1px solid var(--border); border-radius:11px; box-shadow:var(--shadow); display:grid; grid-template-columns:210px 1fr; grid-template-rows:1fr auto; overflow:hidden; }
+  .side { background:var(--sidebar); border-right:1px solid var(--border); display:flex; flex-direction:column; min-height:0; grid-row:1; }
+  .lights { display:flex; gap:7px; padding:12px 12px 6px; }
+  .lights i { width:12px; height:12px; border-radius:50%; background:#ff5f57; } .lights i:nth-child(2){background:#febc2e;} .lights i:nth-child(3){background:#28c840;}
+  .sidelist { flex:1; overflow:hidden; padding:2px 8px 8px; font-size:12px; }
+  .sec { margin:12px 6px 4px; font-size:11px; font-weight:700; letter-spacing:.06em; color:var(--ink3); }
+  .grp { display:flex; align-items:center; gap:7px; padding:5px 8px 3px; font-weight:700; font-size:12.5px; }
+  .grp .n { margin-left:auto; color:var(--ink3); font-weight:500; font-size:11px; }
+  .row { display:flex; align-items:center; gap:7px; height:26px; padding:0 8px; border-radius:6px; white-space:nowrap; }
+  .row .t { overflow:hidden; text-overflow:ellipsis; flex:1; }
+  .row .k { color:var(--ink3); font-size:11px; }
+  .row.sel { background:var(--sel); font-weight:600; }
+  .row.mark { box-shadow:inset 0 0 0 1.5px var(--accent); background:var(--hl); }
+  .row.dim { color:var(--ink2); }
+
+  .content { display:flex; flex-direction:column; min-width:0; min-height:0; grid-row:1; }
+  .titlezone { height:36px; background:var(--header); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:6px; padding:0 10px; font-size:11.5px; color:var(--ink2); flex:none; }
+  .tzbtn { width:28px; height:24px; border-radius:6px; border:1px solid transparent; display:flex; align-items:center; justify-content:center; color:var(--ink2); font-size:13px; }
+  .tzbtn.on { background:var(--panel); border-color:var(--border); color:var(--ink); }
+  .tabs { display:flex; gap:4px; margin-left:8px; overflow:hidden; }
+  .tab { padding:3px 9px; border-radius:6px; white-space:nowrap; display:flex; align-items:center; gap:6px; border:1px solid transparent; }
+  .tab.on { background:var(--win); color:var(--ink); border-color:var(--border); }
+  .body { flex:1; min-height:0; display:flex; position:relative; }
+
+  .dot { width:8px; height:8px; border-radius:50%; display:inline-block; flex:none; background:var(--ink3); opacity:.75; }
+  .dot.working { background:var(--working); opacity:1; }
+  .dot.awaiting { background:var(--awaiting); border-radius:2px; transform:rotate(45deg) scale(.82); opacity:1; }
+  .dot.stopped { background:transparent; border:1.5px solid var(--ink3); }
+
+  /* Leiste unten */
+  .legend { grid-column:1 / span 2; grid-row:2; min-height:28px; border-top:1px solid var(--border); background:var(--header); display:flex; align-items:center; gap:6px 13px; padding:4px 12px; font-size:11.5px; color:var(--ink2); flex-wrap:wrap; }
+  .legend b { color:var(--ink); font-weight:600; }
+  .legend .k { display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
+  .legend .new { color:var(--accent); font-weight:600; }
+  .legend .flash { color:var(--ink); background:var(--hl); border-radius:5px; padding:0 6px; }
+  .g { display:inline-flex; align-items:center; justify-content:center; height:18px; min-width:18px; padding:0 4px; border-radius:9px; background:var(--panel); border:1px solid var(--field-line); color:var(--ink); font-size:11px; font-weight:700; line-height:1; }
+  .kc { display:inline-flex; align-items:center; justify-content:center; height:18px; min-width:18px; padding:0 4px; border-radius:4px; background:var(--panel); border:1px solid var(--field-line); border-bottom-width:2px; color:var(--ink); font-size:11px; font-weight:600; line-height:1; }
+
+  /* Chat */
+  .chatview { flex:1; display:flex; flex-direction:column; min-width:0; background:var(--term); }
+  .term { flex:1; overflow:hidden; padding:12px 14px; font:11.5px/1.6 "SF Mono",ui-monospace,monospace; color:var(--ink2); white-space:pre-wrap; }
+  .term b { color:var(--ink); font-weight:600; }
+  .term .u { color:var(--accent); }
+  .input { margin:0 12px 10px; border:1px solid var(--field-line); border-radius:8px; padding:7px 9px; font:11.5px/1.5 "SF Mono",ui-monospace,monospace; color:var(--ink); background:var(--win); min-height:34px; white-space:pre-wrap; }
+  .input .ctx { display:inline-flex; font:600 11px -apple-system,system-ui,sans-serif; background:var(--hl); color:var(--accent); border-radius:5px; padding:1px 7px; margin-bottom:4px; }
+  .input .empty { color:var(--ink3); }
+
+  /* Board */
+  .board { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .bhead { display:flex; align-items:center; gap:10px; padding:10px 14px 4px; flex-wrap:wrap; }
+  .bhead h3 { margin:0; font-size:15px; }
+  .bhead .sub { color:var(--ink3); font-size:11.5px; }
+  .bhead .sp { margin-left:auto; color:var(--ink3); font-size:11.5px; }
+  .filters { display:flex; gap:6px; padding:2px 14px 8px; flex-wrap:wrap; align-items:center; }
+  .chip { border:1px solid var(--field-line); border-radius:999px; padding:1px 9px; font-size:11.5px; background:var(--field); display:inline-flex; gap:5px; align-items:center; }
+  .chip .n { color:var(--ink3); }
+  .chip.on { border-color:var(--accent); background:var(--hl); font-weight:600; }
+  .chip.me.on { background:var(--warn-bg); border-color:var(--awaiting); }
+  .lanes { flex:1; min-height:0; display:flex; gap:9px; padding:0 14px 10px; overflow:hidden; }
+  .lane { width:218px; flex:none; background:var(--lane); border:1px solid var(--border); border-radius:10px; display:flex; flex-direction:column; min-height:0; }
+  .lane.mine { border-color:color-mix(in srgb, var(--awaiting) 55%, transparent); }
+  .lane.focus { box-shadow:0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent); }
+  .lhead { display:flex; align-items:baseline; gap:6px; padding:8px 10px 5px; font-weight:700; font-size:12.5px; }
+  .lhead .n { color:var(--ink3); font-weight:500; font-size:11.5px; }
+  .lhead .why { margin-left:auto; font-weight:600; font-size:11px; color:var(--awaiting); }
+  .cards { overflow:hidden; padding:9px 7px 7px; margin-top:-6px; display:flex; flex-direction:column; gap:6px; }
+  .cardx { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:7px 8px; position:relative; }
+  .cardx.sel { border-color:var(--accent); box-shadow:0 0 0 2px var(--accent); }
+  .cardx.sel::after { content:"Auswahl"; position:absolute; right:6px; top:-9px; background:var(--accent); color:var(--accent-ink); font-size:11px; font-weight:700; border-radius:5px; padding:0 5px; }
+  .cardx.dim { opacity:.4; }
+  .ctop { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--ink3); }
+  .ctop .ini { margin-left:auto; width:20px; height:20px; border-radius:50%; background:var(--sel); color:var(--ink2); font-size:11px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; }
+  .ctitle { font-weight:600; font-size:12px; margin:3px 0 2px; line-height:1.3; }
+  .tag { display:inline-block; font-size:11px; padding:0 6px; border-radius:5px; background:var(--sel); color:var(--ink2); margin:3px 4px 0 0; }
+  .tag.need { background:var(--warn-bg); color:var(--awaiting); font-weight:600; }
+  .cchat { display:flex; align-items:center; gap:6px; font-size:11.5px; margin-top:5px; padding-top:5px; border-top:1px solid var(--border); color:var(--ink2); }
+  .cchat b { color:var(--ink); }
+  .more { font-size:11.5px; color:var(--ink3); padding:5px 4px; text-align:center; border-radius:6px; }
+  .more.sel { color:var(--ink); background:var(--hl); box-shadow:inset 0 0 0 2px var(--accent); font-weight:600; }
+
+  /* Triage */
+  .tri { flex:1; display:flex; min-width:0; min-height:0; }
+  .trilist { width:220px; flex:none; border-right:1px solid var(--border); overflow:hidden; background:var(--sidebar); }
+  .trihead { padding:10px 12px 6px; font-weight:700; font-size:12.5px; display:flex; gap:6px; }
+  .trihead .n { color:var(--ink3); font-weight:500; font-size:11.5px; }
+  .trow { padding:6px 10px; border-radius:7px; margin:2px 6px; }
+  .trow.sel { background:var(--sel); }
+  .trow.sel.focus { box-shadow:inset 0 0 0 2px var(--accent); background:var(--hl); }
+  .trow .tt { font-size:12px; font-weight:600; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .trow .tm { font-size:11px; color:var(--ink3); display:flex; gap:6px; margin-top:2px; }
+  .trow .tm .k { margin-left:auto; }
+  .trow .dec { font-size:11px; color:var(--accent); font-weight:600; margin-top:2px; }
+  .tmain { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .tbar { display:flex; align-items:center; gap:6px; padding:7px 12px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+  .tbar .tk { font-size:12px; color:var(--ink3); }
+  .tbar .tt { font-weight:600; font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1; }
+  .tbody { flex:1; min-height:0; display:flex; }
+  .tdesc { flex:1; min-width:0; overflow:hidden; padding:14px 18px; position:relative; }
+  .tdesc .inner { transition:transform .18s ease; }
+  .bigtitle { font-size:18px; font-weight:700; margin:0 0 10px; line-height:1.25; }
+  .stand { background:var(--hl); border-radius:8px; padding:8px 10px; font-size:12px; margin-bottom:10px; }
+  .desc h4, .props h4 { margin:12px 0 5px; font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink3); }
+  .desc p { margin:0 0 7px; max-width:70ch; }
+  .desc ul { margin:0 0 7px; padding-left:18px; }
+  .check { display:flex; gap:8px; align-items:flex-start; margin:4px 0; font-size:12px; }
+  .check i { width:13px; height:13px; border:1.5px solid var(--ink3); border-radius:3px; flex:none; margin-top:3px; }
+  .note { font-size:11.5px; color:var(--ink3); }
+  .cmt { border:1px solid var(--border); border-radius:8px; padding:7px 9px; margin-bottom:7px; font-size:12px; background:var(--panel); }
+  .cmt .who { font-size:11px; color:var(--ink3); margin-bottom:2px; }
+  .cmt.dec { border-color:color-mix(in srgb, var(--accent) 40%, transparent); }
+  .scrollbar { position:absolute; right:4px; top:10px; width:4px; height:60px; border-radius:2px; background:var(--accent); opacity:.5; transition:top .18s ease; }
+  .props { width:190px; flex:none; border-left:1px solid var(--border); overflow:hidden; padding:10px 10px; font-size:12px; }
+  .props .pl { font-size:11px; color:var(--ink3); margin:9px 0 2px; }
+  .props .pl:first-child { margin-top:0; }
+  .chl { display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:6px; margin:2px -6px; }
+  .chl.focus { box-shadow:inset 0 0 0 2px var(--accent); background:var(--hl); }
+  .chl .hint { margin-left:auto; font-size:11px; color:var(--accent); font-weight:600; }
+
+  /* Board-Chat */
+  .dock { width:300px; flex:none; border-left:1px solid var(--border); display:flex; flex-direction:column; background:var(--term); min-width:0; }
+  .dock.focus { box-shadow:inset 0 0 0 2px var(--accent); }
+  .dhead { display:flex; align-items:center; gap:6px; padding:6px 8px; background:var(--header); border-bottom:1px solid var(--border); font-size:11.5px; }
+  .dhead .lbl { font-size:11px; color:var(--ink3); font-weight:600; text-transform:uppercase; letter-spacing:.05em; }
+  .dhead .later { margin-left:auto; font-size:11px; color:var(--accent); font-weight:600; }
+  .dock .term { font-size:11px; }
+
+  /* Dynamic Island */
+  .island { position:absolute; top:6px; left:50%; transform:translateX(-50%); background:#0b0b0d; color:#f4f4f6; border-radius:12px 12px 22px 22px; box-shadow:0 18px 40px rgba(0,0,0,.4); z-index:6; min-width:430px; border:1px solid rgba(255,255,255,.1); }
+  .ihead { display:flex; align-items:center; gap:8px; padding:9px 14px 6px; font-size:11px; color:#a4a5ab; white-space:nowrap; }
+  .ihead .layer { font-weight:700; color:#f4f4f6; }
+  .ihead .target { margin-left:auto; display:flex; gap:6px; align-items:center; }
+  .island .g { background:#2a2a2e; border-color:rgba(255,255,255,.16); color:#f4f4f6; }
+  .island .kc { background:#2a2a2e; border-color:rgba(255,255,255,.2); color:#f4f4f6; }
+  .iseg { display:flex; gap:2px; margin:0 12px 6px; padding:2px; background:rgba(255,255,255,.08); border-radius:8px; }
+  .iseg span { flex:1; text-align:center; font-size:11.5px; font-weight:600; padding:4px 8px; border-radius:6px; color:#a4a5ab; white-space:nowrap; }
+  .iseg span.on { background:rgba(255,255,255,.17); color:#fff; }
+  .iseg span.new { color:#aeb4ff; }
+  .iseg span.new.on { color:#fff; }
+  .irows { padding:0 8px 4px; }
+  .ir { display:grid; grid-template-columns:18px 1fr auto; gap:9px; align-items:center; height:32px; padding:0 8px; border-radius:8px; }
+  .ir .t { font-size:12.5px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .ir .t small { font-weight:400; color:#8d8e93; margin-left:6px; font-size:11px; }
+  .ir .w { font-size:11px; color:#a4a5ab; white-space:nowrap; text-align:right; }
+  .ir .w.here { color:#aeb4ff; font-weight:700; }
+  .ir.mark { background:rgba(124,132,232,.26); box-shadow:inset 0 0 0 1.5px #8d95ee; }
+  .ir.off { opacity:.45; }
+  .ir .sw { width:15px; height:15px; border-radius:4px; color:#fff; font-size:11px; font-weight:800; display:flex; align-items:center; justify-content:center; }
+  .isep { height:1px; background:rgba(255,255,255,.1); margin:4px 8px; }
+  .ifoot { display:flex; gap:12px; justify-content:center; padding:6px 14px 10px; font-size:11px; color:#b4b5ba; border-top:1px solid rgba(255,255,255,.08); flex-wrap:wrap; }
+  .ifoot span { display:inline-flex; gap:5px; align-items:center; white-space:nowrap; }
+  .ihint { padding:0 16px 8px; font-size:11.5px; color:#e9b949; }
+  .diamonds { display:flex; gap:16px; padding:2px 14px 6px; justify-content:center; }
+  .dia { display:grid; grid-template-columns:repeat(3,96px); grid-template-rows:repeat(3,38px); gap:4px; }
+  .dia .ttl { grid-column:1 / span 3; grid-row:1; display:none; }
+  .slot { display:flex; align-items:center; gap:6px; padding:0 8px; border-radius:9px; background:rgba(255,255,255,.07); font-size:11.5px; white-space:nowrap; overflow:hidden; }
+  .slot.top { grid-column:2; grid-row:1; } .slot.left { grid-column:1; grid-row:2; } .slot.right { grid-column:3; grid-row:2; } .slot.bottom { grid-column:2; grid-row:3; }
+  .slot.off { opacity:.36; }
+  .slot.new { box-shadow:inset 0 0 0 1.5px #8d95ee; }
+  .dcap { text-align:center; font-size:11px; color:#a4a5ab; margin-top:2px; }
+
+  /* Menü-Karte */
+  .menu { position:absolute; z-index:6; width:290px; background:#0b0b0d; color:#f4f4f6; border:1px solid rgba(255,255,255,.12); border-radius:14px; box-shadow:0 18px 40px rgba(0,0,0,.4); padding:6px 6px 0; }
+  .menu .mg { font-size:11px; color:#8d8e93; font-weight:700; letter-spacing:.04em; padding:7px 8px 3px; }
+  .menu .mi { display:flex; align-items:center; gap:8px; height:28px; padding:0 9px; border-radius:7px; font-size:12.5px; }
+  .menu .mi .chev { margin-left:auto; color:#8d8e93; }
+  .menu .mi.mark { background:rgba(124,132,232,.26); box-shadow:inset 0 0 0 1.5px #8d95ee; }
+  .menu .mi.off { opacity:.4; }
+  .menu .mi .later { margin-left:auto; font-size:11px; color:#aeb4ff; }
+  .menu .mfoot { display:flex; gap:12px; justify-content:center; padding:7px; margin-top:4px; border-top:1px solid rgba(255,255,255,.08); font-size:11px; color:#b4b5ba; }
+  .menu .g { background:#2a2a2e; border-color:rgba(255,255,255,.16); color:#f4f4f6; }
+
+  #overlay { position:absolute; inset:0; pointer-events:none; z-index:6; }
+  .toast { position:absolute; left:50%; bottom:40px; transform:translateX(-50%); background:var(--panel); border:1px solid var(--field-line); box-shadow:var(--shadow); border-radius:9px; padding:8px 12px; font-size:12px; max-width:520px; z-index:7; display:none; }
+  .toast.show { display:block; }
+  .toast pre { margin:4px 0 0; font:11.5px/1.5 "SF Mono",ui-monospace,monospace; color:var(--ink2); white-space:pre-wrap; }
+
+  /* Controller-Attrappe */
+  .padbox { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:12px; position:sticky; top:12px; }
+  .padbox h3 { margin:0 0 4px; font-size:12.5px; }
+  .padbox .hint { font-size:11.5px; color:var(--ink2); margin:0 0 10px; }
+  .pad { background:var(--pad); border-radius:16px; padding:10px; display:grid; grid-template-columns:1fr 1fr; gap:8px 10px; }
+  .pgrp { display:flex; flex-direction:column; gap:4px; }
+  .pgrp .pl { font-size:11px; color:var(--ink3); font-weight:600; }
+  .prow { display:flex; gap:4px; flex-wrap:wrap; }
+  .pk { border:1px solid var(--padkey-line); background:var(--padkey); color:var(--ink); border-radius:8px; min-width:34px; height:30px; padding:0 7px; font-size:12px; font-weight:700; cursor:pointer; }
+  .pk:active { transform:translateY(1px); }
+  .pk.on { background:var(--accent); color:var(--accent-ink); border-color:var(--accent); }
+  .pk.wide { flex:1; }
+  .cross4 { display:grid; grid-template-columns:repeat(3,32px); grid-template-rows:repeat(3,28px); gap:2px; }
+  .cross4 .pk { min-width:0; height:28px; padding:0; }
+  .cross4 .c { grid-column:2; grid-row:2; }
+  .cross4 .u { grid-column:2; grid-row:1; } .cross4 .l { grid-column:1; grid-row:2; } .cross4 .r { grid-column:3; grid-row:2; } .cross4 .d { grid-column:2; grid-row:3; }
+  .face { display:grid; grid-template-columns:repeat(3,32px); grid-template-rows:repeat(3,28px); gap:2px; }
+  .face .t { grid-column:2; grid-row:1; } .face .l { grid-column:1; grid-row:2; } .face .r { grid-column:3; grid-row:2; } .face .b { grid-column:2; grid-row:3; }
+  .face .pk { min-width:0; padding:0; height:28px; }
+  .log { margin-top:10px; font-size:12px; color:var(--ink2); min-height:120px; }
+  .log div { padding:4px 0; border-bottom:1px solid var(--line); }
+  .log div:first-child { color:var(--ink); }
+  .log .no { color:var(--awaiting); font-weight:600; }
+  .log .warn { color:var(--error); font-weight:600; }
+
+  table.t { width:100%; border-collapse:collapse; background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:12.5px; }
+  table.t th, table.t td { text-align:left; padding:7px 11px; border-bottom:1px solid var(--line); vertical-align:top; }
+  table.t th { font-size:11px; color:var(--ink3); text-transform:uppercase; letter-spacing:.05em; }
+  table.t tr:last-child td { border-bottom:0; }
+  table.t td.n { color:var(--ink3); width:34px; }
+  table.t .p { font-size:11px; font-weight:700; color:var(--accent); white-space:nowrap; }
+  .tablewrap { overflow-x:auto; }
+  .legends { display:grid; gap:8px; }
+  .lgrow { display:grid; grid-template-columns:170px 1fr; gap:10px; align-items:center; }
+  .lgrow .nm { font-size:12px; color:var(--ink2); font-weight:600; }
+  .lgrow .legend { grid-column:auto; grid-row:auto; border:1px solid var(--border); border-radius:8px; }
+  .vars { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:12px; }
+  .vars > div { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:11px 13px; }
+  .vars h5 { margin:0 0 6px; font-size:12.5px; }
+  .vars p { margin:3px 0; font-size:12.5px; color:var(--ink2); }
+  .vars p b { color:var(--ink); }
+  .vars .rec { color:var(--accent); font-weight:700; }
+  @media (max-width: 1100px) { .stage { grid-template-columns:1fr; } .padbox { position:static; } }
+  @media (max-width: 760px) { main { padding:16px; } header.page { padding:14px 16px; } .win { height:auto; min-height:560px; grid-template-columns:1fr; } .side { display:none; } .legend { grid-column:1; } .island { min-width:0; width:94%; } .lgrow { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header class="page">
+  <div>
+    <h1>Ticket-Board mit dem Controller</h1>
+    <p>Entwurf zu WM8-91 · Plan: docs/plans/ticket-board-controller.md · Stand 15.11.2026 · abgenommen, E1 bis E4 wie empfohlen</p>
+  </div>
+  <div class="sp">
+    <div class="seg" id="devSeg"><button data-v="ps" class="on">PS5</button><button data-v="xbox">Xbox</button><button data-v="kb">Tastatur</button></div>
+    <div class="seg" id="themeSeg"><button data-theme="system" class="on">System</button><button data-theme="light">Hell</button><button data-theme="dark">Dunkel</button></div>
+  </div>
+</header>
+<main>
+  <div class="rules">
+    <b>Fünf Regeln, mehr ist nicht zu lernen.</b>
+    <ol>
+      <li><b>Das Board ist ein Ort</b> wie ein Chat oder ein Workspace: hin über „Wohin“ (L2 halten, neuer Reiter „Tickets“), zurück mit L2 getippt.</li>
+      <li><b>Ohne Terminal im Fokus bewegen Stick und Steuerkreuz</b> die Auswahl. Das gilt heute schon in einem beendeten Chat.</li>
+      <li><b>Kreuz geht eine Stufe tiefer, Kreis eine zurück:</b> Board → Ticket groß → Chat-Zeile am Ticket → Chat.</li>
+      <li><b>L1/R1 blättern durch das, woran du arbeitest:</b> in den Chats durch Chats, im Board durch Tickets.</li>
+      <li><b>R1 rechts und R2 wirken nur auf den Chat, den du siehst:</b> im Board auf den Board-Chat (kommt mit WM8-113). Bis dahin tun sie dort nichts, und kein verdeckter Chat bekommt etwas.</li>
+    </ol>
+    <ul>
+      <li><b>So probierst du es:</b> Szene wählen, dann rechts die Tasten drücken oder im Fenster mit den Pfeiltasten, Return, Esc und den Kürzeln aus der Tabelle unten arbeiten. Was passiert, steht im Protokoll unter dem Controller.</li>
+      <li><b>Daten:</b> Tickets und Chats aus dem Team WM8. Die Teams KUN und SHOP, ihre Tickets und der Produkt-Chat „Pia“ sind erfunden. <b>Stern ★</b> = Empfehlung. Alles ist ohne Überfahren mit der Maus sichtbar, Texte mindestens 11 pt.</li>
+    </ul>
+  </div>
+
+  <h2>Zum Anklicken</h2>
+  <div class="controls">
+    <div class="ctl"><span class="lab">Szene</span>
+      <div class="seg" id="sceneSeg">
+        <button data-v="chat" class="on">Im Chat</button><button data-v="whereto">1 · Wohin (L2 halten)</button><button data-v="board">2 · Board</button><button data-v="triage">3 · Ticket groß</button><button data-v="dock">4 · Mit Board-Chat (WM8-113)</button><button data-v="r1">5 · R1 halten</button><button data-v="menu">6 · Options</button>
+      </div></div>
+    <div class="ctl"><span class="lab">E1 · Weg zum Board</span>
+      <div class="seg" id="wayVar"><button data-v="tab" class="on">Reiter in Wohin<span class="star">★</span></button><button data-v="r1">Schnellbefehl R1 + ▼</button><button data-v="menu">Nur Options</button></div></div>
+    <div class="ctl"><span class="lab">E2 · L1 / R1 im Board</span>
+      <div class="seg" id="l1Var"><button data-v="ticket" class="on">Voriges / nächstes Ticket<span class="star">★</span></button><button data-v="chat">Chatwechsel wie bisher</button><button data-v="filter">Filter</button></div></div>
+    <div class="ctl"><span class="lab">E3 · Vom Ticket zum Chat</span>
+      <div class="seg" id="zcVar"><button data-v="line" class="on">Über die Chat-Zeile<span class="star">★</span></button><button data-v="direct">Kreuz direkt</button></div></div>
+    <div class="ctl"><span class="lab">E4 · R2 im Board ohne Board-Chat</span>
+      <div class="seg" id="r2Var"><button data-v="none" class="on">Geht nicht<span class="star">★</span></button><button data-v="clip">In die Zwischenablage</button></div></div>
+  </div>
+
+  <div class="stage">
+    <div>
+      <div class="win" id="win" tabindex="0" aria-label="Agent-Chats-Fenster, Tastatur hier aktiv">
+        <aside class="side"><div class="lights"><i></i><i></i><i></i></div><div class="sidelist" id="sidelist"></div></aside>
+        <section class="content">
+          <div class="titlezone"><span class="tzbtn">▤</span><span class="tzbtn" id="ticketBtn">▦</span><div class="tabs" id="tabs"></div></div>
+          <div class="body" id="body"></div>
+        </section>
+        <div class="legend" id="legend"></div>
+        <div id="overlay"></div>
+        <div class="toast" id="toast"></div>
+      </div>
+      <p class="cap" id="cap"></p>
+    </div>
+    <div class="padbox">
+      <h3>Controller</h3>
+      <p class="hint">Halten-Tasten bleiben gedrückt, bis du „loslassen“ drückst. Steuerkreuz und linker Stick sind getrennt, weil sie im Board-Chat Verschiedenes tun. Tastatur: ins Fenster klicken; Kürzel mit ⌘ fängt der Browser teils selbst ab, dann die Tasten hier nehmen.</p>
+      <div class="pad" id="pad"></div>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <h2>Die Leiste unten, je Zustand</h2>
+  <div class="legends" id="legends"></div>
+
+  <h2>Belegung im Ticket-Modus</h2>
+  <div class="tablewrap"><table class="t" id="bindings"></table></div>
+  <p class="cap">Paket 1 = Öffnen und Umschalten, 2 = Bedienen, 3 = Tastatur über die Insel, „113“ = kommt mit dem Board-Chat (WM8-113), die Taste ist bis dahin reserviert und tut nichts. Die volle Liste mit Nummern steht im Plan.</p>
+
+  <h2>Was unbequem ist und wie es gelöst ist</h2>
+  <div class="vars">
+    <div><h5>L1 / R1: Chatwechsel gegen Tickets</h5>
+      <p><span class="rec">★ Ticket blättern.</span> Eine Regel: „blättert durch das, woran du arbeitest“. Bleibt so, wenn später der Board-Chat den Fokus hat. So gehst du Tickets durch, während du mit Jarvis sprichst.</p>
+      <p><b>Chatwechsel wie bisher:</b> nichts Neues, aber ein Druck verlässt das Board.</p>
+      <p><b>Filter</b> wie in Seitenleiste und Verlauf: in der Triage ohne Sinn, Filter braucht man selten.</p></div>
+    <div><h5>Steuerkreuz: Pfeile ins Terminal gegen Bewegung</h5>
+      <p><span class="rec">★ Wie der Stick, solange kein Terminal den Fokus hat.</span> Das ist die heutige Regel für beendete Chats. Im Board-Chat gehen die Pfeile wieder ins Terminal.</p>
+      <p><b>Nur Stick:</b> das genauere Werkzeug läge brach.</p>
+      <p><b>Pfeile immer an den Board-Chat:</b> träfen einen Chat, auf den du gerade nicht schaust.</p></div>
+    <div><h5>Weg zum Board: R1 hat keinen freien Platz</h5>
+      <p><span class="rec">★ Reiter „Tickets“ in Wohin, L2 getippt, Options.</span> Orte wählt man schon heute bei L2; das Board eines anderen Teams gleich mit.</p>
+      <p><b>R1 + ▼:</b> ein Druck weniger, verdrängt aber die Zwischenablage, und R1 heißt „handeln“, nicht „hingehen“.</p>
+      <p><b>Nur Options:</b> drei Drücke und versteckt.</p></div>
+    <div><h5>Kreuz heißt „tiefer“, im Chat aber Enter</h5>
+      <p><span class="rec">★ Zum Chat über die Chat-Zeile</span> (▶, dann Kreuz). Dreimal schnell Kreuz führt so nie vom Board in einen Chat und dort zu einem Enter.</p>
+      <p><b>Kreuz direkt in der Triage:</b> ein Schritt weniger, aber Board → Ticket → Chat → Enter mit dreimal Kreuz.</p>
+      <p><b>Kreis im Board</b> tut deshalb auch nichts: Zweimal Kreis aus der Triage wirft dich nicht hinaus.</p></div>
+  </div>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const URL0 = 'https://linear.app/whisperm8/issue/';
+
+/* ---------- Daten: Team WM8 (Stand 15.11.2026), KUN und SHOP erfunden ---------- */
+const T = {
+  'WM8-104':{t:'Insel per Tastatur bauen: ⌥Tab, Schnellbefehle als Buchstaben (Variante B)',s:'Merge-bereit',p:3,a:'–',pr:'Insel und Pille',crit:'1/4',chats:[['Vic','idle','ruht · Prüfer'],['Lev','stopped','beendet · hat gebaut']]},
+  'WM8-91':{t:'Ticket-Board mit dem Controller öffnen und bedienen',s:'In Progress',p:2,a:'–',pr:'Tickets',crit:'0/13',chats:[['Udo','working','arbeitet']]},
+  'WM8-80':{t:'Seitenleiste sortiert und ohne Doppelungen, Tabs schrumpfen',s:'In Progress',p:2,a:'–',pr:'Agent Chats',chats:[['Vic','idle','ruht']]},
+  'WM8-82':{t:'Linear und Doku spiegeln: Bereiche als Projekte, Vorhaben als Meilensteine',s:'In Progress',p:2,a:'–',pr:'Tickets',crit:'3/6',chats:[['Jarvis','working','arbeitet']]},
+  'WM8-20':{t:'make dev und Handtest der Änderungen seit 2.25.0',s:'In Progress',p:2,a:'GC',pr:'Entwicklung und Release',tags:['Handtest']},
+  'WM8-23':{t:'Linear zwei Wochen an WhisperM8 testen, dann über den Umzug entscheiden',s:'In Progress',p:3,a:'GC',pr:'Tickets',tags:['Entscheidung'],chats:[['Jon','stopped','gestoppt']]},
+  'WM8-112':{t:'Ticket-Board Paket 1: Triage und Lesen',s:'Todo',p:2,a:'–',pr:'Tickets',crit:'0/7',tags:['Feature']},
+  'WM8-113':{t:'Ticket-Board Paket 2: Board-Chat neben dem Board, Entscheidungen sammeln',s:'Todo',p:2,a:'–',pr:'Tickets',crit:'0/7',tags:['Feature']},
+  'WM8-114':{t:'Ticket-Board Paket 3: Jarvis steuert das Board per Befehl',s:'Todo',p:2,a:'–',pr:'Tickets',crit:'0/5',tags:['Feature']},
+  'WM8-115':{t:'Ticket-Board Paket 4: „Wartet auf mich“ über alle Teams',s:'Todo',p:2,a:'–',pr:'Tickets',crit:'0/4',tags:['Feature']},
+  'WM8-57':{t:'Linear-API-Key ersetzen',s:'Todo',p:2,a:'GC',pr:'Konten und Zugänge',tags:['Entscheidung']},
+  'WM8-30':{t:'Variante für die neue Ordnung wählen (A, B oder C)',s:'Todo',p:3,a:'GC',pr:'Einstellungen',tags:['Entscheidung']},
+  'WM8-89':{t:'Board und Notizen aus dem Ticket speisen',s:'Backlog',p:2,a:'–',pr:'Tickets',crit:'0/10'},
+  'WM8-83':{t:'Chat-Verlauf am Ticket: nachlesen und fortsetzen',s:'Backlog',p:3,a:'–',pr:'Tickets',crit:'0/4'},
+  'WM8-105':{t:'Board meldet „fertig – prüfen“ zu früh',s:'Backlog',p:3,a:'–',pr:'Chats-CLI, Skills und Jarvis',crit:'0/3'},
+  'WM8-14':{t:'Apple-Entwicklerkonto buchen',s:'Backlog',p:4,a:'GC',pr:'App-Hülle und Neustart',tags:['Entscheidung']},
+  'KUN-7':{t:'Anmeldeseite: Fehlermeldung verständlicher (erfunden)',s:'In Progress',p:2,a:'–',pr:'Kundenportal'},
+  'KUN-9':{t:'Rechnungen als PDF herunterladen (erfunden)',s:'Todo',p:3,a:'GC',pr:'Kundenportal',tags:['Entscheidung']},
+  'KUN-3':{t:'Kontaktformular: Pflichtfelder markieren (erfunden)',s:'Backlog',p:4,a:'–',pr:'Kundenportal'},
+  'KUN-12':{t:'Passwort vergessen: Mail kommt doppelt (erfunden)',s:'Todo',p:1,a:'–',pr:'Kundenportal'},
+};
+const BOARDS = {
+  WM8:{name:'whisperm8', lanes:[
+    {s:'Merge-bereit',n:1,why:'Abnahme bei dir',mine:true,ks:['WM8-104']},
+    {s:'In Progress',n:9,why:'2 bei dir',ks:['WM8-91','WM8-80','WM8-82','WM8-20','WM8-23']},
+    {s:'Todo',n:15,why:'2 bei dir',mine:true,ks:['WM8-112','WM8-113','WM8-114','WM8-115','WM8-57','WM8-30']},
+    {s:'Backlog',n:36,ks:['WM8-89','WM8-83','WM8-105','WM8-14']}]},
+  KUN:{name:'kundenportal (erfunden)', lanes:[
+    {s:'In Progress',n:1,ks:['KUN-7']},
+    {s:'Todo',n:2,why:'1 bei dir',mine:true,ks:['KUN-9','KUN-12']},
+    {s:'Backlog',n:1,ks:['KUN-3']}]},
+};
+const CHATS = [
+  {n:'Jarvis: Supervisor WhisperM8', s:'working', w:'jetzt'},
+  {n:'Udo · Board per Controller: Entwurf', s:'working', w:'arbeitet'},
+  {n:'Vic · Prüfer: Insel Paket 2', s:'idle', w:'bereit'},
+  {n:'Pia · Produkt WM8 (erfunden)', s:'awaiting', w:'wartet · 4 min'},
+  {n:'Fin · Insel-Tastatur', s:'stopped', w:'gestoppt'},
+];
+const WS = [
+  {n:'WM8 Aktiv', c:'#5e6ad2', w:'6 Chats'}, {n:'WM8 Wartet', c:'#c9962a', w:'4 Chats'}, {sep:true}, {n:'whisperm8', c:'#3fa873', w:'3 aktiv', proj:true},
+];
+const TEAMS = [
+  {k:'WM8', n:'whisperm8', w:'6 warten auf dich'}, {k:'KUN', n:'kundenportal (erfunden)', w:'1 wartet'}, {k:'SHOP', n:'shop-backend (erfunden)', w:'kein Board-Projekt offen'},
+  {sep:true}, {k:'ALL', n:'Wartet auf mich · alle Teams', w:'mit WM8-115', off:true},
+];
+
+/* ---------- Zustand ---------- */
+const S = {
+  place:'chat', team:'WM8', view:'board', focus:'board', col:2, row:0, tri:[], triIdx:0, chatIdx:0,
+  dock:false, island:null, iTab:'chats', iRow:0, iMoved:false, menu:false, mIdx:0, prev:null,
+  filter:0, dockInput:null, scroll:0, laneScroll:0,
+  dev:'ps', way:'tab', l1:'ticket', zc:'line', r2:'none', scene:'chat', flash:null,
+};
+const PREV_CHAT = 'Chat Jarvis';
+
+/* ---------- Tastennamen ---------- */
+const GL = {
+  ps:{cross:'✕',circle:'○',square:'□',triangle:'△',l1:'L1',r1:'R1',l2:'L2',r2:'R2',l3:'L3',r3:'R3',options:'Options',create:'Create',touch:'Touchpad'},
+  xbox:{cross:'A',circle:'B',square:'X',triangle:'Y',l1:'LB',r1:'RB',l2:'LT',r2:'RT',l3:'LS',r3:'RS',options:'Menu',create:'View',touch:'Xbox'},
+};
+const gdev = () => S.dev==='xbox' ? 'xbox' : 'ps';
+const G = (...ks) => ks.map(k=>`<span class="g">${GL[gdev()][k]||k}</span>`).join('');
+const KC = (...ks) => ks.map(k=>`<span class="kc">${k}</span>`).join('');
+const kbd = () => S.dev==='kb';
+
+/* ---------- Abgeleitet ---------- */
+const board = () => BOARDS[S.team] || BOARDS.WM8;
+const lanes = () => board().lanes.map(L=>({...L, shown:L.ks.filter(k=>S.filter!==1 || T[k].a==='GC' || T[k].s==='Merge-bereit').filter(k=>S.filter!==2 || T[k].chats)}));
+const laneRows = L => L.shown.length + (L.n > L.shown.length ? 1 : 0);
+const selKey = () => { const L=lanes()[S.col]; return L && L.shown[S.row]; };
+const curTicket = () => S.view==='triage' ? S.tri[S.triIdx] : selKey();
+const reading = () => lanes().flatMap((L,c)=>L.shown.map((k,r)=>({k,c,r})));
+const teamName = () => S.team==='WM8' ? 'WM8' : S.team;
+
+/* ---------- Rückmeldung ---------- */
+const LOG = [];
+function log(html, kind='') { LOG.unshift(`<div class="${kind}">${html}</div>`); LOG.length = Math.min(LOG.length, 7); $('#log').innerHTML = LOG.join(''); }
+function no(why) { log(`Geht nicht: ${why} ${kbd()?'(Warnton)':'(kurze Vibration)'}`, 'no'); }
+function toast(html){ const t=$('#toast'); t.innerHTML=html; t.classList.add('show'); clearTimeout(toast.h); toast.h=setTimeout(()=>t.classList.remove('show'),3200); }
+
+/* ---------- Orte ---------- */
+function goTickets(team) {
+  if (S.place==='chat') S.prev = 'chat';
+  S.place='tickets'; S.team=team||S.team;
+  if (S.team!=='WM8') { S.view='board'; S.col=0; S.row=0; S.focus='board'; }
+  else if (!S.visited) { S.view='board'; S.col=1; S.row=0; S.focus='board'; S.visited=true; }
+  log(`Board <b>${teamName()}</b> offen, so wie du es verlassen hast. Auswahl auf <b>${curTicket()||'–'}</b>. L2 getippt führt zurück.`);
+}
+function goChat(name) {
+  S.prev = 'tickets'; S.place='chat'; S.chatName = name || 'Jarvis';
+  log(`Im Chat <b>${S.chatName}</b>. L2 getippt führt zurück ins Board, an dieselbe Stelle.`);
+}
+function l2tap() {
+  if (S.place==='chat') { if (S.prev==='tickets') { goTickets(); } else no('kein voriger Ort'); }
+  else { S.prev='tickets'; S.place='chat'; S.chatName='Jarvis'; log('Zurück im Chat <b>Jarvis</b> (L2 getippt). Noch mal L2: wieder ins Board.'); }
+}
+
+/* ---------- Eingabe ---------- */
+function press(b) {
+  S.flash=null;
+  if (S.island==='whereto') return whereKey(b);
+  if (S.island==='r1') return r1Key(b);
+  if (S.menu) return menuKey(b);
+  if (S.place==='chat') return chatKey(b);
+  return ticketKey(b);
+}
+function chatKey(b) {
+  const m = {
+    'stick:up':'Markierung springt in die Liste links (wie heute).', 'stick:down':'Markierung springt in die Liste links (wie heute).',
+    'dpad:up':'↑ ins Terminal (wie heute).','dpad:down':'↓ ins Terminal (wie heute).','dpad:left':'← ins Terminal (wie heute).','dpad:right':'→ ins Terminal (wie heute).',
+    cross:'Enter an Jarvis, mit allen Schutzregeln (wie heute).', circle:'Escape an Jarvis, nur wenn er ruht oder fragt (wie heute).', square:'Rücktaste (wie heute).', triangle:'Leerzeichen (wie heute).',
+    l1:'Voriger Chat (wie heute).', r1:'Nächster Chat (wie heute).', r2:'Diktat an Jarvis (wie heute).', 'rs:up':'Verlauf scrollen.','rs:down':'Verlauf scrollen.', l3:'Kachel groß (wie heute).', r3:'nichts (wie heute).',
+  };
+  if (b==='l2') return l2tap();
+  if (b==='options') { S.menu=true; S.mIdx=0; S.menuItems=menuItems(); S.mIdx=Math.max(0,S.menuItems.findIndex(i=>i.id==='openBoard')); log('Options-Menü am Chat. In „Steuerung“ steht neu <b>Ticket-Board WM8</b>.'); return; }
+  log(m[b] || 'wie heute im Chat');
+}
+function ticketKey(b) {
+  const f=S.focus, L=lanes();
+  const dir = b.split(':')[1]; const isMove = b.startsWith('stick:') || b.startsWith('dpad:');
+  if (b==='l2') return l2tap();
+  if (b==='create') return log('Neuer Chat: Projekt-Auswahl, whisperm8 vorgewählt (wie heute ⌘N).');
+  if (b==='touch') return log('Zwischenablage-Verlauf auf (wie überall).');
+  if (b==='options') { S.menu=true; S.menuItems=menuItems(); S.mIdx=S.menuItems.findIndex(i=>!i.group&&!i.off); log(`Options: Menü-Karte am Ticket <b>${curTicket()||''}</b>.`); return; }
+  if (b==='r2') {
+    if (S.dock) { S.dockInput = S.dockInput || ''; S.recording = !S.recording; return log(S.recording?'Diktat läuft → <b>Board-Chat Jarvis</b>. „Bezug: '+curTicket()+'“ steht davor. R2 noch mal: Text ins Eingabefeld.':'Diktat beendet: Text steht im Eingabefeld von Jarvis, nichts abgeschickt.'); }
+    return S.r2==='clip' ? log('Variante: Diktat landet in der Zwischenablage (und im Verlauf), nicht in einem Chat.', 'warn') : no('Diktat geht erst an den Board-Chat (WM8-113); kein verdeckter Chat bekommt es.');
+  }
+  if (f==='dock') return dockKey(b, dir, isMove);
+  if (f==='sidebar') {
+    if (isMove && dir==='right') { S.focus = S.view==='triage'?'triage':'board'; return log('Zurück ins Board.'); }
+    if (isMove) return log('Markierung in der Seitenleiste (wie heute).');
+    if (b==='cross') { goChat('Vic'); return; }
+    if (b==='circle') { S.focus = S.view==='triage'?'triage':'board'; return log('Zurück ins Board.'); }
+    return log('wie in der Liste links');
+  }
+  if (b==='square') { const k=curTicket(); if(!k) return no('keine Auswahl'); toast(`<b>Link kopiert</b><pre>${k} ${T[k].t}\n${URL0}${k.toLowerCase()}</pre>`); S.flash='Link kopiert: '+k; return log(`Link von <b>${k}</b> kopiert (zwei Zeilen). Nicht im Zwischenablage-Verlauf.`); }
+  if (b==='l3') { const k=curTicket(); return k ? log(`<b>${k}</b> in Linear geöffnet (Browser).`) : no('keine Auswahl'); }
+  if (b==='r3') { S.flash='Aktualisiert 18:04'; return log('Aktualisiert (wie ↻ im Kopf), ein Abruf bei Linear.'); }
+  if (b==='triangle') { if (!S.dock) return no('→ Jarvis kommt mit dem Board-Chat (WM8-113).'); const k=curTicket(); S.dockInput=`${k} „${T[k].t}“ ${URL0}${k.toLowerCase()}`; return log(`<b>${k}</b> ins Eingabefeld von Jarvis gelegt, nicht abgeschickt.`); }
+  if (b==='l1'||b==='r1') return flip(b==='l1'?-1:1);
+  if (b.startsWith('rs:')) { if (S.view==='triage') { S.scroll=Math.max(0,Math.min(3,S.scroll+(dir==='down'?1:-1))); return log('Rechter Stick: Beschreibung und Verlauf blättern.'); } S.laneScroll=dir; return log('Rechter Stick: blättert die Spalte mit der Auswahl.'); }
+
+  if (S.view==='board') {
+    if (isMove) {
+      if (dir==='up') { if (S.row>0) S.row--; else return no('oben in der Spalte'); }
+      if (dir==='down') { if (S.row<laneRows(L[S.col])-1) S.row++; else return no('unten in der Spalte'); }
+      if (dir==='left') { if (S.col===0) { S.focus='sidebar'; return log('◀ aus der ersten Spalte: in die Seitenleiste, wie heute aus dem Inhalt.'); } S.col--; S.row=Math.min(S.row, Math.max(0,laneRows(L[S.col])-1)); }
+      if (dir==='right') { if (S.col===L.length-1) { if (S.dock) { S.focus='dock'; return log('▶ in den Board-Chat Jarvis.'); } return no('letzte Spalte; der Board-Chat kommt mit WM8-113'); } S.col++; S.row=Math.min(S.row, Math.max(0,laneRows(L[S.col])-1)); }
+      return log(`Auswahl: <b>${selKey()||L[S.col].s+' · weitere'}</b>`);
+    }
+    if (b==='cross') { const lane=L[S.col]; if (!lane.shown.length) return no('leere Spalte'); const more = S.row>=lane.shown.length; S.tri = lane.shown.slice(); S.triIdx = more?0:S.row; S.view='triage'; S.focus='triage'; S.scroll=0; return log(more?`Ticket groß mit der ganzen Spalte <b>${lane.s}</b> (${lane.n}).`:`Ticket groß: <b>${S.tri[S.triIdx]}</b>, Liste links = Spalte <b>${lane.s}</b>.`); }
+    if (b==='circle') return no('Kreis tut im Board nichts. Zurück geht mit L2.');
+    return log('nichts');
+  }
+  // Triage
+  const k = curTicket(); const chats = T[k].chats||[];
+  if (f==='chatline') {
+    if (isMove && dir==='up') { if (S.chatIdx>0) S.chatIdx--; else return no('erste Chat-Zeile'); return log(`Chat-Zeile <b>${chats[S.chatIdx][0]}</b>`); }
+    if (isMove && dir==='down') { if (S.chatIdx<chats.length-1) S.chatIdx++; else return no('letzte Chat-Zeile'); return log(`Chat-Zeile <b>${chats[S.chatIdx][0]}</b>`); }
+    if ((isMove && dir==='left') || b==='circle') { S.focus='triage'; return log('Zurück in die Liste.'); }
+    if (isMove && dir==='right') { if (S.dock) { S.focus='dock'; return log('▶ in den Board-Chat Jarvis.'); } return no('rechts gibt es nichts; der Board-Chat kommt mit WM8-113'); }
+    if (b==='cross') { const c=chats[S.chatIdx]; return goChat(c[0]); }
+    return log('nichts');
+  }
+  if (isMove) {
+    if (dir==='up') { if (S.triIdx>0) { S.triIdx--; S.scroll=0; } else return no('oben in der Liste'); return log(`Ticket <b>${curTicket()}</b>, rechts sofort groß.`); }
+    if (dir==='down') { if (S.triIdx<S.tri.length-1) { S.triIdx++; S.scroll=0; } else return no('Ende der Liste'); return log(`Ticket <b>${curTicket()}</b>, rechts sofort groß.`); }
+    if (dir==='left') { S.focus='sidebar'; return log('◀ aus der Liste: in die Seitenleiste.'); }
+    if (dir==='right') { if (chats.length) { S.focus='chatline'; S.chatIdx=0; return log(`▶ auf „Chats am Ticket“: <b>${chats[0][0]}</b>. Kreuz führt hin.`); } if (S.dock) { S.focus='dock'; return log('▶ in den Board-Chat Jarvis.'); } return no('das Ticket hat keinen Chat'); }
+  }
+  if (b==='cross') {
+    if (S.zc==='direct') { if (!chats.length) return no('kein Chat am Ticket'); log('Variante „Kreuz direkt“: ein weiteres Kreuz wäre jetzt ein Enter im Chat.', 'warn'); return goChat(chats[0][0]); }
+    return no('in der Liste gibt es nichts zu öffnen. ▶ führt zu „Chats am Ticket“.');
+  }
+  if (b==='circle') { const lane=lanes().findIndex(L=>L.shown.includes(k)); if (lane>=0) { S.col=lane; S.row=lanes()[lane].shown.indexOf(k); } S.view='board'; S.focus='board'; return log(`Zurück zum Board, Auswahl auf <b>${k}</b>.`); }
+  return log('nichts');
+}
+function dockKey(b, dir, isMove) {
+  if (b.startsWith('stick:')) { if (dir==='right') return no('ganz rechts'); S.focus = S.view==='triage'?'triage':'board'; return log('Stick: zurück '+(S.view==='triage'?'in die Triage-Liste':'ins Board')+' (ein Schritt).'); }
+  if (b.startsWith('dpad:')) return log(`Pfeil ${({up:'↑',down:'↓',left:'←',right:'→'})[dir]} ins Terminal von Jarvis, wie in jedem Chat.`);
+  if (b==='cross') { const had=S.dockInput; S.dockInput=null; return log(had?'Enter an Jarvis: abgeschickt, mit allen Schutzregeln eines Chats.':'Enter an Jarvis (leeres Feld: nichts).'); }
+  if (b==='circle') return log('Escape an Jarvis, nur wenn er ruht oder fragt.');
+  if (b==='l1'||b==='r1') return flip(b==='l1'?-1:1);
+  if (b==='square') return log('Rücktaste im Eingabefeld von Jarvis.');
+  if (b==='triangle') return log('Leerzeichen im Eingabefeld von Jarvis.');
+  if (b.startsWith('rs:')) return log('Verlauf von Jarvis scrollen.');
+  return log('wie in einem Chat');
+}
+function flip(d) {
+  if (S.l1==='chat' && S.focus!=='dock') { S.prev='tickets'; S.place='chat'; S.chatName = d<0?'Pia':'Udo'; return log(`Variante „Chatwechsel“: Board verlassen, ${d<0?'voriger':'nächster'} Chat <b>${S.chatName}</b>.`, 'warn'); }
+  if (S.l1==='filter' && S.focus!=='dock') {
+    if (S.view==='triage') return no('Filter gibt es nur im Board');
+    S.filter = Math.max(0, Math.min(2, S.filter+d)); S.row=0; return log('Filter: <b>'+['Alle','Wartet auf mich','Mit Chat'][S.filter]+'</b>');
+  }
+  if (S.view==='triage') {
+    const i=S.triIdx+d; if (i<0||i>=S.tri.length) return no(d<0?'erstes Ticket':'letztes Ticket');
+    S.triIdx=i; S.scroll=0; return log(`${d<0?'Voriges':'Nächstes'} Ticket: <b>${curTicket()}</b>${S.focus==='dock'?' — der Fokus bleibt bei Jarvis':''}.`);
+  }
+  const R=reading(); const i=R.findIndex(x=>x.c===S.col&&x.r===S.row); const j=(i<0?0:i)+d;
+  if (j<0||j>=R.length) return no(d<0?'erstes Ticket':'letztes Ticket');
+  S.col=R[j].c; S.row=R[j].r; return log(`${d<0?'Voriges':'Nächstes'} Ticket in Lesereihenfolge: <b>${selKey()}</b>`);
+}
+
+/* ---------- Wohin ---------- */
+function iTabs() { return S.way==='tab' ? ['chats','ws','tickets'] : ['chats','ws']; }
+function iRows() { return S.iTab==='chats' ? CHATS : S.iTab==='ws' ? WS : TEAMS; }
+function iStart() {
+  if (S.iTab==='tickets') return 0; if (S.iTab==='chats') return S.place==='chat'?0:-1; return -1;
+}
+function openWhere() {
+  S.island='whereto'; S.iTab = S.place==='tickets' && S.way==='tab' ? 'tickets' : 'chats'; S.iRow=iStart(); S.iMoved=false;
+  log('L2 gehalten: Wohin. '+(S.way==='tab'?'Reiter <b>Chats · Workspaces & Projekte · Tickets</b>.':'Ohne Reiter „Tickets“ (Variante).'));
+}
+function whereKey(b) {
+  const dir=b.split(':')[1]; const rows=iRows();
+  if (b==='l2up') return whereCommit('release');
+  if (b==='circle') { S.island=null; return log('Wohin abgebrochen, nichts passiert.'); }
+  if ((b.startsWith('stick:')||b.startsWith('dpad:')) && (dir==='left'||dir==='right')) {
+    const tabs=iTabs(); const i=tabs.indexOf(S.iTab)+(dir==='right'?1:-1);
+    if (i<0||i>=tabs.length) return no('kein Reiter weiter '+(dir==='right'?'rechts':'links'));
+    S.iTab=tabs[i]; S.iRow=iStart(); S.iMoved=false; return log('Reiter <b>'+({chats:'Chats',ws:'Workspaces & Projekte',tickets:'Tickets'})[S.iTab]+'</b>'+(S.iTab==='tickets'?' — Markierung auf dem Board deines Projekts („hier“).':''));
+  }
+  if (b.startsWith('stick:')||b.startsWith('dpad:')) {
+    let i=S.iRow; do { i += dir==='down'?1:-1; } while (rows[i] && rows[i].sep);
+    if (i<0||i>=rows.length) return no('Ende der Liste');
+    S.iRow=i; S.iMoved=true; return log('Markierung: <b>'+(rows[i].n)+'</b>');
+  }
+  if (b==='cross') return whereCommit('cross');
+  if (b==='r2') { if (S.iTab==='tickets') return S.dock ? (S.island=null, goTickets('WM8'), log('Hin und diktieren an den Board-Chat Jarvis.')) : no('hin und diktieren geht erst mit dem Board-Chat'); S.island=null; return log('Hin und diktieren (wie heute).'); }
+  if (b==='triangle') { S.island=null; return log('Zum nächsten wartenden Chat: Pia (wie heute).'); }
+  if (b==='square') return log('Zuletzt geschlossenen Chat wieder öffnen (wie heute).');
+  return log('in Wohin ohne Wirkung');
+}
+function whereCommit(how) {
+  const r=iRows()[S.iRow];
+  if (!r) { S.island=null; return log('Losgelassen ohne Markierung: nichts passiert.'); }
+  if (S.iTab==='tickets') {
+    if (r.off) { S.island=null; return no('„Wartet auf mich · alle Teams“ kommt mit WM8-115'); }
+    if (r.k==='SHOP') { S.island=null; return log('Board SHOP öffnet (im Entwurf nicht ausgearbeitet).'); }
+    if (S.place==='tickets' && r.k===S.team && !S.iMoved) { S.island=null; return log('Losgelassen auf dem Board, in dem du bist: nichts passiert.'); }
+    S.island=null; return goTickets(r.k);
+  }
+  if (S.iTab==='chats') {
+    if (S.place==='chat' && S.iRow===0) { S.island=null; return log('Losgelassen ohne Bewegung: nichts passiert (wie heute).'); }
+    S.island=null; return goChat(r.n.split(' ')[0].replace(':',''));
+  }
+  S.island=null; if (!S.iMoved) return log('Losgelassen ohne Bewegung: nichts passiert.'); S.prev='tickets'; S.place='chat'; return log(`Workspace <b>${r.n}</b> als Raster.`);
+}
+
+/* ---------- R1 ---------- */
+function r1Key(b) {
+  if (b==='r1up') { S.island=null; return log('R1 losgelassen.'); }
+  const dir=b.split(':')[1];
+  if (b.startsWith('dpad:')) {
+    if (dir==='down' && S.way==='r1') { S.island=null; return S.place==='chat' ? goTickets('WM8') : (S.prev='tickets', S.place='chat', log('R1 + ▼: zurück zu den Chats (Variante).')); }
+    return log(({up:'Limits-Karte aller Konten',left:'Mitteilungen eine Stufe weiter',right:'Wach bleiben eine Stufe weiter',down:'Zwischenablage-Verlauf'})[dir]+' (App-Raute, wie heute).');
+  }
+  const chatOk = S.place==='chat' || S.dock;
+  if (['cross','triangle','square','circle','l3'].includes(b)) {
+    if (!chatOk) return no('rechte Raute: kein Board-Chat. Im Board bekommt kein verdeckter Chat etwas.');
+    return log((S.place==='chat'?'Jarvis':'Board-Chat Jarvis')+': '+({cross:'Jetzt senden',triangle:'Modus wechseln',square:'Befehle ›',circle:'Konto wechseln ›',l3:'Transkript an/aus'})[b]+'.');
+  }
+  return log('unter R1 ohne Wirkung');
+}
+
+/* ---------- Menü ---------- */
+function menuItems() {
+  if (S.place==='chat') return [
+    {group:'Eingaben'},{id:'cont',t:'Weiter'},{id:'cmd',t:'Befehle',sub:true},
+    {group:'Chat'},{id:'acc',t:'Konto wechseln',sub:true},{id:'ren',t:'Umbenennen…'},
+    {group:'Steuerung'}, ...(S.way!=='r1'?[{id:'openBoard',t:'Ticket-Board WM8',isNew:true}]:[]), {id:'clip',t:'Zwischenablage-Verlauf'},{id:'pause',t:'Controller pausieren'}];
+  const k=curTicket(); const chats=(k&&T[k].chats)||[];
+  const tri = S.view==='triage' ? [{group:'Triage'}, ...['Annehmen','Zurückfragen','Zuweisen…','Später','Doppelt','Ablehnen'].map((t,i)=>({id:'tri'+i,t,off:!S.dock,later:!S.dock?'mit 113':''}))] : [];
+  return [
+    ...(S.dock ? tri : []),
+    {group:`Ticket ${k||''}`}, ...(chats.length?[{id:'zc',t:'Zum Chat '+chats[0][0],sub:chats.length>1}]:[{id:'zc0',t:'Zum Chat',off:true,later:'kein Chat'}]),
+    {id:'link',t:'Link kopieren'},{id:'linear',t:'In Linear öffnen'},{id:'jarvis',t:'→ Jarvis',off:!S.dock,later:S.dock?'':'mit 113'},
+    {group:'Board'},{id:'mine',t:S.filter===1?'Alle Tickets zeigen':'Nur „Wartet auf mich“'},{id:'copylist',t:'Liste kopieren'},{id:'refresh',t:'Aktualisieren'},
+    ...(S.dock ? [] : tri),
+    {group:'Steuerung'},{id:'back',t:'Zu den Chats'},{id:'clip',t:'Zwischenablage-Verlauf'},{id:'pause',t:'Controller pausieren'},
+  ];
+}
+function menuKey(b) {
+  const items=S.menuItems; const dir=b.split(':')[1];
+  if (b==='circle'||b==='options') { S.menu=false; return log('Menü zu.'); }
+  if (b.startsWith('stick:')||b.startsWith('dpad:')) {
+    let i=S.mIdx; do { i += dir==='down'?1:dir==='up'?-1:0; } while (items[i] && items[i].group);
+    if (dir==='left'||dir==='right') return log('◀ ▶ im Menü: Unterseite auf/zu.');
+    if (!items[i]) return no('Ende des Menüs'); S.mIdx=i; return log('Markierung: <b>'+items[i].t+'</b>');
+  }
+  if (b==='cross') {
+    const it=items[S.mIdx]; if (!it) return; if (it.off) return no(it.later==='mit 113'?'kommt mit dem Board-Chat (WM8-113)':'geht gerade nicht');
+    S.menu=false;
+    switch (it.id) {
+      case 'openBoard': return goTickets('WM8');
+      case 'back': S.prev='tickets'; S.place='chat'; return log('Zu den Chats: zurück zu Jarvis.');
+      case 'zc': return goChat(T[curTicket()].chats[0][0]);
+      case 'link': return ticketKey('square');
+      case 'linear': return ticketKey('l3');
+      case 'refresh': return ticketKey('r3');
+      case 'jarvis': return ticketKey('triangle');
+      case 'mine': S.filter = S.filter===1?0:1; S.row=0; return log('Filter: <b>'+(S.filter===1?'Wartet auf mich':'Alle')+'</b>');
+      case 'copylist': toast('<b>Liste kopiert</b><pre>Die sichtbaren Tickets in Reihenfolge, je zwei Zeilen.</pre>'); return log('Liste kopiert.');
+      default:
+        if (it.id.startsWith('tri')) { const k=curTicket(); S.dockInput = (S.dockInput&&S.dockInput.includes('Triage in WM8')?S.dockInput:(S.dockInput?S.dockInput+'\n':'')+'Triage in WM8, bitte ausführen:')+`\n- ${k}: ${it.t.replace('…','').toLowerCase()}`; if (S.triIdx<S.tri.length-1) S.triIdx++; return log(`<b>${it.t}</b> für ${k} gesammelt im Eingabefeld von Jarvis; weiter zu <b>${curTicket()}</b>. Abgeschickt wird erst mit Kreuz im Board-Chat.`); }
+        return log(it.t+' (wie heute).');
+    }
+  }
+  return log('im Menü ohne Wirkung');
+}
+
+/* ---------- Darstellung ---------- */
+function side() {
+  const inT = S.place==='tickets';
+  const sbMark = S.focus==='sidebar' && inT;
+  $('#sidelist').innerHTML = `
+    <div class="sec">WORKSPACES</div>
+    <div class="row dim"><span class="t">WM8 Aktiv</span><span class="k">6</span></div>
+    <div class="row dim"><span class="t">WM8 Wartet</span><span class="k">4</span></div>
+    <div class="sec">PROJEKTE</div>
+    <div class="grp">whisperm8 <span class="n">5</span></div>
+    ${CHATS.map((c,i)=>`<div class="row ${!inT&&c.n.startsWith(S.chatName||'Jarvis')?'sel':''} ${sbMark&&i===2?'mark':''}"><span class="dot ${c.s}"></span><span class="t">${c.n}</span></div>`).join('')}
+    <div class="grp">kundenportal <span class="n">1</span></div>
+    <div class="row dim"><span class="dot"></span><span class="t">Beispiel-Chat (erfunden)</span></div>`;
+  const tabs=[['Jarvis','working'],['Udo','working'],['Vic','idle'],['Pia','awaiting']];
+  $('#tabs').innerHTML = tabs.map(([n,st])=>`<div class="tab ${!inT&&(S.chatName||'Jarvis')===n?'on':''}"><span class="dot ${st}"></span>${n}</div>`).join('');
+  $('#ticketBtn').classList.toggle('on', inT);
+}
+function prio(p){ return `<span class="note">${['–','!!!','↑','=','↓'][p]}</span>`; }
+function card(k, sel) {
+  const x=T[k]; const tags=(x.tags||[]).map(t=>`<span class="tag ${t==='Entscheidung'||t==='Handtest'?'need':''}">${t}</span>`).join('');
+  const c=x.chats&&x.chats[0];
+  return `<div class="cardx ${sel?'sel':''}"><div class="ctop"><span>${k}</span>${prio(x.p)}${x.crit?`<span>☰ ${x.crit}</span>`:''}${x.a==='GC'?'<span class="ini">GC</span>':''}</div>
+    <div class="ctitle">${x.t}</div>${tags}${c?`<div class="cchat"><span class="dot ${c[1]}"></span><b>${c[0]}</b> ${c[2]}</div>`:''}</div>`;
+}
+function boardHTML() {
+  const L=lanes(); const focusBoard = S.focus==='board';
+  return `<div class="board">
+    <div class="bhead"><h3>Tickets · ${teamName()}</h3><span class="sub">${board().name}</span><span class="sp">Aktualisiert 17:58 ↻</span></div>
+    <div class="filters"><span class="chip me ${S.filter===1?'on':''}">Wartet auf mich <span class="n">6</span></span><span class="chip ${S.filter===0?'on':''}">Alle</span><span class="chip ${S.filter===2?'on':''}">Mit Chat <span class="n">5</span></span></div>
+    <div class="lanes">${L.map((ln,c)=>{
+      const rest=ln.n-ln.shown.length;
+      return `<div class="lane ${ln.mine?'mine':''} ${focusBoard&&c===S.col?'focus':''}"><div class="lhead">${ln.s} <span class="n">${ln.n}</span>${ln.why?`<span class="why">${ln.why}</span>`:''}</div>
+        <div class="cards">${ln.shown.map((k,r)=>card(k, focusBoard&&c===S.col&&r===S.row)).join('')}${rest>0?`<div class="more ${focusBoard&&c===S.col&&S.row===ln.shown.length?'sel':''}">${rest} weitere · Kreuz zeigt alle</div>`:''}</div></div>`;}).join('')}</div>
+  </div>`;
+}
+function descFor(k) {
+  if (k==='WM8-104') return `<div class="stand">Abgenommen am 14.11.2026 (WM8-16), alle zehn Punkte wie empfohlen.</div>
+    <h4>Ziel</h4><p>Chats und Workspaces auch mit der Tastatur über die Insel wechseln, ohne Controller.</p>
+    <h4>Fertig, wenn · 1 von 4</h4><div class="check"><i></i>die neun Punkte gebaut sind</div><div class="check"><i></i>⌃Tab und ⌥Leertaste sich nicht ändern</div><div class="check"><i style="background:var(--working);border-color:var(--working)"></i>die Logik der Tasten pur und getestet ist</div><div class="check"><i></i>Giuliano es von Hand ausprobiert hat</div>
+    <h4>Verlauf</h4><div class="cmt dec"><div class="who">Abschluss · 15.11. 17:33 · Lev</div><b>Gebaut:</b> Insel per Tastatur in drei Paketen. Handtest mit acht Schritten.</div>
+    <div class="cmt"><div class="who">15.11. 17:23</div>Paket 2 merge-bereit. Volle Suite grün.</div>
+    <div class="cmt dec"><div class="who">Entscheidung · 15.11. 15:55</div><b>Gewählt:</b> macOS-Warnton, Insel bleibt offen.</div>`;
+  if (k==='WM8-112') return `<div class="stand"><b>Stand 15.11.2026:</b> angelegt aus der Beratung WM8-111, noch nicht gestartet.</div>
+    <h4>Ziel</h4><p>Ein Ticket groß sehen und Tickets der Reihe nach durchgehen, wie in der Triage von Linear.</p>
+    <h4>Fertig, wenn · 0 von 7</h4><div class="check"><i></i>Klick auf ein Ticket öffnet die Triage: Liste links, Ticket in der Mitte, Eigenschaften rechts.</div><div class="check"><i></i>Kommentare stehen am Ticket; Entscheidung und Abschluss hervorgehoben.</div><div class="check"><i></i>Link und Liste kopieren.</div><div class="check"><i></i>Spalten nach echtem Status.</div>
+    <h4>Verlauf</h4><p class="note">Noch keine Kommentare.</p>`;
+  if (k==='WM8-91') return `<div class="stand"><b>Stand 15.11.2026:</b> Entwurf der Belegung läuft. Gebaut wird nach Paket 1 des Boards.</div>
+    <h4>Ziel</h4><ul><li>Das Board eines Projekts mit dem Controller öffnen und wieder verlassen.</li><li>Tickets mit dem Controller durchgehen, groß lesen und an Jarvis geben.</li><li>Dieselben Wege mit der Tastatur über die Insel.</li></ul>
+    <h4>Fertig, wenn · 0 von 13</h4><div class="check"><i></i>Belegung als Klick-Entwurf abgenommen.</div><div class="check"><i></i>Zwischen Chats und Tickets umschalten, Rückweg wie L2 getippt.</div><div class="check"><i></i>Auswahl sichtbar, bewegt sich mit Steuerkreuz und Stick.</div>
+    <h4>Verlauf</h4><div class="cmt"><div class="who">15.11. 18:55</div>Bau direkt nach Paket 1 des Boards (WM8-112).</div>`;
+  return `<h4>Beschreibung</h4><p class="note">Im Entwurf sind WM8-104, WM8-112 und WM8-91 ausgeschrieben, die übrigen nur mit Titel.</p>`;
+}
+function triageHTML() {
+  const k=curTicket(), x=T[k]; const lane=lanes().find(L=>L.shown.includes(S.tri[0]));
+  const chats=x.chats||[];
+  return `<div class="tri">
+    <div class="trilist"><div class="trihead">${lane?lane.s:'Liste'} <span class="n">${S.tri.length}</span></div>
+      ${S.tri.map((t,i)=>`<div class="trow ${i===S.triIdx?'sel':''} ${i===S.triIdx&&S.focus==='triage'?'focus':''}"><div class="tt">${T[t].t}</div><div class="tm"><span>${T[t].a==='GC'?'Giuliano':'niemand'}</span>${T[t].chats?`<span><span class="dot ${T[t].chats[0][1]}"></span> ${T[t].chats[0][0]}</span>`:''}<span class="k">${t}</span></div>${S.dockInput&&S.dockInput.includes('- '+t+':')?'<div class="dec">→ gesammelt für Jarvis</div>':''}</div>`).join('')}</div>
+    <div class="tmain">
+      <div class="tbar"><span class="tk">${k}</span><span class="tt">${x.t}</span><span class="btn">⧉ Link</span><span class="btn">↗ Linear</span>${S.dock?'<span class="btn primary">→ Jarvis</span>':''}</div>
+      <div class="tbody"><div class="tdesc desc"><div class="inner" style="transform:translateY(${-S.scroll*90}px)"><div class="bigtitle">${x.t}</div>${descFor(k)}</div><div class="scrollbar" style="top:${10+S.scroll*60}px"></div></div>
+      <div class="props"><div class="pl">Status</div><div>${x.s}</div><div class="pl">Person</div><div>${x.a==='GC'?'Giuliano':'niemand'}</div><div class="pl">Vorhaben</div><div>${x.pr}</div>${x.crit?`<div class="pl">Fertig, wenn</div><div>☰ ${x.crit}</div>`:''}
+        <h4>Chats am Ticket</h4>${chats.length?chats.map((c,i)=>`<div class="chl ${S.focus==='chatline'&&i===S.chatIdx?'focus':''}"><span class="dot ${c[1]}"></span><b>${c[0]}</b><span class="note">${c[2]}</span>${S.focus==='chatline'&&i===S.chatIdx?`<span class="hint">${kbd()?'↩':G('cross')} hin</span>`:''}</div>`).join(''):'<div class="note">keiner</div>'}
+        <div class="pl">Labels</div><div>${(x.tags||['–']).join(', ')}</div></div></div>
+    </div></div>`;
+}
+function dockHTML() {
+  const k=curTicket();
+  return `<aside class="dock ${S.focus==='dock'?'focus':''}"><div class="dhead"><span class="lbl">Board-Chat</span><span class="dot working"></span><b>Jarvis</b><span class="later">kommt mit WM8-113</span></div>
+    <div class="term"><span class="u">❯ Gehen wir die neuen Board-Tickets durch.</span>
+
+⏺ Vier Tickets aus der Beratung, alle Todo.
+  <b>${k||'WM8-112'}</b> liegt links groß. Sag mir je
+  Ticket, was passieren soll.${S.recording?'\n\n<span class="u">● Diktat läuft …</span>':''}</div>
+    <div class="input">${k?`<span class="ctx">Bezug: ${k}</span><br>`:''}${S.dockInput?S.dockInput.replace(/</g,'&lt;'):'<span class="empty">Diktieren (R2) oder tippen. Nichts geht ohne Kreuz hier raus.</span>'}</div></aside>`;
+}
+function chatHTML() {
+  const n=S.chatName||'Jarvis';
+  const txt = n==='Jarvis' ? `<span class="u">❯ Was ist bei WM8 gerade offen für mich?</span>
+
+⏺ <b>WM8 heute, 15.11.</b>
+  Abnahme: WM8-104 ist merge-bereit.
+  Neu: WM8-112 bis WM8-115 fürs Ticket-Board.
+  Udo entwirft gerade die Bedienung per
+  Controller (WM8-91).` : `⏺ <b>${n}</b> — der Chat am Ticket.
+  Hier gilt wieder alles wie in jedem Chat:
+  Kreuz ist Enter, Kreis Escape, R2 Diktat.`;
+  return `<div class="chatview"><div class="term">${txt}</div><div class="input"><span class="empty">Eingabe von ${n}</span></div></div>`;
+}
+function islandHTML() {
+  if (S.island==='whereto') {
+    const tabs=iTabs(); const rows=iRows();
+    const name={chats:'Chats',ws:'Workspaces & Projekte',tickets:'Tickets'};
+    const hereNote = S.iTab==='tickets';
+    return `<div class="island"><div class="ihead">${kbd()?KC('⌥','⇥'):G('l2')}<span class="layer">Wohin</span><span class="target">${S.place==='tickets'?'Tickets · '+teamName():'<span class="dot working"></span>Jarvis'}</span></div>
+      <div class="iseg">${tabs.map(t=>`<span class="${t===S.iTab?'on':''} ${t==='tickets'?'new':''}">${name[t]}${t==='tickets'?' · neu':''}</span>`).join('')}</div>
+      <div class="irows">${rows.map((r,i)=>{
+        if (r.sep) return '<div class="isep"></div>';
+        if (S.iTab==='chats') return `<div class="ir ${i===S.iRow?'mark':''}"><span class="dot ${r.s}"></span><span class="t">${r.n}</span><span class="w">${S.place==='tickets'&&i===0?'vorher':r.w}</span></div>`;
+        if (S.iTab==='ws') return `<div class="ir ${i===S.iRow?'mark':''}"><span class="sw" style="background:${r.c}">${r.proj?'▤':r.n[4]}</span><span class="t">${r.n}</span><span class="w">${r.w}</span></div>`;
+        const here = r.k===S.team; const prev = S.place==='chat' && S.prev==='chat' && r.k==='WM8';
+        return `<div class="ir ${i===S.iRow?'mark':''} ${r.off?'off':''}"><span class="sw" style="background:${r.k==='WM8'?'#5e6ad2':r.k==='KUN'?'#3fa873':r.k==='SHOP'?'#c9962a':'#76777c'}">${r.k==='ALL'?'★':r.k[0]}</span><span class="t">${r.k!=='ALL'?r.k+' ':''}<small>${r.n}</small></span><span class="w ${here?'here':''}">${here?(S.place==='tickets'?'jetzt':'hier'):prev?'vorher':r.w}</span></div>`;
+      }).join('')}</div>
+      ${hereNote&&S.place==='chat'?`<div class="ihint">„hier“ = Board des Projekts deines Chats. Loslassen öffnet es, auch ohne weitere Bewegung.</div>`:''}
+      <div class="ifoot">${kbd()
+        ? `<span>${KC('↑','↓')} wählen</span><span>${KC('←','→')} Reiter</span><span>⌥ los ${KC('↩')} hin</span><span>${KC('Esc')} abbrechen</span>${S.iTab==='tickets'?`<span style="opacity:${S.dock?1:.45}">${KC('␣')} hin + diktieren</span>`:''}`
+        : `<span>${G('✛')} wählen</span><span>◀ ▶ Reiter</span><span>loslassen ${G('cross')} hin</span><span>${G('circle')} abbrechen</span>${S.iTab==='tickets'?`<span style="opacity:${S.dock?1:.45}">${G('r2')} hin + diktieren${S.dock?'':' (mit 113)'}</span>`:''}`}</div></div>`;
+  }
+  if (S.island==='r1') {
+    const chatOk = S.place==='chat' || S.dock; const tgt = S.place==='chat' ? 'Jarvis' : S.dock ? 'Board-Chat Jarvis' : 'kein Board-Chat';
+    return `<div class="island"><div class="ihead">${G('r1')}<span class="layer">Schnellbefehle</span><span class="target">${S.place==='tickets'?'Tickets · '+teamName()+' · ':''}${tgt}</span></div>
+      <div class="diamonds">
+        <div><div class="dia"><div class="slot top">▲ Limits</div><div class="slot left">◀ Mitteilungen</div><div class="slot right">▶ Wach bleiben</div><div class="slot bottom ${S.way==='r1'?'new':''}">▼ ${S.way==='r1'?(S.place==='chat'?'Ticket-Board':'Zu den Chats'):'Zwischenablage'}</div></div><div class="dcap">App · Steuerkreuz (unverändert)</div></div>
+        <div><div class="dia"><div class="slot top ${chatOk?'':'off'}">${G('triangle')} Modus</div><div class="slot left ${chatOk?'':'off'}">${G('square')} Befehle ›</div><div class="slot right ${chatOk?'':'off'}">${G('circle')} Konto ›</div><div class="slot bottom ${chatOk?'':'off'}">${G('cross')} Jetzt senden</div></div><div class="dcap">Chat · Tasten · ${chatOk?tgt:'ausgegraut: im Board erst mit WM8-113'}</div></div>
+      </div>
+      ${S.way==='r1'?'<div class="ihint">Variante: ▼ führt zum Board. Die Zwischenablage gibt es dann nur noch am Touchpad und im Menü.</div>':''}
+      <div class="ifoot"><span>R1 loslassen schließt</span></div></div>`;
+  }
+  return '';
+}
+function menuHTML() {
+  if (!S.menu) return '';
+  const items=S.menuItems;
+  const pos = S.place==='chat' ? 'right:16px;top:44px' : S.view==='triage' ? 'left:440px;top:44px' : `left:${Math.min(230+S.col*227, 560)}px;top:${120+Math.min(S.row,3)*60}px`;
+  return `<div class="menu" style="${pos}">${items.map((it,i)=>it.group?`<div class="mg">${it.group}</div>`:`<div class="mi ${i===S.mIdx?'mark':''} ${it.off?'off':''}">${it.t}${it.isNew?'<span class="later">neu</span>':''}${it.later?`<span class="later">${it.later}</span>`:''}${it.sub?'<span class="chev">›</span>':''}</div>`).join('')}
+    <div class="mfoot">${kbd()?`<span>${KC('↩')} wählen</span><span>${KC('Esc')} zurück</span><span>${KC('⌘','K')} schließt</span>`:`<span>${G('cross')} wählen</span><span>${G('circle')} zurück</span><span>${G('options')} schließt</span>`}</div></div>`;
+}
+
+/* ---------- Leiste ---------- */
+function legendFor(state, dev) {
+  const kb = dev==='kb'; const g=(...k)=>G(...k), k=(...x)=>KC(...x);
+  const E=(c,kk,t,cls='')=>`<span class="k ${cls}">${kb?kk:c}${t}</span>`;
+  const back = S.prev==='tickets' || S.prev==='chat';
+  const l1lbl = S.l1==='chat'?'Chat (verlässt das Board)':S.l1==='filter'?'Filter':'Ticket';
+  switch (state) {
+    case 'chat': return `<b>Chat Jarvis</b><span>arbeitet</span>` + (kb
+      ? `${E('',k('⌥','⇥'),' Wohin')}${E('',k('⌥','␣'),' Diktat')}${back?E('',k('⌥','⇥'),' kurz: Zurück: <b>Tickets WM8</b>','new'):''}`
+      : `${E(g('cross'),'',' Senden')}${E(g('circle'),'',' Escape')}${E(g('r2'),'',' Diktat')}${E(g('l1','r1'),'',' Chat')}${back?E(g('l2'),'',' Zurück: <b>Tickets WM8</b>','new'):''}${E(g('l1','r1','l2'),'',' Halten: Ebenen')}`);
+    case 'board': return `<b>Tickets · ${teamName()}</b>` +
+      E(g('Stick','✛'),k('↑','↓','←','→'),' Auswahl') + E(g('cross'),k('↩'),' Öffnen') + E(g('square'),k('⌘','⇧','C'),' Link') +
+      E(g('l1','r1'),k('⌘','⌥','←','→'),' '+l1lbl) + E(g('l3'),k('⌘','O'),' Linear') + E(g('r3'),k('⌘','R'),' Aktualisieren') + E(g('options'),k('⌘','K'),' Menü') +
+      (S.dock?E(g('triangle'),k('⌘','J'),' → Jarvis')+E(g('r2'),k('⌥','␣'),' Diktat → Jarvis'):'') +
+      E(g('l2'),k('⌥','⇥'),' Zurück: <b>'+PREV_CHAT+'</b>');
+    case 'triage': return `<b>Tickets · ${teamName()}</b>` +
+      E(g('Stick'),k('↑','↓'),' Ticket') + E(g('circle'),k('Esc'),' Board') + E(g('square'),k('⌘','⇧','C'),' Link') + E(g('l1','r1'),k('⌘','⌥','←','→'),' '+l1lbl) +
+      (kb?'':E(g('R-Stick'),'',' Lesen')) + E(g('▶'),k('→'),' Chats am Ticket') + E(g('options'),k('⌘','K'),' Menü') +
+      (S.dock?E(g('triangle'),k('⌘','J'),' → Jarvis'):'') + E(g('l2'),k('⌥','⇥'),' Zurück');
+    case 'chatline': { const c=(T[curTicket()].chats||[[' ']])[S.chatIdx]||[' ']; return `<b>Tickets · ${teamName()}</b>` + E(g('cross'),k('↩'),' Zum Chat <b>'+c[0]+'</b>') + E(g('circle'),k('Esc'),' Liste') + E(g('Stick'),k('↑','↓'),' Chat wählen'); }
+    case 'dock': return `<b>Board-Chat Jarvis</b><span>arbeitet</span>` + E(g('cross'),k('↩'),' Senden') + E(g('circle'),k('Esc'),' Escape') + E(g('✛'),k('↑','↓','←','→'),' Pfeile') +
+      E(g('r2'),k('⌥','␣'),' Diktat') + E(g('l1','r1'),k('⌘','⌥','←','→'),' Ticket','new') + (kb?'':E(g('Stick'),'',' ◀ Board'));
+    case 'sidebar': return `<b>Tickets · ${teamName()}</b>` + E(g('Stick'),k('↑','↓'),' Liste') + E(g('cross'),k('↩'),' Chat öffnen (verlässt die Tickets)') + E(g('▶'),k('→'),' zurück ins Board');
+  }
+  return '';
+}
+function legendState() {
+  if (S.place==='chat') return 'chat';
+  if (S.focus==='dock') return 'dock';
+  if (S.focus==='sidebar') return 'sidebar';
+  if (S.view==='triage') return S.focus==='chatline'?'chatline':'triage';
+  return 'board';
+}
+
+/* ---------- Zusammensetzen ---------- */
+const CAPS = {
+  chat:'<b>Ausgangslage:</b> Du bist im Chat Jarvis. Neu ist nur, was die Leiste zeigt, sobald du einmal im Board warst: <b>L2 Zurück: Tickets WM8</b>. Probier L2 halten (rechts) oder ⌥Tab per Tastatur.',
+  whereto:'<b>Szene 1 · Wohin mit Reiter „Tickets“.</b> Rechts von „Workspaces & Projekte“ steht je Team mit Projekt eine Zeile, das Team deines Chats trägt „hier“ und ist markiert. Loslassen öffnet das Board; ein anderes Team wählst du mit ▲ ▼. Unten reserviert: „Wartet auf mich · alle Teams“ (kommt mit WM8-115).',
+  board:'<b>Szene 2 · Board.</b> Die Auswahl ist ein Ring in Akzentfarbe mit dem Wort „Auswahl“, ohne Maus sichtbar. Stick und Steuerkreuz bewegen, Kreuz öffnet groß, Viereck kopiert den Link, L1/R1 gehen Ticket für Ticket durch das Board. Kreis tut hier absichtlich nichts. Kein Diktat, kein Enter, kein Escape erreicht den Chat dahinter.',
+  triage:'<b>Szene 3 · Ticket groß (Triage).</b> ▲ ▼ wechselt das Ticket, rechts steht es sofort groß. Der rechte Stick blättert Beschreibung und Kommentare. ▶ führt auf „Chats am Ticket“, erst dort führt Kreuz in den Chat. Kreis bringt dich zum Board zurück, auf dieselbe Karte.',
+  dock:'<b>Szene 4 · Mit Board-Chat (kommt mit WM8-113, hier schon eingeplant).</b> R2 diktiert überall im Board an Jarvis, Dreieck legt das Ticket in sein Eingabefeld. Mit ▶ gehst du in den Board-Chat; dort ist alles wie in einem Chat, nur L1/R1 blättern weiter durch die Tickets. Options öffnet in der Triage auf „Triage“: Kreuz sammelt die Entscheidung und springt zum nächsten Ticket.',
+  r1:'<b>Szene 5 · R1 halten im Board.</b> Die App-Raute bleibt, wie sie ist. Die rechte Raute wirkt nur auf einen sichtbaren Chat: im Board auf den Board-Chat, bis dahin ausgegraut. Ein Schnellbefehl für das Board selbst ist bewusst nicht hier (siehe E1).',
+  menu:'<b>Szene 6 · Options im Board.</b> Dieselbe Karte wie am Chat, an der ausgewählten Karte. Gruppen: Ticket, Board, Steuerung; mit dem Board-Chat kommt „Triage“ dazu. „Zu den Chats“ ist der Weg zurück für alle, die L2 nicht nehmen.',
+};
+function render() {
+  side();
+  let html;
+  if (S.place==='chat') html = chatHTML();
+  else html = (S.view==='triage' ? triageHTML() : boardHTML()) + (S.dock ? dockHTML() : '');
+  $('#body').innerHTML = html;
+  $('#overlay').innerHTML = islandHTML() + menuHTML();
+  const st=legendState();
+  $('#legend').innerHTML = legendFor(st, S.dev) + (S.flash?`<span class="flash">${S.flash}</span>`:'');
+  $('#cap').innerHTML = CAPS[S.scene] || '';
+  renderPad();
+}
+
+/* ---------- Szenen ---------- */
+function scene(v) {
+  S.scene=v; S.island=null; S.menu=false; S.dock=false; S.dockInput=null; S.recording=false; S.filter=0; S.scroll=0; S.team='WM8'; S.visited=true; S.visitedMsg=true;
+  if (v==='chat') { S.place='chat'; S.chatName='Jarvis'; S.prev='tickets'; }
+  if (v==='whereto') { S.place='chat'; S.chatName='Jarvis'; S.prev=null; openWhere(); S.iTab = S.way==='tab'?'tickets':'chats'; S.iRow=iStart(); }
+  if (v==='board') { S.place='tickets'; S.prev='chat'; S.view='board'; S.focus='board'; S.col=2; S.row=0; }
+  if (v==='triage') { S.place='tickets'; S.prev='chat'; S.view='triage'; S.focus='triage'; S.col=2; S.tri=lanes()[2].shown.slice(); S.triIdx=0; }
+  if (v==='dock') { S.place='tickets'; S.prev='chat'; S.dock=true; S.view='triage'; S.focus='triage'; S.col=2; S.tri=lanes()[2].shown.slice(0,4); S.triIdx=0; }
+  if (v==='r1') { S.place='tickets'; S.prev='chat'; S.view='board'; S.focus='board'; S.col=2; S.row=0; S.island='r1'; }
+  if (v==='menu') { S.place='tickets'; S.prev='chat'; S.view='board'; S.focus='board'; S.col=2; S.row=0; S.menu=true; S.menuItems=menuItems(); S.mIdx=S.menuItems.findIndex(i=>!i.group&&!i.off); }
+  document.querySelectorAll('#sceneSeg button').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
+  LOG.length=0; $('#log').innerHTML=''; log('Szene gewählt. Drück eine Taste rechts.');
+  render();
+}
+
+/* ---------- Controller-Attrappe ---------- */
+function renderPad() {
+  const g=k=>GL[gdev()][k]||k;
+  const hold2 = S.island==='whereto', hold1 = S.island==='r1';
+  $('#pad').innerHTML = `
+    <div class="pgrp"><span class="pl">Schultertasten</span>
+      <div class="prow"><button class="pk" data-b="l1">${g('l1')}</button><button class="pk" data-b="r1">${g('r1')}</button></div>
+      <div class="prow"><button class="pk" data-b="l2">${g('l2')} tippen</button><button class="pk" data-b="r2">${g('r2')}</button></div>
+      <div class="prow"><button class="pk wide ${hold2?'on':''}" data-b="${hold2?'l2up':'l2hold'}">${g('l2')} ${hold2?'loslassen':'halten'}</button></div>
+      <div class="prow"><button class="pk wide ${hold1?'on':''}" data-b="${hold1?'r1up':'r1hold'}">${g('r1')} ${hold1?'loslassen':'halten'}</button></div></div>
+    <div class="pgrp"><span class="pl">Tasten</span>
+      <div class="face"><button class="pk t" data-b="triangle">${g('triangle')}</button><button class="pk l" data-b="square">${g('square')}</button><button class="pk r" data-b="circle">${g('circle')}</button><button class="pk b" data-b="cross">${g('cross')}</button></div>
+      <div class="prow"><button class="pk" data-b="options">${g('options')}</button><button class="pk" data-b="create">${g('create')}</button></div></div>
+    <div class="pgrp"><span class="pl">Linker Stick</span>
+      <div class="cross4"><button class="pk u" data-b="stick:up">▲</button><button class="pk l" data-b="stick:left">◀</button><button class="pk c" data-b="l3">${g('l3')}</button><button class="pk r" data-b="stick:right">▶</button><button class="pk d" data-b="stick:down">▼</button></div></div>
+    <div class="pgrp"><span class="pl">Steuerkreuz</span>
+      <div class="cross4"><button class="pk u" data-b="dpad:up">▲</button><button class="pk l" data-b="dpad:left">◀</button><button class="pk r" data-b="dpad:right">▶</button><button class="pk d" data-b="dpad:down">▼</button></div></div>
+    <div class="pgrp"><span class="pl">Rechter Stick</span>
+      <div class="prow"><button class="pk" data-b="rs:up">▲</button><button class="pk" data-b="rs:down">▼</button><button class="pk" data-b="r3">${g('r3')}</button></div></div>
+    <div class="pgrp"><span class="pl">Mitte</span>
+      <div class="prow"><button class="pk" data-b="touch">${g('touch')}</button></div></div>`;
+  document.querySelectorAll('#pad .pk').forEach(el=>el.onclick=()=>{ if (S.dev==='kb') { S.dev='ps'; syncSeg('#devSeg','ps'); } padPress(el.dataset.b); });
+}
+function padPress(b) {
+  if (b==='l2hold') { S.menu=false; openWhere(); return render(); }
+  if (b==='r1hold') { S.menu=false; S.island='r1'; log('R1 gehalten: Schnellbefehle.'); return render(); }
+  press(b); render();
+}
+
+/* ---------- Tastatur im Fenster ---------- */
+document.addEventListener('keydown', e => {
+  if (!$('#win').contains(document.activeElement) && document.activeElement!==document.body) return;
+  const arrows={ArrowUp:'up',ArrowDown:'down',ArrowLeft:'left',ArrowRight:'right'};
+  let b=null;
+  if (e.altKey && e.key==='Tab') { e.preventDefault(); S.dev='kb'; syncSeg('#devSeg','kb'); if (S.island!=='whereto') { openWhere(); } else { whereKey('dpad:down'); } return render(); }
+  if (S.island==='whereto' && e.key==='Alt') return;
+  if ((e.metaKey&&e.altKey||e.metaKey&&e.shiftKey) && arrows[e.key] && (arrows[e.key]==='left'||arrows[e.key]==='right')) b = arrows[e.key]==='left'?'l1':'r1';
+  else if (e.metaKey && e.shiftKey && e.key.toLowerCase()==='c') b='square';
+  else if (e.metaKey && e.key.toLowerCase()==='o') b='l3';
+  else if (e.metaKey && e.key.toLowerCase()==='r') b='r3';
+  else if (e.metaKey && e.key.toLowerCase()==='k') b='options';
+  else if (e.metaKey && e.key.toLowerCase()==='j') b='triangle';
+  else if (!e.metaKey && arrows[e.key]) b = (S.focus==='dock'&&S.place==='tickets'&&!S.menu&&!S.island) ? 'dpad:'+arrows[e.key] : 'stick:'+arrows[e.key];
+  else if (e.key==='Enter') b='cross';
+  else if (e.key==='Escape') b='circle';
+  else if (!e.metaKey && (e.key==='j'||e.key==='k') && S.place==='tickets') b = e.key==='j'?'r1':'l1';
+  if (!b) return;
+  e.preventDefault(); S.dev='kb'; syncSeg('#devSeg','kb');
+  press(b); render();
+});
+document.addEventListener('keyup', e => { if (e.key==='Alt' && S.island==='whereto' && S.dev==='kb') { whereKey('l2up'); render(); } });
+
+/* ---------- Tabellen ---------- */
+function bindingsTable() {
+  const rows = [
+    ['Weg','L2 halten','Wohin mit Reiter „Tickets“ (Teams, „hier“, „vorher“)','⌥Tab halten, → bis „Tickets“','1'],
+    ['Weg','L2 getippt','zurück an den vorigen Ort, auch Board ↔ Chat','⌥Tab kurz','1'],
+    ['Weg','Options im Chat','„Ticket-Board WM8“ in der Gruppe Steuerung','⌘K im Board · Knopf ▦','1'],
+    ['Board','Stick, Steuerkreuz','▲ ▼ Karte, ◀ ▶ Spalte; ◀ aus der ersten Spalte in die Seitenleiste','↑ ↓ ← →','2'],
+    ['Board','✕ Kreuz','Ticket groß (Liste = Spalte); auf „N weitere“ die ganze Spalte','Return','2'],
+    ['Board','○ Kreis','nichts, mit Rückmeldung (zurück geht mit L2)','–','2'],
+    ['Board, Triage','□ Viereck','Link kopieren (zwei Zeilen)','⌘⇧C','2'],
+    ['Board, Triage','△ Dreieck','→ Jarvis: ins Eingabefeld des Board-Chats, ohne Absenden','⌘J','113'],
+    ['überall im Ticket-Modus','L1 / R1','voriges / nächstes Ticket, auch bei Fokus im Board-Chat','⌘⌥← / ⌘⌥→, J / K','2'],
+    ['Board, Triage','L3','In Linear öffnen','⌘O','2'],
+    ['Board, Triage','R3 tippen','Aktualisieren','⌘R','2'],
+    ['Board, Triage','Rechter Stick','Spalte bzw. Beschreibung und Kommentare blättern','Trackpad, Bild ↑ ↓','2'],
+    ['Board, Triage','Options','Menü-Karte: Ticket, Board, Steuerung (mit 113 auch Triage)','⌘K','2'],
+    ['Triage','Stick ▲ ▼','Ticket wechseln, rechts sofort groß','↑ ↓','2'],
+    ['Triage','▶','auf „Chats am Ticket“, dann weiter in den Board-Chat (113)','→','2'],
+    ['Chat-Zeile','✕ Kreuz','Zum Chat; L2 getippt bringt dich zurück','Return','2'],
+    ['Triage','○ Kreis','zurück zum Board, Auswahl auf derselben Karte','Esc','2'],
+    ['überall im Ticket-Modus','R2','Diktat an den Board-Chat; bis dahin nichts','⌥Leertaste','113'],
+    ['überall im Ticket-Modus','R1 halten','App-Raute wie immer; Chat-Raute = Board-Chat, bis dahin ausgegraut','⌥Tab: Buchstaben wie heute','1 / 113'],
+    ['Board-Chat','alles','wie in jedem Chat (Kreuz Enter, Kreis Escape, Steuerkreuz Pfeile)','wie im Chat','113'],
+    ['überall','Create, Touchpad, L1 + R1','unverändert: Neuer Chat, Zwischenablage, Pause','unverändert','–'],
+  ];
+  $('#bindings').innerHTML = '<tr><th>Wo</th><th>Taste</th><th>Wirkung</th><th>Tastatur</th><th>Paket</th></tr>' +
+    rows.map(r=>`<tr><td>${r[0]}</td><td><b>${r[1]}</b></td><td>${r[2]}</td><td>${r[3]}</td><td class="p">${r[4]}</td></tr>`).join('');
+}
+function legendsGallery() {
+  const save={...S};
+  const make=(name, setup)=>{ Object.assign(S, save, setup); const st=legendState(); return ['ps','kb'].map(d=>`<div class="lgrow"><span class="nm">${name} · ${d==='kb'?'Tastatur':'Controller'}</span><div class="legend">${legendFor(st,d)}</div></div>`).join(''); };
+  const html = [
+    make('Chat, nach dem Board', {place:'chat', prev:'tickets', dock:false}),
+    make('Board', {place:'tickets', view:'board', focus:'board', dock:false, prev:'chat'}),
+    make('Ticket groß', {place:'tickets', view:'triage', focus:'triage', tri:['WM8-104'], triIdx:0, dock:false}),
+    make('Chat-Zeile am Ticket', {place:'tickets', view:'triage', focus:'chatline', tri:['WM8-104'], triIdx:0, chatIdx:0}),
+    make('Board-Chat im Fokus (113)', {place:'tickets', view:'triage', focus:'dock', dock:true, tri:['WM8-112'], triIdx:0}),
+  ].join('');
+  Object.assign(S, save);
+  $('#legends').innerHTML = html;
+}
+
+/* ---------- Umschalter ---------- */
+function syncSeg(id,v){ document.querySelectorAll(id+' button').forEach(b=>b.classList.toggle('on',b.dataset.v===v)); }
+document.querySelectorAll('#sceneSeg button').forEach(b=>b.onclick=()=>scene(b.dataset.v));
+const vars = {'#wayVar':'way','#l1Var':'l1','#zcVar':'zc','#r2Var':'r2'};
+Object.entries(vars).forEach(([id,key])=>document.querySelectorAll(id+' button').forEach(b=>b.onclick=()=>{ S[key]=b.dataset.v; syncSeg(id,b.dataset.v); if (key==='way' && S.island==='whereto' && !iTabs().includes(S.iTab)) { S.iTab='chats'; S.iRow=iStart(); } log('Variante: <b>'+b.textContent.replace('★','')+'</b>'); render(); legendsGallery(); }));
+document.querySelectorAll('#devSeg button').forEach(b=>b.onclick=()=>{ S.dev=b.dataset.v; syncSeg('#devSeg',S.dev); render(); });
+document.querySelectorAll('#themeSeg button').forEach(b=>b.onclick=()=>{ const v=b.dataset.theme; if(v==='system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=v; document.querySelectorAll('#themeSeg button').forEach(x=>x.classList.toggle('on',x===b)); });
+$('#win').addEventListener('click', ()=>$('#win').focus());
+
+bindingsTable();
+legendsGallery();
+scene('chat');
+</script>
+</body>
+</html>
