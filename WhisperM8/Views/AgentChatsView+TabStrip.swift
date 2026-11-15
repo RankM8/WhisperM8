@@ -9,20 +9,23 @@ import SwiftUI
 /// Drop-Ziel. Reihenfolge, Auswahl und Umfang des Umschalters bleiben in der
 /// puren Tab-Logik.
 extension AgentChatsView {
+    /// Die Elemente des Streifens. Breiten, schmale Tabs und wegen
+    /// Platzmangel zugeklappte Gruppen kommen aus `layout` (WM8-80, Paket 5),
+    /// einmal je Durchlauf berechnet.
     @ViewBuilder
-    var tabStripItemsContent: some View {
+    func tabStripItemsContent(items: [AgentTabGroupingItem], layout: AgentTabWidthResolver.Layout) -> some View {
         // zIndex hebt das Element mit dem aktiven Tab an, damit dessen
         // Chrome-Füße (7pt über die eigene Breite hinaus) über den
         // Nachbar-Tabs statt darunter gezeichnet werden.
-        ForEach(Array(tabGroupingItems.enumerated()), id: \.offset) { _, item in
+        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
             switch item {
             case .single(let sessionID):
                 if let session = headerTabs.first(where: { $0.id == sessionID }) {
-                    chromeTab(session, groupColor: nil)
+                    chromeTab(session, groupColor: nil, layout: layout)
                         .zIndex(sessionID == selectedSession?.id ? 1 : 0)
                 }
             case .group(let key, let sessionIDs):
-                chromeTabGroup(key: key, sessionIDs: sessionIDs)
+                chromeTabGroup(key: key, sessionIDs: sessionIDs, layout: layout)
                     .zIndex((selectedSessionID.map(sessionIDs.contains) ?? false) ? 1 : 0)
             }
         }
@@ -37,11 +40,13 @@ extension AgentChatsView {
 
     func chromeTabGroup(
         key: AgentTabGroupingKey,
-        sessionIDs: [UUID]
+        sessionIDs: [UUID],
+        layout: AgentTabWidthResolver.Layout
     ) -> some View {
         let metadata = tabGroupMetadata(for: key)
         let color = Color(hex: metadata.colorHex)
-        let isCollapsed = collapsedTabGroups.contains(key)
+        let isAutoCollapsed = layout.autoCollapsedKeys.contains(key)
+        let isCollapsed = collapsedTabGroups.contains(key) || isAutoCollapsed
         let isActive = selectedSessionID.map(sessionIDs.contains) ?? false
         let visibleIDs = visibleTabIDs(in: sessionIDs, collapsed: isCollapsed)
 
@@ -52,19 +57,9 @@ extension AgentChatsView {
                 colorHex: metadata.colorHex,
                 isCollapsed: isCollapsed,
                 isActive: isActive,
+                isAutoCollapsed: isAutoCollapsed,
                 onToggle: {
-                    if isCollapsed {
-                        collapsedTabGroups.remove(key)
-                    } else {
-                        collapsedTabGroups.insert(key)
-                        // Eingeklappte Mitglieder verschwinden aus der Leiste.
-                        // Blieben sie ausgewählt, würden Bulk-Aktionen („N Tabs
-                        // schließen/archivieren") Chats treffen, die der User
-                        // nicht mehr sieht — bei Terminal-Sessions unwiderruflich.
-                        let hidden = Set(sessionIDs)
-                            .subtracting(visibleTabIDs(in: sessionIDs, collapsed: true))
-                        if !hidden.isEmpty { multiSelection.subtract(hidden) }
-                    }
+                    toggleTabGroup(key, sessionIDs: sessionIDs, isCollapsed: isCollapsed)
                 }
             )
             // Das Label gehört geometrisch zum ersten Tab. Der Preference-Key
@@ -95,7 +90,7 @@ extension AgentChatsView {
 
             ForEach(visibleIDs, id: \.self) { sessionID in
                 if let session = headerTabs.first(where: { $0.id == sessionID }) {
-                    chromeTab(session, groupColor: color)
+                    chromeTab(session, groupColor: color, layout: layout)
                         .zIndex(sessionID == selectedSessionID ? 1 : 0)
                 }
             }
@@ -138,7 +133,8 @@ extension AgentChatsView {
     /// weiterhin pro Session-ID erhalten.
     func chromeTab(
         _ session: AgentChatSession,
-        groupColor: Color?
+        groupColor: Color?,
+        layout: AgentTabWidthResolver.Layout
     ) -> some View {
         ChatTabButton(
             session: session,
@@ -147,6 +143,8 @@ extension AgentChatsView {
             isMultiSelected: multiSelection.contains(session.id),
             statusStore: runtimeStatusStore,
             groupColor: groupColor,
+            width: layout.widthByID[session.id],
+            isNarrow: layout.narrowIDs.contains(session.id),
             onSelect: {
                 handleTabClick(session.id)
             },
@@ -184,7 +182,18 @@ extension AgentChatsView {
     // MARK: - Der Streifen selbst
 
     var projectChatStrip: some View {
-        VStack(spacing: 0) {
+        // Breiten einmal je Durchlauf (WM8-80, Paket 5). Der Platz dafür hängt
+        // nur am Fenster und an den Knöpfen, nicht an den Tabs selbst.
+        let groupingItems = tabGroupingItems
+        let widthLayout = tabWidthLayout(items: groupingItems)
+        let stripWidth: CGFloat? = widthLayout.widthByID.isEmpty
+            ? nil : min(widthLayout.contentWidth, tabStripViewportWidth)
+        // Drop-Slots aus denselben Werten, statt die Regel erneut zu rechnen.
+        let slotOrderIDs = AgentTabGrouping.slots(
+            items: groupingItems,
+            collapsedKeys: collapsedTabGroups.union(widthLayout.autoCollapsedKeys)
+        ).map(\.leadingID)
+        return VStack(spacing: 0) {
             // Tabs sitzen in der Titelzone, browserähnlich neben den Ampel-
             // Buttons. Das Fenster zieht dort nur auf ausgewiesenen
             // Griffflächen (`windowDragArea`) — über Tabs und Knöpfen ist
@@ -202,6 +211,9 @@ extension AgentChatsView {
                 }
                 TicketsModeButton(windowStore: windowStore, windowID: windowID)
 
+                // Streifen und die Knöpfe direkt dahinter. Dieser Bereich nimmt
+                // allen freien Platz; seine Breite ist die Grundlage der Tab-Breiten.
+                HStack(spacing: 5) {
                 if !headerTabs.isEmpty {
                     ScrollViewReader { proxy in
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -211,7 +223,7 @@ extension AgentChatsView {
                             // an den Strip-Rändern Platz (sonst clippt der
                             // ScrollView die 7pt-Ausstellung).
                             HStack(alignment: .bottom, spacing: 6) {
-                                tabStripItemsContent
+                                tabStripItemsContent(items: groupingItems, layout: widthLayout)
                             }
                             .padding(.horizontal, 8)
                             // Volle Zeilenhöhe, unten verankert: die Tabs
@@ -235,7 +247,7 @@ extension AgentChatsView {
                                 if let index = tabInsertionIndex,
                                    let x = TabReorderGeometry.insertionX(
                                     forIndex: index,
-                                    orderedIDs: tabSlotOrderIDs,
+                                    orderedIDs: slotOrderIDs,
                                     frames: tabFrames,
                                     spacing: 0
                                    ) {
@@ -251,7 +263,7 @@ extension AgentChatsView {
                             // und Move-Semantik (kein Copy-„+"). Cross-Window/Sidebar-
                             // Open laufen weiter über windowStore.moveTab in dropTab.
                             .onDrop(of: [.agentChatSession], delegate: TabReorderDropDelegate(
-                                orderedIDs: tabSlotOrderIDs,
+                                orderedIDs: slotOrderIDs,
                                 frames: tabFrames,
                                 insertionIndex: $tabInsertionIndex,
                                 droppedSession: $tabDropSession,
@@ -320,6 +332,9 @@ extension AgentChatsView {
                                 }
                             )
                         }
+                        // So breit wie der Inhalt, höchstens der verfügbare Platz:
+                        // Knöpfe und Plus stehen direkt hinter dem letzten Tab.
+                        .frame(width: stripWidth)
                         .background {
                             // Unsichtbare Shortcut-Anker: ⌘1–⌘9 springen auf
                             // Tab 1–9 der globalen Tab-Bar.
@@ -370,6 +385,7 @@ extension AgentChatsView {
                     }
                 }
 
+                HStack(spacing: 5) {
                 TitlebarIconButton(
                     systemImage: "rectangle.stack",
                     help: tabGroupingEnabled ? String(localized: "Turn tab groups off") : String(localized: "Turn tab groups on"),
@@ -421,9 +437,21 @@ extension AgentChatsView {
                 .fixedSize()
                 .disabled(selectedProject == nil)
                 .help("Create new chat")
+                }
+                .fixedSize()
+                .background(GeometryReader { geo in
+                    Color.clear.preference(key: TabStripTrailingWidthKey.self, value: geo.size.width)
+                })
 
                 Spacer(minLength: 8)
                     .windowDragArea(depth: TabStripBand.height)
+                }
+                .frame(maxWidth: .infinity)
+                .background(GeometryReader { geo in
+                    Color.clear.preference(key: TabStripAvailableWidthKey.self, value: geo.size.width)
+                })
+                .onPreferenceChange(TabStripAvailableWidthKey.self) { updateTabStripWidth(available: $0) }
+                .onPreferenceChange(TabStripTrailingWidthKey.self) { updateTabStripWidth(trailing: $0) }
 
                 // Branch-Badge entfernt — die Branch steht ohnehin schon in
                 // der Sidebar-Projekt-Zeile und im Project-Inspector, und

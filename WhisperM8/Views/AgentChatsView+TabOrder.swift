@@ -139,7 +139,7 @@ extension AgentChatsView {
     var visibleTabOrderIDs: [UUID] {
         AgentTabOrder.visibleOrderIDs(
             items: tabGroupingItems,
-            collapsedKeys: collapsedTabGroups,
+            collapsedKeys: effectiveCollapsedTabGroups,
             selectedID: selectedSessionID
         )
     }
@@ -147,7 +147,7 @@ extension AgentChatsView {
     /// Drop-Einheiten der Leiste. Eine eingeklappte Gruppe ist EIN Slot —
     /// dadurch bleibt sie beim Ziehen ein gültiges Ziel, ohne aufzuklappen.
     var tabStripSlots: [AgentTabStripSlot] {
-        AgentTabGrouping.slots(items: tabGroupingItems, collapsedKeys: collapsedTabGroups)
+        AgentTabGrouping.slots(items: tabGroupingItems, collapsedKeys: effectiveCollapsedTabGroups)
     }
 
     /// Geometrie-Schlüssel der Slots (ein Eintrag je Drop-Einheit).

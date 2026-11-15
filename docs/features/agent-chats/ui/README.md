@@ -198,6 +198,18 @@ Einfügelinie. Vertikales Herausziehen beziehungsweise das Kontextmenü lösen
 einen Tab oder eine Auswahl in ein neues Fenster ab. Die genaue
 Multi-Window-Mechanik ist in [`multiwindow.md`](multiwindow.md) dokumentiert.
 
+Wird es eng, schrumpfen die Tabs (WM8-80, Tabs 1, Regel pur in
+`AgentTabWidthResolver`): Erst teilen sich alle Tabs den Platz gleich, höchstens
+190 pt, der aktive mindestens 140 pt. Reicht das nicht für 100 pt je Tab, klappen
+Gruppen ohne den aktiven Tab von selbst zu, die größte zuerst; Gruppen mit
+mehrfach ausgewählten Tabs und von Hand geöffnete oder geschlossene Gruppen
+bleiben, wie sie sind. Ein Klick auf den Chip öffnet eine solche Gruppe bis zum
+Neustart der App. Danach werden Tabs bis 64 pt schmal und zeigen einen Kurztitel
+(„Gus“ statt „WM8-69 Gus · …“) und nur den Status-Punkt, erst darunter scrollt
+die Leiste. Der Platz dafür ist die Breite des Bereichs aus Streifen und
+Knöpfen, die nur am Fenster hängt; so gibt es keinen Kreislauf zwischen Messung
+und Tab-Breite.
+
 Für viele Tabs gibt es ein Overflow-Menü und den Ctrl-Tab-Switcher. Der
 Switcher kennt keinen globalen Modus, sondern drei Situationen: Grid sichtbar
 → die echten Panes werden markiert, maximierter Workspace-Chat → Mini-Map im
