@@ -285,6 +285,30 @@ final class ControllerScrollBindingTests: XCTestCase {
         XCTAssertNil(ControllerBindingResolver.action(for: .tap(.circle), in: chat(.working, scrolledBack: false)))
     }
 
+    /// Doppeldruck: Direkt nach „Ans Ende“ schickt Kreis kein Escape, auch
+    /// nicht bei offener Rückfrage oder in einer erkannten Ansicht. Halten und
+    /// L1 + Kreis bleiben.
+    func testNoEscapeRightAfterJumpingToEnd() {
+        for status in [ControllerChatState.Status.idle, .awaitingInput] {
+            let context = chat(status, scrolledBack: false) { $0.jumpedToEndJustNow = true }
+            XCTAssertNil(ControllerBindingResolver.action(for: .tap(.circle), in: context), "\(status)")
+        }
+        let inView = chat(.working, scrolledBack: false) {
+            $0.jumpedToEndJustNow = true
+            $0.openView = .transcript
+        }
+        XCTAssertNil(ControllerBindingResolver.action(for: .tap(.circle), in: inView))
+        let working = chat(.working, scrolledBack: false) { $0.jumpedToEndJustNow = true }
+        XCTAssertEqual(ControllerBindingResolver.action(for: .holdBegan(.circle), in: working), .chatInterrupt)
+        XCTAssertEqual(ControllerBindingResolver.action(for: .inLayer(.writing, .press(.circle)), in: working),
+                       .chatKey(.escape))
+        // Die Leiste zeigt Kreis trotzdem, wie er gleich wieder wirkt.
+        let entries = ControllerLegend.entries(for: chat(.awaitingInput, scrolledBack: false) {
+            $0.jumpedToEndJustNow = true
+        })
+        XCTAssertTrue(entries.contains { $0.label == .reject })
+    }
+
     /// Kreis halten unterbricht weiter, auch hochgescrollt.
     func testHoldingCircleStillInterrupts() {
         let context = chat(.working)
@@ -345,6 +369,7 @@ final class ControllerActionDispatcherScrollTests: XCTestCase {
     private var ui: ControllerUIModel!
     private var island: ControllerIslandSpy!
     private var dispatcher: ControllerActionDispatcher!
+    private var clock = Date(timeIntervalSince1970: 1_000)
 
     override func setUp() async throws {
         window = ControllerWindowFake()
@@ -356,7 +381,7 @@ final class ControllerActionDispatcherScrollTests: XCTestCase {
         island = ControllerIslandSpy()
         dispatcher = ControllerActionDispatcher(
             chats: center, terminals: terminals, dictation: ControllerDictationSpy(),
-            environment: ControllerEnvironmentSpy(), ui: ui, island: island)
+            environment: ControllerEnvironmentSpy(), ui: ui, island: island, now: { [unowned self] in clock })
         guard let selected = window.selected else { return }
         terminals.states[selected] = ControllerTerminalState(
             isRunning: true, profile: .claude, status: .working, draftSuspected: false, scrolledBack: true)
@@ -379,6 +404,17 @@ final class ControllerActionDispatcherScrollTests: XCTestCase {
         XCTAssertFalse(after.scrolledBack)
     }
 
+    /// Zweimal schnell Kreis bei offener Rückfrage: Der zweite Druck lehnt
+    /// nichts ab; nach 0,5 s ist Kreis wieder Escape.
+    func testDoubleCircleAfterJumpSendsNoEscape() {
+        guard let selected = window.selected else { return XCTFail("kein Chat") }
+        terminals.states[selected]?.status = .awaitingInput
+        dispatcher.perform(.scrollToBottom, in: context)
+        XCTAssertNil(ControllerBindingResolver.action(for: .tap(.circle), in: context), "Doppeldruck")
+        clock = clock.addingTimeInterval(0.6)
+        XCTAssertEqual(ControllerBindingResolver.action(for: .tap(.circle), in: context), .chatKey(.escape))
+    }
+
     func testPagingScrollsAndKeepsTheIslandClosed() {
         dispatcher.perform(.scrollPage(step: 1), in: context)
         XCTAssertEqual(terminals.pages, [1])
@@ -389,5 +425,46 @@ final class ControllerActionDispatcherScrollTests: XCTestCase {
         dispatcher.perform(.islandClose, in: context)
         dispatcher.perform(.islandShow(.quickDraw), in: context)
         XCTAssertEqual(island.shown.count, 1)
+    }
+}
+
+/// Mausrad-Deckel im Alternate-Puffer (WM8-116).
+final class ControllerWheelBudgetTests: XCTestCase {
+    func testBaseTempoPassesUntouched() {
+        var budget = ControllerWheelBudget()
+        var sent = 0
+        for step in 0..<30 { sent += budget.take(1, at: Double(step) / 30) }
+        XCTAssertEqual(sent, 30, "30 Zeilen/s wie bisher")
+    }
+
+    /// Volles Tempo aus dem Erkenner: im Dauerlauf höchstens etwa das
+    /// Dreifache von 30/s (gemessen in der dritten Sekunde, der Eimer läuft
+    /// ab Beginn mit).
+    func testFullBoostIsCappedToAboutThreeTimes() {
+        var recognizer = ControllerGestureRecognizer()
+        var budget = ControllerWheelBudget()
+        _ = recognizer.handle(.stick(.right, x: 0, y: -1), at: 0)
+        var requested = 0, sent = 0
+        var time = 0.0
+        while let deadline = recognizer.nextDeadline, deadline < 4 {
+            time = max(time, deadline)
+            for case let .scroll(lines) in recognizer.tick(at: time) {
+                let granted = budget.take(lines, at: time)
+                if time >= 3 {
+                    requested += lines
+                    sent += granted
+                }
+            }
+        }
+        XCTAssertGreaterThan(requested, 250, "der Erkenner liefert das Zehnfache")
+        XCTAssertLessThanOrEqual(sent, 92)
+        XCTAssertGreaterThanOrEqual(sent, 80)
+    }
+
+    func testBurstIsLimitedToOneCall() {
+        var budget = ControllerWheelBudget()
+        XCTAssertEqual(budget.take(100, at: 0), 30)
+        XCTAssertEqual(budget.take(10, at: 0), 0, "leer, kein Nachholen")
+        XCTAssertEqual(budget.take(10, at: 0.1), 9)
     }
 }

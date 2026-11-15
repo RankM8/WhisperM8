@@ -74,7 +74,15 @@ enum ControllerLegend {
     static func entries(
         for context: ControllerContext, traits: ControllerInputTraits = .standard
     ) -> [ControllerLegendEntry] {
-        candidates(for: context)
+        // Die kurze Sperre nach „Ans Ende“ (0,5 s) gehört nicht in die Leiste:
+        // Sie wird nach dem Sprung neu gelesen und zeigte Kreis sonst gar nicht,
+        // bis zur nächsten Eingabe.
+        var context = context
+        if case var .chat(state) = context, state.jumpedToEndJustNow {
+            state.jumpedToEndJustNow = false
+            context = .chat(state)
+        }
+        return candidates(for: context)
             .filter { traits.supports($0.entry) }
             .filter { candidate in
                 candidate.probes.contains { probe in

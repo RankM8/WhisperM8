@@ -75,6 +75,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     static let escapeRepeatWindow: TimeInterval = 1
     /// In einer erkannten Ansicht genügt eine kürzere Sperre (Runde 5).
     static let escapeInViewWindow: TimeInterval = 0.3
+    /// So lange nach „Ans Ende“ schickt Kreis kein Escape (WM8-116, Doppeldruck).
+    static let jumpToEndEscapeLock: TimeInterval = 0.5
+    /// Letzter Sprung ans Ende per Kreis, je Chat.
+    var lastJumpToEnd: (sessionID: UUID, at: Date)?
     /// So lange nach einer Eingabe ins Feld (Rücktaste, Diktat, Text ohne
     /// Senden) darf Kreuz auch bei arbeitendem Chat Enter schicken. 30 s
     /// reichen, um einen diktierten Entwurf zu überfliegen; ein Entwurf von
@@ -186,7 +190,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             promptField: terminal.screen?.promptField,
             onlyRecalledPrompt: terminal.onlyRecalledPrompt,
             questionAcceptsText: terminal.questionAcceptsText,
-            scrolledBack: terminal.scrolledBack
+            scrolledBack: terminal.scrolledBack,
+            jumpedToEndJustNow: lastJumpToEnd.map {
+                $0.sessionID == sessionID && moment.timeIntervalSince($0.at) < Self.jumpToEndEscapeLock
+            } ?? false
         )
     }
 
@@ -302,7 +309,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             // Halten nicht wieder (sie läge sonst über dem Blättern).
             spendIsland(.quickDraw)
             scrollSelected(in: context) { terminals.scrollPage(step, in: $0) }
-        case .scrollToBottom: scrollSelected(in: context) { terminals.scrollToBottom(in: $0) }
+        case .scrollToBottom:
+            // Vor dem Neulesen der Legende merken: Die Sperre gilt ab jetzt.
+            if let sessionID = selectedSessionID { lastJumpToEnd = (sessionID, now()) }
+            scrollSelected(in: context) { terminals.scrollToBottom(in: $0) }
 
         // Liste links
         case let .enterList(step): enterList(step: step)

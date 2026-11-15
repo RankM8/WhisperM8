@@ -113,6 +113,11 @@ pur im Erkenner (`ControllerGestureRecognizer+Axes`: `boostFactor`, `boostIntegr
   (kein Umschalten aufs Scrollen). Ein Scrollen, das schon vor R1 lief, läuft dagegen weiter, bis der Stick
   in der Mitte ist. Unter L1 und L2 scrollt der Stick wie ohne Ebene. Im Alternate-Puffer gehen die
   Zeilen eines Bildschirms als Mausrad an die TUI (höchstens 30 je Schritt, wie beim Scrollen).
+- **Alternate-Puffer:** Dort wird jede Zeile ein Mausrad-Schritt, und viele TUIs scrollen je Schritt drei
+  Zeilen. Das fließende Scrollen schickt deshalb höchstens 90 Schritte je Sekunde (etwa das Dreifache des
+  alten Höchsttempos; Eimer mit 30 Schritten auf einmal, `ControllerWheelBudget`, je Chat in
+  `LiveControllerTerminals`). Bis 30 je Sekunde ändert sich nichts; was darüber hinausgeht, verfällt
+  (kein Nachlaufen nach dem Loslassen). Das Blättern geht nicht über den Deckel.
 - **Kreis im hochgescrollten Chat** springt ans Ende und schickt nichts ans Terminal. Die Legende zeigt
   dann „Ans Ende“ an Kreis; am Ende ist Kreis wieder Escape mit allen Schutzregeln (siehe dort). Kreis
   halten (unterbrechen) bleibt unverändert. „Hochgescrollt“ kommt aus derselben Quelle wie der Sendeschutz
@@ -120,6 +125,9 @@ pur im Erkenner (`ControllerGestureRecognizer+Axes`: `boostFactor`, `boostIntegr
   vorhanden, Ausschnitt nicht ganz unten. Im Alternate-Puffer gibt es kein „ans Ende“; dort bleibt Kreis
   Escape. Gilt für Claude, Codex und Shell, im Raster und in der Einzelansicht. Während Aufnahme,
   Transkription und Nacharbeit verwirft Kreis weiter das Diktat; Scrollen und Blättern gehen dort.
+  **Doppeldruck:** 0,5 s nach dem Sprung schickt Kreis getippt kein Escape (`jumpedToEndJustNow`), sonst
+  lehnte ein zweiter schneller Druck eine Rückfrage ab, die erst mit dem Sprung sichtbar wurde. Halten
+  und L1 + Kreis gelten in dieser Zeit wie sonst; die Legende zeigt Kreis trotzdem.
 - **L1 + Kreis** bleibt „genau ein Escape“, auch hochgescrollt: Es ist der ausdrückliche Weg, wenn man
   wirklich Escape will (etwa um von oben einen Turn abzubrechen, ohne zu halten).
 - **R3** bekommt keine Sprung-Funktion: Man drückt ihn beim Scrollen leicht aus Versehen.

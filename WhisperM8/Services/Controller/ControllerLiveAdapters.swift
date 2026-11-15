@@ -51,8 +51,22 @@ final class LiveControllerTerminals: ControllerTerminalControlling {
         controller(for: sessionID)?.clearInputFromController() ?? false
     }
 
+    /// Mausrad-Deckel je Chat für den Alternate-Puffer (WM8-116).
+    private var wheelBudgets: [UUID: ControllerWheelBudget] = [:]
+
     func scroll(lines: Int, in sessionID: UUID) {
-        controller(for: sessionID)?.scrollHistory(lines: lines)
+        guard let controller = controller(for: sessionID) else { return }
+        var lines = lines
+        // Im Alternate-Puffer wird jede Zeile ein Mausrad-Schritt an die TUI:
+        // dort höchstens etwa das Dreifache des alten Höchsttempos.
+        if controller.terminal.getTerminal().isCurrentBufferAlternate {
+            var budget = wheelBudgets[sessionID] ?? ControllerWheelBudget()
+            let granted = budget.take(abs(lines), at: ProcessInfo.processInfo.systemUptime)
+            wheelBudgets[sessionID] = budget
+            guard granted > 0 else { return }
+            lines = lines < 0 ? -granted : granted
+        }
+        controller.scrollHistory(lines: lines)
     }
 
     func scrollPage(_ step: Int, in sessionID: UUID) {
