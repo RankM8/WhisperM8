@@ -41,6 +41,59 @@ final class AgentTabOrderTests: XCTestCase {
         )
     }
 
+    // MARK: - Teilweise offene Gruppe, Chip, Herkunft (vor Paket 5)
+
+    func testCollapsedGroupWithActiveMemberStaysOneDropSlot() {
+        let slots = AgentTabGrouping.slots(items: items, collapsedKeys: [.workspace(ws)])
+        XCTAssertEqual(slots, [
+            .tab(id: a, groupKey: nil),
+            .collapsedGroup(key: .workspace(ws), memberIDs: [b, c]),
+            .tab(id: d, groupKey: nil),
+        ], "auch wenn der aktive Tab c neben dem Chip sichtbar bleibt")
+    }
+
+    func testChipDragOfPartlyOpenGroupTakesAllMembers() {
+        // Eingeklappt mit sichtbarem aktivem Tab: der Chip nimmt die ganze
+        // Gruppe mit, auch die unsichtbaren Mitglieder.
+        let result = AgentTabOrder.dragGroup(
+            droppedID: b, groupMemberIDs: [b, c], sourceOrder: [a, b, c, d],
+            sourceSelection: [], groupingEnabled: true, keyOf: key)
+        XCTAssertEqual(result, [b, c])
+    }
+
+    func testChipDragIgnoresMultiSelection() {
+        let result = AgentTabOrder.dragGroup(
+            droppedID: b, groupMemberIDs: [b, c], sourceOrder: [a, b, c, d],
+            sourceSelection: [a, b, d], groupingEnabled: true, keyOf: key)
+        XCTAssertEqual(result, [b, c], "der Chip zieht die Gruppe, nicht die Auswahl")
+    }
+
+    func testTabWithoutOriginHasNoTargetCluster() {
+        let unknown = UUID()
+        XCTAssertNil(AgentTabOrder.movingOrigin([unknown], keyOf: key))
+        XCTAssertEqual(AgentTabOrder.movingOrigin([unknown, a], keyOf: key), .project(projectX),
+                       "ein Tab ohne Herkunft zählt nicht als zweite Herkunft")
+    }
+
+    func testHeaderTabsDropArchivedAndUnknownAndKeepOrder() {
+        let project = UUID()
+        let first = AgentChatSession(provider: .claude, projectID: project, title: "eins")
+        var archived = AgentChatSession(provider: .claude, projectID: project, title: "archiv")
+        archived.status = .archived
+        let second = AgentChatSession(provider: .claude, projectID: project, title: "zwei")
+        let tabs = AgentTabOrder.headerTabs(
+            openTabIDs: [second.id, UUID(), archived.id, first.id],
+            sessions: [first, archived, second])
+        XCTAssertEqual(tabs.map(\.title), ["zwei", "eins"])
+    }
+
+    func testOverflowNeedsMoreThanOnePointExtra() {
+        XCTAssertFalse(AgentTabOrder.hasOverflow(contentWidth: 500, viewportWidth: 500))
+        XCTAssertFalse(AgentTabOrder.hasOverflow(contentWidth: 501, viewportWidth: 500))
+        XCTAssertTrue(AgentTabOrder.hasOverflow(contentWidth: 501.5, viewportWidth: 500))
+        XCTAssertFalse(AgentTabOrder.hasOverflow(contentWidth: 0, viewportWidth: 0))
+    }
+
     // MARK: - Ziehen
 
     private func key(_ id: UUID) -> AgentTabGroupingKey? {
