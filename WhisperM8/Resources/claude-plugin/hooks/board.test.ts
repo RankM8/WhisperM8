@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { areaOf, BACKGROUND_NET_MS, clean, dropBackgroundTimers, dueBackgroundWaits, countWord, groups, HEAD_JOIN, HEAD_LEFT, HEAD_NAME, isBefore, layoutBox, nextGenerationStart, planRows, restCounts, sameBoard, shortName, summaryLine, titleParts, waitingHead, waitingLines, waitingText, wakeReason, withStatus } from './register'
+import { areaOf, BACKGROUND_NET_MS, clean, dueBackgroundWaits, countWord, groups, HEAD_JOIN, HEAD_LEFT, HEAD_NAME, isBefore, layoutBox, nextGenerationStart, planRows, restCounts, sameBoard, shortName, summaryLine, titleParts, waitingHead, waitingLines, waitingText, wakeReason, withStatus } from './register'
 
 // Tests der Board-Mod (`claude plugin test` auf den abgelegten Plugin-Ordner
 // oder diesen Ressourcen-Ordner samt Manifest). Werden nicht ausgeliefert.
@@ -44,6 +44,27 @@ const band = (bodyColumns: number, maxRows = 12) => ({
   component: 'AbovePrompt' as const,
   props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows, bodyColumns, scroll: { offset: 0, bodyRows: maxRows }, view: {} },
 })
+
+/**
+ * Zustand der Mod im Test: `seed` gibt vor, was eine frühere Instanz der Mod
+ * hinterlassen hat (Reload), bis die Mod den Schlüssel selbst schreibt;
+ * `last` ist der zuletzt geschriebene Wert eines Schlüssels.
+ */
+const stateOf = (on: On, seed: Record<string, unknown> = {}) => {
+  const written: Record<string, unknown> = {}
+  const fresh = new Set(Object.keys(seed))
+  on('state.set', ($, e, next) => {
+    const { key, value } = e as { key: string; value: unknown }
+    fresh.delete(key)
+    written[key] = value
+    return next(e)
+  })
+  on('state.get', ($, e, next) => {
+    const { key } = e as { key: string }
+    return fresh.has(key) ? ({ value: { value: seed[key], version: 1 } } as never) : next(e)
+  })
+  return { last: (key: string) => written[key] }
+}
 
 type Calls = { argv: string[][]; prompts: string[]; toasts: string[]; sounds: number; spawns: number; spawnArgv: string[][] }
 
@@ -685,23 +706,20 @@ describe('Wecken bei Hintergrund-Läufen (WM8-105)', () => {
     expect(calls.prompts.length).toBe(1)
   })
 
-  test('die Wache übersteht einen Reload: ohne Takt prüft das nächste Neulesen des Boards', async ($, on) => {
+  test('die Wache übersteht einen Reload: eine frische Mod findet sie im Atom und weckt', async ($, on) => {
     const clock = mock.clock(on, { now: NOW })
-    const resting = { ...BOARD, entries: BOARD.entries.map(e => (e.sessionID === LEAD ? { ...e, status: 'idle', statusSince: minutesAgo(0) } : e)) }
-    const calls = world(on, { board: resting, watch: [
-      { event: 'started', cursor: '1:10' },
-      change('working', 'idle', { backgroundTasks: 1 }),
-    ] })
+    const since = minutesAgo(31)
+    const resting = { ...BOARD, entries: BOARD.entries.map(e => (e.sessionID === LEAD ? { ...e, status: 'idle', statusSince: since } : e)) }
+    // So hinterlässt eine frühere Instanz der Mod die Wache (31 Minuten alt).
+    const state = stateOf(on, { backgroundWatch: [{ id: LEAD, since, at: NOW - 31 * 60_000 }] })
+    const calls = world(on, { board: resting, watch: [{ event: 'started', cursor: '1:10' }] })
     await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
     await clock.settle()
-    // Reload: der Takt ist weg, das Atom bleibt.
-    dropBackgroundTimers()
-    for (let i = 0; i < 40; i++) {
-      await clock.advance(60_000)
-      await clock.settle()
-    }
+    await clock.advance(70_000)
+    await clock.settle()
     expect(calls.prompts.length).toBe(1)
     expect(calls.prompts[0]).toContain('ruht, Hintergrund-Lauf läuft noch')
+    expect(state.last('backgroundWatch')).toEqual([])
   })
 
   test('dueBackgroundWaits: fällig nach 30 Minuten, nur wenn der Chat seitdem unverändert ruht', () => {

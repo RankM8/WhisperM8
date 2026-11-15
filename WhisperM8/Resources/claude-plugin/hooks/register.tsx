@@ -410,11 +410,6 @@ const armBackgroundNet = async ($: EngineInterface, entry: BoardEntry, ev: Watch
   armBackgroundTimer($, BACKGROUND_NET_MS)
 }
 
-/** Nur für Tests: verwirft laufende Takte, wie es ein Reload der Mod tut. */
-export const dropBackgroundTimers = () => {
-  backgroundTimerGeneration += 1
-}
-
 /** Ein Takt für die älteste Wache; ein neuer ersetzt den alten. */
 const armBackgroundTimer = ($: EngineInterface, wait: number) => {
   const generation = ++backgroundTimerGeneration
