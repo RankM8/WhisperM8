@@ -165,6 +165,16 @@ mehreren Boards stehen (`otherOwners`).
   und nach jedem Neulesen des Boards. Fehlt das Feld (ältere App, Codex,
   unbekannt), weckt das Turn-Ende wie vorher. Vorher kamen an einem Tag rund
   25 solche Fehlalarme.
+- **Vortritt für die Warteschlange (seit WM8-64):** Arbeitet Jarvis gerade,
+  hält die Mod ihren Weck-Prompt zurück und schickt ihn erst, wenn Jarvis
+  seit 5 s ruht; den eigenen Status liest sie aus demselben `chats watch`.
+  So stellt die Warteschlange der App vorgemerkte Meldungen am Turn-Ende
+  zuerst zu (nach 0,6 s), in der Reihenfolge ihres Eingangs. Vorher hängte
+  Claude jeden Weck-Prompt, der während eines Turns kam, direkt an dessen
+  Ende; Jarvis ruhte dann nie, und Meldungen lagen am 15.11. bis zu
+  22 Minuten. Länger als 10 Minuten hält die Mod nie zurück; solange Jarvis
+  arbeitet, sieht sie alle 30 s nach (nur ein Takt, kein Prozess). Ist der
+  eigene Status unbekannt, weckt sie wie vorher.
 - **Anzeige (seit WM8-99):** Aufbau oben unter „Was es ist“. Was im Kasten
   steht, rechnet `layoutBox` rein aus Einträgen, Breite und Höhe aus
   (`waitingLines` für die Spalten, `summaryLine` für die Sammelzeile); der

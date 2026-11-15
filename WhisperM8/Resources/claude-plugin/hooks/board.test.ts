@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { areaOf, BACKGROUND_NET_MS, clean, dueBackgroundWaits, countWord, groups, HEAD_JOIN, HEAD_LEFT, HEAD_NAME, isBefore, layoutBox, nextGenerationStart, planRows, restCounts, sameBoard, shortName, summaryLine, titleParts, waitingHead, waitingLines, waitingText, wakeReason, withStatus } from './register'
+import { areaOf, BACKGROUND_NET_MS, clean, dueBackgroundWaits, holdWake, WAKE_MAX_HOLD_MS, WAKE_YIELD_MS, countWord, groups, HEAD_JOIN, HEAD_LEFT, HEAD_NAME, isBefore, layoutBox, nextGenerationStart, planRows, restCounts, sameBoard, shortName, summaryLine, titleParts, waitingHead, waitingLines, waitingText, wakeReason, withStatus } from './register'
 
 // Tests der Board-Mod (`claude plugin test` auf den abgelegten Plugin-Ordner
 // oder diesen Ressourcen-Ordner samt Manifest). Werden nicht ausgeliefert.
@@ -767,6 +767,53 @@ describe('Wecken bei Hintergrund-Läufen (WM8-105)', () => {
     expect(calls.prompts.length).toBe(1)
     const lines = calls.prompts[0].split('\n').filter(line => line.startsWith('[Board]'))
     expect(lines).toEqual(['[Board] „ListM8 Lead-Run“ (e45d0000): fertig – prüfen'])
+  })
+})
+
+// WM8-64: Das Turn-Ende des Supervisors gehört zuerst der Warteschlange der
+// App. Ein Weck-Prompt während eines Turns hängte Claude direkt an dessen
+// Ende, Jarvis ruhte nie, vorgemerkte Meldungen lagen bis zu 22 Minuten.
+describe('Wecken lässt der Warteschlange den Vortritt (WM8-64)', () => {
+  const own = (from: string, to: string) =>
+    ({ kind: 'conversation', sessionID: SID, from, to, at: minutesAgo(0), schema: 'wm8.changes/1' })
+  const waits = { kind: 'conversation', sessionID: 'CE45D000-0000-0000-0000-000000000003', from: 'working', to: 'awaitingInput', at: minutesAgo(0), schema: 'wm8.changes/1' }
+
+  test('holdWake: unbekannt hält nicht, Arbeit hält, Ruhe erst nach der Frist, nie länger als die Obergrenze', () => {
+    expect(holdWake(null, 0, 0, 1_000)).toBeNull()
+    expect(holdWake('working', 0, 0, 1_000)).toBeGreaterThan(0)
+    expect(holdWake('awaitingInput', 0, 0, 1_000)).toBeGreaterThan(0)
+    expect(holdWake('idle', 1_000, 0, 2_000)).toBe(WAKE_YIELD_MS - 1_000)
+    expect(holdWake('idle', 1_000, 0, 1_000 + WAKE_YIELD_MS)).toBeNull()
+    expect(holdWake('working', 0, 0, WAKE_MAX_HOLD_MS)).toBeNull()
+  })
+
+  test('solange Jarvis arbeitet, kommt kein Weck-Prompt; nach der Obergrenze doch', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const calls = world(on, { watch: [{ event: 'started', cursor: '1:10' }, own('idle', 'working'), waits] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(2 * 60_000)
+    await clock.settle()
+    expect(calls.prompts).toEqual([])
+    for (let i = 0; i < 20; i++) {
+      await clock.advance(30_000)
+      await clock.settle()
+    }
+    expect(calls.prompts.length).toBe(1)
+    expect(calls.prompts[0]).toContain('wartet auf dich')
+  })
+
+  test('ruht Jarvis, kommt der Weck-Prompt erst nach der Frist für die Warteschlange', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const calls = world(on, { watch: [{ event: 'started', cursor: '1:10' }, own('idle', 'working'), waits, own('working', 'idle')] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(WAKE_YIELD_MS - 1_000)
+    await clock.settle()
+    expect(calls.prompts).toEqual([])
+    await clock.advance(2_000)
+    await clock.settle()
+    expect(calls.prompts.length).toBe(1)
   })
 })
 
