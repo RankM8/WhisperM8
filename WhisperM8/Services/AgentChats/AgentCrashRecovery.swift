@@ -29,6 +29,10 @@ final class AgentCrashRecoveryMarker {
         /// liegen beim Aufbewahrer. Fehlt das Feld, gilt der Marker wie
         /// bisher als „fortsetzen“; ältere Apps ignorieren es.
         var handover: HandedOver?
+        /// Startzeit des Besitzers (WM8-98). Lebt unter `pid` ein anderer
+        /// Prozess (PID neu vergeben), gehört der Marker keinem lebenden Lauf.
+        /// Fehlt das Feld (ältere App), zählt wie bisher nur die PID.
+        var pidStartTime: Double?
     }
 
     /// Wem die App ihre Chats übergeben hat. Je Chat PID samt Startzeit: Lebt
@@ -53,8 +57,13 @@ final class AgentCrashRecoveryMarker {
         /// abgegebenen plus die, deren Abgabe scheiterte.
         var runningSessionIDs: [UUID]
         var handover: HandedOver?
+        /// Der Besitzer des Markers läuft noch: Diese App ist eine zweite
+        /// Instanz, die sich gleich wieder beendet. Sie übernimmt nichts und
+        /// beendet nichts (WM8-98), auch keinen Aufbewahrer.
+        var ownerStillRunning = false
 
         static let none = PreviousRun(runningSessionIDs: [], handover: nil)
+        static let ownerRunning = PreviousRun(runningSessionIDs: [], handover: nil, ownerStillRunning: true)
 
         /// Wie der vorige Lauf endete: `clean` (sauber oder erster Start),
         /// `resume` (fortsetzen: Absturz, Abmelden, „Beenden und fortsetzen“)
@@ -70,6 +79,8 @@ final class AgentCrashRecoveryMarker {
     private let fileURL: URL
     private let ownPID: Int32
     private let isProcessAlive: (Int32) -> Bool
+    private let processStartTime: (Int32) -> Double?
+    private lazy var ownStartTime: Double? = processStartTime(ownPID)
     private let lock = NSLock()
     /// Nach dem sauberen Ende: späte `record`-Aufrufe (PTY-Exits während des
     /// Quits) dürfen den Marker nicht wieder anlegen.
@@ -88,11 +99,13 @@ final class AgentCrashRecoveryMarker {
             .appendingPathComponent("WhisperM8", isDirectory: true)
             .appendingPathComponent("running-sessions.json"),
         ownPID: Int32 = getpid(),
-        isProcessAlive: @escaping (Int32) -> Bool = { kill($0, 0) == 0 }
+        isProcessAlive: @escaping (Int32) -> Bool = { kill($0, 0) == 0 },
+        processStartTime: @escaping (Int32) -> Double? = { ProcessStartTime.of(pid: $0)?.timeIntervalSince1970 }
     ) {
         self.fileURL = fileURL
         self.ownPID = ownPID
         self.isProcessAlive = isProcessAlive
+        self.processStartTime = processStartTime
     }
 
     /// Beim Start aufrufen. Liefert die beim unsauberen Ende laufenden
@@ -104,12 +117,13 @@ final class AgentCrashRecoveryMarker {
         beginRunDetailed().runningSessionIDs
     }
 
-    /// Wie `beginRun`, liefert aber auch den Zustand „übergeben“.
+    /// Wie `beginRun`, liefert aber auch den Zustand „übergeben“ und ob der
+    /// Besitzer des Markers noch läuft.
     func beginRunDetailed() -> PreviousRun {
         lock.lock(); defer { lock.unlock() }
         let previous = read()
-        if let previous, previous.pid != ownPID, isProcessAlive(previous.pid) {
-            return .none
+        if let previous, previous.pid != ownPID, ownerIsAlive(previous) {
+            return .ownerRunning
         }
         isOwner = true
         pendingHandover = previous?.pid != ownPID ? previous?.handover : nil
@@ -185,12 +199,23 @@ final class AgentCrashRecoveryMarker {
         try? FileManager.default.removeItem(at: fileURL)
     }
 
+    /// Lebt der Prozess, der den Marker geschrieben hat? Mit Startzeit im
+    /// Marker zählt nur derselbe Prozess, nicht ein späterer mit derselben PID.
+    /// Ist eine der Startzeiten unbekannt, zählt wie bisher die PID allein.
+    private func ownerIsAlive(_ contents: Contents) -> Bool {
+        guard isProcessAlive(contents.pid) else { return false }
+        guard let expected = contents.pidStartTime, let current = processStartTime(contents.pid) else { return true }
+        return abs(current - expected) < 0.001
+    }
+
     private func read() -> Contents? {
         guard let data = try? Data(contentsOf: fileURL) else { return nil }
         return try? JSONDecoder().decode(Contents.self, from: data)
     }
 
     private func write(_ contents: Contents) {
+        var contents = contents
+        if contents.pid == ownPID, contents.pidStartTime == nil { contents.pidStartTime = ownStartTime }
         try? FileManager.default.createDirectory(
             at: fileURL.deletingLastPathComponent(),
             withIntermediateDirectories: true

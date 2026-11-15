@@ -72,6 +72,49 @@ final class AgentCrashRecoveryMarkerTests: XCTestCase {
         XCTAssertEqual(marker(pid: 300).beginRun(), [a])
     }
 
+    // MARK: Startzeit des Besitzers (WM8-98)
+
+    private func marker(pid: Int32, alive: Set<Int32>, startTimes: [Int32: Double]) -> AgentCrashRecoveryMarker {
+        AgentCrashRecoveryMarker(fileURL: markerURL, ownPID: pid, isProcessAlive: { alive.contains($0) },
+                                 processStartTime: { startTimes[$0] })
+    }
+
+    func testSecondInstanceLearnsThatTheOwnerStillRuns() {
+        let a = UUID()
+        let running = marker(pid: 100, alive: [], startTimes: [100: 1_000])
+        _ = running.beginRun()
+        running.record(runningSessionIDs: [a])
+
+        let second = marker(pid: 200, alive: [100], startTimes: [100: 1_000])
+        XCTAssertEqual(second.beginRunDetailed(), .ownerRunning)
+        XCTAssertEqual(marker(pid: 300).beginRun(), [a], "Marker unangetastet")
+    }
+
+    /// Vic: Ist die PID der alten App neu vergeben, lebt unter ihr ein anderer
+    /// Prozess. Der Marker gehört dann keinem Lauf mehr; die neue App nimmt
+    /// ihn, statt sich für eine zweite Instanz zu halten.
+    func testReusedPIDOfTheOwnerDoesNotCountAsRunning() {
+        let a = UUID()
+        let crashed = marker(pid: 100, alive: [], startTimes: [100: 1_000])
+        _ = crashed.beginRun()
+        crashed.record(runningSessionIDs: [a])
+
+        let next = marker(pid: 200, alive: [100], startTimes: [100: 2_000])
+        let previous = next.beginRunDetailed()
+        XCTAssertFalse(previous.ownerStillRunning)
+        XCTAssertEqual(previous.runningSessionIDs, [a])
+    }
+
+    /// Marker einer älteren App ohne Startzeit: wie bisher zählt die PID.
+    func testMarkerWithoutStartTimeFallsBackToThePID() {
+        let old = marker(pid: 100, alive: [], startTimes: [:])
+        _ = old.beginRun()
+        old.record(runningSessionIDs: [UUID()])
+
+        let second = marker(pid: 200, alive: [100], startTimes: [100: 2_000])
+        XCTAssertTrue(second.beginRunDetailed().ownerStillRunning)
+    }
+
     func testRecordAfterCleanEndDoesNotRecreateMarker() {
         let first = marker(pid: 100)
         _ = first.beginRun()

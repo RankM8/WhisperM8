@@ -122,6 +122,34 @@ final class HandoverTakeServiceTests: XCTestCase {
         }
     }
 
+    /// WM8-98 (Vic): Eine zweite App startet, während die alte nach der Abgabe
+    /// noch lebt. Sie übernimmt nichts, beendet keinen Aufbewahrer und lässt
+    /// den Marker stehen. Die App, die danach startet, übernimmt normal.
+    func testSecondInstanceWhileTheOldAppLivesLeavesTheKeeperAlone() throws {
+        let secrets = FakeSecretStore()
+        let sources = [try spawn()]
+        _ = try handOver(sources, secrets: secrets)
+        let calls = Calls()
+
+        var second = serviceDependencies(secrets: secrets, sessions: sources.map { session(for: $0) }, calls: calls)
+        second.marker = AgentCrashRecoveryMarker(fileURL: markerURL, ownPID: 200, isProcessAlive: { $0 == 100 })
+        second.terminateProcess = { pid in XCTFail("zweite Instanz beendet \(pid)") }
+        second.killProcess = { pid in XCTFail("zweite Instanz tötet \(pid)") }
+        let skipped = HandoverTakeService(dependencies: second).takeAtLaunch()
+
+        XCTAssertTrue(skipped.previous.ownerStillRunning)
+        XCTAssertTrue(skipped.adopted.isEmpty && skipped.fallback.isEmpty)
+        XCTAssertTrue(calls.adopted.isEmpty && calls.resumed.isEmpty)
+        XCTAssertNotNil(HandoverTakeService.status(paths: paths), "Aufbewahrer lebt weiter")
+        XCTAssertTrue(sources[0].child.isAlive)
+        XCTAssertNotEqual(secrets.load(), .missing, "Geheimnis bleibt für die nächste App")
+
+        // Die alte App ist weg: Die nächste übernimmt.
+        let summary = service(secrets: secrets, sessions: sources.map { session(for: $0) }, calls: calls).takeAtLaunch()
+        XCTAssertEqual(summary.adopted, sources.map(\.sessionID))
+        XCTAssertTrue(sources[0].child.isAlive)
+    }
+
     /// Option A von Abgabe bis Übernahme: Die alte App legt das Geheimnis als
     /// Datei ab, eine neue Instanz der Ablage (wie die neue App) liest es,
     /// übernimmt und löscht es.
