@@ -66,6 +66,14 @@
   .row .w { color:var(--ink3); font-size:11px; font-variant-numeric:tabular-nums; }
   .row.sel { background:var(--sel); font-weight:600; }
   .row .ico { width:14px; text-align:center; color:var(--ink3); font-size:11px; flex:none; }
+  .sec.clickable { cursor:pointer; margin-top:16px; }
+  .sec .secn { font-weight:500; letter-spacing:0; color:var(--ink3); }
+  .chev { display:inline-block; width:12px; color:var(--ink2); font-size:11px; }
+  .tog { border:0; background:transparent; padding:0; width:14px; cursor:pointer; color:var(--ink3); flex:none; }
+  .row.sub { padding-left:30px; height:24px; color:var(--ink2); }
+  .row.sub.sel { color:var(--ink); }
+  .row.sub.nochat { cursor:default; color:var(--ink3); }
+  .row.sub.more { cursor:default; color:var(--ink3); font-size:11px; }
   .foot { border-top:1px solid var(--border); display:flex; gap:14px; padding:8px 12px; font-size:11px; color:var(--ink2); }
 
   .content { display:flex; flex-direction:column; min-width:0; min-height:0; }
@@ -213,7 +221,7 @@
       <li><b>Grün heißt nur „arbeitet“.</b> Ein geklappter Lauf ist ein Häkchen in normaler Schrift, ein fehlgeschlagener ein roter Ring wie bei einem Chat mit Fehler, ein Hinweis (etwa Login läuft ab) eine gelbe Zeile.</li>
       <li><b>Alle Knöpfe stehen sichtbar da</b>, an der Zeile oder im Detail. Nichts erscheint nur beim Überfahren, es gibt kein Kontextmenü.</li>
       <li><b>Solange ein Lauf arbeitet, gibt es nur „Mitlesen“.</b> Fortsetzen öffnet einen Tab mit <code>claude --resume</code> im Konto des Laufs und geht erst nach dem Ende, sonst schrieben zwei Prozesse in dieselbe Sitzung.</li>
-      <li><b>Ein Fehlschlag meldet sich dreifach:</b> Mitteilung, roter Ring am Knopf der Ansicht, Fehler-Punkt am Chat des Laufs.</li>
+      <li><b>Ein Fehlschlag meldet sich dreifach:</b> Mitteilung, Fehler-Punkt an Aufgabe und Lauf, Fehler-Zahl an der Überschrift „Geplant“ (in Variante B ein roter Ring am Knopf).</li>
     </ul>
   </div>
 
@@ -221,8 +229,8 @@
   <div class="controls">
     <span class="lab">Wo es wohnt</span>
     <div class="seg" id="variant">
-      <button data-v="B" class="on">B · Eigene Ansicht wie Tickets</button>
-      <button data-v="A">A · Abschnitt in der Seitenleiste</button>
+      <button data-v="A" class="on">A · Seitenleiste (gewählt)</button>
+      <button data-v="B">B · Eigene Ansicht wie Tickets</button>
       <button data-v="C">C · Seite in den Einstellungen</button>
     </div>
     <span class="lab">Zustand zeigen</span>
@@ -239,10 +247,10 @@
   <h2>Die drei Orte im Vergleich</h2>
   <table class="cmp">
     <tr><th>Variante</th><th>Für</th><th>Wider</th></tr>
-    <tr class="rec"><td>B · Eigene Ansicht wie Tickets <span class="pill">Empfehlung</span></td>
+    <tr><td>B · Eigene Ansicht wie Tickets <span class="pill" style="color:var(--ink3);border-color:var(--ink3)">war Empfehlung</span></td>
       <td>Bedienung ist schon bekannt: Knopf in der Titelzone, ⌘W zurück, Liste links, Detail rechts mit „Zum Chat“. Die Seitenleiste bleibt, wie sie ist. Genug Platz für Läufe, Ergebnisse und Fehlertext.</td>
       <td>Ein Knopf mehr in der Titelzone. Nicht dauernd im Blick; dafür meldet sich ein Fehlschlag per Mitteilung, Ring am Knopf und Fehler-Punkt am Chat.</td></tr>
-    <tr><td>A · Abschnitt in der Seitenleiste</td>
+    <tr class="rec"><td>A · Abschnitt in der Seitenleiste <span class="pill">gewählt 15.11.</span><br><span style="font-weight:400;color:var(--ink2)">ganz unten unter den Chats, zuklappbar, Läufe unter ihrer Aufgabe</span></td>
       <td>Immer zu sehen, ein Fehlschlag steht sofort links. Dieselbe Zeile wie ein Chat, nichts Neues zu lernen.</td>
       <td>Die Seitenleiste ist für Chats und wird länger. Termine wie „in 3 Std“ müssen sich ändern und rechnen bei jedem Aufbau der Seitenleiste mit, die schon heute ein Zeitbudget hat. Für das Detail bleibt nur der Inhaltsbereich.</td></tr>
     <tr><td>C · Seite in den Einstellungen</td>
@@ -301,7 +309,8 @@ const START = () => ([
     runs:[ {g:"ok", t:"Fr 06.11., 18:00", s:"geklappt · 1 Min. 58 Sek."} ] },
 ]);
 
-let S = { variant:"B", tasks:START(), sel:"calls", view:"tasks", chat:null, sheet:null, notif:false, timers:[] };
+const OPEN0 = () => ({ calls:true, deps:true });
+let S = { variant:"A", tasks:START(), sel:"calls", view:"tasks", chat:null, run:0, sheet:null, notif:false, timers:[], open:OPEN0(), secClosed:false };
 const $ = (s, r=document) => r.querySelector(s);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const task = id => S.tasks.find(t => t.id === id);
@@ -322,40 +331,54 @@ function rowActs(t) {
 
 /* Seitenleiste mit Chats; die Läufe stehen als Chats unter ihrem Projekt */
 function sidebar(withSection) {
-  const st = id => task(id).state;
+  // Variante B und C: Läufe stehen als Chats unter ihrem Projekt. Variante A: unter ihrer Aufgabe im Abschnitt „Geplant“.
   const runChat = (id, label) => {
+    if (withSection) return "";
     const t = task(id); const d = t.state === "run" ? "working" : t.state === "fail" ? "error" : "done";
     const sel = S.view === "chat" && S.chat === id ? " sel" : "";
-    return `<div class="row${sel}" data-chat="${id}"><span class="ico">⏱</span><span class="t">${esc(label)}</span><i class="dot ${d}"></i></div>`;
+    return `<div class="row${sel}" data-chat="${id}" data-run="0"><span class="ico">⏱</span><span class="t">${esc(label)}</span><i class="dot ${d}"></i></div>`;
   };
+  const chev = open => `<span class="chev">${open ? "▾" : "▸"}</span>`;
   let sec = "";
   if (withSection) {
-    sec = `<div class="sec">GEPLANT<button class="add" data-demo="new" title="Neue Aufgabe">+</button></div>` +
-      S.tasks.map(t => {
+    const fails = S.tasks.filter(t => t.state === "fail").length;
+    sec = `<div class="sec clickable" data-act="togglesec">${chev(!S.secClosed)}GEPLANT
+        <span class="secn">${S.tasks.length}${fails ? ` · <span style="color:var(--error)">${fails} Fehler</span>` : ""}</span>
+        <button class="add" data-demo="new" title="Neue Aufgabe">+</button></div>` +
+      (S.secClosed ? "" : S.tasks.map(t => {
         const w = t.state === "run" ? "läuft" : t.state === "fail" ? "Fehler" : t.state === "paused" ? "pausiert" : t.next.replace("morgen, ", "morgen ");
         const sel = S.view === "tasks" && S.sel === t.id ? " sel" : "";
-        return `<div class="row${sel}" data-task="${t.id}"><i class="dot ${dotFor(t)}"></i><span class="t">${esc(t.name)}</span><span class="w" style="${t.state==="fail"?"color:var(--error)":""}">${esc(w)}</span></div>`;
-      }).join("");
+        const open = !!S.open[t.id];
+        const runs = !open ? "" : t.runs.slice(0, 3).map((r, i) => {
+          const d = r.g === "run" ? "working" : r.g === "fail" ? "error" : r.g === "warn" ? "awaiting" : "done";
+          const date = r.t.split(",")[0];
+          const what = r.g === "run" ? "arbeitet" : r.g === "fail" ? (r.nochat ? "nicht gestartet" : "Fehler") : r.g === "warn" ? "mit Hinweis" : "geklappt";
+          if (r.nochat) return `<div class="row sub nochat"><span class="ico">⏱</span><span class="t">${esc(date)} · ${what}</span><span class="w">kein Chat</span></div>`;
+          const rsel = S.view === "chat" && S.chat === t.id && S.run === i ? " sel" : "";
+          return `<div class="row sub${rsel}" data-chat="${t.id}" data-run="${i}"><span class="ico">⏱</span><span class="t">${esc(date)} · ${what}</span><i class="dot ${d}"></i></div>`;
+        }).join("") + (open && t.runs.length > 3 ? `<div class="row sub more">+ ${t.runs.length - 3} ältere im Archiv</div>` : "");
+        return `<div class="row${sel}" data-task="${t.id}"><button class="tog" data-act="toggletask" data-id="${t.id}" title="Läufe zeigen">${chev(open)}</button><i class="dot ${dotFor(t)}"></i><span class="t">${esc(t.name)}</span><span class="w" style="${t.state==="fail"?"color:var(--error)":""}">${esc(w)}</span></div>${runs}`;
+      }).join(""));
   }
   return `<div class="lights"><i></i><i></i><i></i></div>
     <div class="newchat">Neuer Chat <small>⌘N</small></div>
     <div class="sidelist">
       <div class="sec">WORKSPACES</div>
       <div class="row"><span class="ico">▦</span><span class="t">WM8 Aktiv</span><span class="w">4/4</span></div>
-      ${sec}
       <div class="sec">CHATS</div>
-      <div class="grp">whisperm8<span class="n">4</span></div>
+      <div class="grp">whisperm8<span class="n">${withSection ? 3 : 4}</span></div>
       <div class="row"><span class="ico">✳</span><span class="t">WM8-110 Sam · Geplante Aufgaben: Entwurf</span><i class="dot working"></i></div>
       <div class="row"><span class="ico">✳</span><span class="t">Jarvis: Supervisor WhisperM8</span><i class="dot awaiting"></i></div>
       ${runChat("deps", "Abhängigkeiten prüfen · 15.11.")}
       <div class="row"><span class="ico">✳</span><span class="t">WM8-81 Jon · Ticket-Board Stufe 2</span><i class="dot"></i></div>
-      <div class="grp">ListM8<span class="n">2</span></div>
+      <div class="grp">ListM8<span class="n">${withSection ? 1 : 2}</span></div>
       ${runChat("calls", "Live-Calls auswerten · 13.11.")}
       <div class="row"><span class="ico">✳</span><span class="t">2 Pia · Linear: Feedback umsetzen</span><i class="dot"></i></div>
-      <div class="grp">pm-analyse<span class="n">1</span></div>
+      ${withSection ? "" : `<div class="grp">pm-analyse<span class="n">1</span></div>
       ${runChat("pm", "PM-Tagesbericht · 15.11.")}
       <div class="grp">RankM8<span class="n">1</span></div>
-      ${runChat("rank", "Ranking-Bericht · 09.11.")}
+      ${runChat("rank", "Ranking-Bericht · 09.11.")}`}
+      ${sec}
     </div>
     <div class="foot"><span>Archiv</span><span>Wach</span><span>Glocke</span><span>Limits</span></div>`;
 }
@@ -390,7 +413,7 @@ function detail(wide) {
       <div class="bacts"><button class="btn small" data-act="renew" data-id="${t.id}">Login erneuern…</button></div></div>`;
   const runs = t.runs.map((r, i) => `<div class="lauf"><span class="g ${r.g}">${r.g==="run" ? '<i class="dot working"></i>' : r.g==="fail" ? "✕" : r.g==="warn" ? "◆" : "✓"}</span>
       <span>${esc(r.t)}<small>${esc(r.s)}</small></span>
-      ${r.nochat ? '<span class="hint" style="margin:0">kein Chat</span>' : `<button class="btn small" data-act="chat" data-id="${t.id}">${r.g==="run" ? "Mitlesen" : "Zum Chat"}</button>`}</div>`).join("");
+      ${r.nochat ? '<span class="hint" style="margin:0">kein Chat</span>' : `<button class="btn small" data-act="chat" data-id="${t.id}" data-run="${i}">${r.g==="run" ? "Mitlesen" : "Zum Chat"}</button>`}</div>`).join("");
   return `<div class="det${wide ? " wide" : ""}">
     <h3><i class="dot ${dotFor(t)}"></i>${esc(t.name)}${wide ? "" : `<button class="close" data-act="closedet" title="Schließen">✕</button>`}</h3>
     <div class="acts"><button class="btn small" data-act="now" data-id="${t.id}" ${t.state==="run"||t.state==="paused"?"disabled":""}>Jetzt starten</button>
@@ -402,17 +425,19 @@ function detail(wide) {
       <span>Darf</span><span>${esc(t.rights)}</span><span>Verpasst</span><span>nachholen, bis 12 Std. später</span></div>
     <h4>Auftrag</h4><div class="prompt">${esc(t.prompt)}</div>
     <h4>Läufe</h4><div class="runs">${runs}</div>
-    <p class="hint">Ältere Läufe gehen nach 14 Tagen ins Archiv. In der Seitenleiste steht nur der neueste.</p>
+    <p class="hint">Ältere Läufe gehen nach 14 Tagen ins Archiv. In der Seitenleiste stehen die letzten drei unter der Aufgabe.</p>
   </div>`;
 }
 
 function chatView() {
   const t = task(S.chat);
-  const running = t.state === "run";
+  const r = t.runs[S.run] || t.runs[0];
+  const running = r.g === "run";
+  const when = r.t.split(",")[0];
   const title = { pm:"PM-Tagesbericht · 15.11.", calls:"Live-Calls auswerten · 13.11.", deps:"Abhängigkeiten prüfen · 15.11.", rank:"Ranking-Bericht · 09.11.", week:"Wochenrückblick Board · 06.11." }[t.id];
   const banner = running
-    ? `<div class="banner run"><i class="dot working"></i><span><b>Geplanter Lauf arbeitet noch.</b> Du liest mit, schreiben geht erst nach dem Ende.</span><span class="sp"><button class="btn small" data-act="back">Zur Aufgabe</button></span></div>`
-    : `<div class="banner info"><span>⏱ Lauf von <b>${esc(t.name)}</b> · Konto ${esc(t.account)} · fortgesetzt mit <code>claude --resume</code> im Konto des Laufs, egal welches Konto gerade aktiv ist.</span><span class="sp"><button class="btn small" data-act="back">Zur Aufgabe</button></span></div>`;
+    ? `<div class="banner run"><i class="dot working"></i><span><b>Lauf von ${esc(t.name)} · ${esc(when)} arbeitet noch.</b> Du liest mit, schreiben geht erst nach dem Ende.</span><span class="sp"><button class="btn small" data-act="back">Zur Aufgabe</button></span></div>`
+    : `<div class="banner info"><span>⏱ Lauf von <b>${esc(t.name)}</b> vom ${esc(when)} · Konto ${esc(t.account)} · fortgesetzt mit <code>claude --resume</code> im Konto des Laufs, egal welches Konto gerade aktiv ist.</span><span class="sp"><button class="btn small" data-act="back">Zur Aufgabe</button></span></div>`;
   const body = {
     calls: `<b>&gt; /dealsupply-live-calls neue Calls benennen und auswerten</b>\n\n⏺ Ich hole die Calls der Reihe „DealSupply BETA“ von heute.\n⏺ fireflies - fireflies_get_transcripts (MCP)\n  ⎿ <span class="err">Error: MCP server "fireflies" is not connected</span>\n\n⏺ Ohne Fireflies komme ich nicht an die Transkripte. Ich höre hier auf und lege nichts an.\n  Sobald der Server wieder verbunden ist, reicht ein neuer Lauf.`,
     pm: `<b>&gt; /pm-analyse Daten-Datei: ~/Archiv/pm-analyse/daten/2026-11-15.json</b>\n\n⏺ Read(daten/2026-11-15.json)\n  ⎿ 214 Tickets in DS und AKQ\n⏺ Bash(~/.claude/skills/pm-analyse/bericht.sh)\n  ⎿ <span class="ok">Dokument „PM-Tagesbericht“ aktualisiert</span>\n\n⏺ Der Tagesbericht steht im Linear-Dokument „PM-Tagesbericht“.\n  Xeno hat noch 3 umsetzbare Tickets in DS, Richi 1 in AKQ.`,
@@ -420,7 +445,8 @@ function chatView() {
     rank: `<b>&gt; /rankm8-wochenbericht</b>\n\n⏺ Bericht für KW 45 liegt in docs/berichte/2026-kw45.md.`,
     week: `<b>&gt; Fass zusammen, welche WM8-Tickets diese Woche fertig wurden …</b>\n\n⏺ Kommentar an WM8-1 geschrieben.`,
   }[t.id];
-  return `<div class="chat">${banner}<div class="term">${body}</div>
+  const shown = (S.run || 0) === 0 ? body : `<b>&gt; ${esc(t.prompt)}</b>\n\n⏺ Lauf vom ${esc(r.t)}: ${esc(r.s)}.`;
+  return `<div class="chat">${banner}<div class="term">${shown}</div>
     <div class="input${running ? "" : " live"}">${running ? "Mitlesen: Eingabe gesperrt, bis der Lauf fertig ist" : "Was soll ich als Nächstes tun?"}</div></div>`;
 }
 
@@ -462,7 +488,7 @@ function notif() {
 }
 
 function titlezone() {
-  const tabs = `<div class="tabs"><span class="tab${S.view==="chat"?" on":""}">${S.view==="chat" ? "⏱ " + esc(task(S.chat).name) : "WM8-110 Sam · Geplante Aufgaben"}</span><span class="tab">Jarvis: Supervisor</span></div>`;
+  const tabs = `<div class="tabs"><span class="tab${S.view==="chat"?" on":""}">${S.view==="chat" ? "⏱ " + esc(task(S.chat).name) + " · " + esc((task(S.chat).runs[S.run] || task(S.chat).runs[0]).t.split(",")[0]) : "WM8-110 Sam · Geplante Aufgaben"}</span><span class="tab">Jarvis: Supervisor</span></div>`;
   const clock = S.variant === "B" ? `<button class="tzbtn${S.view==="tasks"?" on":""}" data-act="toggletasks" title="Geplante Aufgaben">⏱${anyFail() ? '<span class="ring"></span>' : ""}</button>` : "";
   return `<div class="titlezone"><button class="tzbtn" title="Seitenleiste">▤</button><button class="tzbtn" title="Tickets">☰</button>${clock}${tabs}</div>`;
 }
@@ -510,7 +536,7 @@ function caption() {
   if (S.variant === "B") return S.view === "tasks"
     ? `<b>Variante B (Empfehlung).</b> Der Uhr-Knopf neben dem Ticket-Knopf schaltet den Bereich unter der Tab-Leiste um, wie bei den Tickets. Links die Übersicht, rechts das Detail der gewählten Aufgabe. „Jetzt starten“ und „Pausieren“ stehen an jeder Zeile. Probier: eine Zeile anklicken, „Jetzt starten“, „Zum Chat“, „Mitlesen“.`
     : `<b>Variante B, zurück bei den Chats.</b> Der rote Ring am Uhr-Knopf bleibt, solange eine Aufgabe fehlgeschlagen ist. Klick auf den Uhr-Knopf öffnet die Übersicht wieder.`;
-  if (S.variant === "A") return `<b>Variante A.</b> Ein Abschnitt „Geplant“ zwischen Workspaces und Chats, je Aufgabe eine Zeile wie ein Chat; rechts der nächste Termin oder der Zustand. Ein Klick zeigt das Detail im Inhaltsbereich, eine Übersicht als Tabelle gibt es nicht.`;
+  if (S.variant === "A") return `<b>Variante A (gewählt am 15.11.).</b> Der Abschnitt „Geplant“ steht ganz unten unter den Chats und klappt wie die anderen zu (Klick auf die Überschrift). Je Aufgabe eine Zeile mit Zustand oder nächstem Termin; der Pfeil davor klappt ihre letzten drei Läufe auf, jeder Lauf ist ein Chat mit Datum und Ergebnis. Ein Klick auf den Lauf öffnet seinen Chat, ein Klick auf die Aufgabe ihr Detail. Die Läufe stehen nur hier, nicht noch einmal unter ihrem Projekt.`;
   return `<b>Variante C.</b> Eine eigene Seite in den Einstellungen unter Agent Chats. Zum Einrichten gut, zum Nachsehen weit weg: „Zum Chat“ muss das Hauptfenster nach vorn holen.`;
 }
 
@@ -528,7 +554,7 @@ document.addEventListener("click", e => {
     if (d === "login") { const r = task("rank"); r.state = "fail"; r.loginFail = true; r.warn = null; r.last = { head:"nicht gestartet", when:"Mo 16.11., 08:00", text:"Login von RankM8 abgelaufen" };
       r.error = "Vor dem Start war das Konto RankM8 nicht mehr angemeldet (Login am 15.11. abgelaufen). Der Lauf ist gar nicht erst gestartet, es gibt keinen Chat dazu.";
       r.next = "Mo 23.11., 08:00"; r.runs.unshift({ g:"fail", t:"Mo 16.11., 08:00", s:"nicht gestartet · Login abgelaufen", nochat:true }); r.loginEnds = "abgelaufen am 15.11."; S.sel = "rank"; S.view = S.variant === "C" ? "settings" : "tasks"; }
-    if (d === "reset") { S.timers.forEach(clearTimeout); S = { variant:S.variant, tasks:START(), sel:"calls", view:S.variant==="C"?"settings":"tasks", chat:null, sheet:null, notif:false, timers:[] }; }
+    if (d === "reset") { S.timers.forEach(clearTimeout); S = { variant:S.variant, tasks:START(), sel:"calls", view:S.variant==="C"?"settings":"tasks", chat:null, run:0, sheet:null, notif:false, timers:[], open:OPEN0(), secClosed:false }; }
     render(); return;
   }
   const a = e.target.closest("[data-act]");
@@ -536,6 +562,8 @@ document.addEventListener("click", e => {
     e.stopPropagation();
     const t = a.dataset.id && task(a.dataset.id);
     switch (a.dataset.act) {
+      case "togglesec": S.secClosed = !S.secClosed; break;
+      case "toggletask": S.open[t.id] = !S.open[t.id]; break;
       case "toggletasks": S.view = S.view === "tasks" ? "chats" : "tasks"; break;
       case "closedet": S.sel = null; break;
       case "pause": t.state = t.state === "paused" ? "ok" : "paused";
@@ -548,9 +576,9 @@ document.addEventListener("click", e => {
           t.runs[0] = { g:"ok", t:"So 15.11., eben", s:"von Hand gestartet · geklappt" }; render(); }, 6000)); break;
       case "stop": t.state = "fail"; t.last = { head:"abgebrochen", when:"eben", text:"von Hand abgebrochen" }; t.error = "Du hast den Lauf abgebrochen. Der Chat enthält alles bis dahin.";
         t.runs[0] = { g:"fail", t:"So 15.11., 15:45", s:"von Hand abgebrochen" }; break;
-      case "chat": S.chat = t.id; S.view = "chat"; S.notif = false; if (S.variant === "C") S.variant = "B"; break;
+      case "chat": S.chat = t.id; S.run = +(a.dataset.run || 0); S.open[t.id] = true; S.view = "chat"; S.notif = false; if (S.variant === "C") S.variant = "B"; break;
       case "opentask": S.sel = t.id; S.view = S.variant === "C" ? "settings" : "tasks"; S.notif = false; break;
-      case "back": S.sel = S.chat; S.view = "tasks"; break;
+      case "back": S.sel = S.chat; S.open[S.chat] = true; S.view = "tasks"; break;
       case "edit": S.sheet = t.id; break;
       case "renew": a.textContent = "Browser offen, warte auf Login…"; a.disabled = true; return;
       case "sheetclose": S.sheet = null; break;
@@ -561,7 +589,7 @@ document.addEventListener("click", e => {
   const tr = e.target.closest("[data-task]");
   if (tr) { S.sel = tr.dataset.task; if (S.variant !== "C") S.view = "tasks"; render(); return; }
   const ch = e.target.closest("[data-chat]");
-  if (ch) { S.chat = ch.dataset.chat; S.view = "chat"; render(); return; }
+  if (ch) { S.chat = ch.dataset.chat; S.run = +(ch.dataset.run || 0); S.view = "chat"; render(); return; }
 });
 
 const root = document.documentElement;

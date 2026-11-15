@@ -1,5 +1,5 @@
 ---
-status: Entwurf, Entscheidung offen (E1 Ort in der App, E2 Weg ohne App)
+status: Entwurf abgenommen; E1 und E2 entschieden (15.11.2026), Bau nicht freigegeben
 stand: 2026-11-15
 feature: Geplante Aufgaben — wiederkehrende Claude-Läufe in WhisperM8 anlegen, sehen, von Hand starten, pausieren und ihren Chat öffnen
 branch: design/WM8-110-geplante-aufgaben
@@ -21,11 +21,13 @@ zwei Grundfragen. Gebaut wird erst nach der Entscheidung.
   „arbeitet“ und danach als „fertig“, im richtigen Konto. Es fehlen nur ein Titel, ein festes Projekt und die
   Verbindung von Aufgabe zu Sitzung. Alle drei liefert der Start selbst (`--name`, fester Startordner,
   `--session-id`).
-- **Ohne App:** Empfehlung ist, dass die App die Läufe selbst startet (Weg A). Verpasste Läufe holt sie nach dem
+- **Ohne App (entschieden 15.11.2026):** Die App startet die Läufe selbst (Weg A). Verpasste Läufe holt sie nach dem
   Aufwachen und beim Start nach. Ein Hintergrunddienst im App-Paket (Weg C) kann später dazukommen. Einen Eintrag je
   Lauf in `~/Library/LaunchAgents` (Weg B) empfehle ich nicht.
-- **Ort in der App:** Empfehlung ist eine eigene Ansicht hinter einem Knopf in der Titelzone, genau wie die
-  Tickets (Variante B im Entwurf).
+- **Ort in der App (entschieden 15.11.2026):** ein Abschnitt „Geplant“ in der Seitenleiste, ganz unten unter den
+  Chats, zuklappbar wie die anderen Abschnitte. Unter jeder Aufgabe lassen sich ihre letzten Läufe aufklappen, ein
+  Klick auf einen Lauf öffnet seinen Chat (Variante A im Entwurf, mit diesen Änderungen). Meine Empfehlung war die
+  eigene Ansicht wie bei den Tickets (Variante B).
 
 ## Teil 1a: Läuft der Plan, wenn die App beendet ist?
 
@@ -46,7 +48,7 @@ Drei Wege. A und B hat Jarvis vorgegeben, C ist ein dritter, der beim Nachlesen 
 | Zusammenspiel mit dem Wach-Knopf | Stufe „am Strom, solange ein Chat arbeitet“ zählt den Lauf mit, weil er als „arbeitet“ im Status-Speicher steht (gemessen, siehe 1b). Den Mac zum Termin wecken kann kein Weg | wie A, solange die App läuft. Ohne App hält nur Claude Codes eigenes `caffeinate` während eines Turns wach, zugeklappt nicht | wie B |
 | Aufwand | klein: Zeitgeber, Nachholen, Starter | mittel: plist schreiben, laden, entladen, mit den Aufgaben abgleichen, Aufräumen bei Löschen, Umbenennen, Deinstallieren | mittel: plist im Bundle (`Package.swift` **und** Makefile `_bundle`), Tick-Befehl, Anmeldung, Zustand „vom Nutzer abgeschaltet“. Offen, ob `SMAppService` die mit dem lokalen Zertifikat signierte App annimmt (`TeamIdentifier=not set`), das braucht einen Spike |
 
-**Empfehlung: A jetzt, C später, B nicht.**
+**Empfehlung: A jetzt, C später, B nicht.** Giuliano hat am 15.11.2026 A gewählt („nur mit laufender App“).
 
 - A erfüllt „läuft auch ohne offenes Fenster“ wörtlich. Die App startet beim Anmelden (Schalter in den
   Einstellungen) und läuft praktisch immer, Jarvis lebt in ihr.
@@ -105,9 +107,9 @@ geschlossenen Chat.
   Zwei Prozesse auf einer Sitzung darf es nicht geben. Bis zum Ende gibt es deshalb nur „Mitlesen“ (Verlauf,
   `TranscriptTextView`), „Fortsetzen“ erst danach. Diese Sperre gilt für jeden Chat ohne Tab, dessen Status aus
   der Registry „arbeitet“ sagt, nicht nur für geplante Läufe.
-- **Jeden Tag ein neuer Chat:** Nach einem Jahr wären es 365 je Aufgabe. Die Läufe einer Aufgabe stehen deshalb in
-  ihrem Detail; in der Seitenleiste bleibt nur der neueste. Ältere gehen nach 14 Tagen ins Archiv (das gibt es
-  schon), einstellbar je Aufgabe.
+- **Jeden Tag ein neuer Chat:** Nach einem Jahr wären es 365 je Aufgabe. Die Läufe einer Aufgabe stehen deshalb
+  unter ihr im Abschnitt „Geplant“ (die letzten drei, aufklappbar) und vollständig in ihrem Detail, nicht noch
+  einmal unter ihrem Projekt. Ältere gehen nach 14 Tagen ins Archiv (das gibt es schon), einstellbar je Aufgabe.
 - **Rechte:** Ein `-p`-Lauf kann nicht nachfragen. Was er darf, steht vorher fest (`--allowedTools`). Verweigerte
   Werkzeuge stehen in `permission_denials`. Ein Lauf mit Verweigerungen gilt als „geklappt, mit Hinweis“, nicht
   still als Erfolg.
@@ -136,6 +138,13 @@ Entwurf mit allen Zuständen: [`../design/geplante-aufgaben.html`](../design/gep
 | **B · Eigene Ansicht wie die Tickets** (Empfehlung): Knopf mit Uhr neben dem Ticket-Knopf in der Titelzone, schaltet den Bereich unter der Tab-Leiste um. Liste links, Detail rechts, wie beim Ticket-Board | Bedienung ist bekannt (Knopf, ⌘W zurück, Detail mit „Zum Chat“); die Seitenleiste bleibt, wie sie ist; Platz für Läufe, Ergebnis und Fehler. Ein Fehlschlag färbt den Knopf, schickt eine Mitteilung und zeigt den Chat des Laufs mit Fehler-Punkt in der Seitenleiste | ein Knopf mehr in der Titelzone; nicht dauernd sichtbar, man muss umschalten |
 | **C · Seite in den Einstellungen** (Agent Chats › Geplante Aufgaben) | passt zum Anlegen und Ändern, kein neuer Platz im Fenster | Einstellungen sind für Konfiguration, nicht zum Nachsehen. „Zum Chat“ springt aus dem Einstellungsfenster ins Hauptfenster. Ein Fehlschlag fällt dort niemandem auf |
 
+**Gewählt (Giuliano, 15.11.2026): A**, mit drei Änderungen: Der Abschnitt steht ganz unten unter den Chats statt
+oben, er klappt zu wie die anderen, und unter jeder Aufgabe stehen ihre Läufe, jeder mit Datum, Ergebnis und Weg in
+seinen Chat. Damit ist immer zu sehen, zu welcher Aufgabe ein Lauf gehört. Die Bedenken aus der Tabelle bleiben
+Bauregeln: Die Zeilen nutzen die vorhandene Chat-Zeile und `AgentStatusIndicator`, der Abschnitt beobachtet den
+`AgentSessionActivityStore` nicht, und „nächster Termin“ steht als Uhrzeit oder Tag da, nie als mitlaufendes
+„in 3 Std“. Mit zugeklapptem Abschnitt zeigt die Überschrift die Zahl der Aufgaben und der Fehlschläge.
+
 **Verworfen: Teil des Ticket-Boards.** Das Board gehört zu einem Projekt, liest nur Linear und hängt am Schalter
 `ticketBoardEnabled`. Geplante Aufgaben laufen über Projekte und Konten hinweg und sind keine Tickets. Beides in
 einer Ansicht machte das Board voller und die Aufgaben schwerer zu finden.
@@ -150,7 +159,8 @@ einer Ansicht machte das Board voller und die Aufgaben schwerer zu finden.
   Fortsetzen, Ändern, Zum Chat (nach dem Lauf) oder Mitlesen (während des Laufs).
 - Anlegen und Ändern in einem Blatt: Name, Auftrag (Text oder Skill), Projektordner, Konto, Zeitplan,
   Rechte, Nachholen ja oder nein, Aufbewahrung der Läufe.
-- Ein Fehlschlag meldet sich dreifach: Mitteilung, roter Ring am Knopf, Fehler-Punkt am Chat des Laufs.
+- Ein Fehlschlag meldet sich dreifach: Mitteilung, Fehler-Punkt an Aufgabe und Lauf, in Variante A zusätzlich die
+  Fehler-Zahl an der Überschrift „Geplant“ (in B wäre es ein roter Ring am Knopf).
 - Kein Modell-Feld: Welches Modell ein Claude-Chat nutzt, entscheidet Claude Code (Invariante in CLAUDE.md). Die
   PM-Analyse läuft heute mit `--model opus`. Bei der Übernahme fällt das weg, oder die Invariante bekommt eine
   Ausnahme. Das entscheidet Giuliano, wenn Paket 4 ansteht.
@@ -165,9 +175,9 @@ Alles hinter einem Labs-Schalter, ab Werk aus.
    als eigene Datei unter `scheduled-tasks/runs/<Aufgabe>/` (schreibt der Lauf, liest die App). Nachholen bei
    Aufwachen und App-Start. Kommandozeile `whisperm8 schedule list|run|pause|resume`. Handtest: abgelaufenes
    Konto, App-Neustart während eines Laufs, Mac schläft über den Termin.
-2. **Ansicht.** Übersicht, Detail, Blatt zum Anlegen und Ändern in der gewählten Variante, Snapshots hell und
-   dunkel.
-3. **Meldungen und Chat.** Mitteilung bei Fehlschlag, Ring am Knopf, Login-Warnung vor dem nächsten Lauf,
+2. **Ansicht.** Abschnitt „Geplant“ unten in der Seitenleiste (zuklappbar, Läufe je Aufgabe aufklappbar), Detail
+   im Inhaltsbereich, Blatt zum Anlegen und Ändern, Snapshots hell und dunkel.
+3. **Meldungen und Chat.** Mitteilung bei Fehlschlag, Fehler-Zahl an der Überschrift „Geplant“, Login-Warnung vor dem nächsten Lauf,
    „Mitlesen“ statt Fortsetzen, solange ein Lauf arbeitet (gilt für alle Chats ohne Tab), Archiv für alte Läufe.
 4. **PM-Analyse übernehmen.** Als Aufgabe anlegen, launchd-Eintrag erst nach Giulianos Ja entfernen.
 5. **Später, nur bei Bedarf:** Weg C, zuerst als Spike, ob `SMAppService.agent` mit unserer Signatur geht.
@@ -185,5 +195,7 @@ Alles hinter einem Labs-Schalter, ab Werk aus.
 
 ## Entscheidungen
 
-- **E1 Ort in der App:** A Seitenleiste, B eigene Ansicht wie Tickets (Empfehlung), C Einstellungen. Offen.
-- **E2 Weg ohne App:** A App startet (Empfehlung, C später), B je Lauf ein LaunchAgent, C gleich mit Dienst. Offen.
+- **E1 Ort in der App:** entschieden am 15.11.2026 von Giuliano: A, Abschnitt „Geplant“ in der Seitenleiste, ganz
+  unten unter den Chats, zuklappbar, Läufe unter ihrer Aufgabe mit Weg in den Chat.
+- **E2 Weg ohne App:** entschieden am 15.11.2026 von Giuliano: A, Läufe nur mit laufender App, verpasste werden
+  nachgeholt. C bleibt als spätere Erweiterung möglich, B nicht.
