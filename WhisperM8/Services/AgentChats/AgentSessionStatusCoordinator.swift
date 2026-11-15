@@ -251,6 +251,19 @@ final class AgentSessionStatusCoordinator {
     /// Uhr für `statusSince` — in Tests austauschbar.
     var now: () -> Date = { Date() }
 
+    /// Offene Hintergrund-Befehle eines Chats beim Turn-Ende, fürs Journal
+    /// (WM8-105); `nil` = unbekannt. Nur in der App: Unter `swift test` läse
+    /// der Live-Weg den echten Workspace.
+    var backgroundTaskCount: (UUID) -> Int? = { id in
+        AppInstance.isAppBundleProcess ? ClaudeBackgroundTaskMonitor.shared.openTaskCountIfRead(liveSessionID: id) : nil
+    }
+    /// Liest das Transcript beim Turn-Start im Hintergrund an, damit das
+    /// Turn-Ende auf dem Main Thread nur noch die neuen Zeilen liest.
+    var prefetchBackgroundTasks: (UUID) -> Void = { id in
+        guard AppInstance.isAppBundleProcess else { return }
+        Task { @MainActor in await ClaudeBackgroundTaskMonitor.shared.prefetch(liveSessionIDs: [id]) }
+    }
+
     init(
         store: AgentSessionStore = AgentSessionStore(),
         hookBridge: ClaudeHookBridge? = nil,
@@ -1126,6 +1139,9 @@ final class AgentSessionStatusCoordinator {
         // Speicher — bei der Nachanalyse eines Queue-Staus fehlte damit genau
         // der Wert, der die Blockade erklärt hätte. `signal` und `source`
         // machen den Übergang später erklärbar statt nur sichtbar.
+        // Turn-Ende: Läuft noch ein Hintergrund-Befehl, ist der Chat nicht
+        // fertig, Claude macht nach dessen Ende von selbst weiter (WM8-105).
+        let turnEnded = oldState.runtimeStatus == .working && transition.state.runtimeStatus == .idle
         ChatsStatusJournal.shared.append(
             sessionID: sessionID,
             from: oldState.runtimeStatus?.rawValue,
@@ -1133,7 +1149,8 @@ final class AgentSessionStatusCoordinator {
             signal: Self.journalLabel(for: signal),
             source: registryLiveSessions.contains(sessionID)
                 ? "registry"
-                : hookLiveSessions.contains(sessionID) ? "hook" : "transcript")
+                : hookLiveSessions.contains(sessionID) ? "hook" : "transcript",
+            backgroundTasks: turnEnded ? backgroundTaskCount(sessionID) : nil)
 
         for effect in transition.effects {
             perform(effect, sessionID: sessionID)
@@ -1145,6 +1162,7 @@ final class AgentSessionStatusCoordinator {
         if case .working = transition.state, oldState.runtimeStatus != .working {
             AgentTerminalRegistry.shared.controller(for: sessionID)?.noteTurnStarted()
             startupInputSince[sessionID] = nil
+            prefetchBackgroundTasks(sessionID)
         }
         // Chat ist nach dem Start bereit: ein während `launching`
         // zurückgestellter Folgeauftrag geht jetzt raus (LR-CLI-003).

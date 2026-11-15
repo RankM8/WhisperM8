@@ -678,6 +678,13 @@ Aufrufer zu brechen.
   Ereignis mit Cursor. Für Sidecars und Skripte; ein LLM nutzt besser `since`.
   Ausdrücklich **kein zweiter Ereignisweg**: Bricht der Strom ab, holt der
   Cursor die Ereignisse nach.
+- **`backgroundTasks`** (seit WM8-105, nur bei `working → idle` eines
+  Claude-Chats): Zahl der Hintergrund-Befehle (`run_in_background`,
+  Hintergrund-Subagents), die beim Turn-Ende noch laufen. Quelle ist das
+  Transcript (`ClaudeBackgroundTaskTracker`), nicht der Bildschirm. Fehlt das
+  Feld, ist die Zahl unbekannt (älterer Eintrag, Codex, Transcript noch nicht
+  angelesen). Bei `> 0` ist der Chat nicht fertig: Endet der Befehl, beginnt
+  Claude von selbst einen neuen Turn.
 
 ### Zustandsachsen
 

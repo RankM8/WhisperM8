@@ -32,6 +32,8 @@ const MIN = 60_000
 const WAKE_COALESCE_MS = 5_000
 /** Höchstens ein Weck-Prompt je Minute: Jeder ist ein Turn von Jarvis. */
 const WAKE_MIN_GAP_MS = 60_000
+/** Sicherheitsnetz: so lange darf ein Chat ruhen, während sein Hintergrund-Befehl läuft. */
+export const BACKGROUND_NET_MS = 30 * MIN
 
 // Modul-Zustand: lebt nur bis zum nächsten Reload, deshalb nur Steuerung,
 // nie Anzeige (die steht in den Atomen oben).
@@ -56,8 +58,15 @@ const SLOW_REFRESH_MS = 5 * MIN
 let toolDeferred: boolean | null = null
 let speakToolDeferred: boolean | null = null
 let clipboardToolDeferred: boolean | null = null
-let wakeQueue: string[] = []
+/** Weck-Zeilen bis zum nächsten Prompt; je Chat höchstens eine (WM8-105). */
+let wakeQueue: { id: string; line: string }[] = []
 let wakeTimerArmed = false
+/**
+ * Chats, deren Turn mit offenem Hintergrund-Befehl endete (WM8-105): Chat →
+ * Zeitpunkt dieses Turn-Endes. Ruht der Chat danach unverändert
+ * `BACKGROUND_NET_MS` lang, weckt die Mod einmal (hängender Befehl).
+ */
+const backgroundWaits = new Map<string, string>()
 let lastWakeAt = 0
 
 
@@ -221,6 +230,8 @@ type WatchEvent = {
   sessionID?: string
   from?: string | null
   to?: string | null
+  /** Offene Hintergrund-Befehle beim Turn-Ende (`working → idle`); fehlt = unbekannt (WM8-105). */
+  backgroundTasks?: number
 }
 
 const sameID = (a: string | undefined, b: string | undefined) =>
@@ -331,31 +342,72 @@ const handleEvent = async ($: EngineInterface, ev: WatchEvent) => {
 
 // MARK: Wecken
 
-/** Wartet auf den User oder hat den Turn beendet: dann lohnt ein Blick. */
-const wakeReason = (ev: WatchEvent): string | null => {
+/**
+ * Wartet auf den User oder hat den Turn beendet: dann lohnt ein Blick. Ein
+ * Turn-Ende mit offenem Hintergrund-Befehl ist kein „fertig“: Endet der
+ * Befehl, beginnt Claude von selbst einen neuen Turn (WM8-105). Unbekannt
+ * (Feld fehlt, ältere App) weckt wie bisher; „wartet auf dich“ immer.
+ */
+export const wakeReason = (ev: WatchEvent): string | null => {
   if (ev.to === 'awaitingInput') return 'wartet auf dich'
-  if (ev.from === 'working' && ev.to === 'idle') return 'fertig – prüfen'
+  if (ev.from === 'working' && ev.to === 'idle') return waitsForOwnRun(ev) ? null : 'fertig – prüfen'
   return null
 }
+
+export const waitsForOwnRun = (ev: WatchEvent) =>
+  ev.from === 'working' && ev.to === 'idle' && typeof ev.backgroundTasks === 'number' && ev.backgroundTasks > 0
 
 let wakeMode = 'turn'
 
 const considerWake = async ($: EngineInterface, entry: BoardEntry, ev: WatchEvent) => {
   const id = entry.sessionID.toUpperCase()
+  // Jeder neue Zustand beendet das Warten auf den eigenen Lauf.
+  backgroundWaits.delete(id)
   if (ev.to === 'working') {
     // Arbeitet wieder: derselbe Zustand darf später erneut wecken.
     await update($, woken, list => (list ?? []).filter(key => !key.startsWith(`${id}:`)))
     return
   }
-  const reason = wakeReason(ev)
+  if (waitsForOwnRun(ev)) {
+    armBackgroundNet($, entry, ev)
+    return
+  }
+  await wake($, entry, ev.to ?? '', wakeReason(ev))
+}
+
+/** Reiht eine Weck-Zeile ein, einmal je Chat und Zustand; geparkte Chats wecken nicht. */
+const wake = async ($: EngineInterface, entry: BoardEntry, state: string, reason: string | null) => {
   if (reason === null || entry.light === 'parked' || wakeMode === 'aus') return
-  const key = `${id}:${ev.to}`
+  const id = entry.sessionID.toUpperCase()
+  const key = `${id}:${state}`
   if ((await read($, woken)).includes(key)) return
   await update($, woken, list => [...(list ?? []), key].slice(-200))
   // Der Titel stammt aus einem fremden Chat (ai-title, erster Prompt) — als Daten
   // gekennzeichnet und ohne Steuerzeichen, nie als Anweisung lesbar (LR-PJ-004).
-  wakeQueue.push(`[Board] „${asData(entry.title)}“ (${asData(entry.ref)}): ${reason}`)
+  const line = `[Board] „${asData(entry.title)}“ (${asData(entry.ref)}): ${reason}`
+  // Je Chat eine Zeile: Ein jüngerer Zustand ersetzt den älteren im selben Prompt.
+  wakeQueue = [...wakeQueue.filter(item => item.id !== id), { id, line }]
   armWake($)
+}
+
+/**
+ * Sicherheitsnetz für hängende Hintergrund-Befehle (WM8-105): Ruht der Chat
+ * nach diesem Turn-Ende `BACKGROUND_NET_MS` lang unverändert, weckt die Mod
+ * einmal. Jeder neue Zustand des Chats löscht die Wache.
+ */
+const armBackgroundNet = ($: EngineInterface, entry: BoardEntry, ev: WatchEvent) => {
+  const id = entry.sessionID.toUpperCase()
+  const since = ev.at ?? `seq:${String(ev.cursor ?? '')}`
+  backgroundWaits.set(id, since)
+  $.clock.after(BACKGROUND_NET_MS, () => {
+    if (backgroundWaits.get(id) !== since) return
+    backgroundWaits.delete(id)
+    void (async () => {
+      const current = (await read($, board))?.entries.find(e => sameID(e.sessionID, entry.sessionID))
+      if (current === undefined || current.status !== 'idle') return
+      await wake($, current, 'idle', 'ruht, Hintergrund-Lauf läuft noch – prüfen')
+    })().catch(() => undefined)
+  })
 }
 
 const armWake = ($: EngineInterface) => {
@@ -367,7 +419,7 @@ const armWake = ($: EngineInterface) => {
 
 const flushWake = async ($: EngineInterface) => {
   wakeTimerArmed = false
-  const lines = wakeQueue
+  const lines = wakeQueue.map(item => item.line)
   wakeQueue = []
   if (lines.length === 0) return
   lastWakeAt = Date.now()

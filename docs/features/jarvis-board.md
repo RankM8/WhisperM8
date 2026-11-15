@@ -149,7 +149,18 @@ mehreren Boards stehen (`otherOwners`).
   Turn (`working → idle`). Daraufhin kommt ein Hinweis (bewusst ohne Ton), und je nach
   Einstellung ein Prompt `[Board] <Name> (<ref>): …` an Jarvis. Gebündelt
   über 5 s, höchstens ein Prompt je Minute, einmal je Chat und Zustand, bis
-  der Chat wieder arbeitet. Geparkte Chats wecken nicht.
+  der Chat wieder arbeitet; in einem Prompt steht je Chat nur sein jüngster
+  Zustand. Geparkte Chats wecken nicht.
+- **Kein „fertig“ bei laufendem Hintergrund-Befehl (seit WM8-105):** Endet
+  der Turn, während ein Hintergrund-Befehl des Chats läuft (Testlauf,
+  Warteschleife; Feld `backgroundTasks` im Strom, § `chats watch` in
+  `agent-chats-cli.md`), weckt die Mod nicht. Endet der Befehl, macht Claude
+  von selbst weiter, und erst das Turn-Ende ohne offenen Befehl meldet
+  „fertig – prüfen“. „Wartet auf dich“ weckt immer. Sicherheitsnetz für
+  hängende Befehle: Ruht der Chat danach 30 Minuten unverändert, kommt
+  einmal „ruht, Hintergrund-Lauf läuft noch – prüfen“. Fehlt das Feld (ältere
+  App, Codex), weckt das Turn-Ende wie vorher. Vorher kamen an einem Tag rund
+  25 solche Fehlalarme.
 - **Anzeige (seit WM8-99):** Aufbau oben unter „Was es ist“. Was im Kasten
   steht, rechnet `layoutBox` rein aus Einträgen, Breite und Höhe aus
   (`waitingLines` für die Spalten, `summaryLine` für die Sammelzeile); der

@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { areaOf, clean, countWord, groups, HEAD_JOIN, HEAD_LEFT, HEAD_NAME, isBefore, layoutBox, nextGenerationStart, planRows, restCounts, sameBoard, shortName, summaryLine, titleParts, waitingHead, waitingLines, waitingText, withStatus } from './register'
+import { areaOf, BACKGROUND_NET_MS, clean, countWord, groups, HEAD_JOIN, HEAD_LEFT, HEAD_NAME, isBefore, layoutBox, nextGenerationStart, planRows, restCounts, sameBoard, shortName, summaryLine, titleParts, waitingHead, waitingLines, waitingText, wakeReason, withStatus } from './register'
 
 // Tests der Board-Mod (`claude plugin test` auf den abgelegten Plugin-Ordner
 // oder diesen Ressourcen-Ordner samt Manifest). Werden nicht ausgeliefert.
@@ -596,6 +596,124 @@ describe('Wecken', () => {
     expect(calls.sounds).toBe(0) // Wecken bewusst ohne Ton
     expect(calls.prompts.length).toBe(1)
     expect(calls.prompts[0]).toContain('[Board] „ListM8 Lead-Run“ (e45d0000): wartet auf dich')
+  })
+})
+
+// WM8-105: Ein Turn-Ende mit offenem Hintergrund-Befehl ist kein „fertig“.
+// Claude macht nach dem Ende des Befehls von selbst weiter; erst das Turn-Ende
+// ohne offenen Befehl weckt. „Wartet auf dich“ weckt immer.
+describe('Wecken bei Hintergrund-Läufen (WM8-105)', () => {
+  const LEAD = 'CE45D000-0000-0000-0000-000000000003'
+  const change = (from: string, to: string, extra: Record<string, unknown> = {}) =>
+    ({ kind: 'conversation', sessionID: LEAD, from, to, at: minutesAgo(0), schema: 'wm8.changes/1', ...extra })
+
+  test('Turn-Ende mit laufendem Hintergrund-Befehl weckt nicht, das Turn-Ende danach ohne Befehl schon', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const calls = world(on, { watch: [
+      { event: 'started', cursor: '1:10' },
+      change('working', 'idle', { backgroundTasks: 1 }),
+    ] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(6_000)
+    await clock.settle()
+    expect(calls.prompts).toEqual([])
+    expect(calls.toasts).toEqual([])
+  })
+
+  test('der Lauf endet, Claude macht weiter und ruht dann ohne Befehl: genau ein Hinweis', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const calls = world(on, { watch: [
+      { event: 'started', cursor: '1:10' },
+      change('working', 'idle', { backgroundTasks: 2 }),
+      change('idle', 'working'),
+      change('working', 'idle', { backgroundTasks: 1 }),
+      change('idle', 'working'),
+      change('working', 'idle', { backgroundTasks: 0 }),
+    ] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(6_000)
+    await clock.settle()
+    expect(calls.prompts.length).toBe(1)
+    expect(calls.prompts[0]).toContain('[Board] „ListM8 Lead-Run“ (e45d0000): fertig – prüfen')
+  })
+
+  test('wartet auf dich weckt auch bei laufendem Hintergrund-Befehl', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const calls = world(on, { watch: [
+      { event: 'started', cursor: '1:10' },
+      change('working', 'idle', { backgroundTasks: 1 }),
+      change('idle', 'awaitingInput'),
+    ] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(6_000)
+    await clock.settle()
+    expect(calls.prompts.length).toBe(1)
+    expect(calls.prompts[0]).toContain('wartet auf dich')
+  })
+
+  test('ohne Angabe (ältere App) weckt das Turn-Ende wie bisher', () => {
+    expect(wakeReason(change('working', 'idle'))).toBe('fertig – prüfen')
+    expect(wakeReason(change('working', 'idle', { backgroundTasks: 0 }))).toBe('fertig – prüfen')
+    expect(wakeReason(change('working', 'idle', { backgroundTasks: 1 }))).toBeNull()
+    expect(wakeReason(change('working', 'awaitingInput', { backgroundTasks: 1 }))).toBe('wartet auf dich')
+  })
+
+  test('hängt der Befehl, weckt die Mod nach 30 Minuten Ruhe einmal', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    // Das Neulesen nach dem Ende des Stroms liefert den echten Stand: ruht.
+    const resting = { ...BOARD, entries: BOARD.entries.map(e => (e.sessionID === LEAD ? { ...e, status: 'idle' } : e)) }
+    const calls = world(on, { board: resting, watch: [
+      { event: 'started', cursor: '1:10' },
+      change('working', 'idle', { backgroundTasks: 1 }),
+    ] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(BACKGROUND_NET_MS - 60_000)
+    await clock.settle()
+    expect(calls.prompts).toEqual([])
+    await clock.advance(60_000 + 6_000)
+    await clock.settle()
+    await clock.advance(6_000)
+    await clock.settle()
+    expect(calls.prompts.length).toBe(1)
+    expect(calls.prompts[0]).toContain('ruht, Hintergrund-Lauf läuft noch')
+    await clock.advance(BACKGROUND_NET_MS)
+    await clock.settle()
+    expect(calls.prompts.length).toBe(1)
+  })
+
+  test('arbeitet der Chat vor Ablauf wieder, bleibt das Sicherheitsnetz still', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const calls = world(on, { watch: [
+      { event: 'started', cursor: '1:10' },
+      change('working', 'idle', { backgroundTasks: 1 }),
+      change('idle', 'working'),
+    ] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(BACKGROUND_NET_MS + 10_000)
+    await clock.settle()
+    expect(calls.prompts).toEqual([])
+  })
+
+  test('in einem gebündelten Prompt steht je Chat nur der jüngste Zustand', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const calls = world(on, { watch: [
+      { event: 'started', cursor: '1:10' },
+      change('working', 'awaitingInput'),
+      change('awaitingInput', 'working'),
+      change('working', 'idle', { backgroundTasks: 0 }),
+    ] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(6_000)
+    await clock.settle()
+    expect(calls.prompts.length).toBe(1)
+    const lines = calls.prompts[0].split('\n').filter(line => line.startsWith('[Board]'))
+    expect(lines).toEqual(['[Board] „ListM8 Lead-Run“ (e45d0000): fertig – prüfen'])
   })
 })
 

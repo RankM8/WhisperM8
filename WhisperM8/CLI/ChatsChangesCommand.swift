@@ -218,6 +218,7 @@ enum ChatsChangesCommand {
         }
         if let from = entry.from { dict["from"] = from }
         if let to = entry.to { dict["to"] = to }
+        if let backgroundTasks = entry.backgroundTasks { dict["backgroundTasks"] = backgroundTasks }
         return dict
     }
 

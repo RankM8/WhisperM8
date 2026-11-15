@@ -212,6 +212,19 @@ final class ClaudeBackgroundTaskMonitor: @unchecked Sendable {
         return openTaskCount(sessionID: id, transcriptURL: target.url, processID: target.pid)
     }
 
+    /// Wie `openTaskCount(liveSessionID:)`, aber nur, wenn der Tracker der
+    /// Session schon gelesen hat (`prefetch` beim Turn-Start, WM8-105). Sonst
+    /// `nil`: Der erste Durchlauf läse ein ganzes Transcript auf dem Main
+    /// Thread, und „unbekannt“ weckt das Board lieber einmal zu viel.
+    @MainActor
+    func openTaskCountIfRead(liveSessionID id: UUID) -> Int? {
+        lock.lock()
+        let read = trackers[id] != nil
+        lock.unlock()
+        guard read else { return nil }
+        return openTaskCount(liveSessionID: id)
+    }
+
     /// Erster Durchlauf im Hintergrund — vor dem Umzugs-Sheet bzw. dem
     /// CLI-Umzug, damit `decide()` synchron bleiben kann und trotzdem nur
     /// noch angehängte Bytes liest.
