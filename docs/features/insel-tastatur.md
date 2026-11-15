@@ -42,8 +42,9 @@ Ort ein Chat war). So führt ⌥Tab kurz getippt genau dorthin, wo L2 getippt hi
 
 Erkannt wird über den keyCode, nicht über das Zeichen: Mit ⌥ liefert das Layout andere Zeichen. Andere
 Tasten bei gehaltenem ⌥ schluckt die Insel, damit kein ⌥-Zeichen ins Terminal rutscht. Kommt eine Taste
-ohne ⌥ an, ist uns das Loslassen entgangen (Menü-Tracking): Die Insel schließt ohne Wechsel, die Taste
-läuft normal weiter. Dasselbe gilt für ein ⌥-Loslassen, das wir nicht gesehen haben.
+ohne ⌥ an, ist uns das Loslassen entgangen (Menü-Tracking, Mission Control mit gehaltenem ⌥): Die Insel
+schließt ohne Wechsel, die Taste läuft normal weiter — auch Return, das dann dem Prompt gehört. Nur Esc
+bricht ab und bleibt bei uns. Ein ⌥-Loslassen, das wir nicht gesehen haben, schließt ebenso ohne Wechsel.
 
 **Geht nicht** (W ohne wartenden Chat, R ohne geschlossenen Chat, Leertaste auf einem Workspace,
 gescheiterter Wechsel): macOS-Warnton, die Insel bleibt offen (Entscheidung Giuliano, 15.11.2026).
@@ -89,7 +90,8 @@ Insel), nicht auf die markierte Zeile. Darunter „App“.
 - **⌥Leertaste** ist der Diktat-Hotkey (global über Carbon) und kommt nie als Tastendruck an. Ist die
   Insel offen, heißt er dort „hin und diktieren“ bzw. „stopp“ wie die Leertaste; sein Loslassen beendet
   die gerade gestartete Aufnahme nicht (`KeyboardIslandMonitor.consumeDictationHotkeyDown/Up`). Ohne
-  offene Insel bleibt ⌥Leertaste unverändert.
+  offene Insel bleibt ⌥Leertaste unverändert; ein gewöhnlicher Druck löscht einen liegengebliebenen
+  Merker, damit ein verlorenes Loslassen nie das Ende eines späteren Diktats verschluckt.
 - **Während eines Diktats** geht die Insel nur auf, wenn das Diktat an einen Chat gebunden ist. Bei einem
   Diktat ins Programm vorne (Hotkey) bleibt ⌥Tab zu: Ein Wechsel brächte den Text woanders hin.
   Gebunden: Wohin geht, das Diktat bleibt an seinem Ziel, der Kopf nennt es („→ Chat“). Leertaste heißt

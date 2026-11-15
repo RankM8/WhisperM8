@@ -135,7 +135,12 @@ final class KeyboardIslandMonitor {
     /// diktieren“ bzw. „stopp“ wie die Leertaste. `true`: erledigt, der
     /// gewöhnliche Diktat-Weg bleibt aus.
     func consumeDictationHotkeyDown() -> Bool {
-        guard let dispatcher, dispatcher.isKeyboardIslandOpen else { return false }
+        guard let dispatcher, dispatcher.isKeyboardIslandOpen else {
+            // Ein gewöhnlicher Druck: Ein liegengebliebener Merker (Loslassen
+            // verloren) darf dessen Ende nicht verschlucken.
+            swallowHotkeyUp = false
+            return false
+        }
         swallowHotkeyUp = true
         dispatcher.keyboardIslandDictate()
         return true

@@ -229,6 +229,26 @@ final class KeyboardIslandDispatcherTests: XCTestCase {
         XCTAssertFalse(monitor.consumeDictationHotkeyUp())
     }
 
+    /// Geht das Loslassen des verbrauchten Hotkeys verloren, verschluckt der
+    /// Merker nicht das Ende des nächsten gewöhnlichen Diktats.
+    func testLostHotkeyReleaseDoesNotSwallowLaterDictation() {
+        press(K.tab)
+        XCTAssertTrue(monitor.consumeDictationHotkeyDown())
+        // Loslassen verloren; später ein gewöhnlicher Druck ohne Insel.
+        XCTAssertFalse(monitor.consumeDictationHotkeyDown())
+        XCTAssertFalse(monitor.consumeDictationHotkeyUp(), "das Ende des gewöhnlichen Diktats läuft durch")
+    }
+
+    /// Ist das Loslassen von ⌥ verloren gegangen, gehört Return dem Prompt:
+    /// Die Insel schließt ohne Wechsel, Return läuft weiter.
+    func testReturnWithoutOptionPassesThrough() {
+        window.backTarget = ControllerBackTarget(kind: .chat, title: "Chat", id: chats[3])
+        press(K.tab)
+        XCTAssertFalse(press(K.returnKey, []))
+        XCTAssertFalse(dispatcher.isKeyboardIslandOpen)
+        XCTAssertTrue(window.commands.isEmpty)
+    }
+
     /// Während eines an einen Chat gebundenen Diktats: Wohin geht, Leertaste
     /// heißt „stopp“, Esc schließt nur die Insel.
     func testDuringBoundDictation() {
