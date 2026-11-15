@@ -377,6 +377,8 @@ struct GPTAccountsSection: View {
 
     private func reload() {
         profiles = profileService.profiles()
+        // Login, Logout, neues oder gelöschtes Profil: Menüs sofort angleichen.
+        AccountProfileStore.shared.refresh()
         activeProfileName = profileService.activeProfileName()
         runningPorts = proxyManager.runningProfileInstances()
         fetchUsage()

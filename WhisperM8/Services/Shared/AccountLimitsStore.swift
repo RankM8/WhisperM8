@@ -129,7 +129,7 @@ final class AccountLimitsStore {
     /// Angemeldete Claude-Konten, wie das Claude-Popover sie zeigt (aus dem
     /// kurzlebigen Cache des Kontextmenüs).
     static func claudeAccountNames() -> [String] {
-        AccountMenuData.claudeProfiles.value.filter(\.isLoggedIn).map(\.name)
+        AccountProfileStore.shared.claudeProfiles.filter(\.isLoggedIn).map(\.name)
     }
 
     /// Angemeldete Konten des GPT-Backends, wie das GPT-Popover sie zeigt
@@ -138,9 +138,9 @@ final class AccountLimitsStore {
         let profiles = CodexUsagePopoverTargets.displayedProfiles(
             backendEnabled: AppPreferences.shared.claudeGPTBackendEnabled,
             profilesEnabled: AppPreferences.shared.isGPTAccountProfilesEnabled,
-            all: { AccountMenuData.gptProfiles.value },
+            all: { AccountProfileStore.shared.gptProfiles },
             main: {
-                AccountMenuData.gptProfiles.value.first { $0.name == GPTAccountProfiles.mainProfileName }
+                AccountProfileStore.shared.gptProfiles.first { $0.name == GPTAccountProfiles.mainProfileName }
                     ?? GPTAccountProfiles().profile(named: GPTAccountProfiles.mainProfileName)
             })
         return CodexUsagePopoverTargets.fetchTargets(profiles).map(\.name)

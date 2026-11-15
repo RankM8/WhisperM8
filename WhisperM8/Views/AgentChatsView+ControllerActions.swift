@@ -22,7 +22,7 @@ extension AgentChatsView {
         var accounts: [ControllerAccountChoice] = []
         if canMoveToAccount(session) {
             let current = session.claudeProfileName ?? ClaudeAccountProfiles.mainProfileName
-            accounts += AccountMenuData.claudeProfiles.value.map { profile in
+            accounts += AccountProfileStore.shared.claudeProfiles.map { profile in
                 ControllerAccountChoice(
                     kind: .claude, name: profile.name, label: moveTargetLabel(profile),
                     isCurrent: profile.name == current, isLoggedIn: profile.isLoggedIn)
@@ -30,7 +30,7 @@ extension AgentChatsView {
         }
         if canSwitchGPTAccount(session) {
             let current = session.gptProfileName ?? GPTAccountProfiles.mainProfileName
-            accounts += AccountMenuData.gptProfiles.value.map { profile in
+            accounts += AccountProfileStore.shared.gptProfiles.map { profile in
                 ControllerAccountChoice(
                     kind: .gpt, name: profile.name, label: gptAccountLabel(profile),
                     isCurrent: profile.name == current, isLoggedIn: profile.isLoggedIn)

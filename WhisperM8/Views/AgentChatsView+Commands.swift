@@ -144,7 +144,7 @@ extension AgentChatsView {
         case .setGPTAccount(let sessionID, let profileName):
             guard let session = workspace.sessions.first(where: { $0.id == sessionID }),
                   canSwitchGPTAccount(session),
-                  let profile = AccountMenuData.gptProfiles.value.first(where: { $0.name == profileName }),
+                  let profile = AccountProfileStore.shared.gptProfiles.first(where: { $0.name == profileName }),
                   profile.isLoggedIn else { return false }
             setGPTAccount([session], toProfile: profile)
             return true

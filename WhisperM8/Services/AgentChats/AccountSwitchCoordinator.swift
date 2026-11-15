@@ -340,7 +340,7 @@ extension AccountSwitchCoordinator.Dependencies {
             },
             perform: { moves, batchID in
                 let outcome = AccountMoveService().perform(moves, batchID: batchID)
-                AccountMenuData.invalidateAll()
+                AccountProfileStore.shared.refresh()
                 return outcome
             },
             scheduleResume: { id in

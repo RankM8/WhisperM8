@@ -298,6 +298,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // reagiert — unabhängig davon, wer ihn blockiert. Kostet zehn
         // Timer-Ticks pro Sekunde und läuft deshalb immer mit.
         MainThreadStallMonitor.shared.start()
+        // Kontoprofile im Speicher: Menüs und Seitenleiste lesen nur ihn,
+        // neu gelesen wird abseits des Main Threads (WM8-101).
+        AccountProfileStore.shared.start()
         // Einmalig: Terminal-Snapshots wegräumen — seit der Verlaufsansicht
         // liest sie niemand mehr, geschrieben werden sie auch nicht mehr.
         LegacyDataCleanup.removeObsoleteTerminalSnapshots()

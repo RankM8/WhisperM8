@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-11-13
+updated: 2026-11-15
 description: Claude-Konten in Agent Chats — Konto neuer Chats, Login-Frist und Erneuerung, Hauptkonto tauschen, gemeinsames Memory, Kontowechsel ohne Stoppen, MCP-Angleich.
 ---
 
@@ -81,6 +81,18 @@ MCP-Logins) schreibt `keychainWriter` wie bisher kurz über die Argumente von `s
 jetzt auch die Erneuerung. Den Namen des Keychain-Eintrags
 bildet Claude aus dem unveränderten Wert von `CLAUDE_CONFIG_DIR` (sha256, erste acht Hex-Zeichen), auch mit Leerzeichen
 und Umlauten im Pfad (nachgemessen an 2.1.322 über die `security`-Aufrufe der CLI).
+
+## Kontoprofile im Speicher
+
+Kontextmenüs, Seitenleiste, Controller und Limits lesen die Claude- und GPT-Profile
+aus `AccountProfileStore`, nie von der Platte (WM8-101; vorher lud ein Menü-Cache alle
+2 s im Body nach). Neu gelesen wird abseits des Main Threads: bei App-Ereignissen
+(Umzug, Rückgängig, Kontowechsel, `reload()` der Konto-Einstellungen nach Login,
+Logout, neuem oder gelöschtem Profil), beim Aktivieren der App und alle 30 s für
+Änderungen von außen, etwa einen Login im Terminal. Ein Dateiwächter fehlt mit
+Absicht: Die Profilordner enthalten die Verläufe, und die `.claude.json` des
+Hauptkontos liegt im Home-Ordner. Der Speicher schreibt nichts und fasst den
+Schlüsselbund nicht an. Ein unveränderter Stand löst keinen Neuaufbau aus.
 
 ## Schlüsselbund und Test-Instanz
 
