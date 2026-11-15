@@ -1441,6 +1441,16 @@
         }
       }
     },
+    "Account ›": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konto ›"
+          }
+        }
+      }
+    },
     "Accounts": {
       "localizations": {
         "de": {
@@ -4881,6 +4891,16 @@
         }
       }
     },
+    "Commands ›": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Befehle ›"
+          }
+        }
+      }
+    },
     "Commits": {
       "localizations": {
         "de": {
@@ -6071,6 +6091,16 @@
         }
       }
     },
+    "Escape to Claude": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Escape an Claude"
+          }
+        }
+      }
+    },
     "Hide stopped chats": {
       "localizations": {
         "de": {
@@ -6107,6 +6137,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Diese Chats stehen oben im Workspace"
+          }
+        }
+      }
+    },
+    "back to the list": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "zurück zur Liste"
+          }
+        }
+      }
+    },
+    "delete to line start": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "bis Zeilenanfang löschen"
           }
         }
       }
@@ -22344,6 +22394,36 @@
         }
       }
     },
+    "for %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "für %@"
+          }
+        }
+      }
+    },
+    "for %@ · off while dictation runs": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "für %@ · aus, solange das Diktat läuft"
+          }
+        }
+      }
+    },
+    "for %@ · question open": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "für %@ · Rückfrage offen"
+          }
+        }
+      }
+    },
     "free": {
       "localizations": {
         "de": {
@@ -22524,6 +22604,16 @@
         }
       }
     },
+    "line up / down in the draft": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeile hoch / runter im Entwurf"
+          }
+        }
+      }
+    },
     "live fetch failed (HTTP %lld)": {
       "localizations": {
         "de": {
@@ -22660,6 +22750,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "noch nie verknüpft"
+          }
+        }
+      }
+    },
+    "new line without sending": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeilenumbruch ohne Senden"
           }
         }
       }
@@ -22864,6 +22964,16 @@
         }
       }
     },
+    "paste": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "einfügen"
+          }
+        }
+      }
+    },
     "paused (dictation running)": {
       "localizations": {
         "de": {
@@ -22954,6 +23064,16 @@
         }
       }
     },
+    "release: nothing switches (marker unmoved)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "loslassen: nichts wechselt (Markierung unbewegt)"
+          }
+        }
+      }
+    },
     "release: switch": {
       "localizations": {
         "de": {
@@ -23020,6 +23140,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "läuft in eigenem Worktree"
+          }
+        }
+      }
+    },
+    "scroll": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "blättern"
           }
         }
       }
@@ -23154,6 +23284,16 @@
         }
       }
     },
+    "the keys also work without the island": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "die Tasten gehen auch ohne Insel"
+          }
+        }
+      }
+    },
     "the newest listed model": {
       "localizations": {
         "de": {
@@ -23234,6 +23374,16 @@
         }
       }
     },
+    "undo (Claude)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "rückgängig (Claude)"
+          }
+        }
+      }
+    },
     "unknown": {
       "localizations": {
         "de": {
@@ -23300,6 +23450,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wo."
+          }
+        }
+      }
+    },
+    "word back / forward": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wort zurück / vor"
           }
         }
       }
@@ -23630,6 +23790,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "↑ %lld weitere"
+          }
+        }
+      }
+    },
+    "↑↓ move · ↩ select · esc back": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "↑↓ bewegen · ↩ wählen · esc zurück"
+          }
+        }
+      }
+    },
+    "↑↓ move · ↩ select · esc closes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "↑↓ bewegen · ↩ wählen · esc schließt"
           }
         }
       }

@@ -162,9 +162,9 @@ final class KeyboardIslandDispatcherTests: XCTestCase {
 
     func testOtherKeysAreSwallowedAndMissedReleasePassesThrough() {
         press(K.tab)
-        XCTAssertTrue(press(0), "⌥A gehört der Insel")
+        XCTAssertTrue(press(2), "⌥D gehört der Insel")
         XCTAssertTrue(dispatcher.isKeyboardIslandOpen)
-        XCTAssertFalse(press(0, []), "Taste ohne ⌥: Loslassen verpasst, Taste läuft weiter")
+        XCTAssertFalse(press(2, []), "Taste ohne ⌥: Loslassen verpasst, Taste läuft weiter")
         XCTAssertFalse(dispatcher.isKeyboardIslandOpen)
         XCTAssertTrue(window.commands.isEmpty)
     }
@@ -227,6 +227,27 @@ final class KeyboardIslandDispatcherTests: XCTestCase {
         XCTAssertEqual(dictation.started, [.agentChat(sessionID: chats[2])])
         XCTAssertTrue(monitor.consumeDictationHotkeyUp())
         XCTAssertFalse(monitor.consumeDictationHotkeyUp())
+    }
+
+    /// Geht das Loslassen des verbrauchten Hotkeys verloren, verschluckt der
+    /// Merker nicht das Ende des nächsten gewöhnlichen Diktats.
+    func testLostHotkeyReleaseDoesNotSwallowLaterDictation() {
+        press(K.tab)
+        XCTAssertTrue(monitor.consumeDictationHotkeyDown())
+        // Loslassen verloren; später ein gewöhnlicher Druck ohne Insel.
+        XCTAssertFalse(monitor.consumeDictationHotkeyDown())
+        XCTAssertFalse(monitor.consumeDictationHotkeyUp(), "das Ende des gewöhnlichen Diktats läuft durch")
+    }
+
+    /// Ist das Loslassen von ⌥ verloren gegangen, schließt Return die Insel
+    /// ohne Wechsel und wird verschluckt wie Esc: Ins Terminal durchgereicht
+    /// bestätigte es womöglich eine offene Freigabe.
+    func testReturnWithoutOptionIsSwallowed() {
+        window.backTarget = ControllerBackTarget(kind: .chat, title: "Chat", id: chats[3])
+        press(K.tab)
+        XCTAssertTrue(press(K.returnKey, []))
+        XCTAssertFalse(dispatcher.isKeyboardIslandOpen)
+        XCTAssertTrue(window.commands.isEmpty)
     }
 
     /// Während eines an einen Chat gebundenen Diktats: Wohin geht, Leertaste

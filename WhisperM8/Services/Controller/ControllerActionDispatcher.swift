@@ -21,6 +21,12 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     var playHaptic: (ControllerHapticPattern) -> Void = { _ in }
     /// „Geht nicht“ per Tastatur (Insel per ⌥Tab): der macOS-Warnton.
     var keyboardRejected: () -> Void = {}
+    /// Buchstaben der Tastenzeile im aktuellen Layout, wo sie von S M O B K ·
+    /// L N A C abweichen (live über das Tastaturlayout, nur im Ereignis-Pfad).
+    var keyboardLetters: () -> [KeyboardIslandCommand: String] = { [:] }
+    /// Das Options-Menü per Tastatur nutzt `perform`; dann bucht es keine
+    /// Controller-Eingabe für die Legende.
+    var performingForKeyboard = false
     var togglePause: () -> Void = {}
     /// Angaben des Debug-Kanals (Test-Instanz ohne aktives Fenster).
     var debugOverride: () -> ControllerDebugOverride? = { nil }
@@ -245,6 +251,9 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             spentLayer = nil
             return
         }
+        // Die Legende folgt dem zuletzt benutzten Gerät (WM8-104). Der Halte-
+        // Ring zählt mit: Er kommt nur vom Controller.
+        if !performingForKeyboard, ui.lastInput != .controller { ui.lastInput = .controller }
         // Der Controller greift ein, während die Insel per Tastatur offen ist:
         // Sie schließt ohne Wechsel (wie Maus oder Tastatur die Controller-Insel
         // schließen). Das Ende einer Ebene hat dann nichts mehr zu tun.
@@ -645,9 +654,13 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         guard terminal.isRunning else { return nil }
         let fieldHasText = ControllerScreenReading.fieldHasText(
             screen: terminal.screen, tracker: terminal.fieldMayHaveText || terminal.draftSuspected)
+        // Codex meldet Freigaben nie als „wartet“; offen sieht man sie nur am
+        // Bildschirm (WM8-67, hochgescrollt WM8-107). Dann gilt sie wie eine
+        // Rückfrage: Kreuz bzw. S schickt nichts.
+        let dialogOpen = terminal.status == .awaitingInput || terminal.screen?.codexApproval == true
         return ControllerQuickDrawSlots.crossAction(
             profile: terminal.profile, busy: isBusy(terminal),
-            dialogOpen: terminal.status == .awaitingInput, viewOpen: terminal.screen?.openView != nil,
+            dialogOpen: dialogOpen, viewOpen: terminal.screen?.openView != nil,
             fieldHasText: fieldHasText, queuedOwnPrompts: terminal.queuedOwnPrompts,
             onlyRecalledPrompt: terminal.onlyRecalledPrompt)
     }

@@ -183,7 +183,12 @@ final class ControllerUIModel {
     var area: ControllerFocusArea = .content
     var markedRow: SidebarNavigationRow?
     /// Offenes Menü (Options); `nil` = zu.
-    var menu: ControllerMenuModel?
+    var menu: ControllerMenuModel? {
+        didSet { if menu == nil, menuByKeyboard { menuByKeyboard = false } }
+    }
+    /// Das Menü hat die Insel per Tastatur geöffnet (B, K): Es geht mit
+    /// Pfeilen, Return und Esc, die Fußzeile zeigt Tastenkappen.
+    var menuByKeyboard = false
     /// Im Ziel-Chat ist eine Rückfrage offen: Einträge, die Text senden, sind aus.
     var menuDialogOpen = false
     var holdProgress: ControllerHoldProgress?
@@ -191,6 +196,8 @@ final class ControllerUIModel {
     var context: ControllerContext = .noWindow
     /// Titel des Ziel-Chats für die Legende.
     var targetTitle: String?
+    /// Womit zuletzt bedient wurde: Danach richtet sich die Legende (WM8-104).
+    var lastInput: ControllerIslandInput = .controller
 
     @ObservationIgnored var listModel = SidebarNavigationModel()
 

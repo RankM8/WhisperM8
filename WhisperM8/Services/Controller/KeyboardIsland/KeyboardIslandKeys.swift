@@ -52,6 +52,10 @@ enum KeyboardIslandKeys {
         case nextWaiting
         /// R: zuletzt geschlossenen Chat wieder öffnen.
         case reopen
+        /// Buchstabe der Tastenzeile (S M O B K · L N A C).
+        case command(KeyboardIslandCommand)
+        /// ?: Spickzettel der Schreib-Tasten.
+        case cheatSheet
         /// Andere Taste bei gehaltenem ⌥: schlucken, sonst käme ein ⌥-Zeichen
         /// ins Terminal. Die Insel bleibt.
         case ignore
@@ -60,20 +64,24 @@ enum KeyboardIslandKeys {
         case cancelAndPassThrough
     }
 
-    static func action(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Action {
+    /// - Parameter characters: `charactersIgnoringModifiers` (mit ⇧, ohne ⌥):
+    ///   nur für „?“, das je nach Layout auf einer anderen Taste liegt.
+    static func action(keyCode: UInt16, modifiers: NSEvent.ModifierFlags, characters: String? = nil) -> Action {
         let mods = modifiers.intersection(relevantModifiers)
-        // Return und Esc gelten auch, wenn ⌥ schon los ist und das Loslassen
-        // noch unterwegs war — beide sind eindeutig gemeint.
-        switch keyCode {
-        case KeyCode.escape: return .cancel
-        case KeyCode.returnKey, KeyCode.keypadEnter: return .commit
-        default: break
-        }
-        guard mods.contains(.option) else { return .cancelAndPassThrough }
+        // Esc gilt auch ohne ⌥: Es bricht nur ab und darf das Terminal nie
+        // erreichen. Return ohne ⌥ heißt, das Loslassen ist uns entgangen
+        // (etwa Mission Control mit gehaltenem ⌥): Es wechselt nicht zur alten
+        // Markierung und wird wie Esc verschluckt — durchgereicht bestätigte es
+        // womöglich eine offene Freigabe im Chat (Gegenlesen Paket 2).
+        if keyCode == KeyCode.escape { return .cancel }
+        let isReturn = keyCode == KeyCode.returnKey || keyCode == KeyCode.keypadEnter
+        guard mods.contains(.option) else { return isReturn ? .cancel : .cancelAndPassThrough }
+        if isReturn { return .commit }
         // Mit ⌘ oder ⌃ ist es ein anderes Kürzel (⌃⌥Tab, ⌘⌥←): nicht für uns,
         // aber auch nicht ins Terminal, solange die Insel offen ist.
         guard mods.isDisjoint(with: [.command, .control]) else { return .ignore }
         let shift = mods.contains(.shift)
+        if characters == "?" { return .cheatSheet }
         switch keyCode {
         case KeyCode.tab: return .step(shift ? -1 : 1)
         case KeyCode.downArrow: return .step(1)
@@ -83,7 +91,35 @@ enum KeyboardIslandKeys {
         case KeyCode.space: return .dictate
         case KeyCode.w where !shift: return .nextWaiting
         case KeyCode.r where !shift: return .reopen
-        default: return .ignore
+        default:
+            guard !shift, let command = KeyboardIslandCommand.command(keyCode: keyCode) else { return .ignore }
+            return .command(command)
+        }
+    }
+
+    // MARK: - Options-Menü per Tastatur
+
+    /// Tasten im Options-Menü, das B oder K per Tastatur geöffnet hat.
+    enum MenuAction: Equatable {
+        case move(Int)
+        /// Return, →: Eintrag wählen bzw. Unterseite öffnen.
+        case activate
+        /// Esc, ←: eine Ebene zurück, auf der ersten Ebene schließen.
+        case back
+        /// Jede andere Taste: Menü zu, die Taste läuft normal weiter.
+        case closeAndPassThrough
+    }
+
+    static func menuAction(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> MenuAction {
+        let mods = modifiers.intersection(relevantModifiers)
+        guard mods.isDisjoint(with: [.command, .control]) else { return .closeAndPassThrough }
+        switch keyCode {
+        case KeyCode.downArrow: return .move(1)
+        case KeyCode.upArrow: return .move(-1)
+        case KeyCode.tab: return .move(mods.contains(.shift) ? -1 : 1)
+        case KeyCode.returnKey, KeyCode.keypadEnter, KeyCode.rightArrow: return .activate
+        case KeyCode.escape, KeyCode.leftArrow: return .back
+        default: return .closeAndPassThrough
         }
     }
 
