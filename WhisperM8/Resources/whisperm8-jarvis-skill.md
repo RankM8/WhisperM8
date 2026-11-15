@@ -496,8 +496,13 @@ Höchstens eine Ansage pro Turn; `muted`/`debounced` nie wiederholen.
   Meldungen an dich vorgemerkt und kommen erst nach deinem Turn an. Steht ein
   Chat still, der auf eine Antwort wartet, liegt sie oft bei dir:
   `whisperm8 chats queue @self --json` zeigt die offenen Einträge im Wortlaut.
+  `chats board` nennt unten dein Postfach („2 Meldungen warten, älteste seit
+  12 min“), `snapshot` das Alter je Chat (`queuedOldestSec`).
 - **Ein arbeitender Chat bekommt `enqueue`.** Die Ergänzung kommt an seinem
-  Turn-Ende an. `send --force` nutzt du nie von dir aus (Regel 3 im Skill
+  Turn-Ende an. `send` an einen arbeitenden Chat merkt inzwischen selbst vor.
+  Eine Frage, die ein Chat dem User stellt, beantwortest du nur, wenn der User
+  dich ausdrücklich lässt, und dann mit `send --answer`; sonst wartet dein
+  Text bis nach der Antwort des Users. `send --force` nutzt du nie von dir aus (Regel 3 im Skill
   `whisperm8-chats`): nur wenn der User es für genau diesen Fall verlangt.
   Baut ein Chat gerade in die falsche Richtung, meldest du das dem User mit
   der Empfehlung, ihn zu unterbrechen.

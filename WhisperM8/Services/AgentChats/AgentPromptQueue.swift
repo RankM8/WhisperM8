@@ -46,6 +46,9 @@ struct QueuedPrompt: Codable, Equatable, Identifiable {
     /// auch für externe oder unverifizierte Aufrufer (LR-CLI-011). Alte
     /// Einträge ohne Feld gelten als nicht verifiziert.
     var enqueuedVerified: Bool = false
+    /// Chat, der vorgemerkt hat — nur, wenn er per Token belegt ist. Bleibt
+    /// der Auftrag im Eingabefeld stehen, bekommt er Bescheid (Vic zu WM8-100).
+    var enqueuedBySessionID: UUID? = nil
     var state: State = .pending
     var deliveredAt: Date?
     var lastError: String?
@@ -72,14 +75,16 @@ struct QueuedPrompt: Codable, Equatable, Identifiable {
         enqueuedAt = try container.decode(Date.self, forKey: .enqueuedAt)
         enqueuedBy = try container.decodeIfPresent(String.self, forKey: .enqueuedBy) ?? "unbekannt"
         enqueuedVerified = try container.decodeIfPresent(Bool.self, forKey: .enqueuedVerified) ?? false
+        enqueuedBySessionID = try container.decodeIfPresent(UUID.self, forKey: .enqueuedBySessionID)
         state = try container.decodeIfPresent(State.self, forKey: .state) ?? .pending
         deliveredAt = try container.decodeIfPresent(Date.self, forKey: .deliveredAt)
         lastError = try container.decodeIfPresent(String.self, forKey: .lastError)
     }
 
     init(id: UUID = UUID(), sequence: Int = 0, sessionID: UUID, prompt: String,
-         enqueuedAt: Date, enqueuedBy: String, enqueuedVerified: Bool = false, state: State = .pending,
-         deliveredAt: Date? = nil, lastError: String? = nil) {
+         enqueuedAt: Date, enqueuedBy: String, enqueuedVerified: Bool = false, enqueuedBySessionID: UUID? = nil,
+         state: State = .pending, deliveredAt: Date? = nil, lastError: String? = nil) {
+        self.enqueuedBySessionID = enqueuedBySessionID
         self.id = id
         self.sequence = sequence
         self.sessionID = sessionID
@@ -144,6 +149,30 @@ enum AgentPromptQueueLogic {
             counts[prompt.sessionID, default: 0] += 1
         }
         return counts
+    }
+
+    /// Wartende Meldungen eines Chats und die älteste davon (WM8-71): Der
+    /// Supervisor soll sehen, wie lange etwas schon liegt.
+    static func inbox(for sessionID: UUID, in all: [QueuedPrompt]) -> (open: Int, oldest: Date?) {
+        let open = all.filter { $0.sessionID == sessionID && $0.isOpen }
+        return (open.count, open.map(\.enqueuedAt).min())
+    }
+
+    /// Älteste wartende Meldung je Session.
+    static func oldestOpen(in all: [QueuedPrompt]) -> [UUID: Date] {
+        var oldest: [UUID: Date] = [:]
+        for prompt in all where prompt.isOpen {
+            oldest[prompt.sessionID] = min(oldest[prompt.sessionID] ?? prompt.enqueuedAt, prompt.enqueuedAt)
+        }
+        return oldest
+    }
+
+    /// „2 Meldungen warten, älteste seit 12 min“; `nil` ohne wartende.
+    static func inboxLine(open: Int, oldest: Date?, now: Date) -> String? {
+        guard open > 0 else { return nil }
+        let noun = open == 1 ? "1 Meldung wartet" : "\(open) Meldungen warten"
+        guard let oldest else { return noun }
+        return noun + (open == 1 ? ", seit " : ", älteste seit ") + ChatsOutput.relative(from: oldest, to: now)
     }
 
     /// Anzahl klärungsbedürftiger Aufträge je Session.

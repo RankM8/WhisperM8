@@ -24,6 +24,8 @@ struct ChatsSnapshotSession: Equatable {
     var excerpt: String?
     /// Sekunden seit dem letzten abgeschlossenen Turn (nur `recentlyDone`).
     var doneSec: Int?
+    /// Sekunden, die der älteste wartende Auftrag schon liegt (WM8-71).
+    var queuedOldestSec: Int? = nil
 
     var json: [String: Any] {
         var dict: [String: Any] = [
@@ -36,6 +38,7 @@ struct ChatsSnapshotSession: Equatable {
             "actions": actions,
         ]
         if queued > 0 { dict["queued"] = queued }
+        if let queuedOldestSec { dict["queuedOldestSec"] = queuedOldestSec }
         if let excerpt { dict["excerpt"] = excerpt }
         if let doneSec { dict["doneSec"] = doneSec }
         return dict

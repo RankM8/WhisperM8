@@ -351,11 +351,17 @@ unerreichbar, 124 wait-Timeout, 130 unterbrochen.
 `session.send` prüft alle Guards und pastet in EINEM synchronen
 `MainActor.run`-Block (kein `await` zwischen Status-Check und Paste):
 ① existiert + nicht archiviert → ② Ziel ≠ Actor (Selbst-Send, nie überstimmbar)
-→ ③ laufende PTY → ④ Status ∈ `--if-status` (Default `awaitingInput,idle`;
-`--force` überstimmt) → ⑤ Prompt nicht leer → ⑥ kein vermuteter Entwurf im
+→ ③ laufende PTY → ④ Status ∈ `--if-status` (Default seit WM8-85 nur `idle`,
+`--answer` ergänzt `awaitingInput`; `--force` überstimmt) → ⑤ Prompt nicht leer → ⑥ kein vermuteter Entwurf im
 Eingabefeld (`--force` überstimmt; ein alter Rückleger wird stattdessen geleert,
 siehe unten). Danach Bracketed Paste
-(`ESC[200~ … ESC[201~`, Pflicht gegen Newline-Auto-Submit) + CR nach 80 ms.
+(`ESC[200~ … ESC[201~`, Pflicht gegen Newline-Auto-Submit) + CR nach 80 ms. In
+Terminal-Tabs nur, wenn das Programm den Einfüge-Modus eingeschaltet hat (zsh
+tut das); sonst kommt der Text wie getippt an, ohne Steuerzeichen, ein
+Zeilenumbruch wird zum Enter (WM8-47). Mehrzeiliger Text wird dort also
+zeilenweise eingegeben; auch mit `--no-submit` gehen alle Zeilen bis auf die
+letzte schon raus. Claude und Codex bekommen immer die
+Klammern.
 Idempotenz-Cache (requestID, 60 s) verhindert Doppel-Paste bei Retry. Jeder Send
 an einen Claude- oder Codex-Chat bekommt die Marker-Zeile `[via whisperm8 chats ·
 von <actor> · HH:MM]` vorangestellt (Ein-Hop-Regel im Skill). An Shell-Tabs geht
@@ -395,7 +401,7 @@ Eingabefeld stehen könnte (`TerminalComposerDraftTracker`, pur getestet):
   (Exit 4, `isRetryable`, Ausweg `enqueue`) ab — auch mit `--force`. Vorher
   wurde der Text dort ignoriert und das Enter wählte die Vorauswahl „Yes“, auch
   wenn „nein“ geschickt wurde. Eine offene Frage (AskUserQuestion) beantwortet
-  `send` wie bisher. Geht die Freigabe erst zwischen Einfügen und Enter (80 ms)
+  `send` seit WM8-85 nur noch mit `--answer`, siehe unten. Geht die Freigabe erst zwischen Einfügen und Enter (80 ms)
   auf, hält `DelayedEnterGuard` das Enter zurück; `send` wartet darauf kurz
   (bis 330 ms) und antwortet dann ebenfalls `approvalPending` statt
   `delivered` (Audit `withheld`, `detail.textInField: true`,
@@ -745,7 +751,8 @@ je Zustellung einmal und im Startfenster höchstens einmal je Sekunde.
 
 ### Vormerken und Start bestätigen (WM8-70)
 
-`send --queue-if-busy` legt einen Auftrag an einen beschäftigten Chat (Status
+Seit WM8-85 ist Vormerken der Standard von `send`; `--queue-if-busy` bleibt als
+ausdrückliche Form, `--no-queue` gibt die Absage wie früher. `send --queue-if-busy` legt einen Auftrag an einen beschäftigten Chat (Status
 `working`, Entwurf im Eingabefeld, Start läuft noch) in die Warteschlange,
 statt mit Exit 4 zu enden; ist der Chat inzwischen frei, wird direkt
 zugestellt. `send --wait-started` (Standard 20 s, `--wait-started=N` für eine
@@ -766,6 +773,43 @@ umgangen. Mit den Regeln aus WM8-75: Bei offener Freigabe meldet
 Text steht im Eingabefeld) ist nie „gestartet“ und wird nie vorgemerkt, sonst
 käme der Text doppelt. Slash-Befehle (`/login`, `/model`, `/rate-limit-options`) gehen auch
 am Limit durch: sie sind der Ausweg.
+
+### Rückfall-Härtung (WM8-85, Paket 1)
+
+Weg B aus [chat-kommunikation](../plans/chat-kommunikation.md): Claude-Chats
+schicken sich Nachrichten künftig nativ, die CLI bleibt der Rückfall und wird
+dafür sicherer.
+
+- **Keine Antwort in eine offene Rückfrage von sich aus.** Der Standard-Status
+  von `send` ist nur `idle`. Vorher landete ein Prompt an einen Chat mit offener
+  Frage im Freitextfeld des Dialogs und ging als Antwort des Users raus (WM8-71,
+  viermal am 13./14.11.). Jetzt wird er vorgemerkt und kommt nach der Antwort;
+  `--answer` antwortet bewusst. Die Meldung nennt den Schalter.
+- **Vormerken statt Absage.** Ruht der Chat nicht (arbeitet, offene Rückfrage,
+  startet, Entwurf im Feld, Nutzungslimit, Freigabe offen), legt `send` den
+  Auftrag selbst in die Warteschlange und meldet „vorgemerkt als Nr. N“
+  (Exit 0, `outcome: queued`). `--no-queue` sagt wie früher mit Exit 4 ab. Nie
+  vorgemerkt wird ein Text, der schon im Eingabefeld steht (WM8-100,
+  `resend: false`), und automatisch nichts mit gesetztem `--if-status` oder
+  `--answer` (nur das ausdrückliche `--queue-if-busy` merkt dort wie seit
+  WM8-70 bei „startet“ und „Freigabe offen“ vor). `--json` trägt immer
+  `outcome` (`delivered`, `queued`, …).
+- **`--force` beantwortet keine Frage.** Es überspringt den Status-Guard, aber
+  nie den Schutz einer offenen Rückfrage; die beantwortet nur `--answer`.
+- **Terminal-Tabs** bekommen Text ohne Einfüge-Klammern, wenn das Programm sie
+  nicht angefordert hat (WM8-47, siehe oben).
+- **Postfach mit Alter (WM8-71).** `chats queue` nennt je Chat die älteste
+  wartende Meldung, `chats board` unter dem Board das Postfach des Besitzers
+  („2 Meldungen warten, älteste seit 12 min“, JSON `inbox.open`,
+  `inbox.oldestAt`), `snapshot` je Chat `queuedOldestSec`.
+- **Stehengebliebener Auftrag meldet sich.** Bleibt ein vorgemerkter Auftrag im
+  Eingabefeld des Ziels stehen (WM8-100), bekommt der Absender eine eigene
+  Meldung mit dem Hinweis auf `chats submit`, sofern er ein per Token belegter
+  Chat war (`enqueuedBySessionID` im Queue-Eintrag). Nie `send … || enqueue …`:
+  Im Fall „steht im Eingabefeld“ käme der Auftrag doppelt; `send` merkt selbst vor.
+- **Limit des Empfängers.** `chats address` nennt ein Nutzungslimit des Ziels
+  (JSON `usageLimit`, `usageLimitResetsAt`; ohne `--json` eine Warnung auf
+  stderr): Eine native Nachricht käme an, der Chat arbeitete aber nicht.
 
 ### Chat am Nutzungslimit (WM8-69)
 

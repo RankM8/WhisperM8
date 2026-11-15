@@ -88,8 +88,9 @@ enum ChatsSnapshotCommand {
         }
 
         let runtimeByID = await ChatsStatusProbe.probeAll(entries: candidates, now: context.now)
-        let queueCounts = AgentPromptQueueLogic.openCounts(
-            in: AgentPromptQueueStore.read(from: AgentPromptQueueStore.defaultFileURL()))
+        let queueAll = AgentPromptQueueStore.read(from: AgentPromptQueueStore.defaultFileURL())
+        let queueCounts = AgentPromptQueueLogic.openCounts(in: queueAll)
+        let queueOldest = AgentPromptQueueLogic.oldestOpen(in: queueAll)
 
         var sessions: [ChatsSnapshotSession] = []
         var counts: [ChatsSnapshotBucket: Int] = [:]
@@ -132,7 +133,8 @@ enum ChatsSnapshotCommand {
                     : nil,
                 doneSec: bucket == .recentlyDone
                     ? entry.session.lastTurnAt.map { Int(context.now.timeIntervalSince($0)) }
-                    : nil))
+                    : nil,
+                queuedOldestSec: queueOldest[entry.session.id].map { Int(context.now.timeIntervalSince($0)) }))
         }
 
         // Nicht geprobte Sessions sind per Definition idle (ausserhalb des
@@ -185,7 +187,10 @@ enum ChatsSnapshotCommand {
         for session in sessions {
             var line = "\(session.ref) \(session.name) — \(session.axes.conversation.state.rawValue)"
             if let reason = session.axes.conversation.reason { line += "(\(reason.rawValue))" }
-            if session.queued > 0 { line += " ⏳\(session.queued)" }
+            if session.queued > 0 {
+                line += " ⏳\(session.queued)"
+                if let age = session.queuedOldestSec { line += " seit \(ChatsOutput.relative(from: Date(timeIntervalSinceNow: -Double(age)), to: Date()))" }
+            }
             CLIIO.out(line)
             if let excerpt = session.excerpt { CLIIO.out("   „\(excerpt)\"") }
         }
