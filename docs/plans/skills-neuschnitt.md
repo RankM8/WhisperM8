@@ -1,6 +1,6 @@
 # Skills entrümpeln und neu schneiden
 
-**Stand:** 2026-11-15 · **Status:** Vorschlag, Entscheidungen von Giuliano offen (Abschnitt 7) · **Tickets:** WM8-78 (Neuschnitt), WM8-77 (Entrümpeln)
+**Stand:** 2026-11-15 · **Status:** Vorschlag; Giuliano hat am 15.11. E1–E4 entschieden, jeweils wie empfohlen (Abschnitt 7) · **Tickets:** WM8-78 (Neuschnitt), WM8-77 (Entrümpeln)
 **Gelesen:** alle neun `WhisperM8/Resources/*-skill.md` auf main `a8454d26`, `docs/features/jarvis-board.md`,
 `docs/features/agent-chats-cli.md`, `whisperm8 chats help`, `whisperm8 tickets --help`, die globalen Skills
 `linear` und `pm` (nur lesend, nicht im Repo), die Aufträge des Supervisors vom 14. und 15.11.
@@ -299,4 +299,11 @@ Verweisen der anderen abhängt.
 | E3 | Darf der Supervisor Befunde ohne Rückfrage als Ticket erfassen? | Ja, wo du es für das Projekt erlaubt hast und keine Kollegen im selben Ticket-Bereich arbeiten; markiert als „Selbst erfasst“, gemeldet als „Neu erfasst“, gebaut erst nach deinem „bauen“. |
 | E4 | Wie lange gilt eine Freigabe? | Für diese Sitzung und genau ihr Ziel. Stehend nur, wenn du es ausdrücklich so sagst; dann mit Datum und Umfang festgehalten. |
 
-Ergebnis der Entscheidungen: wird hier und am Ticket WM8-78 nachgetragen.
+**Entschieden am 15.11.2026 (Giuliano, per Fragetool), festgehalten am Ticket WM8-78:**
+
+- E1: Anhang ja, Texte ohne.
+- E2: für alle Supervisor; Tab zu, Ausnahmen Prüfer zwischen zwei Paketen und bewusst geparkte Chats.
+- E3: ohne Frage erfassen, wo erlaubt und ohne Kollegen im selben Ticket-Bereich.
+- E4: Sitzung, stehend nur auf ausdrückliche Ansage.
+
+Offen bleibt die Abnahme des Plans selbst und die technische Frage Nr. 8 (Rückweg der Meldungen); beides beim Supervisor.
