@@ -1,6 +1,6 @@
 ---
 status: aktiv
-stand: 2026-11-13
+stand: 2026-11-15
 feature: whisperm8 chats (Agent-Chats-CLI / Jarvis)
 ---
 
@@ -1107,9 +1107,36 @@ Privacy-Default). Nur die App schreibt; `chats audit` liest.
 
 `whisperm8-chats` (`WhisperM8/Resources/whisperm8-chats-skill.md`): macht aus Befehlen
 Verhalten. Autonomie-Stufen (Beobachten/Zuarbeiten/Supervisor), Send-Gate über
-AskUserQuestion, Ein-Hop-Regel, Batch-Aufräumen, Supervisor-Loop
-(`overview → wait → tail → berichten`). Interrupt nur nach expliziter
-User-Freigabe.
+AskUserQuestion, Ein-Hop-Regel, Batch-Aufräumen, Lagebild ohne Jarvis-Modus
+(`snapshot → since → tail → berichten`; den Dauerbetrieb trägt der Skill
+`jarvis` mit dem Board). Interrupt nur nach expliziter User-Freigabe.
+
+**Freigabeliste für Lese-Befehle** (in `permissions.allow` der
+Claude-Code-Einstellungen; Mutationen bewusst nicht):
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(whisperm8 chats list:*)",
+      "Bash(whisperm8 chats overview:*)",
+      "Bash(whisperm8 chats snapshot:*)",
+      "Bash(whisperm8 chats since:*)",
+      "Bash(whisperm8 chats show:*)",
+      "Bash(whisperm8 chats tail:*)",
+      "Bash(whisperm8 chats wait:*)",
+      "Bash(whisperm8 chats queue:*)",
+      "Bash(whisperm8 chats address:*)",
+      "Bash(whisperm8 chats audit:*)",
+      "Bash(whisperm8 chats archived:*)",
+      "Bash(whisperm8 chats duplicates:*)"
+    ]
+  }
+}
+```
+
+`chats board` fehlt bewusst: Mit `set`, `milestone` oder `clear` ändert derselbe
+Befehlsanfang das Board.
 
 **Verhältnis zum nativen Cross-Session-Messaging** (Claude Code
 `ListAgents`/`SendMessage`, geprüft 10.10. und 17.10.2026): Es ersetzt

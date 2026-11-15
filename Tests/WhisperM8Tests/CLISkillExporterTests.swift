@@ -545,6 +545,30 @@ final class CLISkillExporterTests: XCTestCase {
         XCTAssertNotNil(stamp.installed["examples/wf-docs-review.js"])
     }
 
+    /// `make skills` liefert im Plugin-Modus dieselben Skills aus wie die App
+    /// (`SkillDefinition.plugin`); vorher fehlten `clipboard` und `tickets`.
+    func testSyncSkillsPluginModeShipsEveryPluginSkill() throws {
+        let pluginRoot = tempHome.appendingPathComponent("plugin-root", isDirectory: true)
+
+        let result = try runSyncSkills(
+            skillsHome: tempHome.appendingPathComponent("skills", isDirectory: true),
+            extraEnvironment: [
+                "WHISPERM8_PLUGIN_MODE": "1",
+                "WHISPERM8_PLUGIN_ROOT": pluginRoot.path,
+            ]
+        )
+
+        XCTAssertEqual(result.status, 0, result.output)
+        let skillsDirectory = pluginRoot.appendingPathComponent("whisperm8/skills", isDirectory: true)
+        let shipped = Set(try FileManager.default.contentsOfDirectory(atPath: skillsDirectory.path))
+        let expected = Set(CLISkillExporter.SkillDefinition.plugin.map(\.name))
+        XCTAssertEqual(shipped, expected, "PLUGIN_SKILLS in scripts/sync-skills.sh muss SkillDefinition.plugin spiegeln")
+        for name in expected {
+            XCTAssertTrue(FileManager.default.fileExists(
+                atPath: skillsDirectory.appendingPathComponent("\(name)/SKILL.md").path), name)
+        }
+    }
+
     func testSyncSkillsRejectsSymlinkedAssetDirectoryInRepoMirror() throws {
         let skillsHome = tempHome.appendingPathComponent("skills", isDirectory: true)
         let mirror = tempHome.appendingPathComponent("repo-mirror/gpt-workflow", isDirectory: true)

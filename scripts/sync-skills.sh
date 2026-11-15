@@ -131,9 +131,15 @@ overall_changed=0
 # sondern als `whisperm8:<skill>` aus dem Plugin-Ordner, den die App jeder
 # Session per CLAUDE_CODE_PLUGIN_DIRS mitgibt (WhisperM8ClaudePlugin.swift).
 # Dieser Block legt denselben Aufbau aus dem Repo ab — gleiche Ablage
-# (versions/<hash>/whisperm8 + Symlink, atomar umgebogen), damit laufende
-# Sessions nicht mitten im Turn neu laden. Ohne App-Build: neue Sessions sehen
-# den Repo-Stand sofort.
+# (versions/<hash>/whisperm8 + Symlink, atomar umgebogen), damit nie in einen
+# Ordner geschrieben wird, den eine Session gerade liest. Laufende Sessions
+# laden das Plugin trotzdem neu, wenn sich die Version im Manifest ändert
+# (beobachtet mit Claude Code 2.1.325). Dieses Skript schreibt
+# 0.0.0-dev+<Kurz-Hash von HEAD>, die Version ändert sich also mit jedem neuen
+# Commit; zwei Läufe am selben Commit ergeben dieselbe Version, ob dann neu
+# geladen wird, ist nicht belegt. Die App schreibt ihre eigene Versionsnummer.
+# Ein schon geladener Skill bleibt im Kontext, wie er war. Ohne App-Build: neue Sessions sehen den Repo-Stand
+# sofort.
 #
 # WHISPERM8_PLUGIN_MODE: 1 = Plugin (Default, solange claudePluginEnabled
 # nicht NO ist), 0 = alte lose Kopien. Mit WHISPERM8_SKILLS_HOME (Tests,
@@ -150,7 +156,9 @@ if [[ "$plugin_mode" == auto ]]; then
   fi
 fi
 
-PLUGIN_SKILLS=("${SKILLS[@]}" "jarvis|whisperm8-jarvis-skill||" "callout|whisperm8-callout-skill||")
+# Muss CLISkillExporter.SkillDefinition.plugin spiegeln (Test: CLISkillExporterTests).
+PLUGIN_SKILLS=("${SKILLS[@]}" "jarvis|whisperm8-jarvis-skill||" "callout|whisperm8-callout-skill||"
+  "clipboard|whisperm8-clipboard-skill||" "tickets|whisperm8-tickets-skill||")
 
 sync_plugin() {
   local skeleton="$RESOURCES/claude-plugin" versions="$PLUGIN_ROOT/versions"

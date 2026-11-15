@@ -18,7 +18,7 @@ Hilfe: `whisperm8 tickets --help`.
 |---|---|
 | Arbeit beginnt | `whisperm8 tickets link ABC-12` |
 | Etwas wartet auf den Nutzer | `whisperm8 tickets assign ABC-12 me` und das Label, das das Projekt dafür führt: `whisperm8 tickets label ABC-12 --add <Label>` |
-| Zwischenstand, der zählt | `whisperm8 tickets note ABC-12 "Branch steht, Review läuft."` |
+| Zwischenstand, der zählt | `whisperm8 tickets comment ABC-12 "Branch steht, Review läuft."` |
 | Ein Punkt unter „Fertig, wenn“ ist erledigt | `whisperm8 tickets check ABC-12 2` (Nummer oder ein Stück des Textes; ohne Verweis zeigt der Befehl die Kästchen) |
 | Der Nutzer hat etwas entschieden | `whisperm8 tickets decide ABC-12 --question "…" --option "A" --option "B" --chosen "A"` |
 | Gebaut und geprüft, Branch wartet auf den Merge | `whisperm8 tickets done ABC-12 --built "was gebaut wurde" --commit abc1234 --not "was nicht dazugehört" --test "Schritt für den Handtest" --status "Merge-bereit"` |
@@ -26,8 +26,8 @@ Hilfe: `whisperm8 tickets --help`.
 | Falsch verknüpft | `whisperm8 tickets unlink ABC-12` |
 
 - `link` setzt ein Ticket, das noch nicht in Arbeit ist, auf „In Progress“. Mit `--no-status` bleibt der Status.
-- `note` ersetzt die erste Zeile des Tickets (`**Stand TT.MM.JJJJ:** …`). Das ist der Ort für den Stand, nicht
-  eine Kette von Kommentaren. `comment` ist für Dinge, die als Verlauf stehen bleiben sollen.
+- Zwischenstände schreibt der Chat als Kommentar (`comment`). Die Stand-Zeile oben im Ticket
+  (`**Stand TT.MM.JJJJ:** …`, ersetzt mit `note`) führt der Supervisor.
 - **Abgeben heißt zusammenfassen.** `done` verlangt `--built`: ein, zwei Sätze, was gebaut wurde, so dass es
   jemand ohne den Chat-Verlauf versteht. Dazu nach Bedarf `--commit`, `--not` (was bewusst nicht dazugehört),
   `--test` je Schritt für den Handtest (mehrfach; sie stehen dann als Kästchen am Ticket) und `--image bild.png`.
@@ -81,19 +81,25 @@ whisperm8 tickets list --status "Merge-bereit"
 
 - **Board lesen:** Unter „Laufende Chats ohne offenes Ticket“ steht je Chat, woran er zuletzt saß:
   - „zuletzt an ABC-12 (Merge-bereit)“: Er hat abgegeben und wartet auf deinen Merge. Offen lassen, bis gemergt ist.
-  - „zuletzt an ABC-29 (Done)“: Die Arbeit ist erledigt. Chat schließen. Dasselbe gilt für einen Status nach dem
-    Merge („wartet aufs Ausliefern“): Der Chat hat nichts mehr zu tun.
-  - „noch nie verknüpft“: Er arbeitet ohne Ticket. Ticket anlegen und verknüpfen, oder schließen.
+  - „zuletzt an ABC-29 (Done)“: Die Arbeit ist erledigt. Chat stoppen, sein Tab geht mit zu
+    (`whisperm8 chats close <ref> --stop`), und aus dem Workspace nehmen (Skill `jarvis`, Abschnitt 3).
+    Dasselbe gilt für einen Status nach dem Merge („wartet aufs Ausliefern“): Der Chat hat nichts mehr zu tun.
+  - „noch nie verknüpft“: Er arbeitet ohne Ticket. Ticket anlegen und verknüpfen, oder stoppen.
   Supervisor-Chats (Titel beginnt mit „Jarvis“) stehen getrennt und brauchen kein Ticket.
 - **Abgegebene Tickets:** Ein Ticket, das ein Chat mit `done` abgegeben hat und das noch in Arbeit steht (etwa
   „Merge-bereit“), zeigt „abgegeben von <Chat>“ und zählt nicht zu `--no-agent`. Es wartet auf dich.
 - **Für einen anderen Chat handeln:** `--chat <Anfang der Chat-ID>` bei `link`, `done`, `unlink`, `mine`
   (IDs aus `whisperm8 chats list`).
-- **Nach dem Merge:** `whisperm8 tickets status ABC-12 Done`, dann den Chat schließen.
-- **Neue Tickets** nur nach dem Ja des Nutzers:
+- **Nach dem Merge:** `whisperm8 tickets status ABC-12 Done`, dann den Chat stoppen (wie oben).
+- **Neue Tickets** legt der Supervisor an:
   `whisperm8 tickets new "Titel" --description @text.md --project "Vorhaben" --priority high --labels <Label>`.
+  Befunde zum Werkzeug oder Ablauf erfasst er ohne Rückfrage, wo der Nutzer das für das Projekt erlaubt hat und
+  keine Kollegen im selben Ticket-Bereich arbeiten: markiert mit dem Label, das das Projekt dafür führt (etwa
+  „Selbst erfasst“), und gemeldet als „Neu erfasst“ (Skill `jarvis`, Abschnitt 14). Gebaut wird erst nach dem
+  „bauen“ des Nutzers. Sonst und bei mehr als einer Handvoll: erst fragen bzw. die Liste zeigen.
 - **Zuweisen:** `whisperm8 tickets assign ABC-12 me` (der Nutzer), `none` oder ein Namensteil.
-- Chats nach ihrem Ticket benennen (`ABC-12 Ole · Thema: Aufgabe`); das Board zeigt daraus den Rufnamen „Ole“.
+- Chats nach ihrem Ticket benennen, Schema im Skill `jarvis` (Abschnitt „Benennung“):
+  `ABC-12 Ole · Thema: Aufgabe`; das Board zeigt daraus den Rufnamen „Ole“.
 
 ## Aufbau eines Tickets
 
@@ -111,7 +117,9 @@ Wer will was und warum. Nicht, wie es gebaut wird.
 Branch, Plan-Datei, Abhängigkeiten.
 ```
 
-Keine Hinweise auf KI-Beteiligung in Tickets oder Kommentaren.
+Keine Hinweise auf KI-Beteiligung in Tickets oder Kommentaren. In Beschreibung, Stand-Zeile und Kommentaren steht
+auch kein Chat-Name und kein „laut Chat X“. Was die Kommandozeile selbst anhängt (die Verknüpfung „Chat: …“,
+„Festgehalten von“ bei `decide`), bleibt so: Board und Ansichten im Ticket-Werkzeug lesen es.
 
 ## Grenzen und Fehler
 
@@ -133,7 +141,8 @@ Keine Hinweise auf KI-Beteiligung in Tickets oder Kommentaren.
 - `whisperm8 tickets doctor` prüft Zugang, Zuordnung und App, und nennt als Hinweise („ACHTE“), was Ordnung
   braucht: Tickets ohne Projekt, eingeplant ohne „Fertig, wenn“, in Arbeit ohne Chat, seit Wochen unberührt, und
   Abweichungen zwischen der Tabelle der Bereiche in der Doku des Projekts und dem Ticket-Werkzeug. Exit-Codes: 0 ok, 1 Aufruf falsch, 3 nicht
-  gefunden, 4 mehrdeutig, 5 Linear nicht eingerichtet, nicht erreichbar oder lehnt ab.
+  gefunden, 4 mehrdeutig oder abgelehnt (etwa Schreiben in einen fremden Workspace), 5 Linear nicht eingerichtet,
+  nicht erreichbar oder lehnt ab.
 - Einrichtung (einmalig, macht der Nutzer oder der Supervisor mit ihm): `pbpaste | whisperm8 tickets setup --key-stdin`
   (je Workspace ein Key, der Workspace ergibt sich aus dem Key) und `whisperm8 tickets setup --team ABC --project <Ordner>`.
   Den Key nie ausgeben, nie in eine Datei, nie in den Chat.
