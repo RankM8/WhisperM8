@@ -76,8 +76,16 @@ enum PromptSubmitCheck {
     /// vor und die Warteschlange stellte einem ruhenden Chat nie zu (15.11.,
     /// Chat mit laufendem Hintergrund-Befehl). Nicht ablesbar heißt `false`,
     /// dann gilt die Schätzung wie bisher.
+    ///
+    /// Streng, weil es den Sendeweg lockert (Uli zu WM8-64): Eine Fehl-Ablesung
+    /// Richtung „leer“ würde zu einem Senden mit Enter. Leer heißt deshalb
+    /// zusätzlich: eine Zeile, und der Cursor steht in ihr ganz am Anfang. Der
+    /// Cursor bestätigt, dass es das echte Feld ist und nicht zwei Linien aus
+    /// einer Tool-Ausgabe weiter oben; ein abgeblendeter Platzhalter für
+    /// eingefügten Text oder ein Bild setzt den Cursor dahinter.
     static func fieldVisiblyEmpty(field: ControllerPromptField?, profile: TerminalKeyboardProfile) -> Bool {
-        profile == .claudeCodeChat && field?.isEmpty == true
+        guard profile == .claudeCodeChat, let field else { return false }
+        return field.isEmpty && field.rows == 1 && field.cursorRow == 0 && field.cursorAtStart
     }
 
     static let stuckMessage = "Der Text steht im Eingabefeld des Chats, wurde aber nicht abgeschickt. "
