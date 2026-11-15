@@ -112,20 +112,50 @@ struct TicketBoardLanesView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let count = CGFloat(max(lanes.count, 1))
-            let width = max(Self.minColumnWidth, (proxy.size.width - Self.spacing * (count - 1)) / count)
+            // Eingeklappte Spalten sind schmal; die gefüllten teilen sich den Rest.
+            let folded = CGFloat(lanes.filter(\.isFolded).count)
+            let open = CGFloat(max(lanes.count - Int(folded), 1))
+            let free = proxy.size.width - Self.spacing * CGFloat(max(lanes.count - 1, 0)) - folded * TicketBoardLanes.foldedWidth
+            let width = max(Self.minColumnWidth, free / open)
             ScrollView(.horizontal, showsIndicators: true) {
                 HStack(alignment: .top, spacing: Self.spacing) {
                     ForEach(lanes) { lane in
-                        TicketBoardLaneView(lane: lane, rule: rule, selectedKey: selectedKey,
-                                            isExpanded: expanded.contains(lane.id), source: source,
-                                            select: select, expand: { expand(lane.id) })
-                            .frame(width: width)
+                        if lane.isFolded {
+                            TicketBoardFoldedLaneView(lane: lane)
+                                .frame(width: TicketBoardLanes.foldedWidth)
+                        } else {
+                            TicketBoardLaneView(lane: lane, rule: rule, selectedKey: selectedKey,
+                                                isExpanded: expanded.contains(lane.id), source: source,
+                                                select: select, expand: { expand(lane.id) })
+                                .frame(width: width)
+                        }
                     }
                 }
                 .frame(height: proxy.size.height)
             }
         }
+    }
+}
+
+/// Eine Spalte, die ein Filter geleert hat: schmal, nur Statusname und 0.
+private struct TicketBoardFoldedLaneView: View {
+    let lane: TicketBoardLane
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(verbatim: lane.status.name)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AgentTheme.textSecondary)
+                .lineLimit(2)
+            Text(verbatim: "0")
+                .font(.system(size: 11, weight: .medium).monospacedDigit())
+                .foregroundStyle(AgentTheme.textSecondary)
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(TicketBoardStyle.column, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 }
 

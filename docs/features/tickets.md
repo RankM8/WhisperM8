@@ -451,7 +451,7 @@ gezeigten Stands.
 - **Board:** eine Spalte je Status des Teams, der offene Tickets hat (seit WM8-112; vorher drei Gruppen nach Art
   des Status, die genau die Engpässe versteckten). Reihenfolge: zuerst Status, die nach der Regel des Teams auf
   mich warten, dann Eingang, Begonnenes (darin „fertig“ hinter „in Arbeit“), als Nächstes, Backlog; sonst der
-  weiteste Stand links. Ein Filter leert eine Spalte, statt sie zu entfernen. Eine Spalte zeigt die ersten acht
+  weiteste Stand links. Leert ein Filter eine Spalte, klappt sie an ihrem Platz schmal ein (150 pt, nur Statusname und 0), und die gefüllten rücken zusammen (Giuliano, 15.11.2026); ohne Filter bleibt eine leere Spalte breit. Die Regel steht pur in `TicketBoardLanes.isFolded`. Eine Spalte zeigt die ersten acht
   Karten, darunter „N weitere · alle zeigen“. Im Kopf der Spalte steht „Wartet auf dich“ (Status bedeutet das,
   Rahmen in Bernstein) oder „N für dich“. Jede Karte zeigt Nummer, Priorität, Fortschritt der Kästchen, Person,
   Titel, Projekt und Meilenstein, Status und Labels; Labels, mit denen ein Ticket auf mich wartet, in Bernstein.

@@ -81,6 +81,10 @@ final class TicketTeamRuleTests: XCTestCase {
         filter.waitingForMe = true
         let presentation = TicketBoardPresentation.make(model: model(), filter: filter)
         XCTAssertEqual(presentation.lanes.count, 4)
+        XCTAssertEqual(presentation.lanes.map(\.isFolded), [false, true, false, true], "vom Filter geleert: schmal, an ihrem Platz")
+        XCTAssertEqual(TicketBoardPresentation.make(model: model(), filter: .all).lanes.map(\.isFolded), [false, false, false, false])
+        XCTAssertFalse(TicketBoardLanes.isFolded(entries: [], filterActive: false), "ohne Filter bleibt eine leere Spalte breit")
+        XCTAssertTrue(TicketBoardLanes.isFolded(entries: [], filterActive: true))
         XCTAssertEqual(presentation.lanes.flatMap { $0.entries.map(\.ticket.key) }, ["WM8-2", "WM8-3"])
         XCTAssertEqual(presentation.counts.waitingForMe, 2)
         XCTAssertEqual(TicketBoardPresentation.make(model: model(), filter: .all).counts.waitingForMe, 2,

@@ -9,6 +9,8 @@ struct TicketBoardLane: Equatable, Identifiable {
     var meaning: TicketStatusMeaning?
     /// Sichtbare Tickets (nach Filter), in der Reihenfolge der Karten.
     var entries: [TicketBoardEntry]
+    /// Schmal eingeklappt: Ein Filter hat die Spalte geleert (`TicketBoardLanes.isFolded`).
+    var isFolded = false
 
     var id: String { status.id }
     /// Wie viele der sichtbaren Tickets auf den Nutzer warten.
@@ -29,6 +31,18 @@ enum TicketBoardLanes {
         return (entries, lane.entries.count - entries.count)
     }
 
+    /// Breite einer eingeklappten Spalte (Entwurf: `.lane.folded`).
+    static let foldedWidth: CGFloat = 150
+
+    /// Eine Spalte, die ein Filter geleert hat, klappt schmal ein: nur
+    /// Statusname und 0, an ihrem Platz; die gefüllten rücken zusammen
+    /// (Entscheidung Giuliano, 15.11.2026). Ohne Filter bleibt eine leere
+    /// Spalte breit. Die Controller-Navigation (WM8-91) überspringt
+    /// eingeklappte Spalten.
+    static func isFolded(entries: [TicketBoardEntry], filterActive: Bool) -> Bool {
+        filterActive && entries.isEmpty
+    }
+
     /// Eine Spalte je offenem Status, der Tickets hat. Welche Status
     /// Spalten bekommen, hängt am ungefilterten Stand: Ein Filter leert eine
     /// Spalte, statt sie verschwinden zu lassen, damit das Board nicht springt.
@@ -39,7 +53,7 @@ enum TicketBoardLanes {
     /// hinter denen in Arbeit. Sonst der weiteste Stand links, also nach der
     /// Stelle im Team absteigend. Die Karten einer Spalte stehen nach Priorität.
     static func make(statuses: [TicketStatus], open: [TicketBoardEntry], visible: [TicketBoardEntry],
-                     rule: TicketTeamRule) -> [TicketBoardLane] {
+                     rule: TicketTeamRule, filterActive: Bool = false) -> [TicketBoardLane] {
         let used = Set(open.map(\.ticket.status.id))
         var known = statuses.filter { !$0.kind.isClosed && used.contains($0.id) }
         // Ein Status, den die Liste des Teams (noch) nicht kennt, bekommt trotzdem eine Spalte.
@@ -49,8 +63,9 @@ enum TicketBoardLanes {
         var byStatus: [String: [TicketBoardEntry]] = [:]
         for entry in visible { byStatus[entry.ticket.status.id, default: []].append(entry) }
         return known.sorted { laneOrder($0, $1, rule: rule) }.map { status in
-            TicketBoardLane(status: status, meaning: rule.meaning(of: status),
-                            entries: (byStatus[status.id] ?? []).sorted(by: TicketBoardLayout.order))
+            let entries = (byStatus[status.id] ?? []).sorted(by: TicketBoardLayout.order)
+            return TicketBoardLane(status: status, meaning: rule.meaning(of: status), entries: entries,
+                                   isFolded: isFolded(entries: entries, filterActive: filterActive))
         }
     }
 

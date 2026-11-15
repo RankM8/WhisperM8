@@ -40,7 +40,8 @@ struct TicketBoardPresentation: Equatable {
         for entry in visible { byProject[entry.ticket.project ?? "", default: []].append(entry) }
         let names = Set(open.map { $0.ticket.project ?? "" })
         return TicketBoardPresentation(
-            lanes: TicketBoardLanes.make(statuses: model.statuses, open: open, visible: visible, rule: model.rule),
+            lanes: TicketBoardLanes.make(statuses: model.statuses, open: open, visible: visible, rule: model.rule,
+                                         filterActive: filter != .all),
             groups: sorted(Array(byProject.keys)).map { Group(project: $0, entries: byProject[$0, default: []].sorted(by: TicketBoardLayout.order)) },
             counts: TicketFilterCounts.make(entries: open, filter: filter),
             projects: sorted(Array(names)),
