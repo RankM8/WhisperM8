@@ -136,10 +136,15 @@ pur im Erkenner (`ControllerGestureRecognizer+Axes`: `boostFactor`, `boostIntegr
   Statusänderung noch die alte Beschriftung; die Belegung selbst liest bei jedem Druck frisch.
 - **Kosten im Ereignis-Pfad:** Der Erkenner gibt höchstens 60 Scroll-Gesten je Sekunde aus
   (`scrollMinInterval`); bei 300 Zeilen/s trägt jede rund 5 Zeilen, bis 60 Zeilen/s bleibt es eine Geste
-  je Zeile wie vorher. Jede Geste kostet wie bisher einen Sprung auf den Main Thread mit Schnappschuss
-  (bei Claude und Codex unten: Lesen der untersten 16 Zeilen; hochgescrollt bei Claude nichts, bei Codex
-  die Freigabe-Probe aus WM8-107) und einen `scrollUp`/`scrollDown` von SwiftTerm. Das Blättern sind
-  höchstens gut drei Gesten je Sekunde. „Hochgescrollt“ liest nur Zahlen der Ansicht.
+  je Zeile wie vorher. Jede Geste kostet einen Sprung auf den Main Thread und einen
+  `scrollUp`/`scrollDown` von SwiftTerm. Den vollen Schnappschuss (Fenster, Status, bei Claude und Codex
+  unten das Lesen der untersten 16 Zeilen, Zähler `controller.screen.read`) ziehen Scrollen und Blättern
+  höchstens alle 250 ms; dazwischen verwendet `ControllerManager` den letzten wieder (WM8-101). Gemessen im
+  Test mit den Gesten des Erkenners bei vollem Ausschlag: vorher 43, 60 und 60 Schnappschüsse in den
+  Sekunden 0–1, 1–2 und 2–3, jetzt je 4. Jede andere Geste zieht ihn frisch und verwirft den gemerkten —
+  Kreis, Kreuz und alles, was sendet oder Escape schickt, entscheidet immer am Stand des Drucks; die Pause
+  gilt sofort. Das Blättern sind höchstens gut drei Gesten je Sekunde. „Hochgescrollt“ liest nur Zahlen
+  der Ansicht.
 - Xbox: RB + rechter Stick blättert, B springt ans Ende (Belegung nach Lage). Paddles ändern sich nicht:
   Sie lösen eigene Aktionen aus und wirken in keiner Ebene; die Tastatur-Insel (⌥Tab) kennt weder Kreis
   noch Stick.

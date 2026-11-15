@@ -411,12 +411,15 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     /// Legende gleich neu (Kreis: „Ans Ende“ oder wieder „Zurück“) — sonst
     /// stünde dort bis zur nächsten Eingabe der Stand von vor dem Scrollen.
     /// Nur dann: Ein voller Schnappschuss je Scroll-Geste wäre bei hohem Tempo
-    /// zu teuer.
+    /// zu teuer. Verglichen wird mit dem zuletzt veröffentlichten Stand
+    /// (`ui.context`), nicht mit dem Zusammenhang der Geste: Der kann bei
+    /// Scroll-Gesten bis zu 250 ms alt sein (WM8-101) und löste sonst bei jeder
+    /// Geste ein Neulesen aus.
     private func scrollSelected(in context: ControllerContext, _ body: (UUID) -> Void) {
         guard let sessionID = selectedSessionID else { return }
         body(sessionID)
-        guard case let .chat(state) = context else { return }
-        if terminals.isScrolledBack(sessionID) != state.scrolledBack { refreshContext() }
+        guard case .chat = context, case let .chat(shown) = ui.context else { return }
+        if terminals.isScrolledBack(sessionID) != shown.scrolledBack { refreshContext() }
     }
 
     private func sendKey(_ key: TerminalControlKey) {
