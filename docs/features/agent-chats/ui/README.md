@@ -46,8 +46,10 @@ Details zu mehreren Fenstern, Tab-Detach und Cross-Window-Moves stehen in
 Die Sidebar ist der Navigator über Projekte und Chats. Sie kann ein- und
 ausgeblendet werden, hat eine persistierte Breite mit Clamp gegen die aktuelle
 Fensterbreite und bietet oben Such-, Refresh-, Scope- und Layout-Controls. Der
-Scope ist `Aktiv`, `Zuletzt` oder `Alle`; die Suche hebt den Scope auf `Alle`
-an. Das Layout ist gruppiert nach Projekt oder flach nach Recency.
+Scope ist `Aktiv`, `Zuletzt` oder `Alle`, jeweils mit der Zahl der Chats im
+Umschalter; die Suche hebt den Scope auf `Alle` an. Das Plus am Projektkopf steht
+immer da (mit Arbeitsordnern als Menü Hauptordner/Arbeitsordner), ⊞ erscheint
+beim Überfahren, bei offener Projekt-Ansicht und im Kontextmenü. Das Layout ist gruppiert nach Projekt oder flach nach Recency.
 
 Die zentrale Erzeugungsfläche sitzt ebenfalls in der Sidebar und im Header.
 Der Sidebar-Splitbutton „Neuer Chat" startet direkt im aktuellen Zielprojekt;
@@ -216,7 +218,9 @@ Rahmen. Gemessen wird mit `onGeometryChange`, nicht über Preferences: Deren Wer
 kam im Test erst mit einem späteren Update-Zyklus an und blieb sonst auf 0. Die
 Gruppen-Chips werden ebenso gemessen; bis zur ersten Messung gilt eine Schätzung.
 
-Für viele Tabs gibt es ein Overflow-Menü und den Ctrl-Tab-Switcher. Der
+Rechts neben der Leiste steht immer das Tab-Menü (Winkel nach unten): Es listet
+alle offenen Tabs und trägt den Schalter „Tab-Gruppen“, der früher ein eigener
+Knopf war (WM8-80). Für viele Tabs gibt es außerdem den Ctrl-Tab-Switcher. Der
 Switcher kennt keinen globalen Modus, sondern drei Situationen: Grid sichtbar
 → die echten Panes werden markiert, maximierter Workspace-Chat → Mini-Map im
 Grid-Layout, sonst → Liste der offenen Tabs desselben Projekts. Kacheln zeigen

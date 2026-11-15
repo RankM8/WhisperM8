@@ -493,6 +493,9 @@ struct ProjectChatGroup: View {
 
                 Spacer(minLength: 6)
 
+                // ⊞ beim Überfahren und solange die Projekt-Ansicht offen ist,
+                // sonst über das Kontextmenü. Das Plus steht immer da, samt
+                // der Wahl Hauptordner/Arbeitsordner (WM8-80, kein Hover-only).
                 if isHeaderHovered || isWorkspaceOpen {
                     Button(action: onOpenAsWorkspace) {
                         Image(systemName: "square.grid.2x2")
@@ -504,60 +507,55 @@ struct ProjectChatGroup: View {
                                     : AgentTheme.textTertiary)
                             .frame(width: 20, height: 20)
                             .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(!canOpenAsWorkspace && !isWorkspaceOpen)
+                .help(isWorkspaceOpen
+                    ? String(localized: "Show project grid again")
+                    : canOpenAsWorkspace
+                        ? String(localized: "Open project as workspace (live grid of the active chats)")
+                        : String(localized: "No active chats in this project"))
+                }
+                if worktreeProjects.isEmpty {
+                    Button { onNewChat(project) } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(isHeaderHovered ? AgentTheme.textSecondary : AgentTheme.textTertiary)
+                            .frame(width: 20, height: 20)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .disabled(!canOpenAsWorkspace && !isWorkspaceOpen)
-                    .help(isWorkspaceOpen
-                        ? String(localized: "Show project grid again")
-                        : canOpenAsWorkspace
-                            ? String(localized: "Open project as workspace (live grid of the active chats)")
-                            : String(localized: "No active chats in this project"))
-                    if isHeaderHovered {
-                        if worktreeProjects.isEmpty {
-                            Button { onNewChat(project) } label: {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(AgentTheme.textSecondary)
-                                    .frame(width: 20, height: 20)
-                                    .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .help("Start a new Codex chat in the project")
-                        } else {
-                            // In der Gruppe stehen auch Chats aus Arbeitsordnern:
-                            // Das Plus fragt, wo der neue Chat startet, statt still
-                            // den Hauptordner zu nehmen (WM8-102).
-                            Menu {
-                                Button { onNewChat(project) } label: {
-                                    Label("Main folder", systemImage: "folder")
-                                }
-                                ForEach(worktreeProjects) { worktree in
-                                    Button { onNewChat(worktree) } label: {
-                                        Label(worktree.name, systemImage: AgentWorkingCopyBadge.iconName(.worktree))
-                                    }
-                                }
-                            } label: {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundStyle(AgentTheme.textSecondary)
-                                    .frame(width: 20, height: 20)
-                                    .contentShape(Rectangle())
-                            }
-                            .menuStyle(.borderlessButton)
-                            .menuIndicator(.hidden)
-                            .fixedSize()
-                            .help("New chat: choose the main folder or a worktree")
+                    .help("Start a new Codex chat in the project")
+                } else {
+                    // In der Gruppe stehen auch Chats aus Arbeitsordnern:
+                    // Das Plus fragt, wo der neue Chat startet, statt still
+                    // den Hauptordner zu nehmen (WM8-102).
+                    Menu {
+                        Button { onNewChat(project) } label: {
+                            Label("Main folder", systemImage: "folder")
                         }
-                    } else if let workspaceOccupancyLabel {
-                        Text(workspaceOccupancyLabel)
-                            .font(.system(size: 11, weight: .semibold).monospacedDigit())
-                            .foregroundStyle(AgentTheme.accent)
-                            .help("The grid shows \(workspaceOccupancyLabel) active chats — final stage 3×3 reached")
+                        ForEach(worktreeProjects) { worktree in
+                            Button { onNewChat(worktree) } label: {
+                                Label(worktree.name, systemImage: AgentWorkingCopyBadge.iconName(.worktree))
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(isHeaderHovered ? AgentTheme.textSecondary : AgentTheme.textTertiary)
+                            .frame(width: 20, height: 20)
+                            .contentShape(Rectangle())
                     }
-                } else if let workspaceOccupancyLabel {
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                    .help("New chat: choose the main folder or a worktree")
+                }
+                if let workspaceOccupancyLabel {
                     Text(workspaceOccupancyLabel)
                         .font(.system(size: 11, weight: .semibold).monospacedDigit())
                         .foregroundStyle(AgentTheme.accent)
+                        .help("The grid shows \(workspaceOccupancyLabel) active chats — final stage 3×3 reached")
                 } else if !sessions.isEmpty {
                     Text("\(sessions.count)")
                         .font(.system(size: 11, weight: .medium).monospacedDigit())
@@ -1193,9 +1191,11 @@ struct PinnedSessionRow: View {
                 Spacer(minLength: 0)
 
                 if let slotBadge {
+                    // Grau statt Akzentfarbe (WM8-80): Die Marke ordnet nur ein,
+                    // sie soll nicht lauter sein als der Status.
                     Text(slotBadge)
-                        .font(.system(size: 11, weight: .bold).monospacedDigit())
-                        .foregroundStyle(AgentTheme.accent)
+                        .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                        .foregroundStyle(AgentTheme.textTertiary)
                         .help("Slot position in the workspace")
                 }
 
@@ -1203,7 +1203,8 @@ struct PinnedSessionRow: View {
                     .frame(minWidth: 28, alignment: .trailing)
             }
             .padding(.horizontal, 10)
-            .frame(maxWidth: .infinity, minHeight: 28, maxHeight: 28, alignment: .leading)
+            // 26 statt 28 (WM8-80): ein Zeilenmaß mit den Projektzeilen.
+            .frame(maxWidth: .infinity, minHeight: 26, maxHeight: 26, alignment: .leading)
             .background(rowBackground, in: RoundedRectangle(cornerRadius: 6))
             .overlay {
                 if isMultiSelected {

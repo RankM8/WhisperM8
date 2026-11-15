@@ -2121,6 +2121,16 @@
         }
       }
     },
+    "All tabs and tab groups": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Tabs und Tab-Gruppen"
+          }
+        }
+      }
+    },
     "All time": {
       "localizations": {
         "de": {
@@ -6137,6 +6147,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gestoppte Chats zeigen"
+          }
+        }
+      }
+    },
+    "Tab groups": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tab-Gruppen"
           }
         }
       }

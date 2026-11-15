@@ -118,19 +118,13 @@ enum AgentTabOrder {
         return origins.count == 1 ? origins.first : nil
     }
 
-    // MARK: - Offene Tabs und Überlauf
+    // MARK: - Offene Tabs
 
     /// Offene Tabs in gespeicherter Reihenfolge. Unbekannte IDs (Chat
     /// gelöscht) und archivierte Chats fallen heraus.
     static func headerTabs(openTabIDs: [UUID], sessions: [AgentChatSession]) -> [AgentChatSession] {
         let byID = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         return openTabIDs.compactMap { byID[$0] }.filter { $0.status != .archived }
-    }
-
-    /// Ist der Inhalt der Leiste breiter als ihr sichtbarer Bereich? Ein
-    /// Punkt Spielraum gegen Rundung beim Messen.
-    static func hasOverflow(contentWidth: CGFloat, viewportWidth: CGFloat) -> Bool {
-        contentWidth > viewportWidth + 1
     }
 }
 

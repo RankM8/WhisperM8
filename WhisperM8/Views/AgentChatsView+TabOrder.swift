@@ -186,11 +186,4 @@ extension AgentChatsView {
         }
         return ("Gruppe", AgentGridWorkspace.defaultColorHex)
     }
-
-    /// `true`, wenn der Tab-Strip-Inhalt breiter ist als sein sichtbarer
-    /// Bereich — dann blenden wir das Chevron-Overflow-Menü ein. Im Fullscreen
-    /// (alle Tabs passen rein) ist das `false`.
-    var hasTabOverflow: Bool {
-        AgentTabOrder.hasOverflow(contentWidth: stripContentWidth, viewportWidth: stripViewportWidth)
-    }
 }
