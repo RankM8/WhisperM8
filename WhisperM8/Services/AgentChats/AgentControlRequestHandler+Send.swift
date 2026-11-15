@@ -47,6 +47,9 @@ extension AgentControlRequestHandler {
             var usageWarning: String?
             var verify = false
             let outcome: SendOutcome = {
+                // Unmittelbar vor der Wirkung: Hat der Client inzwischen aufgegeben
+                // (MainActor hing), nicht mehr einfügen (WM8-85).
+                if request.isExpired() { return .failure(.expired, Self.expiredMessage) }
                 let registry = AgentTerminalRegistry.shared
                 let workspace = AgentWorkspaceUIModel.shared.workspace
                 guard let session = workspace.sessions.first(where: { $0.id == targetID }),
@@ -196,5 +199,16 @@ extension AgentControlRequestHandler {
                 + "Vorgemerkt kommt der Prompt nach der Antwort; bewusst antworten: `chats send <ref> --answer …`."
         }
         return "Ziel ist \(runtime.rawValue) (erlaubt: \(allowed.joined(separator: ",")))"
+    }
+}
+
+// MARK: - Veraltete Anfrage (WM8-85)
+
+extension AgentControlRequestHandler {
+    static let expiredMessage = "Anfrage verworfen: Der Client hatte schon aufgegeben (keine Antwort in seiner Frist). "
+        + "Nichts ausgeführt."
+
+    static func expiredResponse(_ request: ChatsControlRequest) -> ChatsControlResponse {
+        .failure(requestID: request.requestID, code: .expired, message: expiredMessage)
     }
 }

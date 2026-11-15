@@ -94,19 +94,33 @@ struct ChatsControlRequest: Codable, Equatable {
     var method: String
     /// Methoden-spezifische Parameter, dynamisch getypt.
     var params: ChatsControlJSON
+    /// Absendezeit des Clients (Unix-Sekunden, WM8-85). Ältere Clients
+    /// schicken sie nicht; dann wird nichts verworfen.
+    var sentAt: Double?
 
     init(
         protocolVersion: Int = ChatsControlProtocol.version,
         requestID: String = UUID().uuidString,
         actor: ChatsControlActor,
         method: String,
-        params: ChatsControlJSON = .object([:])
+        params: ChatsControlJSON = .object([:]),
+        sentAt: Double? = nil
     ) {
         self.protocolVersion = protocolVersion
         self.requestID = requestID
         self.actor = actor
         self.method = method
         self.params = params
+        self.sentAt = sentAt
+    }
+
+    /// Hat der Client schon aufgegeben? Dann darf eine verändernde Anfrage
+    /// nichts mehr tun (Vorfall 15.11.2026: die App arbeitete nach zwei
+    /// Minuten Stillstand angestaute `enqueue` ab, deren Clients längst mit
+    /// „keine Antwort“ geendet hatten; jede Wiederholung lag einzeln vor).
+    func isExpired(now: Date = Date()) -> Bool {
+        guard let sentAt else { return false }
+        return now.timeIntervalSince1970 - sentAt > Double(ChatsControlProtocol.clientReadTimeoutSeconds(for: method))
     }
 }
 
@@ -127,6 +141,9 @@ enum ChatsControlErrorCode: String, Codable {
     /// den User (WM8-75). Auch, wenn das Enter zurückgehalten wurde, weil sie
     /// erst nach dem Einfügen aufging.
     case approvalPending
+    /// Der Client hatte schon aufgegeben; nichts ausgeführt (WM8-85). Kommt
+    /// nur bei einem Client an, der länger wartet als seine eigene Frist.
+    case expired
     case invalid           // → Exit 1 (kaputte Parameter)
     case unsupported       // → Exit 1
     case internalError     // → Exit 4
@@ -134,7 +151,7 @@ enum ChatsControlErrorCode: String, Codable {
     var exitCode: Int32 {
         switch self {
         case .notFound: return ChatsCLIExit.notFound
-        case .conflict, .selfSend, .noPty, .notReady, .approvalPending, .internalError: return ChatsCLIExit.conflict
+        case .conflict, .selfSend, .noPty, .notReady, .approvalPending, .internalError, .expired: return ChatsCLIExit.conflict
         case .invalid, .unsupported: return ChatsCLIExit.usage
         }
     }
@@ -144,7 +161,7 @@ enum ChatsControlErrorCode: String, Codable {
     var isRetryable: Bool {
         switch self {
         case .notReady, .conflict, .approvalPending: return true
-        case .notFound, .selfSend, .noPty, .invalid, .unsupported, .internalError: return false
+        case .notFound, .selfSend, .noPty, .invalid, .unsupported, .internalError, .expired: return false
         }
     }
 

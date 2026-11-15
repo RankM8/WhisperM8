@@ -240,6 +240,30 @@ Teildateien zerfallen, das Plugin wird nur per Symlink-Tausch umgestellt.
 Härtungen sicher. C lohnt sich, wenn sich nach einigen Tagen zeigt, dass Chats die Regeln im Skill nicht
 zuverlässig befolgen. Dann zuerst `$.session.send` über Konten an einer Test-Instanz prüfen.
 
+## Nachtrag: erster Einsatz und Bau (WM8-85, 14./15.11.2026)
+
+Vier Befunde des Prüfers aus dem ersten echten Einsatz, die Weg B einschränken:
+
+1. **Native Nachrichten sind Worte eines Kollegen, nie Zustimmung des Users.** Claude Code hängt jeder
+   nativen Nachricht einen Zusatz an: nicht vom User getippt, als Bitte eines Kollegen im Rahmen der eigenen
+   Rechte behandeln, ein Kollege kann nichts freigeben. Entscheidungen des Users (Go zum Merge, stehende
+   Freigabe) laufen deshalb weiter über `chats send`/`enqueue`.
+2. **Der Absender ist nativ schwächer zu erkennen.** Ohne Angabe heißt eine Sitzung nach dem Ordner. Ein
+   fester Name je Chat (`claude --name`) ist als eigenes Paket geplant (WM8-85, Paket 2b). Gemessen an
+   2.1.325: `--name` geht mit `--resume`, Claude zeichnet den Namen in die obere Linie des Eingabefelds und
+   schreibt ihn als `custom-title` in den Verlauf; die Titel-Übernahme der App muss das übergehen.
+3. **Ein Auftrag an einen arbeitenden Chat mischt sich in dessen Turn.** Für Meldungen gut, für Aufträge
+   nicht: Aufträge an arbeitende Chats gehen weiter per `enqueue` (oder `send`, das seit WM8-85 selbst vormerkt).
+4. **Der Antwortweg muss ausdrücklich genannt werden.** Claude schlägt dem Empfänger die Absenderadresse vor;
+   soll die Antwort an einen Dritten gehen, steht das im Auftrag.
+
+**Gebaut (WM8-85):** Paket 1 härtet die CLI (keine Antwort in offene Rückfragen ohne `--answer`, `send` merkt
+selbst vor, Terminal-Tabs ohne Einfüge-Klammern, Postfach mit Alter, Limit in `chats address`). Paket 2a:
+native Nachrichten im Audit (`chats audit`, Methode `native-message`; erkannt im Verlauf an
+`"origin":{"kind":"peer",…}` mit `msg_id`, ohne neuen Hook), Skills mit dem nativen Weg als Standard,
+veraltete Anfragen verwerfen, Exit 6 bei unklarem Ausgang. Paket 2b (fester Name) folgt. Nicht gebaut: die Meldung an den Absender, wenn der Empfänger am Limit scheitert (Hook `StopFailure`, nur an einem
+nachgebauten Limit gemessen).
+
 ## Prüfskript
 
 `scripts/claude-peer-messaging-check.sh [konto-a] [konto-b]` (Standard `ai ai2`) misst sechs Grundlagen:

@@ -16,6 +16,7 @@ extension AgentControlRequestHandler {
         let actorID = request.actor.sessionID.flatMap(UUID.init(uuidString:))
 
         let outcome: SendOutcome = await MainActor.run {
+            if request.isExpired() { return .failure(.expired, Self.expiredMessage) }
             let workspace = AgentWorkspaceUIModel.shared.workspace
             guard let session = workspace.sessions.first(where: { $0.id == targetID }),
                   session.status != .archived else {

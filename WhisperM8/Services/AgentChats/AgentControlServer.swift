@@ -413,6 +413,17 @@ final class AgentControlServer: @unchecked Sendable {
             respond(fd, .failure(requestID: request.requestID, code: .internalError, message: "Kein Handler"))
             return
         }
+        // Lag die Anfrage länger als die Frist ihres Clients im Rückstau,
+        // nichts mehr ausführen (WM8-85). Lesen bleibt erlaubt.
+        if request.isExpired(), !AgentControlRequestHandler.readOnlyMethods.contains(request.method) {
+            Logger.agentStore.notice("control_request_expired method=\(request.method, privacy: .public)")
+            ChatsAuditLog.shared.append(ChatsAuditEntry(
+                at: Date(), actor: request.actor.sessionID.map { "Chat \($0.prefix(8))" } ?? "external",
+                verified: false, method: request.method, target: nil, outcome: "expired",
+                promptChars: nil, promptHead: nil))
+            respond(fd, AgentControlRequestHandler.expiredResponse(request))
+            return
+        }
 
         // Genau eine Response pro Request. Handler entscheidet selbst, was auf
         // den MainActor hoppt. Die Box ist NSLock-geschützt (GPT-Review):

@@ -134,6 +134,10 @@ extension AgentControlRequestHandler {
         // Phase 1 — planen und (nur bei echter Ausfuehrung) anhalten. EIN
         // MainActor-Block: Laufzustand, Status und Stop sehen denselben Stand.
         let phase: MoveAccountPhase = await MainActor.run {
+            // Erste Zeile im Block, vor dem ersten Anhalten: Hing die App, bis der
+            // Client aufgab, nichts anfangen (WM8-85). Später nicht mehr abbrechen,
+            // sonst blieben Chats angehalten, ohne umzuziehen.
+            if request.isExpired() { return .fail(.expired, Self.expiredMessage) }
             let profiles = ClaudeAccountProfiles()
             let target = AccountMovePlanner.normalize(targetName)
             let targetIsLoggedIn = targetCheck.loginProblem == nil

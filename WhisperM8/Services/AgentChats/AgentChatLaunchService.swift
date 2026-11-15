@@ -125,4 +125,6 @@ struct AgentChatLaunchService {
 
 struct ControlLaunchError: Error {
     var message: String
+    /// Verworfen, weil der Client schon aufgegeben hatte (WM8-85).
+    var expired = false
 }

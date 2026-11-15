@@ -10,7 +10,14 @@ enum ChatsControlClient {
     enum ClientError: Error {
         case appUnreachable(String)
         case protocolError(String)
+        /// Anfrage geschickt, aber keine Antwort in der Frist (WM8-85): Die App
+        /// hat sie vielleicht noch ausgeführt. Nicht „App nicht da“.
+        case outcomeUnknown(String)
     }
+
+    static let outcomeUnknownMessage = "Ausgang unklar: Die App hat nicht rechtzeitig geantwortet. Sie hat die "
+        + "Anfrage vielleicht schon ausgeführt. Nicht wiederholen — erst "
+        + "`whisperm8 chats queue <ref>` bzw. `chats tail <ref>` prüfen."
 
     static let connectTimeoutSeconds = 2
     /// Muss GRÖSSER sein als das Server-Handler-Fenster (10 s in
@@ -30,7 +37,8 @@ enum ChatsControlClient {
         }
 
         let actor = ChatsControlActor(identity: .fromEnvironment())
-        let request = ChatsControlRequest(actor: actor, method: method, params: .object(params))
+        let request = ChatsControlRequest(actor: actor, method: method, params: .object(params),
+                                          sentAt: Date().timeIntervalSince1970)
         let line = try ChatsControlCodec.encodeLine(request)
         try writeAll(fd, line)
         // Lang laufende Methoden (Kontowechsel) brauchen eine längere Lese-Frist.
@@ -38,7 +46,7 @@ enum ChatsControlClient {
         setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &readTimeout, socklen_t(MemoryLayout<timeval>.size))
 
         guard let responseLine = readLine(fd) else {
-            throw ClientError.appUnreachable("Keine Antwort von der App (Verbindung abgebrochen).")
+            throw ClientError.outcomeUnknown(outcomeUnknownMessage)
         }
         do {
             return try ChatsControlCodec.decode(ChatsControlResponse.self, from: responseLine)

@@ -15,6 +15,9 @@ enum ChatsCLIExit {
     static let conflict: Int32 = 4
     /// Socket-Befehl, aber App nicht erreichbar.
     static let appUnreachable: Int32 = 5
+    /// Anfrage geschickt, keine Antwort in der Frist: vielleicht ausgeführt.
+    /// Nie blind wiederholen, erst `chats queue`/`tail` prüfen (WM8-85).
+    static let outcomeUnknown: Int32 = 6
     /// Nur `wait`: Timeout ohne Ereignis.
     static let timeout: Int32 = 124
     /// SIGINT während eines blockierenden Befehls.
@@ -1072,7 +1075,8 @@ enum ChatsCLIHelp {
 
     EXIT-CODES
       0 ok · 1 Usage · 3 nicht gefunden/mehrdeutig · 4 Guard-Konflikt
-      5 App nicht erreichbar · 124 wait-Timeout · 130 unterbrochen
+      5 App nicht erreichbar · 6 Ausgang unklar (keine Antwort in der Frist; nicht
+      wiederholen, erst chats queue/tail prüfen) · 124 wait-Timeout · 130 unterbrochen
 
     Alle --json-Objekte tragen schemaVersion und markieren geschätzte Status
     mit "source": "transcriptEstimate". Ergebnis auf stdout, Rest auf stderr.

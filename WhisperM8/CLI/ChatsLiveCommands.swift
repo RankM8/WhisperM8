@@ -62,6 +62,9 @@ enum ChatsLiveSupport {
         } catch let ChatsControlClient.ClientError.protocolError(message) {
             CLIIO.err("Fehler: \(message)")
             return .failed(ChatsCLIExit.appUnreachable)
+        } catch let ChatsControlClient.ClientError.outcomeUnknown(message) {
+            CLIIO.err("Fehler: \(message)")
+            return .failed(ChatsCLIExit.outcomeUnknown)
         } catch {
             CLIIO.err("Fehler: \(error.localizedDescription)")
             return .failed(ChatsCLIExit.appUnreachable)

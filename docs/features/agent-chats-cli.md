@@ -811,6 +811,37 @@ dafür sicherer.
   (JSON `usageLimit`, `usageLimitResetsAt`; ohne `--json` eine Warnung auf
   stderr): Eine native Nachricht käme an, der Chat arbeitete aber nicht.
 
+### Nativ als Standard (WM8-85, Paket 2a)
+
+- **Native Nachrichten im Audit.** Der Watcher erkennt im Verlauf, den er ohnehin liest, Zeilen mit
+  `"origin":{"kind":"peer",…}` und trägt jede Nachricht genau einmal (`msg_id`) in `chats audit` ein: Methode
+  `native-message`, Absender (selbst angegebener Name und Adresse), Empfänger, Anfang des Textes. Nach einem
+  App-Start wird erst gemerkt, was im Verlauf steht, gemeldet wird nur Neues. Kein neuer Hook.
+- **Skills:** Claude-Chats schreiben sich standardmäßig nativ (Adresse aus `chats address`), auch Fertig- und
+  Blockiert-Meldungen an den Supervisor. Die CLI bleibt für Aufträge an arbeitende Chats, alles mit einer
+  Entscheidung des Users, Codex-Chats, gestoppte Chats und Terminal-Tabs. Bericht und Messung:
+  [chat-kommunikation](../plans/chat-kommunikation.md).
+
+### Veraltete Anfragen und unklarer Ausgang (WM8-85)
+
+Vorfall 15.11.2026: Die App bearbeitete bei Last 147 rund zwei Minuten lang keine Anfrage. Ein `enqueue` endete
+mit „Keine Antwort von der App“, der Absender wiederholte alle 15 s, und als die App wieder lief, arbeitete sie
+alle angestauten Anfragen ab: sechsmal dieselbe Meldung in einer Warteschlange. Seitdem:
+
+- Die CLI schickt ihre Absendezeit mit (`sentAt`). Ist eine verändernde Anfrage älter als die Lesefrist ihres
+  Clients (Handler-Frist + 2 s), verwirft die App sie beim Annehmen im Server. Weil die Anfragen am 15.11.
+  rechtzeitig ankamen und erst am MainActor hingen, prüfen diese Befehle noch einmal unmittelbar vor der
+  Wirkung: `send`, `enqueue`, `submit`, `interrupt` (ein spätes ESC träfe einen späteren Turn), `new`,
+  `resume`, `close --stop`, `move-account` (vor dem ersten Anhalten, danach nicht mehr) und `board`. Alle
+  anderen verändernden Befehle (etwa `rename`, `pin`, `order`, `workspace`) prüft nur das Annehmen; hängt die
+  App danach, laufen sie verspätet. Antwort `expired`, Log `control_request_expired`, Audit `expired`.
+  Lesende Methoden laufen weiter.
+- Kommt in der Frist keine Antwort, endet die CLI mit **Exit 6 „Ausgang unklar“** statt Exit 5: Die App hat
+  die Anfrage vielleicht schon ausgeführt. Nie blind wiederholen, erst `chats queue` bzw.
+  `chats tail` prüfen. Exit 5 heißt nur noch: App nicht erreichbar, nichts gesendet.
+- Offen, nicht gebaut: gleichen Text desselben Absenders an dasselbe Ziel binnen 10 Minuten ablehnen. Das träfe
+  auch gewollte Wiederholungen; darüber entscheidet Giuliano.
+
 ### Chat am Nutzungslimit (WM8-69)
 
 Claude schreibt die Limit-Antwort als eigene Zeile in den Verlauf

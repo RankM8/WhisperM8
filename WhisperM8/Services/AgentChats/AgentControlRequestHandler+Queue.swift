@@ -56,6 +56,13 @@ extension AgentControlRequestHandler {
                             message: "Session nicht gefunden oder archiviert")
         }
 
+        // Hat der Client schon aufgegeben (MainActor hing), nicht mehr
+        // vormerken: Seine Wiederholung käme sonst doppelt an (WM8-85).
+        if request.isExpired() {
+            await audit(request.actor, method: "queue-enqueue", target: await sessionLabel(targetID),
+                        outcome: "expired", prompt: prompt)
+            return Self.expiredResponse(request)
+        }
         let enqueuedVerified = actorID.map {
             AgentSessionTokenRegistry.shared.verify(sessionID: $0, token: request.actor.token)
         } ?? false
