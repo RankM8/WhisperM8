@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<!--
+  Klick-Entwurf zu WM8-89 „Offene Fragen der Chats an einer Stelle“. Plan: docs/plans/offene-fragen.md.
+  Kein App-Code. Farben und Bausteine aus docs/design/ticket-board-alltag.html (abgenommen am 15.11.2026).
+  Chats, Tickets und Themen aus dem Team WM8 (Stand 15.11.2026). Die Fragen von Vic, Fin und Kai sind
+  nachgestellt; die drei Reiter von Lux sind die echten Fragen dieses Entwurfs. Terminal-Text ist nachgestellt.
+-->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offene Fragen</title>
+<style>
+  :root {
+    --bg:#f2f2f4; --panel:#ffffff; --ink:#1c1c1e; --ink2:#5f6064; --ink3:#7d7e83; --line:rgba(0,0,0,.09);
+    --win:#ffffff; --sidebar:#eeeef0; --header:#f2f2f4; --term:#fbfbfc; --border:rgba(0,0,0,.08);
+    --field:#ffffff; --field-line:rgba(0,0,0,.14); --sel:rgba(127,127,127,.14); --hl:rgba(94,106,210,.10);
+    --accent:#5e6ad2; --accent-ink:#ffffff; --working:#3fa873; --awaiting:#b9861c; --error:#d6473d;
+    --error-bg:rgba(214,71,61,.08); --warn-bg:rgba(201,150,42,.12); --ok-bg:rgba(63,168,115,.10);
+    --out:#2b8794; --out-bg:rgba(43,135,148,.10);
+    --shadow:0 14px 40px rgba(0,0,0,.18); --card:#ffffff; --lane:#f6f6f8; --desk:#d9dbe2;
+  }
+  :root[data-theme="dark"] {
+    --bg:#17181b; --panel:#1f2023; --ink:#f1f1f3; --ink2:#a4a5ab; --ink3:#86878d; --line:rgba(255,255,255,.09);
+    --win:#0f0f10; --sidebar:#131415; --header:#121213; --term:#0f0f10; --border:rgba(255,255,255,.08);
+    --field:#1c1c1f; --field-line:rgba(255,255,255,.14); --sel:rgba(255,255,255,.08); --hl:rgba(124,132,232,.14);
+    --accent:#7c84e8; --accent-ink:#ffffff; --working:#4cc38a; --awaiting:#e9b949; --error:#e5594f;
+    --error-bg:rgba(229,89,79,.10); --warn-bg:rgba(233,185,73,.12); --ok-bg:rgba(76,195,138,.12);
+    --out:#55b8c4; --out-bg:rgba(85,184,196,.12);
+    --shadow:0 14px 40px rgba(0,0,0,.5); --card:#18191b; --lane:#141517; --desk:#2a2c33;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#17181b; --panel:#1f2023; --ink:#f1f1f3; --ink2:#a4a5ab; --ink3:#86878d; --line:rgba(255,255,255,.09);
+      --win:#0f0f10; --sidebar:#131415; --header:#121213; --term:#0f0f10; --border:rgba(255,255,255,.08);
+      --field:#1c1c1f; --field-line:rgba(255,255,255,.14); --sel:rgba(255,255,255,.08); --hl:rgba(124,132,232,.14);
+      --accent:#7c84e8; --accent-ink:#ffffff; --working:#4cc38a; --awaiting:#e9b949; --error:#e5594f;
+      --error-bg:rgba(229,89,79,.10); --warn-bg:rgba(233,185,73,.12); --ok-bg:rgba(76,195,138,.12);
+      --out:#55b8c4; --out-bg:rgba(85,184,196,.12);
+      --shadow:0 14px 40px rgba(0,0,0,.5); --card:#18191b; --lane:#141517; --desk:#2a2c33;
+    }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.45 -apple-system,"SF Pro Text",system-ui,sans-serif; background:var(--bg); color:var(--ink); }
+  button { font:inherit; color:inherit; }
+  code { font:12px "SF Mono",ui-monospace,monospace; }
+  header.page { display:flex; align-items:center; gap:16px; padding:18px 28px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header.page h1 { font-size:16px; margin:0; font-weight:600; }
+  header.page p { margin:0; color:var(--ink2); }
+  header.page .sp { margin-left:auto; }
+  main { padding:22px 28px 80px; max-width:1600px; }
+  h2 { margin:30px 0 10px; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink3); font-weight:600; }
+  .rules { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 18px; color:var(--ink2); }
+  .rules b { color:var(--ink); }
+  .rules ul { margin:6px 0 0; padding-left:18px; } .rules li { margin:3px 0; }
+  .cap { color:var(--ink2); max-width:110ch; margin:12px 2px 0; min-height:40px; }
+  .cap b { color:var(--ink); }
+  .proscons { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:10px; margin-top:10px; max-width:1100px; }
+  .proscons > div { background:var(--panel); border:1px solid var(--line); border-radius:9px; padding:9px 12px; font-size:12.5px; }
+  .proscons h5 { margin:0 0 4px; font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink3); }
+  .proscons ul { margin:0; padding-left:16px; } .proscons li { margin:2px 0; }
+
+  .btn { border:1px solid var(--field-line); background:var(--field); color:var(--ink); border-radius:7px; padding:4px 11px; cursor:pointer; font-size:12px; white-space:nowrap; display:inline-flex; align-items:center; gap:6px; }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); font-weight:600; }
+  .btn.small { padding:2px 8px; font-size:11.5px; }
+  .btn.ghost { border-color:transparent; background:transparent; color:var(--ink2); }
+  .btn[disabled] { opacity:.45; cursor:not-allowed; }
+
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(330px,1fr)); gap:10px 22px; margin:0 0 14px; }
+  .ctl { display:flex; flex-direction:column; gap:5px; }
+  .ctl .lab { font-size:11px; color:var(--ink3); text-transform:uppercase; letter-spacing:.05em; font-weight:600; }
+  .seg { display:inline-flex; flex-wrap:wrap; gap:2px; padding:2px; background:var(--sel); border-radius:8px; width:max-content; max-width:100%; }
+  .seg button { border:0; background:transparent; padding:4px 11px; border-radius:6px; font-size:12px; color:var(--ink2); cursor:pointer; font-weight:500; }
+  .seg button.on { background:var(--panel); color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.12); font-weight:600; }
+  .seg button .star { color:var(--accent); font-weight:700; margin-left:3px; }
+
+  /* Fenster */
+  .win { position:relative; height:700px; background:var(--win); border:1px solid var(--border); border-radius:11px; box-shadow:var(--shadow); display:grid; grid-template-columns:220px 1fr; overflow:hidden; }
+  .side { background:var(--sidebar); border-right:1px solid var(--border); display:flex; flex-direction:column; min-height:0; }
+  .lights { display:flex; gap:7px; padding:12px 12px 6px; }
+  .lights i { width:12px; height:12px; border-radius:50%; background:#ff5f57; } .lights i:nth-child(2){background:#febc2e;} .lights i:nth-child(3){background:#28c840;}
+  .newchat { margin:4px 10px 8px; border:1px solid var(--border); background:var(--panel); border-radius:8px; padding:6px 10px; font-size:12.5px; font-weight:600; }
+  .sidelist { flex:1; overflow:auto; padding:2px 8px 8px; font-size:12px; }
+  .sec { margin:12px 6px 4px; font-size:11px; font-weight:700; letter-spacing:.06em; color:var(--ink3); }
+  .grp { display:flex; align-items:center; gap:7px; padding:5px 8px 3px; font-weight:700; color:var(--ink); font-size:12.5px; }
+  .grp .n { margin-left:auto; color:var(--ink3); font-weight:500; font-size:11px; }
+  .row { display:flex; align-items:center; gap:7px; height:26px; padding:0 8px; border-radius:6px; color:var(--ink); white-space:nowrap; cursor:pointer; }
+  .row .t { overflow:hidden; text-overflow:ellipsis; flex:1; }
+  .row .k { color:var(--ink3); font-size:11px; }
+  .row.sel { background:var(--sel); font-weight:600; }
+  .content { display:flex; flex-direction:column; min-width:0; min-height:0; }
+  .titlezone { height:38px; background:var(--header); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:6px; padding:0 10px; font-size:11.5px; color:var(--ink2); }
+  .tzbtn { height:24px; min-width:28px; border-radius:6px; border:1px solid transparent; background:transparent; display:flex; align-items:center; justify-content:center; gap:5px; cursor:pointer; color:var(--ink2); font-size:12px; padding:0 6px; }
+  .tzbtn.on { background:var(--panel); border-color:var(--border); color:var(--ink); }
+  .tzbtn .badge { background:var(--awaiting); color:#fff; border-radius:999px; font-size:11px; font-weight:700; padding:0 6px; line-height:16px; }
+  .tabs { display:flex; gap:4px; margin-left:8px; overflow:hidden; }
+  .tab { padding:3px 9px; border-radius:6px; white-space:nowrap; display:flex; align-items:center; gap:6px; border:1px solid transparent; }
+  .tab.on { background:var(--win); color:var(--ink); border-color:var(--border); }
+  .body { flex:1; min-height:0; display:flex; position:relative; }
+
+  .dot { width:8px; height:8px; border-radius:50%; display:inline-block; flex:none; background:var(--ink3); opacity:.75; }
+  .dot.working { background:var(--working); opacity:1; }
+  .dot.awaiting { background:var(--awaiting); border-radius:2px; transform:rotate(45deg) scale(.82); opacity:1; }
+  .dot.stopped { background:transparent; border:1.5px solid var(--ink3); }
+
+  /* Art des Wartens: Zeichen + Wort, nie nur Farbe */
+  .kind { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; border-radius:5px; padding:1px 7px; white-space:nowrap; }
+  .kind i { font-style:normal; font-weight:800; }
+  .kind.q { background:var(--hl); color:var(--accent); }
+  .kind.p { background:var(--warn-bg); color:var(--awaiting); }
+  .kind.o { background:var(--out-bg); color:var(--out); }
+  .src { font-size:11px; color:var(--ink3); display:inline-flex; gap:4px; align-items:center; }
+  .src.weak { color:var(--awaiting); }
+
+  /* Wartet auf mich */
+  .inbox { flex:1; display:flex; min-width:0; min-height:0; }
+  .ilist { width:330px; flex:none; border-right:1px solid var(--border); overflow:auto; background:var(--sidebar); padding-bottom:10px; }
+  .ihead { padding:12px 12px 4px; display:flex; align-items:baseline; gap:8px; }
+  .ihead h3 { margin:0; font-size:14px; }
+  .ihead .n { color:var(--ink3); font-size:11.5px; }
+  .igrp { margin:10px 12px 3px; display:flex; align-items:baseline; gap:6px; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--ink3); }
+  .igrp .n { font-weight:500; }
+  .qrow { margin:2px 6px; padding:7px 9px; border-radius:8px; cursor:pointer; border:1px solid transparent; }
+  .qrow.sel { background:var(--panel); border-color:var(--field-line); box-shadow:0 1px 2px rgba(0,0,0,.06); }
+  .qrow .l1 { display:flex; align-items:center; gap:6px; font-size:11.5px; color:var(--ink2); }
+  .qrow .l1 b { color:var(--ink); }
+  .qrow .l1 .age { margin-left:auto; font-size:11px; color:var(--ink3); font-variant-numeric:tabular-nums; }
+  .qrow .l2 { font-size:12.5px; font-weight:600; line-height:1.3; margin-top:3px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .qrow .l3 { font-size:11px; color:var(--ink3); margin-top:2px; }
+  .trow2 { margin:2px 6px; padding:6px 9px; border-radius:8px; display:flex; gap:7px; align-items:center; font-size:12px; cursor:pointer; }
+  .trow2.sel { background:var(--panel); border:1px solid var(--field-line); }
+  .trow2 .k { color:var(--ink3); font-size:11px; font-variant-numeric:tabular-nums; flex:none; }
+  .trow2 .t { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .team { font-size:11px; font-weight:700; border-radius:5px; padding:0 5px; background:var(--sel); color:var(--ink2); flex:none; }
+  .more { font-size:11.5px; color:var(--ink3); padding:4px 18px; }
+
+  .qmain { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .qbar { display:flex; align-items:center; gap:8px; padding:9px 16px; border-bottom:1px solid var(--border); font-size:12px; color:var(--ink2); flex-wrap:wrap; }
+  .qbar .sp { margin-left:auto; display:flex; gap:6px; align-items:center; }
+  .qscroll { flex:1; overflow:auto; padding:16px 22px 22px; }
+  .qwho { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12px; color:var(--ink2); }
+  .qwho b { color:var(--ink); font-size:13px; }
+  .qtitle { font-size:18px; font-weight:700; margin:8px 0 12px; line-height:1.3; max-width:62ch; }
+  .reiter { display:flex; gap:4px; flex-wrap:wrap; margin:0 0 10px; }
+  .reiter button { border:1px solid var(--field-line); background:var(--field); border-radius:999px; padding:2px 11px; font-size:12px; cursor:pointer; display:inline-flex; gap:5px; align-items:center; }
+  .reiter button.on { border-color:var(--accent); background:var(--hl); color:var(--accent); font-weight:600; }
+  .reiter button .num { font-size:11px; color:var(--ink3); }
+  .opts { display:flex; flex-direction:column; gap:6px; max-width:720px; }
+  .opt { border:1px solid var(--border); border-radius:9px; padding:8px 11px; background:var(--panel); display:grid; grid-template-columns:34px 1fr; gap:2px 6px; }
+  .opt .no { font-size:12px; color:var(--ink3); font-variant-numeric:tabular-nums; padding-top:1px; white-space:nowrap; }
+  .opt .lb { font-weight:600; font-size:13px; }
+  .opt .ds { grid-column:2; font-size:12px; color:var(--ink2); }
+  .opt.rec .lb::after { content:" · Empfehlung des Chats"; font-weight:500; font-size:11px; color:var(--accent); }
+  .opt.fixed { background:transparent; border-style:dashed; }
+  .opt.pick { cursor:pointer; }
+  .opt.picked { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+  .opt.pick .no::before { content:"○ "; } .opt.picked .no::before { content:"● "; color:var(--accent); }
+  .readonly { margin:12px 0 0; font-size:12px; color:var(--ink2); display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .cmdbox { font:12px/1.5 "SF Mono",ui-monospace,monospace; background:var(--term); border:1px solid var(--border); border-radius:8px; padding:8px 11px; max-width:720px; white-space:pre-wrap; }
+  .facts { margin-top:16px; border-top:1px solid var(--border); padding-top:10px; font-size:12px; color:var(--ink2); max-width:720px; }
+  .facts div { margin:3px 0; }
+  .facts b { color:var(--ink); font-weight:600; }
+  .guard { margin-top:14px; border:1px solid var(--field-line); border-radius:10px; padding:10px 12px; max-width:720px; background:var(--panel); }
+  .guard h5 { margin:0 0 6px; font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink3); }
+  .guard .ck, .guard .ck.ok, .guard .ck.no { font-size:12px; margin:3px 0; display:flex; gap:7px; color:var(--ink); font-weight:400; }
+  .guard .ck.ok::before { content:"✓"; color:var(--working); font-weight:700; }
+  .guard .ck.no::before { content:"✕"; color:var(--error); font-weight:700; }
+  .freetext { margin-top:8px; border:1px solid var(--field-line); border-radius:8px; padding:7px 10px; font-size:12.5px; color:var(--ink3); background:var(--field); max-width:720px; }
+  .sendrow { display:flex; gap:8px; align-items:center; margin-top:10px; flex-wrap:wrap; }
+
+  /* Terminal und Band */
+  .termwrap { flex:1; display:flex; flex-direction:column; min-width:0; background:var(--term); }
+  .term { flex:1; overflow:auto; padding:12px 14px; font:12px/1.55 "SF Mono",ui-monospace,monospace; color:var(--ink2); white-space:pre-wrap; }
+  .term b { color:var(--ink); font-weight:600; }
+  .term .u { color:var(--accent); }
+  .term .q { color:var(--accent); font-weight:700; }
+  .term .p { color:var(--awaiting); font-weight:700; }
+  .term .o { color:var(--out); font-weight:700; }
+  .term .dim { color:var(--ink3); }
+  .band { margin:4px 12px 6px; border:1.5px solid var(--error); border-radius:10px; padding:12px 10px 6px; font:12px/1.6 "SF Mono",ui-monospace,monospace; color:var(--ink); position:relative; }
+  .band .bt { position:absolute; top:-9px; left:12px; background:var(--term); padding:0 6px; font-weight:700; color:var(--error); }
+  .band .bl { display:grid; grid-template-columns:16px 52px 64px 1fr; gap:8px; white-space:nowrap; overflow:hidden; }
+  .band .bl span:last-child { overflow:hidden; text-overflow:ellipsis; }
+  .band .sum { color:var(--ink3); }
+  .prompt { margin:0 12px 12px; border-top:1px solid var(--field-line); border-bottom:1px solid var(--field-line); padding:6px 2px; font:12px "SF Mono",ui-monospace,monospace; color:var(--ink3); }
+
+  /* Raster */
+  .gridv { flex:1; display:grid; grid-template-columns:1fr 1fr; grid-template-rows:1fr 1fr; gap:4px; padding:4px; background:var(--border); min-width:0; }
+  .tile { background:var(--win); display:flex; flex-direction:column; min-height:0; min-width:0; border-radius:6px; overflow:hidden; position:relative; }
+  .thead { flex:none; background:var(--header); border-bottom:1px solid var(--border); font-size:11.5px; }
+  .thead .t1 { height:26px; display:flex; align-items:center; gap:6px; padding:0 8px; }
+  .thead .t2 { display:flex; align-items:center; gap:6px; padding:0 8px 5px; font-size:11.5px; color:var(--ink2); white-space:nowrap; overflow:hidden; cursor:pointer; }
+  .thead .t2 .txt { overflow:hidden; text-overflow:ellipsis; }
+  .thead .t2 .tog { margin-left:auto; color:var(--ink3); }
+  .tile .term { font-size:11px; }
+  .tilecard { position:absolute; left:8px; right:8px; top:52px; background:var(--panel); border:1px solid var(--field-line); border-radius:9px; box-shadow:var(--shadow); padding:10px 12px; z-index:3; max-height:calc(100% - 60px); overflow:auto; }
+  .tilecard .opt { padding:5px 9px; }
+  .tilecard .opt .lb { font-size:12px; }
+
+  /* Insel */
+  .desk { flex:1; background:var(--desk); position:relative; overflow:hidden; display:flex; justify-content:center; }
+  .island { margin-top:12px; background:#111214; color:#f1f1f3; border-radius:22px; box-shadow:0 18px 50px rgba(0,0,0,.35); width:520px; max-width:calc(100% - 32px); padding:12px 14px 14px; align-self:flex-start; }
+  .island .ihd { display:flex; align-items:center; gap:8px; font-size:12px; color:#a4a5ab; }
+  .island .ihd b { color:#fff; }
+  .island .ihd .sp { margin-left:auto; font-size:11px; }
+  .island .iq { font-size:14px; font-weight:600; margin:8px 0 8px; line-height:1.35; }
+  .island .io { font-size:12px; color:#d0d1d6; margin:3px 0; display:flex; gap:7px; }
+  .island .io .no { color:#86878d; }
+  .island .irow2 { display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
+  .island .ib { border:1px solid rgba(255,255,255,.18); border-radius:999px; padding:3px 11px; font-size:12px; background:rgba(255,255,255,.06); color:#fff; }
+  .island .ib.on { background:#7c84e8; border-color:#7c84e8; font-weight:600; }
+  .island .queue { display:flex; gap:6px; margin-top:10px; padding-top:9px; border-top:1px solid rgba(255,255,255,.1); flex-wrap:wrap; }
+  .island .qp { font-size:11.5px; border-radius:999px; padding:2px 9px; background:rgba(255,255,255,.08); color:#d0d1d6; }
+  .island .qp.on { background:rgba(124,132,232,.35); color:#fff; }
+  .deskwin { position:absolute; left:40px; right:40px; bottom:-40px; top:200px; background:var(--win); border-radius:11px; border:1px solid var(--border); opacity:.85; padding:18px; font-size:12px; color:var(--ink3); }
+
+  /* Heute */
+  .notif { position:absolute; right:16px; top:12px; width:330px; background:var(--panel); border:1px solid var(--field-line); border-radius:13px; box-shadow:var(--shadow); padding:10px 12px; font-size:12px; z-index:4; }
+  .notif .nh { display:flex; gap:6px; color:var(--ink3); font-size:11px; }
+  .notif b { display:block; margin-top:3px; }
+
+  .toast { position:absolute; left:50%; bottom:18px; transform:translateX(-50%); background:var(--panel); border:1px solid var(--field-line); box-shadow:var(--shadow); border-radius:9px; padding:9px 13px; font-size:12px; max-width:600px; display:none; z-index:6; }
+  .toast.show { display:block; }
+
+  table.t { width:100%; border-collapse:collapse; background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:12.5px; }
+  table.t th, table.t td { text-align:left; padding:8px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  table.t th { font-size:11px; color:var(--ink3); text-transform:uppercase; letter-spacing:.05em; }
+  table.t tr:last-child td { border-bottom:0; }
+  .ok { color:var(--working); font-weight:600; } .mid { color:var(--awaiting); font-weight:600; } .no { color:var(--error); font-weight:600; }
+  @media (max-width: 760px) { main { padding:16px; } header.page { padding:14px 16px; } .win { height:auto; min-height:640px; grid-template-columns:1fr; } .side { display:none; } .ilist { width:100%; } .inbox { flex-direction:column; } }
+</style>
+</head>
+<body>
+<header class="page">
+  <div>
+    <h1>Offene Fragen der Chats an einer Stelle</h1>
+    <p>Entwurf zu WM8-89 · Plan: docs/plans/offene-fragen.md · Stand 15.11.2026 · zur Abnahme, nichts gebaut</p>
+  </div>
+  <div class="sp seg" id="themeSeg">
+    <button data-theme="light">Hell</button><button data-theme="dark">Dunkel</button><button data-theme="system" class="on">System</button>
+  </div>
+</header>
+<main>
+  <div class="rules">
+    <b>Worum es geht:</b> Stellt dir ein Chat eine Frage, siehst du heute nur „wartet auf dich“. Die Frage selbst liegt im Chat, und Jarvis kann sie dir nur nacherzählen.
+    Der Entwurf zeigt Text und Optionen dort, wo du ohnehin hinsiehst, in derselben Liste wie die Tickets, die auf dich warten (WM8-115).
+    <ul>
+      <li><b>Drei Arten des Wartens</b>, immer mit Zeichen und Wort: <span class="kind q"><i>?</i>Entscheidung</span> (Fragetool), <span class="kind p"><i>!</i>Erlaubnis</span> (ein Befehl will laufen), <span class="kind o"><i>↗</i>Bei dir</span> (etwas außerhalb: Schlüssel, Login, Handprobe).</li>
+      <li><b>Stufe 1 liest nur:</b> Du siehst die ganze Frage samt aller Reiter und springst mit einem Klick in den Chat. Antworten im Board ist eine eigene, spätere Stufe (unten zum Umschalten).</li>
+      <li><b>Woher die Angaben kommen</b> steht an jeder Frage: <span class="src">aus dem Verlauf</span> ist verlässlich, <span class="src weak">vom Bildschirm abgelesen</span> nicht, <span class="src">von Jarvis eingetragen</span> ist Handarbeit.</li>
+      <li><b>Stern ★</b> = Empfehlung. Alles ist ohne Überfahren mit der Maus sichtbar, Texte mindestens 11 pt. Chats, Tickets und Themen aus WM8; die Fragen von Vic, Fin und Kai sind nachgestellt.</li>
+    </ul>
+  </div>
+
+  <h2>Zum Anklicken</h2>
+  <div class="controls">
+    <div class="ctl"><span class="lab">Ort</span>
+      <div class="seg" id="placeSeg">
+        <button data-v="inbox" class="on">„Wartet auf mich“<span class="star">★</span></button><button data-v="band">Board-Band bei Jarvis</button><button data-v="tile">Zeile am Kachelkopf</button><button data-v="island">Insel</button><button data-v="today">Heute</button>
+      </div></div>
+    <div class="ctl"><span class="lab">Lage</span>
+      <div class="seg" id="caseSeg">
+        <button data-v="many" class="on">Fünf Chats warten</button><button data-v="multi">Drei Fragen in einem Dialog</button><button data-v="one">Eine Frage</button>
+      </div></div>
+    <div class="ctl"><span class="lab">Stufe</span>
+      <div class="seg" id="stageSeg">
+        <button data-v="read" class="on">Nur lesen, Sprung in den Chat<span class="star">★</span></button><button data-v="answer">Im Board antworten (später)</button>
+      </div></div>
+  </div>
+
+  <div class="win" id="win">
+    <aside class="side">
+      <div class="lights"><i></i><i></i><i></i></div>
+      <div class="newchat">＋ Neuer Chat</div>
+      <div class="sidelist" id="sidelist"></div>
+    </aside>
+    <section class="content">
+      <div class="titlezone" id="titlezone"></div>
+      <div class="body" id="body"></div>
+    </section>
+    <div class="toast" id="toast"></div>
+  </div>
+  <p class="cap" id="cap"></p>
+  <div class="proscons" id="pc"></div>
+
+  <h2>Was die App über eine offene Frage weiß</h2>
+  <table class="t">
+    <tr><th>Art</th><th>Text und Optionen</th><th>Woher</th><th>Verlässlich?</th></tr>
+    <tr><td><span class="kind q"><i>?</i>Entscheidung</span> Claude, Fragetool</td><td>alle Reiter: Überschrift, Frage, Optionen mit Beschreibung, Mehrfachauswahl</td><td>Verlauf des Chats; Claude schreibt den Aufruf, bevor der Dialog aufgeht. Claudes Registry meldet dazu „input needed“.</td><td class="ok">ja</td></tr>
+    <tr><td><span class="kind p"><i>!</i>Erlaubnis</span> Claude</td><td>Werkzeug und Befehl (etwa <code>Bash: rm -rf …</code>), bei Plan-Freigabe der Plan. Die Knöpfe (Yes, No …) stehen nirgends in den Daten.</td><td>Verlauf plus Registry „permission prompt“</td><td class="ok">ja, ohne Knöpfe</td></tr>
+    <tr><td><span class="kind p"><i>!</i>Erlaubnis</span> Codex</td><td>Befehl aus dem offenen Aufruf; dass er wartet, nur vom Bildschirm</td><td>Codex schreibt Freigaben nicht in den Verlauf; Ablesen am festen Wortlaut von Codex 0.169.0</td><td class="mid">nur abgelesen</td></tr>
+    <tr><td><span class="kind q"><i>?</i>Entscheidung</span> Codex</td><td>Rückfrage steht im Verlauf (<code>request_user_input</code>); Aufbau ungemessen</td><td>Verlauf; heute zählt sie als „ruht“, nicht als „wartet“</td><td class="mid">vor dem Bau messen</td></tr>
+    <tr><td><span class="kind o"><i>↗</i>Bei dir</span></td><td>nichts; der Chat beendet seinen Zug und schreibt, was er braucht</td><td>nur Jarvis' Eintrag „Eingriff“ am Board, von Hand</td><td class="no">kein Signal</td></tr>
+  </table>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const S = { place:'inbox', kase:'many', stage:'read', sel:'lux', tab:0, picked:null, tileOpen:'lux' };
+const URL0 = 'https://linear.app/whisperm8/issue/';
+
+/* --- Offene Fragen (WM8, 15.11.2026) --- */
+const Q = {
+  lux:{ chat:'Lux', key:'WM8-89', topic:'Offene Fragen entwerfen', kind:'q', age:'2 min', src:'Verlauf', status:'awaiting', agent:'Claude',
+    questions:[
+      {h:'Ort', q:'Wo sollen offene Fragen der Chats erscheinen?', opts:[
+        ['„Wartet auf mich“ plus Hinweise','Die ganze Frage steht in der Liste „Wartet auf mich“, zusammen mit den Tickets. Board-Band, Kachelkopf und Mitteilung zeigen die erste Zeile und führen dorthin.',true],
+        ['Nur im Board-Band bei Jarvis','Die Frage steht im Kasten über Jarvis\' Eingabefeld. Kein Klick, aber wenig Platz und nur im Jarvis-Chat.'],
+        ['In der Insel','Die Frage erscheint über allen Fenstern oben in der Mitte. Gut im Vorbeigehen, eng für mehrere Reiter.']]},
+      {h:'Antworten', q:'Sollst du später direkt im Board antworten können?', opts:[
+        ['Später, nur einfache Fragen','Erst Stufe 1 benutzen. Danach, nach einer Messung, nur Claude-Fragen mit einem Reiter; Erlaubnisse nie.',true],
+        ['Gleich mitbauen','Schneller am Ziel, aber genau dort gab es die Fehler mit ungewollten Bestätigungen.'],
+        ['Nie, immer im Chat','Die Liste zeigt und springt, geantwortet wird nur im Chat selbst.']]},
+      {h:'Reihenfolge', q:'Was soll zuerst gebaut werden?', opts:[
+        ['Erst liest Jarvis die Fragen ganz','Klein und sofort spürbar: Jarvis bekommt alle Reiter mit Optionen und kann sie dir wörtlich vorlegen. Danach die Anzeige.',true],
+        ['Alles zusammen nach WM8-115','Ein Bau, aber du wartest, bis „Wartet auf mich“ steht.']]},
+    ]},
+  vic:{ chat:'Vic', key:'WM8-104', topic:'Prüfer: Insel per Tastatur', kind:'q', age:'9 min', src:'Verlauf', status:'awaiting', agent:'Claude',
+    questions:[
+      {h:'⌥Tab', q:'⌥Tab öffnet die Insel auch, wenn ein Terminal den Fokus hat. Claude bekommt die Taste dort nie. Wie soll es sein?', opts:[
+        ['So lassen: die Insel gewinnt','⌥Tab öffnet überall die Insel, wie im Entwurf zu WM8-104.',true],
+        ['Im Terminal an Claude durchreichen','Die Insel öffnet nur, wenn kein Terminal den Fokus hat.']]}]},
+  fin:{ chat:'Fin', key:'WM8-101', topic:'Befunde aus dem Pflichttest', kind:'p', age:'4 min', src:'Verlauf', status:'awaiting', agent:'Claude',
+    cmd:'Bash · rm -rf .claude/worktrees/neustart/.build', why:'Build-Ordner des fertigen Arbeitsordners löschen, um Platz zu schaffen.',
+    fixed:['Yes','Yes, and don\'t ask again for rm commands in this folder','No, and tell Claude what to do differently']},
+  kai:{ chat:'Kai', key:null, topic:'Codex: Alte Arbeitsordner aufräumen', kind:'p', age:'6 min', src:'Bildschirm', status:'awaiting', agent:'Codex',
+    cmd:'git worktree remove .claude/worktrees/grid-alt', why:'Codex meldet Freigaben nicht. Dass er wartet, ist vom Bildschirm abgelesen; ist der Chat hochgescrollt, sieht die App es erst beim Zurückscrollen.',
+    fixed:['Yes, proceed','No, and tell Codex what to do differently']},
+  jon:{ chat:'Jon', key:'WM8-57', topic:'Linear-API-Key ersetzen', kind:'o', age:'21 min', src:'Jarvis', status:'idle', agent:'Claude',
+    out:'Neuen Linear-Key anlegen (Linear → Einstellungen → API) und im Terminal hinterlegen:', cmd2:'whisperm8 tickets setup --key-stdin',
+    why:'Der Chat hat seinen Zug beendet und im Text geschrieben, was er braucht. Ein Signal dafür gibt es nicht; Jarvis hat es als „Eingriff“ eingetragen.'},
+};
+const ORDER = { many:['lux','fin','kai','vic','jon'], multi:['lux'], one:['vic'] };
+const KIND = { q:['?','Entscheidung'], p:['!','Erlaubnis'], o:['↗','Bei dir'] };
+const SRC = { Verlauf:['aus dem Verlauf',''], Bildschirm:['vom Bildschirm abgelesen','weak'], Jarvis:['von Jarvis eingetragen',''] };
+const TICKETS = [
+  {g:'Abnahme', rows:[['WM8','WM8-104','Insel per Tastatur bauen: ⌥Tab, Schnellbefehle als Buchstaben (Variante B)','vic']]},
+  {g:'Entscheidungen', rows:[['WM8','WM8-23','Linear zwei Wochen an WhisperM8 testen, dann über den Umzug entscheiden'],['WM8','WM8-57','Linear-API-Key ersetzen','jon'],['WM8','WM8-30','Variante für die neue Ordnung wählen (A, B oder C)']], more:'3 weitere'},
+  {g:'Handtests', rows:[['WM8','WM8-20','make dev und Handtest der Änderungen seit 2.25.0'],['WM8','WM8-15','Handtests nach make dev: Runde 5, Insel und Xbox']]},
+];
+const list = () => ORDER[S.kase];
+const kindChip = k => `<span class="kind ${k}"><i>${KIND[k][0]}</i>${KIND[k][1]}</span>`;
+const srcChip = s => `<span class="src ${SRC[s][1]}">${SRC[s][0]}</span>`;
+const firstLine = x => x.kind==='q' ? (x.questions.length>1?`Frage 1/${x.questions.length}: `:'')+x.questions[0].q : x.kind==='p' ? x.cmd : x.out.replace(/:$/,'');
+const shortLine = x => x.kind==='q' ? (x.questions.length>1?`Frage 1/${x.questions.length}: `:'Frage: ')+x.questions[0].q : x.kind==='p' ? 'Erlaubnis: '+x.cmd.replace('Bash · ','') : 'Bei dir: Linear-Key erneuern';
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+
+/* --- Seitenleiste und Titelzeile --- */
+function side() {
+  const ids = list();
+  const r = (id, dot) => { const x=Q[id]; const w = ids.includes(id); return `<div class="row ${S.sel===id&&S.place!=='band'?'sel':''}" data-q="${w?id:''}"><span class="dot ${w? (x.status==='idle'?'':'awaiting') : dot}"></span><span class="t">${x.key?x.key+' ':''}${x.chat} · ${x.topic}</span>${w?`<span class="k">${KIND[x.kind][0]}</span>`:''}</div>`; };
+  $('#sidelist').innerHTML = `
+    <div class="sec">WORKSPACES</div>
+    <div class="row"><span class="t">WM8 Aktiv</span><span class="k">7</span></div>
+    <div class="sec">PROJEKTE</div>
+    <div class="grp">whisperm8 <span class="n">8</span></div>
+    <div class="row ${S.place==='band'?'sel':''}"><span class="dot working"></span><span class="t">Jarvis: Supervisor WhisperM8</span></div>
+    ${r('lux','working')}${r('vic','')}${r('fin','working')}${r('kai','working')}${r('jon','')}
+    <div class="row"><span class="dot working"></span><span class="t">Ida · Skills entrümpeln</span></div>
+    <div class="row"><span class="dot"></span><span class="t">Mia · WM8-91 Board per Controller</span></div>`;
+  const n = list().length;
+  $('#titlezone').innerHTML = `<button class="tzbtn" title="Seitenleiste">▤</button>
+    <button class="tzbtn ${S.place==='inbox'?'on':''}" id="inboxBtn" title="Wartet auf mich">Wartet auf mich <span class="badge">${n+7}</span></button>
+    <button class="tzbtn" title="Tickets">▦</button>
+    <div class="tabs">${S.place==='band'?'<span class="tab on"><span class="dot working"></span>Jarvis</span>':S.place==='tile'?'<span class="tab on">⊞ WM8 Aktiv</span>':S.place==='inbox'?'<span class="tab on">Wartet auf mich</span>':'<span class="tab on"><span class="dot working"></span>Jarvis</span>'}</div>`;
+}
+
+/* --- Frage im Detail (gemeinsam für Liste, Kachel und Antworten) --- */
+function questionBody(x, compact) {
+  if (x.kind==='q') {
+    const qs = x.questions, i = Math.min(S.tab, qs.length-1), cur = qs[i];
+    const tabs = qs.length>1 ? `<div class="reiter">${qs.map((q,j)=>`<button data-tab="${j}" class="${j===i?'on':''}"><span class="num">${j+1}</span>${q.h}</button>`).join('')}</div>` : '';
+    const answer = S.stage==='answer' && !compact;
+    const opts = cur.opts.map((o,j)=>`<div class="opt ${o[2]?'rec':''} ${answer?'pick':''} ${answer&&S.picked===j?'picked':''}" data-pick="${j}"><span class="no">${j+1}.</span><span class="lb">${o[0]}</span><span class="ds">${o[1]}</span></div>`).join('');
+    const fixedOpt = `<div class="opt fixed"><span class="no">${cur.opts.length+1}.</span><span class="lb">Type something · Chat about this</span><span class="ds">feste Einträge von Claude, stehen in jeder Frage</span></div>`;
+    return `${tabs}<div style="font-weight:600;margin:0 0 8px;font-size:${compact?12.5:14}px">${cur.q}</div><div class="opts">${opts}${compact?'':fixedOpt}</div>`;
+  }
+  if (x.kind==='p') {
+    return `<div class="cmdbox">${esc(x.cmd)}</div><div style="margin:8px 0;font-size:12.5px;color:var(--ink2);max-width:720px">${x.why}</div>
+      ${compact?'':`<div class="opts">${x.fixed.map((f,j)=>`<div class="opt fixed"><span class="no">${j+1}.</span><span class="lb">${f}</span><span class="ds">${j===0?'vorausgewählt im Dialog':''}</span></div>`).join('')}</div>`}`;
+  }
+  return `<div style="font-size:13px;margin-bottom:6px;max-width:720px">${x.out}</div><div class="cmdbox">${x.cmd2}</div><div style="margin-top:8px;font-size:12px;color:var(--ink2);max-width:720px">${x.why}</div>`;
+}
+function guardHTML(x) {
+  if (S.stage!=='answer') return `<div class="readonly"><button class="btn primary" data-jump="${x.chat}">Zum Chat ${x.chat} →</button><span>Antworten im Chat. Die Optionen hier sind nur zum Lesen.</span></div>`;
+  if (x.kind!=='q' || x.agent!=='Claude') {
+    return `<div class="guard"><h5>Antworten im Board</h5>
+      <div class="ck no">${x.kind==='o'?'Nichts zu beantworten: Das geschieht außerhalb, danach sagst du es dem Chat.':'Erlaubnisse gibst du nur im Chat. Eine einzelne Taste oder ein Enter im falschen Moment gibt sie frei (WM8-67, WM8-75, WM8-107).'}</div>
+      <div class="sendrow"><button class="btn primary" data-jump="${x.chat}">Zum Chat ${x.chat} →</button></div></div>`;
+  }
+  const multi = x.questions.length>1;
+  return `<div class="freetext">Eigene Antwort tippen oder diktieren …</div>
+    <div class="guard"><h5>Wird direkt vor dem Senden geprüft</h5>
+      <div class="ck ok">Es ist Claudes Fragetool, keine Erlaubnis (Registry „input needed“, jüngster Aufruf ist die Frage)</div>
+      <div class="ck ok">Es ist genau diese Frage: Kennung des Aufrufs unverändert, seit du sie geöffnet hast</div>
+      <div class="ck ok">Der Frage-Dialog steht unten im Terminal (abgelesen, auch hochgescrollt)</div>
+      <div class="ck ok">Gesendet wird als ein Einfüge-Block, nie als einzelne Taste; das Enter erst nach erneuter Prüfung</div>
+      <div class="ck ${multi?'no':'ok'}">${multi?'Mehrere Reiter: noch nicht im Board. Die Tasten zwischen den Reitern sind ungemessen.':'Ein Reiter'}</div>
+      <div class="sendrow"><button class="btn primary" id="send" ${multi||S.picked===null?'disabled':''}>Antwort senden</button><button class="btn" data-jump="${x.chat}">Lieber im Chat</button>
+      <span class="src">Danach prüft die App, ob die Antwort im Verlauf ankam; sonst Hinweis, kein zweiter Versuch.</span></div></div>`;
+}
+
+/* --- Ort A: Wartet auf mich --- */
+function inboxHTML() {
+  const ids = list();
+  if (!ids.includes(S.sel)) S.sel = ids[0];
+  const rows = ids.map(id=>{ const x=Q[id]; return `<div class="qrow ${S.sel===id?'sel':''}" data-q="${id}">
+      <div class="l1">${kindChip(x.kind)}<b>${x.chat}</b>${x.key?`<span>${x.key}</span>`:`<span>${x.agent}</span>`}<span class="age">seit ${x.age}</span></div>
+      <div class="l2">${x.kind==='q'?x.questions[0].q:x.kind==='p'?esc(x.cmd):x.out.replace(/:$/,'')}</div>
+      <div class="l3">${x.kind==='q'&&x.questions.length>1?`${x.questions.length} Fragen in einem Dialog · `:''}${x.kind==='q'?x.questions[0].opts.length+' Optionen · ':''}${SRC[x.src][0]}</div></div>`; }).join('');
+  const tick = TICKETS.map(G=>`<div class="igrp">${G.g} <span class="n">${G.rows.length}</span></div>${G.rows.map(r=>`<div class="trow2"><span class="team">${r[0]}</span><span class="k">${r[1]}</span><span class="t">${r[2]}</span>${r[3]&&ids.includes(r[3])?`<span class="kind ${Q[r[3]].kind}" title="Chat wartet"><i>${KIND[Q[r[3]].kind][0]}</i>${Q[r[3]].chat}</span>`:''}</div>`).join('')}${G.more?`<div class="more">${G.more}</div>`:''}`).join('');
+  const x = Q[S.sel];
+  return `<div class="inbox">
+    <div class="ilist">
+      <div class="ihead"><h3>Wartet auf mich</h3><span class="n">alle Teams</span></div>
+      <div class="igrp">Fragen der Chats <span class="n">${ids.length}</span></div>${rows}
+      ${tick}
+      <div class="more" style="padding-top:8px">AKQ und DS: Gruppen aus WM8-115 (Prüfung ohne Prüfer, Produktentscheidung)</div>
+    </div>
+    <div class="qmain">
+      <div class="qbar">${kindChip(x.kind)}<span><b style="color:var(--ink)">${x.chat}</b> · ${x.topic}</span>
+        <span class="sp"><span>${ids.indexOf(S.sel)+1} von ${ids.length}</span><button class="btn small" id="prev">↑</button><button class="btn small" id="next">↓</button></span></div>
+      <div class="qscroll">
+        <div class="qwho">${x.key?`<span class="team">WM8</span><span>${x.key}</span>·`:''}<span>${x.agent}</span>·<span>wartet seit ${x.age}</span>·${srcChip(x.src)}</div>
+        <div class="qtitle">${x.kind==='q'?(x.questions.length>1?`${x.questions.length} Fragen in einem Dialog`:'Frage an dich'):x.kind==='p'?'Ein Befehl will laufen':'Etwas außerhalb des Chats'}</div>
+        ${questionBody(x,false)}
+        ${guardHTML(x)}
+        <div class="facts"><div><b>Ticket:</b> ${x.key?`${x.key} · <a href="${URL0}${x.key.toLowerCase()}" style="color:var(--accent)">in Linear</a>`:'keins'}</div>
+          <div><b>Verschwindet,</b> sobald der Chat die Antwort hat (Ergebnis im Verlauf) oder der Dialog mit Esc zugeht.</div></div>
+      </div>
+    </div></div>`;
+}
+
+/* --- Ort B: Board-Band bei Jarvis --- */
+function bandHTML() {
+  const ids = list(); const x = Q[ids[0]];
+  const lines = ids.map(id=>{ const y=Q[id]; return `<div class="bl"><span class="${y.kind==='q'?'q':y.kind==='p'?'p':'o'}" style="color:var(--${y.kind==='q'?'accent':y.kind==='p'?'awaiting':'out'});font-weight:700">${KIND[y.kind][0]}</span><span>${y.chat}</span><span>${y.key||'Codex'}</span><span>${esc(shortLine(y))}</span></div>`; }).join('');
+  const relay = x.kind==='q' && x.questions.length>1
+    ? `<b>⏺ Lux (WM8-89) fragt dich, drei Reiter. Wörtlich:</b>
+
+  <span class="q">1 · Ort</span>  ${x.questions[0].q}
+      1. ${x.questions[0].opts[0][0]}  <span class="dim">(Empfehlung)</span>
+      2. ${x.questions[0].opts[1][0]}
+      3. ${x.questions[0].opts[2][0]}
+  <span class="q">2 · Antworten</span>  ${x.questions[1].q}
+      1. ${x.questions[1].opts[0][0]}  <span class="dim">(Empfehlung)</span>
+      2. ${x.questions[1].opts[1][0]}   3. ${x.questions[1].opts[2][0]}
+  <span class="q">3 · Reihenfolge</span>  ${x.questions[2].q}
+      1. ${x.questions[2].opts[0][0]}  <span class="dim">(Empfehlung)</span>
+      2. ${x.questions[2].opts[1][0]}
+
+  Beantworten im Chat von Lux. Soll ich dich hinbringen?`
+    : `<b>⏺ ${x.chat} fragt:</b> ${x.kind==='q'?x.questions[0].q:esc(x.cmd)}
+${x.kind==='q'?x.questions[0].opts.map((o,j)=>`      ${j+1}. ${o[0]}`).join('\n'):''}`;
+  return `<div class="termwrap">
+    <div class="term"><span class="u">❯ was wartet auf mich?</span>
+
+<span class="dim">⏺ Bash(whisperm8 chats questions --json)
+  ⎿ ${ids.length} ${ids.length===1?'offene Frage':'offene Fragen'} ·${ids.filter(i=>Q[i].kind==='q').length} Entscheidung, ${ids.filter(i=>Q[i].kind==='p').length} Erlaubnis, ${ids.filter(i=>Q[i].kind==='o').length} bei dir</span>
+
+${relay}</div>
+    <div class="band"><span class="bt">Jarvis · ${ids.length} ${ids.length===1?'wartet':'warten'} auf dich</span>${lines}<div class="sum">läuft Ida · ruht Mia</div></div>
+    <div class="prompt">❯ </div></div>`;
+}
+
+/* --- Ort C: Zeile am Kachelkopf (WM8-89) --- */
+function tileHTML() {
+  const ids = list(); const pick = ids.slice(0,4);
+  while (pick.length<4) pick.push(null);
+  const filler = [['Ida','Skills entrümpeln','working','⏺ Prüfe 41 Skills auf Doppelungen …'],['Mia','WM8-91 Board per Controller','','⏺ Fertig. Entwurf liegt auf dem Branch.'],['Jarvis','Supervisor','working','⏺ Lege die Abnahme von WM8-104 vor …']];
+  let f = 0;
+  const tiles = pick.map(id=>{
+    if (!id) { const g=filler[f++]; return `<div class="tile"><div class="thead"><div class="t1"><span class="dot ${g[2]}"></span><b>${g[0]}</b> ${g[1]}</div><div class="t2"><span class="txt">${g[2]==='working'?'arbeitet':'fertig, prüfen'}</span></div></div><div class="term">${g[3]}</div></div>`; }
+    const x=Q[id]; const open = S.tileOpen===id;
+    return `<div class="tile"><div class="thead"><div class="t1"><span class="dot ${x.status==='idle'?'':'awaiting'}"></span><b>${x.chat}</b> ${x.key||''} ${x.topic}</div>
+      <div class="t2" data-tile="${id}">${x.key?`<span>${x.key}</span><span style="color:var(--ink3)">${id==='lux'?'0/10':id==='vic'?'1/4':id==='fin'?'0/20':'–'}</span>`:''}${kindChip(x.kind)}<span class="txt">${esc(shortLine(x))}</span><span class="tog">${open?'▴':'▾'}</span></div></div>
+      <div class="term">${x.kind==='q'?'⏺ Ich lege dir die Entscheidung vor.\n\n<span class="dim">[Frage-Dialog offen]</span>':x.kind==='p'?'<span class="dim">[Erlaubnis-Dialog offen]</span>':'⏺ Ich brauche einen neuen Linear-Key …'}</div>
+      ${open?`<div class="tilecard"><div class="qwho" style="margin-bottom:6px">${srcChip(x.src)} · wartet seit ${x.age}</div>${questionBody(x,true)}<div class="readonly"><button class="btn primary small" data-jump="${x.chat}">In diesen Chat</button><button class="btn small" id="toInbox">In „Wartet auf mich“</button></div></div>`:''}</div>`; }).join('');
+  return `<div class="gridv">${tiles}</div>`;
+}
+
+/* --- Ort D: Insel --- */
+function islandHTML() {
+  const ids = list(); if (!ids.includes(S.sel)) S.sel = ids[0]; const x = Q[S.sel];
+  let body;
+  if (x.kind==='q') { const qs=x.questions, i=Math.min(S.tab,qs.length-1), cur=qs[i];
+    body = `${qs.length>1?`<div class="irow2" style="margin-top:6px">${qs.map((q,j)=>`<span class="ib ${j===i?'on':''}" data-tab="${j}">${j+1} ${q.h}</span>`).join('')}</div>`:''}
+      <div class="iq">${cur.q}</div>${cur.opts.map((o,j)=>`<div class="io"><span class="no">${j+1}.</span><span>${o[0]}</span></div>`).join('')}
+      <div class="io" style="color:#86878d;margin-top:5px">Beschreibungen der Optionen: nur im Chat oder in „Wartet auf mich“</div>`; }
+  else if (x.kind==='p') body = `<div class="iq" style="font-family:'SF Mono',ui-monospace,monospace;font-size:12.5px">${esc(x.cmd)}</div><div class="io">${x.agent==='Codex'?'vom Bildschirm abgelesen':'Erlaubnis nur im Chat'}</div>`;
+  else body = `<div class="iq">${x.out}</div><div class="io" style="font-family:'SF Mono',ui-monospace,monospace">${x.cmd2}</div>`;
+  return `<div class="desk"><div class="deskwin">Anderes Programm im Vordergrund (Browser, Mail, Linear) …</div>
+    <div class="island" style="position:relative;z-index:2">
+      <div class="ihd"><span class="kind ${x.kind}"><i>${KIND[x.kind][0]}</i>${KIND[x.kind][1]}</span><b>${x.chat}</b><span>${x.key||x.agent}</span><span class="sp">seit ${x.age}</span></div>
+      ${body}
+      <div class="irow2"><span class="ib on" data-jump="${x.chat}">⏎ Zum Chat</span><span class="ib">esc Schließen</span></div>
+      ${ids.length>1?`<div class="queue">${ids.map(id=>`<span class="qp ${id===S.sel?'on':''}" data-q="${id}">${KIND[Q[id].kind][0]} ${Q[id].chat}</span>`).join('')}</div>`:''}
+    </div></div>`;
+}
+
+/* --- Heute --- */
+function todayHTML() {
+  const ids = list();
+  const needs = { lux:'Entscheidung zum Entwurf', vic:'Frage zur Insel', fin:'wartet auf dich', kai:'', jon:'Linear-Key erneuern' };
+  const lines = ids.filter(id=>Q[id].agent==='Claude' && (Q[id].status==='awaiting'||id==='jon')).map(id=>`<div class="bl"><span style="color:var(--error);font-weight:700">●</span><span>${Q[id].chat}</span><span>${Q[id].key||''}</span><span>${needs[id]}</span></div>`).join('');
+  const x = Q[ids[0]];
+  return `<div class="termwrap" style="position:relative">
+    <div class="notif"><div class="nh"><span>WhisperM8</span><span style="margin-left:auto">jetzt</span></div><b>${x.chat} · ${x.topic}</b>${x.kind==='q'?'Agent has a question.':x.kind==='p'?'Agent is waiting for permission.':'Agent is done and waiting for you.'}</div>
+    <div class="term"><span class="u">❯ was wartet auf mich?</span>
+
+<span class="dim">⏺ Bash(whisperm8 chats snapshot --json)
+  ⎿ ${ids.length} Chats · Status awaitingInput · keine Frage im Ergebnis</span>
+
+<b>⏺ ${x.chat} hat eine Frage.</b> Ich habe den Bildschirm gelesen:
+  „${x.kind==='q'?x.questions[0].q:esc(x.cmd)}“
+  ${x.kind==='q'&&x.questions.length>1?'<span class="p">Weitere Reiter sehe ich nicht, dafür müsste ich im Dialog weiterblättern.</span>':''}
+  ${ids.includes('kai')?'\n<span class="dim">Kai (Codex) steht als „ruht“; dass er auf eine Freigabe wartet, sehe ich nicht.</span>':''}</div>
+    <div class="band"><span class="bt">Jarvis · ${ids.filter(i=>Q[i].agent==='Claude').length} warten auf dich</span>${lines}<div class="sum">läuft Ida · ruht Mia${ids.includes('kai')?', Kai':''}</div></div>
+    <div class="prompt">❯ </div></div>`;
+}
+
+/* --- Zusammensetzen --- */
+const CAPS = {
+  inbox:'<b>Ort A, empfohlen: „Wartet auf mich“.</b> Eine Liste, oben die Fragen der Chats, darunter die Tickets aus WM8-115. Links die Fragen mit Art, Chat und Alter, rechts die ganze Frage mit allen Reitern und den Beschreibungen der Optionen. „Zum Chat“ springt hin. Ein Ticket, an dessen Chat eine Frage hängt (WM8-57, WM8-104), trägt das Zeichen; es steht nicht doppelt da. Der Knopf „Wartet auf mich“ oben ist von überall erreichbar, auch ohne Ticket-System; dann zeigt die Liste nur die Fragen.',
+  band:'<b>Ort B: Board-Band bei Jarvis.</b> Die Zeile je Chat füllt sich selbst mit der ersten Zeile der Frage und ihrer Art, statt mit Jarvis\' Nacherzählung. Jarvis liest mit <code>whisperm8 chats questions</code> alle Reiter und legt sie dir wörtlich vor. Kein Klick nötig, aber der Kasten hat nur wenige Zeilen, und Optionen lassen sich im Terminal nicht anklicken.',
+  tile:'<b>Ort C: Zeile am Kachelkopf (WM8-89).</b> Im Raster trägt jede Kachel eine Zeile mit Ticket, Fortschritt und dem, was der Chat braucht, jetzt mit Art und Fragetext. Ein Klick klappt die Frage auf (ab Werk zu, wie am 14.11. entschieden). Gut, um im Raster zu sehen, wer was will; eine Sammlung über alle Chats ist es nicht.',
+  island:'<b>Ort D: Insel.</b> Die Frage erscheint oben in der Mitte, auch wenn ein anderes Programm vorne ist. Gut im Vorbeigehen und mit dem Controller. Eng: Reiter passen, Beschreibungen der Optionen nicht. Und sie ist eine weitere Stelle neben der Liste.',
+  today:'<b>Heute.</b> Mitteilung „Agent has a question.“ ohne Text, im Band Jarvis\' eigene Worte („Entscheidung zum Entwurf“), Jarvis liest den Bildschirm und sieht nur den ersten Reiter. Codex-Freigaben erscheinen gar nicht als wartend.',
+};
+const PC = {
+  inbox:[['Für',['Eine Liste für Tickets und Fragen, wie entschieden','Platz für alle Reiter und Beschreibungen','Durchgehen mit ↑↓, wie die Triage','Funktioniert auch ohne Ticket-System']],['Wider',['Ein Klick weg von dort, wo du gerade bist','Lebt im Ticket-Bereich, den du heute selten öffnest; deshalb führen Band, Kachel und Mitteilung hierher']]],
+  band:[['Für',['Genau dort, wo du mit Jarvis sprichst','Kein Klick, kein Wechsel','Jarvis kann wörtlich vorlegen statt nacherzählen']],['Wider',['Wenige Zeilen im Terminal, nur die erste Zeile je Frage','Nichts anklickbar','Nur im Jarvis-Chat; ohne Jarvis keine Liste']]],
+  tile:[['Für',['Am Chat selbst, im Raster sofort sichtbar','Baut auf der Zeile aus WM8-89 auf']],['Wider',['Nur im Raster, nur die Chats auf dem Schirm','Keine Sammlung, kein Durchgehen']]],
+  island:[['Für',['Auch wenn WhisperM8 hinten liegt','Mit dem Controller bedienbar']],['Wider',['Eng, Beschreibungen fehlen','Eine weitere Stelle, die man pflegen muss','Kann stören, wenn du gerade woanders arbeitest']]],
+  today:[['Heute',['Nur „wartet auf dich“, die Frage liegt im Chat','Rund zwölf Wechsel an einem Tag (15.11.)']],['Fehlt',['Text und Optionen','Unterschied zwischen Entscheidung, Erlaubnis und „bei dir“','Codex-Freigaben']]],
+};
+function render() {
+  side();
+  const html = S.place==='inbox'?inboxHTML():S.place==='band'?bandHTML():S.place==='tile'?tileHTML():S.place==='island'?islandHTML():todayHTML();
+  $('#body').innerHTML = html;
+  let cap = CAPS[S.place];
+  if (S.stage==='answer') cap += S.place==='inbox' ? ' <b>Stufe „Im Board antworten“ (später, eigene Freigabe):</b> Nur bei einer Claude-Frage mit einem Reiter wählbar; vor dem Senden laufen fünf Prüfungen. Erlaubnisse, Codex und Dialoge mit mehreren Reitern bleiben beim Sprung in den Chat.' : ' <b>Antworten im Board</b> zeigt der Entwurf nur am Ort A.';
+  $('#cap').innerHTML = cap;
+  $('#pc').innerHTML = PC[S.place].map(p=>`<div><h5>${p[0]}</h5><ul>${p[1].map(l=>`<li>${l}</li>`).join('')}</ul></div>`).join('');
+  wire();
+}
+function toast(html){ const t=$('#toast'); t.innerHTML=html; t.classList.add('show'); clearTimeout(toast.h); toast.h=setTimeout(()=>t.classList.remove('show'),3800); }
+function wire() {
+  document.querySelectorAll('[data-q]').forEach(e=>{ if(!e.dataset.q) return; e.onclick=()=>{ S.sel=e.dataset.q; S.tab=0; S.picked=null; if(S.place!=='island'&&S.place!=='inbox'){ S.place='inbox'; syncSeg('#placeSeg','inbox'); } render(); }; });
+  document.querySelectorAll('[data-tab]').forEach(e=>e.onclick=()=>{ S.tab=+e.dataset.tab; S.picked=null; render(); });
+  document.querySelectorAll('[data-pick]').forEach(e=>e.onclick=()=>{ if(S.stage!=='answer') return; S.picked=+e.dataset.pick; render(); });
+  document.querySelectorAll('[data-tile]').forEach(e=>e.onclick=()=>{ S.tileOpen = S.tileOpen===e.dataset.tile?null:e.dataset.tile; S.tab=0; render(); });
+  document.querySelectorAll('[data-jump]').forEach(e=>e.onclick=()=>toast(`Springt in den Chat <b>${e.dataset.jump}</b>: Tab vorn, Fokus im Terminal, der Dialog steht unten. Zurück über den Knopf „Wartet auf mich“ oben.`));
+  const ib=$('#inboxBtn'); if(ib) ib.onclick=()=>{ S.place='inbox'; syncSeg('#placeSeg','inbox'); render(); };
+  const ti=$('#toInbox'); if(ti) ti.onclick=()=>{ S.sel=S.tileOpen; S.place='inbox'; syncSeg('#placeSeg','inbox'); render(); };
+  const step=d=>{ const l=list(); let i=(l.indexOf(S.sel)+d+l.length)%l.length; S.sel=l[i]; S.tab=0; S.picked=null; render(); };
+  const p=$('#prev'); if(p) p.onclick=()=>step(-1); const n=$('#next'); if(n) n.onclick=()=>step(1);
+  const sd=$('#send'); if(sd&&!sd.disabled) sd.onclick=()=>toast(`<b>Gesendet</b> an ${Q[S.sel].chat}: „${Q[S.sel].questions[0].opts[S.picked][0]}“ als Einfüge-Block, dann Enter nach erneuter Prüfung. Die Antwort steht im Verlauf; die Frage verschwindet aus der Liste.`);
+}
+function syncSeg(id,v){ document.querySelectorAll(id+' button').forEach(b=>b.classList.toggle('on',b.dataset.v===v)); }
+function seg(id,key){ document.querySelectorAll(id+' button').forEach(b=>b.onclick=()=>{ S[key]=b.dataset.v; if(key==='kase'){ S.sel=ORDER[S.kase][0]; S.tab=0; S.picked=null; S.tileOpen=ORDER[S.kase][0]; } if(key==='stage') S.picked=null; syncSeg(id,b.dataset.v); render(); }); }
+seg('#placeSeg','place'); seg('#caseSeg','kase'); seg('#stageSeg','stage');
+document.addEventListener('keydown',e=>{ if(S.place!=='inbox') return; if(e.key==='ArrowDown'||e.key==='j'){ e.preventDefault(); $('#next')?.click(); } if(e.key==='ArrowUp'||e.key==='k'){ e.preventDefault(); $('#prev')?.click(); } });
+document.querySelectorAll('#themeSeg button').forEach(b=>b.onclick=()=>{ const v=b.dataset.theme; if(v==='system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=v; document.querySelectorAll('#themeSeg button').forEach(x=>x.classList.toggle('on',x===b)); });
+render();
+</script>
+</body>
+</html>
