@@ -813,15 +813,18 @@ dafür sicherer.
 
 ### Nativ als Standard (WM8-85, Paket 2a und 2b)
 
-- **Fester Name je Claude-Chat (2b).** Die App startet Claude-Chats mit `claude --name <name>`: Kopf des
-  Titels bis „·“ oder „:“ als Kürzel (höchstens 24 Zeichen), dazu acht Zeichen der Chat-ID
-  (`gus-f0d79f2c`). Nur ab Claude Code 2.1.325 (gemessen, auch mit `--resume`) und nur bei bekannter Version;
+- **Fester Name je Claude-Chat (2b).** Die App startet Claude-Chats im Vordergrund mit `claude --name <name>`
+  (Hintergrund-Chats und das Anhängen an einen Hintergrund-Lauf bekommen keinen Namen): Kopf des Titels bis
+  „·“ oder „:“ als Kürzel (höchstens 24 Zeichen), dazu acht Zeichen der Chat-ID (`gus-f0d79f2c`); ein
+  Platzhalter wie „Neue Session“ oder „Claude Chat“ ergibt `chat-<id>`. Nur ab Claude Code 2.1.325 (gemessen, auch mit `--resume`) und nur bei bekannter Version;
   Notbremse `claudeNativeNameEnabled`. Ein `--name` aus den Einstellungen gewinnt.
   - Claude schreibt den Namen als `custom-title` in den Verlauf. Die Titel-Übernahme übergeht ihn
-    (`NativeSessionTitle`, im Auto-Namer per Chat-ID, im Indexer per Namensmuster `kopf-1a2b3c4d`); ein echtes
+    (`NativeSessionTitle`, per Chat-ID und Namensmuster `kopf-1a2b3c4d`, das auch einen vom Abzweig
+    mitgebrachten Namen des Ursprungs trifft); ein echtes
     `/rename` gewinnt weiter. Der Name wird nie aus einem Titel gebildet, der selbst schon dieser Name ist.
-  - Claude zeichnet den Namen in die obere Linie des Eingabefelds: „───── name ─“, bei 30 Spalten gekürzt
-    „ name-gekü… ─“ ohne Linie links (gemessen an 2.1.325). Die Feld-Erkennung (`isNamedRule`) lässt genau
+  - Claude zeichnet den Namen in die obere Linie des Eingabefelds (gemessen an 2.1.325, Name mit L Zeichen):
+    ab L+6 Spalten „───── name ─“, bei L+5, L+4, L+3 zwei, eins, kein Linienzeichen links, darunter gekürzt
+    „ name-gekü… ─“. Die Feld-Erkennung (`isNamedRule`) lässt genau
     einen kurzen Text zu; sonst sähen Freigabe-Schutz, Startprüfung, `submit` und Controller kein Feld mehr.
   - Nicht gemessen: ob ein von Claude selbst abgezweigter Hintergrund-Lauf den Namen erbt.
 - **Native Nachrichten im Audit.** Der Watcher erkennt im Verlauf, den er ohnehin liest, Zeilen mit

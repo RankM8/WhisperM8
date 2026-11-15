@@ -378,6 +378,9 @@ struct AgentCommandBuilder {
         var title = session.title
         let suffix = "-" + nativeIDSuffix(session.id)
         while title.lowercased().hasSuffix(suffix) { title = String(title.dropLast(suffix.count)) }
+        // Platzhalter eines frischen Chats ergäben „neue-session-…“ in ListAgents,
+        // der Linie über dem Feld und Claudes Liste (Vic): dann nur „chat-<id>“.
+        if isPlaceholderTitle(title) { return "chat-" + nativeIDSuffix(session.id) }
         let head = title.components(separatedBy: CharacterSet(charactersIn: "·:")).first ?? ""
         let folded = head.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "de_DE"))
             .lowercased()
@@ -394,6 +397,13 @@ struct AgentCommandBuilder {
         while slug.hasSuffix("-") { slug.removeLast() }
         let id = String(session.id.uuidString.prefix(8)).lowercased()
         return slug.isEmpty ? "chat-\(id)" : "\(slug)-\(id)"
+    }
+
+    /// Titel, die ein frischer Chat von der App bekommt, bevor er benannt ist.
+    static func isPlaceholderTitle(_ title: String) -> Bool {
+        let normalized = title.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized.isEmpty || normalized == "neue session" || normalized == "terminal"
+            || normalized.hasSuffix(" chat")
     }
 
     static func nativeIDSuffix(_ id: UUID) -> String {

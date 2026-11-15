@@ -162,6 +162,17 @@ final class NativeMessagingTests: XCTestCase {
                            cols: 30).promptField
         XCTAssertEqual(field?.isEmpty, true, "Feld auch in einer 30 Spalten schmalen Kachel")
         XCTAssertFalse(ControllerScreenReading.isRule(" Ausgabe mit Text … ─"), "gekürzt nur ohne Leerzeichen im Namen")
+        // Zwischenbreiten (Vic): gemessen bei 35, 36, 37 Spalten (Name 32 Zeichen).
+        let measured = [35: " wm8-100-gus-nachrichten-f0d79f2c ─", 36: "─ wm8-100-gus-nachrichten-f0d79f2c ─",
+                        37: "── wm8-100-gus-nachrichten-f0d79f2c ─", 38: "─── wm8-100-gus-nachrichten-f0d79f2c ─",
+                        33: " wm8-100-gus-nachrichten-f0d79… ─", 34: " wm8-100-gus-nachrichten-f0d79f… ─"]
+        for (cols, line) in measured.sorted(by: { $0.key < $1.key }) {
+            XCTAssertTrue(ControllerScreenReading.isRule(line), "\(cols) Spalten")
+            let field = screen("⏺ OK\n\(line)\n\(dim)❯ \(reset)\(save)\n\(String(repeating: "─", count: cols))\(restore)",
+                               cols: cols).promptField
+            XCTAssertEqual(field?.isEmpty, true, "Feld bei \(cols) Spalten")
+        }
+        XCTAssertFalse(ControllerScreenReading.isRule("─ zwei Wörter ─"), "links knapp nur ohne Leerzeichen im Text")
         XCTAssertFalse(ControllerScreenReading.isRule("ausgabe… ─"), "links weder Linie noch Leerzeichen")
     }
 
@@ -205,6 +216,14 @@ final class NativeMessagingTests: XCTestCase {
         XCTAssertFalse(AgentCommandBuilder.isOwnNativeName("gus-1a2b3c4d", sessionID: id), "Name eines anderen Chats")
         XCTAssertFalse(AgentCommandBuilder.looksLikeNativeName("Review Startfenster"))
         XCTAssertTrue(AgentCommandBuilder.looksLikeNativeName("wm8-100-gus-f0d79f2c"))
+    }
+
+    func testFreshChatsAreCalledChatID() {
+        let id = UUID(uuidString: "F0D79F2C-A760-4303-A014-71B548B0A122")!
+        for title in ["Neue Session", "Claude Chat", "Codex Chat", "", "Terminal"] {
+            XCTAssertEqual(AgentCommandBuilder.nativeName(for: AgentChatSession(id: id, provider: .claude, projectID: UUID(), title: title)),
+                           "chat-f0d79f2c", title)
+        }
     }
 
     func testOnlyAMeasuredClaudeVersionGetsTheName() {

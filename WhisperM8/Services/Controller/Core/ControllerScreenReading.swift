@@ -327,13 +327,15 @@ enum ControllerScreenReading {
     static let maxRuleLabel = 48
 
     /// Claude schreibt den Namen der Sitzung (`claude --name`, WM8-85) in die
-    /// obere Linie des Eingabefelds. Gemessen an 2.1.325:
-    /// - 160 und 40 Spalten: „───── wm8-100-gus-nachrichten-f0d79f2c ─“
-    /// - 30 Spalten: „ wm8-100-gus-nachrichten-f0… ─“ — gekürzt, links keine Linie.
+    /// obere Linie des Eingabefelds. Gemessen an 2.1.325 mit einem Namen von
+    /// 32 Zeichen (L):
+    /// - ab L+6 Spalten: „───── name ─“ (drei und mehr Linienzeichen links)
+    /// - L+5: „── name ─“, L+4: „─ name ─“, L+3: „ name ─“ (links nichts)
+    /// - darunter gekürzt: „ wm8-100-gus-nachrichten-f0… ─“
     /// Erlaubt ist genau ein kurzer Text mit Leerzeichen davor und danach,
-    /// rechts mindestens ein Linienzeichen, links mindestens drei; links
-    /// keines nur, wenn Claude den Namen gekürzt hat (endet auf „…“, ohne
-    /// Leerzeichen darin).
+    /// rechts mindestens ein Linienzeichen. Links weniger als drei nur, wenn
+    /// der Text kein Leerzeichen enthält (Namen der App haben keines); links
+    /// keines nur, wenn die Zeile mit einem Leerzeichen beginnt.
     static func isNamedRule(_ line: String) -> Bool {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         let characters = Array(trimmed)
@@ -346,7 +348,8 @@ enum ControllerScreenReading {
         guard !label.isEmpty, label.count <= maxRuleLabel,
               !label.contains(where: { ruleCharacters.contains($0) }) else { return false }
         if leading >= 3 { return true }
-        return leading == 0 && line.first == " " && label.hasSuffix("…") && !label.contains(" ")
+        guard !label.contains(" ") else { return false }
+        return leading > 0 || line.first == " "
     }
 
     /// Spalte, an der der Text nach dem Prompt-Zeichen beginnt.
