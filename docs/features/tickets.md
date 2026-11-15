@@ -9,7 +9,7 @@ WhisperM8 verbindet die Tickets im Ticket-Werkzeug mit den Chats der App. Ein Ch
 Ticket; daraus ergibt sich, wer woran sitzt, welche Chats laufen und welche Tickets niemanden haben.
 
 Stand 14.11.2026: Es gibt den Kern, die Kommandozeile `whisperm8 tickets`, den Skill `tickets` im Plugin, die
-Seite „Tickets“ in den Einstellungen (Labs) und die Ansicht im Agent-Chats-Fenster (Board und Backlog, nur
+Seite „Tickets“ in den Einstellungen (Labs) und die Ansicht im Agent-Chats-Fenster (Board und Liste, nur
 lesend, Stufe 1). Knöpfe, die Tickets ändern (Stufe 2), gibt es nicht. Plan:
 [`../plans/ticket-board.md`](../plans/ticket-board.md), Entwurf
 [`../design/ticket-board.html`](../design/ticket-board.html).
@@ -147,7 +147,9 @@ Hinweise („ACHTE“), der Bericht bleibt grün:
 2. **Zuordnung:** `whisperm8 tickets setup --team WM8 --project <Ordner>` schreibt, welches Projekt zu welchem
    Team gehört und in welchem Workspace das Team liegt. Arbeitsordner unterhalb des Projekts zählen mit. Ohne
    `--workspace` sieht die Kommandozeile nach, in welchem eingerichteten Workspace es das Team gibt.
-3. **Prüfen:** `whisperm8 tickets doctor`.
+3. **Regel des Teams (für das Board):** `whisperm8 tickets setup --team WM8 --status "Merge-bereit=wartet"
+   --waiting-labels Entscheidung,Handtest`. Siehe „Regel je Team“ unten.
+4. **Prüfen:** `whisperm8 tickets doctor`.
 
 Liegt ein Key schon im Schlüsselbund (von einem anderen Werkzeug abgelegt), übernimmt ihn
 `whisperm8 tickets setup --workspace <Kürzel>` nach einer Prüfung bei Linear.
@@ -280,7 +282,9 @@ Eine Verknüpfung ist ein Anhang am Ticket. Das Format hält `TicketChatLinkForm
 ```
 Models/Tickets/Ticket.swift                  Ticket, Status-Art, Person, Verknüpfung, Abzug; TicketChat
 Services/Tickets/TicketChatLinkFormat.swift  Format der Verknüpfung
-Services/Tickets/TicketBoardModel.swift      wer sitzt woran, Chats ohne offenes Ticket, Supervisor; Filter, Zählungen, Spalten
+Services/Tickets/TicketBoardModel.swift      wer sitzt woran, Chats ohne offenes Ticket, Supervisor; Filter, Zählungen, Gruppen der CLI
+Services/Tickets/TicketBoardLanes.swift      Spalten des Boards nach echtem Status
+Services/Tickets/TicketTeamRule.swift        Regel je Team: was ein Status bedeutet, wann ein Ticket auf mich wartet
 Services/Tickets/TicketSource.swift          Grenze zum Ticket-Werkzeug, Fehler, Stand-Zeile
 Services/Tickets/LinearGraphQLClient.swift   ein Aufruf, Fehlerübersetzung; Key im Schlüsselbund
 Services/Tickets/LinearTicketSource.swift    die einzige Stelle, die Linear kennt
@@ -291,9 +295,9 @@ Services/Tickets/TicketHygiene.swift         Ordnung der Tickets, Tabelle der Be
 Services/Tickets/TicketBoardStore.swift      Abzug mit Takt für die Ansicht
 Views/Tickets/TicketErrorText.swift          Fehler als übersetzter Satz für die Oberfläche
 Views/Tickets/TicketBoardPresentation.swift  fertig gerechneter Inhalt, Zustand der Ansicht (Filter, Auswahl), Live-Zustand der Chats
-Views/Tickets/TicketBoardView.swift          Kopf, Umschalter Board/Backlog, Filter
+Views/Tickets/TicketBoardView.swift          Kopf, Umschalter Board/Liste, Filter
 Views/Tickets/TicketCardView.swift           Karte und Spalten
-Views/Tickets/TicketBacklogListView.swift    Liste nach Projekt, Leiste „Chats ohne Ticket“
+Views/Tickets/TicketBacklogListView.swift    Liste nach Projekt, Zeile „Chats ohne Ticket“
 Views/Tickets/TicketDetailPanel.swift        Detail rechts
 Views/Tickets/TicketDescriptionBlocks.swift  Beschreibung leicht gesetzt (Überschriften, Kästchen, Listen)
 Views/Tickets/TicketBoardText.swift          Texte und kleine Bausteine (Status-Punkt, Priorität, Person)
@@ -331,7 +335,7 @@ CLI/TicketsCLIRunner.swift                   Ausführung und Ausgabe
 
 ## Die Ansicht in der App
 
-Die Ansicht liest nur. Bilder: `make snapshots ONLY=tickets` (Board, Backlog, Detail, Leerzustände), Beispiele
+Die Ansicht liest nur. Bilder: `make snapshots ONLY=tickets` (Board, Liste, Detail, Leerzustände), Beispiele
 in [`../design/ticket-board/`](../design/ticket-board/).
 
 ### Einstieg
@@ -402,6 +406,32 @@ Die Zahlen lassen sich jederzeit nachmessen: `whisperm8 tickets doctor` nennt je
 und den Rest des Budgets („Budget WM8“). Jede Anfrage schreibt außerdem `linear_cost complexity=…
 remaining_complexity=… remaining_requests=…` ins Debug-Log; der Schlüssel steht nicht darin.
 
+### Regel je Team
+
+Welcher Status was bedeutet, ist je Team verschieden: In einem Team heißt ein Status, der nach Code-Prüfung
+klingt, „Produktentscheidung offen“, in einem anderen wartet „Merge-bereit“ auf die Abnahme. Deshalb steht im
+Code kein Statusname. Die Regel liegt in `tickets.json` unter `rulesByTeam` und hat zwei Teile:
+
+| Teil | Bedeutung | ohne Eintrag |
+|---|---|---|
+| `statusMeanings` | Name des Status → `wartet` (wartet auf mich), `arbeit` (in Arbeit), `fertig` (gebaut, wartet auf andere) | begonnene Status gelten als „in Arbeit“ |
+| `waitingLabels` | Labels, mit denen ein mir zugewiesenes Ticket auf mich wartet | jedes mir zugewiesene offene Ticket |
+
+Ein Ticket wartet auf mich, wenn sein Status „wartet“ bedeutet oder es mir zugewiesen ist und (falls die Regel
+Labels nennt) eines davon trägt. Wer „ich“ bin, sagt Linear im selben Abruf wie das Board (`viewer { id }`), ohne
+zusätzliche Anfrage.
+
+```bash
+whisperm8 tickets setup --team WM8 --status "Merge-bereit=wartet" --status "Wartet aufs Ausliefern=fertig" \
+                        --waiting-labels Entscheidung,Handtest
+whisperm8 tickets setup --team WM8 --status "Merge-bereit="      # Bedeutung wegnehmen
+whisperm8 tickets setup --team WM8 --show-rule                    # zeigen
+whisperm8 tickets setup --team WM8 --clear-rule                   # löschen
+```
+
+Die Regel ändert nur die Einrichtung, nie Linear. Die Ansicht liest sie beim nächsten Aktivieren des Fensters
+neu. Später nutzen „Wartet auf mich“ über alle Teams (WM8-115) und der Controller (WM8-91) dieselbe Regel.
+
 ### Was die Ansicht statt des Boards zeigt
 
 | Zustand | Text | Knopf |
@@ -418,18 +448,24 @@ gezeigten Stands.
 
 ### Inhalt
 
-- **Board:** drei Spalten nach Art des Status (in Arbeit, als Nächstes, Backlog). In „In Arbeit“ stehen die
-  Tickets nach Status in der Reihenfolge des Teams, darin nach Priorität. Jede Karte zeigt Nummer, Priorität,
-  Fortschritt der Kästchen, Person, Titel, Projekt und Meilenstein, Status und Labels, und unten den Chat mit
-  Status-Punkt und Zustand. Sitzt keiner daran, steht dort „Kein Agent“, bei einem abgegebenen Ticket „Abgegeben
-  von …“.
-- **Backlog:** dieselben Tickets als Liste, nach Projekt gruppiert.
-- **Filter:** Agent (alle, mit, ohne) und Person (alle, nicht zugewiesen, je Person) lassen sich kombinieren,
-  dazu die Auswahl eines Projekts. Jede Zahl gilt innerhalb der übrigen Auswahl.
+- **Board:** eine Spalte je Status des Teams, der offene Tickets hat (seit WM8-112; vorher drei Gruppen nach Art
+  des Status, die genau die Engpässe versteckten). Reihenfolge: zuerst Status, die nach der Regel des Teams auf
+  mich warten, dann Eingang, Begonnenes (darin „fertig“ hinter „in Arbeit“), als Nächstes, Backlog; sonst der
+  weiteste Stand links. Leert ein Filter eine Spalte, klappt sie an ihrem Platz schmal ein (150 pt, nur Statusname und 0), und die gefüllten rücken zusammen (Giuliano, 15.11.2026); ohne Filter bleibt eine leere Spalte breit. Die Regel steht pur in `TicketBoardLanes.isFolded`. Eine Spalte zeigt die ersten acht
+  Karten, darunter „N weitere · alle zeigen“. Im Kopf der Spalte steht „Wartet auf dich“ (Status bedeutet das,
+  Rahmen in Bernstein) oder „N für dich“. Jede Karte zeigt Nummer, Priorität, Fortschritt der Kästchen, Person,
+  Titel, Projekt und Meilenstein, Status und Labels; Labels, mit denen ein Ticket auf mich wartet, in Bernstein.
+  Die Chat-Zeile steht nur da, wo ein Chat sitzt oder abgegeben hat („Abgegeben von …“). „Kein Agent“ gibt es
+  nicht mehr: In Teams, deren Entwickler ohne WhisperM8-Chats arbeiten, stand es auf fast jeder Karte.
+- **Liste:** dieselben Tickets als Liste, nach Projekt gruppiert.
+- **Filter:** „Wartet auf mich“ (Bernstein, vorn), Agent (alle, mit, ohne) und Person (alle, nicht zugewiesen, je
+  Person) lassen sich kombinieren, dazu die Auswahl eines Projekts. Jede Zahl gilt innerhalb der übrigen Auswahl.
+  „Ohne Agent“ zählt keine Status, die nach der Regel „fertig“ oder „wartet auf mich“ bedeuten.
 - **Detail:** Eckdaten, der Chat mit „arbeitet seit …“, „Zum Chat“ und „In Linear öffnen“, darunter die
   Beschreibung, leicht gesetzt (Überschriften, Kästchen, Listen mit ihren Nummern). Escape schließt es.
-- **Leiste:** laufende Chats ohne offenes Ticket, mit dem Ticket, an dem sie zuletzt saßen. Supervisor-Chats
-  stehen getrennt daneben und zählen nicht als Lücke.
+- **Zeile „Chats ohne Ticket“:** zugeklappt eine Zeile mit der Zahl der laufenden Chats ohne offenes Ticket und
+  dem Supervisor. Aufgeklappt die Chats mit dem Ticket, an dem sie zuletzt saßen; Supervisor-Chats stehen getrennt
+  daneben und zählen nicht als Lücke.
 - **Schmales Fenster:** Die Spalten werden nicht schmaler als 260 pt, darunter scrollt das Board waagrecht.
   Unter 940 pt Breite liegt das Detail über dem Inhalt statt daneben; die Liste lässt dann Status und
   Fortschritt weg.
@@ -501,7 +537,8 @@ Zeilen werden nicht gesetzt, der Rest steht in Linear.
 `TicketsCLITests`: pure Typen, Quelle gegen feste Antworten, Speicher mit eingespeister Wartefunktion,
 Kommandozeile gegen eine Quelle aus Closures. Kein Test braucht Netz, Schlüsselbund oder die App.
 
-Für die Ansicht: `TicketBoardPresentationTests` (Spalten, Filter, Zählungen, Detail),
+Für die Ansicht: `TicketBoardPresentationTests` (Spalten, Filter, Zählungen, Detail), `TicketTeamRuleTests`
+(Regel je Team, Spalten nach Status, „Wartet auf mich“, Befehl `setup --status`),
 `TicketBoardControllerTests` (Zuordnung, Abruf nur bei sichtbarer Ansicht, Leerzustände, Projektwechsel, überholte
 Antworten) und `AgentWindowStoreTicketsModeTests` (Umschalter je Fenster, Rückkehr zu den Chats, Schnappschuss für
 den Controller). Was nur von Hand prüfbar ist, steht als Liste im Plan unter „Tests und Abnahme“.

@@ -14,14 +14,20 @@ struct TicketBoardEntry: Equatable, Identifiable {
         didSet { derive() }
     }
     var agents: [TicketAgent]
+    /// Was der Status im Team bedeutet (Regel des Teams, sonst seine Art).
+    var meaning: TicketStatusMeaning?
+    /// Wartet auf den Nutzer, nach der Regel des Teams.
+    var waitsForMe: Bool
     /// Fortschritt der Kästchen und Rufnamen der abgebenden Chats, einmal
     /// gerechnet: Karten lesen sie bei jedem Zeichnen.
     private(set) var criteria: TicketChecklistProgress?
     private(set) var handedOverBy: [String] = []
 
-    init(ticket: Ticket, agents: [TicketAgent]) {
+    init(ticket: Ticket, agents: [TicketAgent], meaning: TicketStatusMeaning? = nil, waitsForMe: Bool = false) {
         self.ticket = ticket
         self.agents = agents
+        self.meaning = meaning ?? (ticket.status.kind == .started ? .inProgress : nil)
+        self.waitsForMe = waitsForMe
         derive()
     }
 
@@ -60,6 +66,10 @@ struct TicketBoardModel: Equatable {
     var looseChats: [TicketLooseChat]
     /// Supervisor-Chats betreuen andere Chats und brauchen kein Ticket.
     var supervisors: [TicketChat]
+    /// Status des Teams in seiner Reihenfolge; daraus werden die Spalten.
+    var statuses: [TicketStatus] = []
+    /// Regel des Teams, mit der Bedeutungen und „wartet auf mich“ gerechnet wurden.
+    var rule = TicketTeamRule()
 
     /// Dasselbe Modell ohne den Zustand der Chats. Die Ansicht führt den
     /// Zustand getrennt: Ein Statuswechsel soll das Modell nicht „ändern“ und
@@ -100,7 +110,8 @@ enum TicketBoardBuilder {
     ///     „zuletzt an …“.
     ///   - chats: alle Chats dieser Installation, laufende und ruhende.
     ///   - projectPath: nur Chats dieses Projekts gelten als „ohne Ticket“.
-    static func build(snapshot: TicketBoardSnapshot, chats: [TicketChat], projectPath: String?) -> TicketBoardModel {
+    static func build(snapshot: TicketBoardSnapshot, chats: [TicketChat], projectPath: String?,
+                      rule: TicketTeamRule = TicketTeamRule()) -> TicketBoardModel {
         let chatsByID = Dictionary(chats.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         var linkedChatIDs = Set<UUID>()
         var earlier: [UUID: [String]] = [:]
@@ -123,7 +134,8 @@ enum TicketBoardBuilder {
             for link in ticket.links where !link.isActive {
                 earlier[link.chatID, default: []].append("\(ticket.key) (\(ticket.status.name))")
             }
-            entries.append(TicketBoardEntry(ticket: ticket, agents: agents))
+            entries.append(TicketBoardEntry(ticket: ticket, agents: agents, meaning: rule.meaning(of: ticket.status),
+                                            waitsForMe: rule.waitsForMe(ticket, viewerID: snapshot.viewerID)))
         }
 
         let candidates = chats.filter { chat in
@@ -137,7 +149,9 @@ enum TicketBoardBuilder {
         return TicketBoardModel(
             entries: entries,
             looseChats: loose.sorted { $0.chat.title.localizedStandardCompare($1.chat.title) == .orderedAscending },
-            supervisors: supervisors
+            supervisors: supervisors,
+            statuses: snapshot.statuses,
+            rule: rule
         )
     }
 
@@ -158,7 +172,8 @@ enum TicketAgentFilter: String, Equatable, CaseIterable {
     case withAgent
     /// In Arbeit oder bereit, aber niemand sitzt daran. Backlog zählt nicht:
     /// dort ist ein fehlender Agent kein Befund. Abgegebene Tickets auch nicht:
-    /// Sie warten auf den Merge, nicht auf einen Chat.
+    /// Sie warten auf den Merge, nicht auf einen Chat. Ebenso Status, die nach
+    /// der Regel des Teams „fertig“ oder „wartet auf mich“ bedeuten.
     case withoutAgent
 }
 
@@ -173,11 +188,13 @@ struct TicketBoardFilter: Equatable {
     var person: TicketPersonFilter = .all
     /// Name des Vorhabens; `""` steht für „ohne Vorhaben“.
     var project: String?
+    /// Nur, was nach der Regel des Teams auf den Nutzer wartet.
+    var waitingForMe = false
 
     static let all = TicketBoardFilter()
 
     func matches(_ entry: TicketBoardEntry) -> Bool {
-        matchesProject(entry) && matchesPerson(entry) && matchesAgent(entry)
+        (!waitingForMe || entry.waitsForMe) && matchesProject(entry) && matchesPerson(entry) && matchesAgent(entry)
     }
 
     func apply(to entries: [TicketBoardEntry]) -> [TicketBoardEntry] {
@@ -201,7 +218,9 @@ struct TicketBoardFilter: Equatable {
         switch agent {
         case .all: return true
         case .withAgent: return entry.hasAgent
-        case .withoutAgent: return !entry.hasAgent && entry.ticket.status.kind != .backlog && !entry.isHandedOver
+        case .withoutAgent:
+            return !entry.hasAgent && entry.ticket.status.kind != .backlog && !entry.isHandedOver
+                && entry.meaning != .done && entry.meaning != .waitsForMe
         }
     }
 }
@@ -213,12 +232,14 @@ struct TicketFilterCounts: Equatable {
     var withAgent: Int
     var withoutAgent: Int
     var unassigned: Int
+    /// Wartet auf den Nutzer, innerhalb der übrigen Auswahl.
+    var waitingForMe: Int = 0
     /// Personen mit Anzahl, alphabetisch.
     var people: [(person: TicketPerson, count: Int)]
 
     static func == (lhs: TicketFilterCounts, rhs: TicketFilterCounts) -> Bool {
         lhs.all == rhs.all && lhs.withAgent == rhs.withAgent && lhs.withoutAgent == rhs.withoutAgent
-            && lhs.unassigned == rhs.unassigned
+            && lhs.unassigned == rhs.unassigned && lhs.waitingForMe == rhs.waitingForMe
             && lhs.people.map(\.person) == rhs.people.map(\.person)
             && lhs.people.map(\.count) == rhs.people.map(\.count)
     }
@@ -244,11 +265,14 @@ struct TicketFilterCounts: Equatable {
         }
         var without = agentBase
         without.agent = .withoutAgent
+        var waitingBase = filter
+        waitingBase.waitingForMe = false
         return TicketFilterCounts(
             all: forAgents.count,
             withAgent: forAgents.filter(\.hasAgent).count,
             withoutAgent: without.apply(to: entries).count,
             unassigned: forPeople.filter { $0.ticket.assignee == nil }.count,
+            waitingForMe: waitingBase.apply(to: entries).filter(\.waitsForMe).count,
             people: byPerson.map { (person: $0.key, count: $0.value) }
                 .sorted { $0.person.name.localizedStandardCompare($1.person.name) == .orderedAscending }
         )

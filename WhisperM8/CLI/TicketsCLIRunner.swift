@@ -385,6 +385,15 @@ enum TicketsCLIRunner {
         case .removeTeam(let team, let withProjects):
             return try removeTeam(team, withProjects: withProjects, env)
 
+        case .rule(let request):
+            do {
+                let result = try TicketTeamRuleChange.apply(request, to: env.config())
+                if !request.isShowOnly { try env.saveConfig(result.config) }
+                return result.message
+            } catch let problem as TicketTeamRuleChange.Problem {
+                throw Failure(exitCode: TicketsCLIExit.usage, message: problem.message)
+            }
+
         case .doctor(let json):
             // Wird in `execute` behandelt (Bericht immer nach stdout).
             return TicketsCLIFormatter.doctor(await doctor(env), json: json)

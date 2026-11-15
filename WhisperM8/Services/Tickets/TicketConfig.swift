@@ -21,6 +21,8 @@ struct TicketConfig: Codable, Equatable {
     /// Projektordner → Datei mit der Tabelle Bereich, Ordner, Projekt (relativ
     /// zum Projektordner). `tickets doctor` prüft sie gegen das Ticket-Werkzeug.
     var areasFileByProjectPath: [String: String] = [:]
+    /// Team-Kürzel → Regel, was seine Status bedeuten (`tickets setup --status`).
+    var rulesByTeam: [String: TicketTeamRule] = [:]
 
     init() {}
 
@@ -32,6 +34,17 @@ struct TicketConfig: Codable, Equatable {
         workspacesByTeam = try container.decodeIfPresent([String: String].self, forKey: .workspacesByTeam) ?? [:]
         workspaces = try container.decodeIfPresent([String].self, forKey: .workspaces) ?? []
         areasFileByProjectPath = try container.decodeIfPresent([String: String].self, forKey: .areasFileByProjectPath) ?? [:]
+        rulesByTeam = try container.decodeIfPresent([String: TicketTeamRule].self, forKey: .rulesByTeam) ?? [:]
+    }
+
+    /// Regel eines Teams; ohne Eintrag die leere Regel.
+    func rule(forTeam team: String) -> TicketTeamRule {
+        rulesByTeam.first { $0.key.caseInsensitiveCompare(team) == .orderedSame }?.value ?? TicketTeamRule()
+    }
+
+    mutating func set(rule: TicketTeamRule, forTeam team: String) {
+        rulesByTeam = rulesByTeam.filter { $0.key.caseInsensitiveCompare(team) != .orderedSame }
+        if !rule.isEmpty { rulesByTeam[team.uppercased()] = rule }
     }
 
     /// Team für ein Verzeichnis: das Projekt mit dem längsten passenden Pfad,
@@ -156,6 +169,7 @@ struct TicketConfig: Codable, Equatable {
     mutating func removeTeam(_ team: String) {
         for path in projectPaths(forTeam: team) { removeProject(path) }
         workspacesByTeam = workspacesByTeam.filter { $0.key.caseInsensitiveCompare(team) != .orderedSame }
+        rulesByTeam = rulesByTeam.filter { $0.key.caseInsensitiveCompare(team) != .orderedSame }
     }
 
     /// Kürzel eines Workspaces, wie Linear es in der Adresse führt. Es wandert

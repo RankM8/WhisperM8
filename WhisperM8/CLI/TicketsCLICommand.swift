@@ -23,6 +23,8 @@ enum TicketsCLIArguments: Equatable {
     case setup(keyFromStdin: Bool, project: String?, team: String?, workspace: String?, reassign: Bool, areas: String?)
     /// `setup --remove-team`: nimmt ein Team wieder aus der Einrichtung.
     case removeTeam(team: String, withProjects: Bool)
+    /// `setup --team T --status …`: was die Status des Teams bedeuten.
+    case rule(TicketTeamRuleChange.Request)
     case doctor(json: Bool)
 
     enum ParseError: Error, Equatable {
@@ -43,6 +45,7 @@ enum TicketsCLIArguments: Equatable {
     var isWrite: Bool {
         switch self {
         case .link, .done, .unlink, .status, .note, .comment, .new, .assign, .label, .setup, .removeTeam, .decide: return true
+        case .rule(let request): return !request.isShowOnly
         // Ohne Verweise zeigt `check` nur die Kästchen.
         case .check(_, let references, _, _): return !references.isEmpty
         case .help, .board, .list, .show, .mine, .doctor: return false
@@ -55,7 +58,7 @@ enum TicketsCLIArguments: Equatable {
              .note(let key, _), .comment(let key, _), .assign(let key, _), .label(let key, _, _), .decide(let key, _),
              .check(let key, _, _, _):
             return key
-        case .help, .board, .list, .mine, .new, .setup, .removeTeam, .doctor:
+        case .help, .board, .list, .mine, .new, .setup, .removeTeam, .rule, .doctor:
             return nil
         }
     }
@@ -234,6 +237,16 @@ enum TicketsCLIArguments: Equatable {
                 return .removeTeam(team: team, withProjects: withProjects)
             }
             guard !withProjects else { throw ParseError.usage("--with-projects braucht --remove-team") }
+            let statuses = try values("--status"), clear = flag("--clear-rule"), showRule = flag("--show-rule")
+            let labels: [String]? = rest.contains("--waiting-labels") ? try list("--waiting-labels") : nil
+            if !statuses.isEmpty || clear || showRule || labels != nil {
+                // Die Regel steht für sich: Sie fragt Linear nicht und ändert keine Zuordnung.
+                guard let team = try value("--team")?.trimmingCharacters(in: .whitespaces).uppercased(), !team.isEmpty else {
+                    throw ParseError.usage("--status, --waiting-labels, --clear-rule und --show-rule brauchen --team")
+                }
+                _ = try positional(0, "tickets setup --team T [--status NAME=BEDEUTUNG]… [--waiting-labels a,b] [--clear-rule] [--show-rule]")
+                return .rule(.init(team: team, statuses: statuses, waitingLabels: labels, clear: clear))
+            }
             let stdin = flag("--key-stdin"), project = try value("--project"), team = try value("--team")
             let workspace = try value("--workspace"), reassign = flag("--reassign"), areas = try value("--areas")
             guard project == nil || team != nil else { throw ParseError.usage("--project braucht --team") }
@@ -417,6 +430,14 @@ enum TicketsCLICommand {
       whisperm8 tickets setup --team T --project ORDNER --areas DATEI
                 Nennt die Datei im Projekt (relativ), in der die Tabelle
                 Bereich, Ordner, Projekt steht; doctor prüft sie.
+      whisperm8 tickets setup --team T --status NAME=BEDEUTUNG… [--waiting-labels a,b]
+                Regel des Teams für das Board: was ein Status bedeutet
+                (wartet = wartet auf mich, arbeit = in Arbeit, fertig =
+                gebaut, wartet auf andere). `NAME=` nimmt die Bedeutung weg.
+                --waiting-labels: Labels, mit denen ein mir zugewiesenes
+                Ticket auf mich wartet (leer: jedes zugewiesene). Ändert nur
+                die Einrichtung, nie Linear. --show-rule zeigt die Regel,
+                --clear-rule löscht sie.
       whisperm8 tickets setup --remove-team T [--with-projects]
                 Nimmt ein Team wieder aus der Einrichtung, etwa wenn es in
                 Linear gelöscht oder umbenannt wurde. Hängt noch ein Ordner

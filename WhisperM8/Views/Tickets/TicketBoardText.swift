@@ -77,7 +77,7 @@ enum TicketBoardText {
 
     /// Was VoiceOver zu einer Karte sagt: ein Satz statt jedes Einzelteils.
     static func spoken(_ entry: TicketBoardEntry) -> String {
-        let agent = entry.agents.first?.chat?.shortName ?? String(localized: "No agent")
+        let agent = entry.agents.first?.chat?.shortName ?? String(localized: "No chat")
         return [entry.ticket.key, entry.ticket.title, entry.ticket.status.name, priority(entry.ticket.priority), agent]
             .joined(separator: ", ")
     }
@@ -220,12 +220,15 @@ struct TicketCriteriaBadge: View {
 
 // MARK: - Zeile „wer sitzt daran“
 
-/// Der Chat an einem Ticket, oder sichtbar, dass keiner daran sitzt.
+/// Der Chat an einem Ticket. Ohne Chat bleibt die Zeile leer: „Kein Agent“
+/// stand früher auf fast jeder Karte und sagte dort nichts.
 struct TicketAgentRow: View {
     let entry: TicketBoardEntry
     let source: TicketChatStatusSource
     /// In der Liste nur Punkt und Name; die Karte nennt auch den Zustand.
     var compact = false
+    /// Im Detail steht ausdrücklich „Kein Chat“.
+    var showsNone = false
 
     var body: some View {
         HStack(spacing: 6) {
@@ -257,20 +260,10 @@ struct TicketAgentRow: View {
                     .font(.system(size: 11))
                     .foregroundStyle(AgentTheme.textSecondary)
                     .lineLimit(1)
-            } else if entry.ticket.status.kind == .backlog {
-                Circle().fill(AgentTheme.border).frame(width: 7, height: 7)
-                Text("Not scheduled yet")
+            } else if showsNone {
+                Text("No chat")
                     .font(.system(size: 11))
                     .foregroundStyle(AgentTheme.textSecondary)
-            } else {
-                // Auffällig durch Form und Gewicht, nicht durch eine Statusfarbe:
-                // Gelb heißt in der App „wartet auf dich“, Rot „Fehler“.
-                Circle()
-                    .strokeBorder(AgentTheme.textPrimary, style: StrokeStyle(lineWidth: 1.2, dash: [2, 1.5]))
-                    .frame(width: 9, height: 9)
-                Text("No agent")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(AgentTheme.textPrimary)
             }
         }
     }

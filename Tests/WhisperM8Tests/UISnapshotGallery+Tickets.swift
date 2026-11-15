@@ -98,7 +98,7 @@ extension UISnapshotGallery {
             chat(5, "Ole · Terminal-Tab", .idle), chat(6, "Noa · Chats sprechen miteinander", .working),
             chat(9, "Jarvis: Supervisor", .idle),
         ]
-        let me = TicketPerson(id: "u1", name: "Giuliano Costa"), richard = TicketPerson(id: "u2", name: "Richard Strittmatter")
+        let me = TicketPerson(id: "u1", name: "Giuliano Costa"), erika = TicketPerson(id: "u2", name: "Erika Beispiel")
         let statuses = [
             TicketStatus(id: "s0", name: "Backlog", kind: .backlog, position: 0), TicketStatus(id: "s1", name: "Todo", kind: .unstarted, position: 1),
             TicketStatus(id: "s2", name: "In Progress", kind: .started, position: 2), TicketStatus(id: "s3", name: "Merge-bereit", kind: .started, position: 2.5),
@@ -124,7 +124,7 @@ extension UISnapshotGallery {
             ticket(69, "In Progress", "Chats am Nutzungslimit erkennen, anzeigen, sauber umziehen", priority: 1, area: "Agent Chats",
                    labels: ["Feature", "Handtest"], links: [link(2)]),
             ticket(16, "In Progress", "Insel auch für die Tastatur: Entwurf fertigstellen", area: "Insel und Pille", links: [link(4)], blocked: true),
-            ticket(12, "In Progress", "Neustart ohne Chatverlust: Gesamtabnahme", priority: 2, person: richard, area: "App-Hülle und Neustart", links: [link(3)]),
+            ticket(12, "In Progress", "Neustart ohne Chatverlust: Gesamtabnahme", priority: 2, person: erika, area: "App-Hülle und Neustart", links: [link(3)]),
             ticket(30, "In Progress", "Tastenkürzel für den Workspace-Wechsel", priority: 4, area: "Agent Chats"),
             ticket(86, "Merge-bereit", "Ticket-Werkzeug: Entscheidung festhalten, Abschluss beim Abgeben", priority: 2, links: [link(1, active: false)],
                    text: "## Fertig, wenn\n- [x] a\n- [x] b\n- [x] c"),
@@ -136,9 +136,16 @@ extension UISnapshotGallery {
             ticket(45, "Backlog", "Chats sehen, die in WhisperM8 auf anderen Rechnern laufen", priority: 4),
             ticket(58, "Backlog", "Jarvis-Skill: Titel ohne Nummer", priority: 0, area: nil),
             ticket(29, "Done", "Terminal-Tab bleibt nach Neustart", area: "Agent Chats", links: [link(5, active: false)]),
-        ]
-        let snapshot = TicketBoardSnapshot(team: "WM8", statuses: statuses, tickets: tickets, fetchedAt: Date(timeIntervalSince1970: 1_794_630_000))
-        let board = TicketBoardBuilder.build(snapshot: snapshot, chats: chats, projectPath: project)
+        ] + (90...96).map { n in
+            // Erfundene Backlog-Tickets, damit eine Spalte „N weitere“ zeigt.
+            ticket(n, "Backlog", "Beispiel-Ticket \(n): erfundener Eintrag im Backlog", priority: 4, area: "Beispiel")
+        }
+        let snapshot = TicketBoardSnapshot(team: "WM8", statuses: statuses, tickets: tickets, fetchedAt: Date(timeIntervalSince1970: 1_794_630_000),
+                                           viewerID: me.id)
+        // Regel wie für WM8 gedacht: Merge-bereit heißt Abnahme bei dir, Entscheidungen und Handtests warten auf dich.
+        let rule = TicketTeamRule(statusMeanings: ["Merge-bereit": .waitsForMe, "Wartet aufs Ausliefern": .done],
+                                  waitingLabels: ["Entscheidung", "Handtest"])
+        let board = TicketBoardBuilder.build(snapshot: snapshot, chats: chats, projectPath: project, rule: rule)
         let source = TicketChatStatusSource.fixed(Dictionary(uniqueKeysWithValues: chats.compactMap { chat in chat.state.map { (chat.id, $0) } }))
         func view(_ configure: (TicketBoardViewModel) -> Void = { _ in }, problem: String? = nil) -> AnyView {
             let model = TicketBoardViewModel(model: board)
@@ -151,11 +158,18 @@ extension UISnapshotGallery {
             Fixture(name: "tickets-board", size: size) { view() },
             Fixture(name: "tickets-board-detail", size: size) { view { $0.selectedKey = "WM8-81" } },
             Fixture(name: "tickets-board-ohne-agent", size: size) { view { $0.filter.agent = .withoutAgent } },
+            Fixture(name: "tickets-board-wartet-auf-mich", size: size) { view { $0.filter.waitingForMe = true } },
+            Fixture(name: "tickets-board-spalte-offen", size: size) { view { $0.expandedLanes = ["s0"] } },
+            Fixture(name: "tickets-chats-ohne-ticket-offen", size: CGSize(width: 900, height: 120)) {
+                AnyView(TicketLooseChatsBar(chats: board.looseChats, supervisors: board.supervisors, source: source, openChat: { _ in },
+                                            isExpanded: true)
+                    .padding(14).background(AgentTheme.background))
+            },
             Fixture(name: "tickets-board-person", size: size) { view { $0.filter.person = .person(id: "u1") } },
-            Fixture(name: "tickets-backlog", size: size) { view { $0.mode = .backlog } },
-            Fixture(name: "tickets-backlog-detail", size: size) { view { $0.mode = .backlog; $0.selectedKey = "WM8-69" } },
+            Fixture(name: "tickets-backlog", size: size) { view { $0.mode = .list } },
+            Fixture(name: "tickets-backlog-detail", size: size) { view { $0.mode = .list; $0.selectedKey = "WM8-69" } },
             Fixture(name: "tickets-board-schmal-detail", size: CGSize(width: 760, height: 640)) { view { $0.selectedKey = "WM8-81" } },
-            Fixture(name: "tickets-backlog-schmal", size: CGSize(width: 560, height: 640)) { view { $0.mode = .backlog } },
+            Fixture(name: "tickets-backlog-schmal", size: CGSize(width: 560, height: 640)) { view { $0.mode = .list } },
             Fixture(name: "tickets-board-stoerung", size: size) {
                 view(problem: TicketSourceError.network("-1009").userText)
             },

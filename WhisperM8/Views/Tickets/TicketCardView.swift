@@ -4,6 +4,7 @@ import SwiftUI
 /// der Chat, der daran sitzt. Alles ist ohne Mauszeiger sichtbar.
 struct TicketCardView: View {
     let entry: TicketBoardEntry
+    var rule = TicketTeamRule()
     let isSelected: Bool
     let source: TicketChatStatusSource
     let select: () -> Void
@@ -32,9 +33,12 @@ struct TicketCardView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(AgentTheme.textSecondary)
                     .lineLimit(1)
-                TicketCardTags(ticket: ticket)
-                Rectangle().fill(AgentTheme.border).frame(height: 1)
-                TicketAgentRow(entry: entry, source: source)
+                TicketCardTags(ticket: ticket, rule: rule)
+                // Die Chat-Zeile nur, wo es einen Chat gibt: Ohne Chat sagt sie nichts.
+                if entry.hasAgent || entry.isHandedOver {
+                    Rectangle().fill(AgentTheme.border).frame(height: 1)
+                    TicketAgentRow(entry: entry, source: source)
+                }
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -56,6 +60,8 @@ struct TicketCardView: View {
 /// Status des Teams, „blockiert“ und die Labels des Tickets.
 struct TicketCardTags: View {
     let ticket: Ticket
+    /// Labels, die nach der Regel des Teams auf den Nutzer warten, stehen in Bernstein.
+    var rule = TicketTeamRule()
     /// Mehr Labels machen die Karte unruhig; der Rest steht im Detail.
     var maxLabels = 2
     /// Auf der Karte fällt der Status weg, wenn er nur die Spalte wiederholt.
@@ -71,8 +77,11 @@ struct TicketCardTags: View {
                 TicketTag(text: String(localized: "Blocked"), tone: AgentTheme.statusError)
             }
             ForEach(labels.prefix(maxLabels), id: \.self) { label in
-                // Die Art des Tickets zurückhaltend, alles andere mit Akzent.
-                if TicketBoardText.typeLabels.contains(label.lowercased()) {
+                // Die Art des Tickets zurückhaltend, „wartet auf dich“ in
+                // Bernstein, alles andere mit Akzent.
+                if rule.isWaitingLabel(label) {
+                    TicketTag(text: label, tone: AgentTheme.statusAwaiting)
+                } else if TicketBoardText.typeLabels.contains(label.lowercased()) {
                     TicketTag(text: label)
                 } else {
                     TicketTag(text: label, tone: AgentTheme.accent)
@@ -87,12 +96,15 @@ struct TicketCardTags: View {
     }
 }
 
-/// Spalten des Boards.
-struct TicketBoardColumnsView: View {
-    let columns: [TicketBoardColumn]
+/// Spalten des Boards: eine je Status des Teams.
+struct TicketBoardLanesView: View {
+    let lanes: [TicketBoardLane]
+    let rule: TicketTeamRule
     let selectedKey: String?
+    let expanded: Set<String>
     let source: TicketChatStatusSource
     let select: (String) -> Void
+    let expand: (String) -> Void
 
     /// Schmaler wird keine Spalte; darunter scrollt das Board waagrecht.
     static let minColumnWidth: CGFloat = 260
@@ -100,53 +112,122 @@ struct TicketBoardColumnsView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let count = CGFloat(max(columns.count, 1))
-            let width = max(Self.minColumnWidth, (proxy.size.width - Self.spacing * (count - 1)) / count)
+            // Eingeklappte Spalten sind schmal; die gefüllten teilen sich den Rest.
+            let folded = CGFloat(lanes.filter(\.isFolded).count)
+            let open = CGFloat(max(lanes.count - Int(folded), 1))
+            let free = proxy.size.width - Self.spacing * CGFloat(max(lanes.count - 1, 0)) - folded * TicketBoardLanes.foldedWidth
+            let width = max(Self.minColumnWidth, free / open)
             ScrollView(.horizontal, showsIndicators: true) {
-                columnStack(width: width)
-                    .frame(height: proxy.size.height)
+                HStack(alignment: .top, spacing: Self.spacing) {
+                    ForEach(lanes) { lane in
+                        if lane.isFolded {
+                            TicketBoardFoldedLaneView(lane: lane)
+                                .frame(width: TicketBoardLanes.foldedWidth)
+                        } else {
+                            TicketBoardLaneView(lane: lane, rule: rule, selectedKey: selectedKey,
+                                                isExpanded: expanded.contains(lane.id), source: source,
+                                                select: select, expand: { expand(lane.id) })
+                                .frame(width: width)
+                        }
+                    }
+                }
+                .frame(height: proxy.size.height)
             }
         }
     }
+}
 
-    private func columnStack(width: CGFloat) -> some View {
-        HStack(alignment: .top, spacing: Self.spacing) {
-            ForEach(columns) { column in
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 6) {
-                        Text(verbatim: TicketBoardText.column(column.kind))
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(AgentTheme.textPrimary)
-                        Text(verbatim: "\(column.entries.count)")
-                            .font(.system(size: 11, weight: .medium).monospacedDigit())
-                            .foregroundStyle(AgentTheme.textSecondary)
-                        Spacer(minLength: 4)
-                        Text("\(column.agentCount) with agent")
+/// Eine Spalte, die ein Filter geleert hat: schmal, nur Statusname und 0.
+private struct TicketBoardFoldedLaneView: View {
+    let lane: TicketBoardLane
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(verbatim: lane.status.name)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(AgentTheme.textSecondary)
+                .lineLimit(2)
+            Text(verbatim: "0")
+                .font(.system(size: 11, weight: .medium).monospacedDigit())
+                .foregroundStyle(AgentTheme.textSecondary)
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(TicketBoardStyle.column, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Eine Spalte: Status, Zahl, Hinweis „wartet auf dich“ und die Karten.
+private struct TicketBoardLaneView: View {
+    let lane: TicketBoardLane
+    let rule: TicketTeamRule
+    let selectedKey: String?
+    let isExpanded: Bool
+    let source: TicketChatStatusSource
+    let select: (String) -> Void
+    let expand: () -> Void
+
+    var body: some View {
+        let (shown, hidden) = TicketBoardLanes.shown(lane, expanded: isExpanded)
+        let isMine = lane.meaning == .waitsForMe
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Text(verbatim: lane.status.name)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AgentTheme.textPrimary)
+                    .lineLimit(1)
+                Text(verbatim: "\(lane.entries.count)")
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
+                    .foregroundStyle(AgentTheme.textSecondary)
+                Spacer(minLength: 4)
+                if isMine {
+                    Text("Waiting for you")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(AgentTheme.statusAwaiting)
+                } else if lane.waitingCount > 0 {
+                    Text("\(lane.waitingCount) for you")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(AgentTheme.statusAwaiting)
+                }
+            }
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    ForEach(shown) { entry in
+                        TicketCardView(entry: entry, rule: rule, isSelected: selectedKey == entry.ticket.key, source: source) {
+                            select(entry.ticket.key)
+                        }
+                    }
+                    if hidden > 0 {
+                        Button(action: expand) {
+                            Text("\(hidden) more · show all")
+                                .font(.system(size: 11.5, weight: .medium))
+                                .foregroundStyle(AgentTheme.textSecondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 6)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    if lane.entries.isEmpty {
+                        Text("No tickets for this filter.")
                             .font(.system(size: 11))
                             .foregroundStyle(AgentTheme.textSecondary)
-                    }
-                    ScrollView {
-                        LazyVStack(spacing: 8) {
-                            ForEach(column.entries) { entry in
-                                TicketCardView(entry: entry, isSelected: selectedKey == entry.ticket.key, source: source) {
-                                    select(entry.ticket.key)
-                                }
-                            }
-                            if column.entries.isEmpty {
-                                Text("No tickets for this filter.")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(AgentTheme.textSecondary)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .padding(.vertical, 8)
-                            }
-                        }
-                        .padding(.bottom, 8)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, 8)
                     }
                 }
-                .padding(10)
-                .frame(width: width)
-                .frame(maxHeight: .infinity, alignment: .top)
-                .background(TicketBoardStyle.column, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .padding(.bottom, 8)
+            }
+        }
+        .padding(10)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(TicketBoardStyle.column, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            if isMine {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(AgentTheme.statusAwaiting.opacity(0.55), lineWidth: 1)
             }
         }
     }
