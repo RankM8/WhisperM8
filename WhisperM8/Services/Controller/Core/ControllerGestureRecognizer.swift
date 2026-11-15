@@ -29,7 +29,9 @@ import Foundation
 ///   Ebenen-Aktion.
 /// - **Steuerkreuz und linker Stick**: `.move` mit Wiederholung.
 /// - **Trigger**: Analogwert mit Hysterese, danach wie digitale Tasten.
-/// - **Rechter Stick**: `.scroll` im Takt von `tick`.
+/// - **Rechter Stick**: `.scroll` im Takt von `tick`, am Anschlag gehalten
+///   immer schneller (WM8-116). Bei gehaltenem R1 blättert er stattdessen
+///   bildschirmweise (`.inLayer(.quickDraw, .scrollPage)`), mit Wiederholung.
 struct ControllerGestureRecognizer: Sendable {
     struct Config: Equatable, Sendable {
         /// Ab hier gilt eine Ebenen-Taste (L1, R1, L2) als gehalten, und die
@@ -72,6 +74,32 @@ struct ControllerGestureRecognizer: Sendable {
         /// Kommt der Zeitgeber spät, wird höchstens so viel Zeit nachgeholt,
         /// damit kein Sprung über viele Zeilen entsteht.
         var scrollMaxCatchUp: TimeInterval = 0.25
+        /// Tempo beim Halten am Anschlag (WM8-116). Ab diesem Ausschlag gilt
+        /// der Stick als „am Anschlag“; 0,9 statt 1, weil nicht jeder Stick
+        /// ganz 1 meldet. Unter 0,7 fällt der Anstieg weg (Hysterese: Ein
+        /// Daumen, der am Anschlag etwas nachgibt, verliert das Tempo nicht).
+        var scrollBoostEnterDeflection: Float = 0.9
+        var scrollBoostExitDeflection: Float = 0.7
+        /// So lange bleibt das Tempo am Anschlag wie bisher (30 Zeilen/s) —
+        /// wer nur ein Stück hochliest, merkt vom Anstieg nichts.
+        var scrollBoostDelay: TimeInterval = 0.5
+        /// Danach steigt das Tempo gleichmäßig bis `scrollBoostMaxFactor`;
+        /// nach 0,5 + 1,5 = 2 s am Anschlag also rund 300 Zeilen/s.
+        var scrollBoostRampDuration: TimeInterval = 1.5
+        var scrollBoostMaxFactor: Double = 10
+        /// Höchstens so oft geht eine Scroll-Geste raus (60 je Sekunde, eine je
+        /// Bild). Bei 300 Zeilen/s bündelt das rund 5 Zeilen je Geste statt 300
+        /// einzelner Gesten. Unter 60 Zeilen/s ändert es nichts.
+        var scrollMinInterval: TimeInterval = 1.0 / 60
+        /// Ebenen, in denen der rechte Stick bildschirmweise blättert statt zu
+        /// scrollen (WM8-116: R1). In den anderen scrollt er wie ohne Ebene.
+        var stickPagingLayers: Set<ControllerLayer> = [.quickDraw]
+        /// Blättern beim Halten: der erste Bildschirm sofort, nach 0,5 s der
+        /// nächste, dann alle 0,3 s. Langsamer als die Tastenwiederholung,
+        /// weil jeder Schritt ein ganzer Bildschirm ist und man noch sehen
+        /// soll, wo man ist.
+        var pageRepeatDelay: TimeInterval = 0.5
+        var pageRepeatInterval: TimeInterval = 0.3
 
         func holdThreshold(for button: ControllerButton) -> TimeInterval? {
             switch button {
@@ -118,11 +146,27 @@ struct ControllerGestureRecognizer: Sendable {
     }
 
     struct ScrollState: Equatable, Sendable {
-        /// Vorzeichenbehaftet, positiv heißt nach unten.
+        /// Grundtempo aus dem Ausschlag, vorzeichenbehaftet, positiv heißt
+        /// nach unten. Am Anschlag kommt der Faktor aus `boostSince` dazu.
         var linesPerSecond: Double
         /// Noch nicht ausgegebene Zeilen (ohne Vorzeichen).
         var accumulator: Double
         var lastUpdate: TimeInterval
+        /// Seit wann der Stick am Anschlag steht; `nil`: kein Anstieg.
+        var boostSince: TimeInterval?
+        /// Wann zuletzt eine Scroll-Geste rausging (`scrollMinInterval`).
+        var lastEmit: TimeInterval?
+    }
+
+    /// Blättern mit dem rechten Stick in einer Ebene (R1, WM8-116).
+    struct PageState: Equatable, Sendable {
+        var layer: ControllerLayer
+        /// `.up` oder `.down`; `nil` zwischen Totzone und Schwelle.
+        var direction: ControllerDirection?
+        var nextAt: TimeInterval?
+        /// Die Ebene ist vorbei, der Stick aber noch ausgelenkt: Er tut
+        /// nichts mehr, bis er in die Mitte zurückkehrt — auch kein Scrollen.
+        var ended = false
     }
 
     /// Kleine Toleranz gegen Rundungsfehler bei Zeitvergleichen: Ein Tick
@@ -151,6 +195,7 @@ struct ControllerGestureRecognizer: Sendable {
     var leftRepeatAt: TimeInterval?
     var leftDeflected = false
     var scroll: ScrollState?
+    var page: PageState?
 
     init(config: Config = .init()) {
         self.config = config
@@ -170,7 +215,7 @@ struct ControllerGestureRecognizer: Sendable {
         case let .stick(.left, x, y):
             gestures += leftStick(x: x, y: y, at: time)
         case let .stick(.right, _, y):
-            rightStick(y: y, at: time)
+            gestures += rightStick(y: y, at: time)
             gestures += cancelHoldsWhileScrolling()
             // Scrollen während einer gehaltenen Ebenen-Taste ist eine zweite
             // Eingabe: kein Tippen mehr (das Scrollen selbst läuft weiter).
@@ -205,13 +250,14 @@ struct ControllerGestureRecognizer: Sendable {
         if let dpadRepeat { deadlines.append(dpadRepeat.nextAt) }
         if let leftRepeatAt { deadlines.append(leftRepeatAt) }
         if let scrollDeadline { deadlines.append(scrollDeadline) }
+        if let pageAt = page?.nextAt { deadlines.append(pageAt) }
         return deadlines.min()
     }
 
     /// Nichts gedrückt, kein Stick ausgelenkt.
     var isIdle: Bool {
         pressedButtons.isEmpty && holds.isEmpty && layer == nil && layerButtons.isEmpty && chord == nil
-            && !leftDeflected && leftDirection == nil && scroll == nil
+            && !leftDeflected && leftDirection == nil && scroll == nil && page == nil
     }
 
     /// Löst alles Gehaltene, etwa bei Trennung oder Ruhezustand.
@@ -244,6 +290,7 @@ struct ControllerGestureRecognizer: Sendable {
         leftRepeatAt = nil
         leftDeflected = false
         scroll = nil
+        page = nil
         return gestures
     }
 
@@ -303,7 +350,7 @@ struct ControllerGestureRecognizer: Sendable {
             }
             if let threshold = config.holdThreshold(for: button) {
                 // Wer gerade scrollt, drückt R3 eher aus Versehen.
-                if config.scrollCancelsHold.contains(button), scroll != nil { return [] }
+                if config.scrollCancelsHold.contains(button), scroll != nil || page != nil { return [] }
                 holds[button] = HoldState(pressedAt: time)
                 return [.holdPending(button, duration: threshold)]
             }
@@ -343,7 +390,7 @@ struct ControllerGestureRecognizer: Sendable {
     /// Scrollt der rechte Stick, verfallen Drücke auf R3, die noch nicht als
     /// gehalten gelten: kein Halten, beim Loslassen auch kein Tippen.
     mutating func cancelHoldsWhileScrolling() -> [ControllerGesture] {
-        guard scroll != nil else { return [] }
+        guard scroll != nil || page != nil else { return [] }
         var gestures: [ControllerGesture] = []
         for button in config.scrollCancelsHold.sorted(by: { $0.rawValue < $1.rawValue }) {
             guard let hold = holds[button], !hold.began else { continue }
@@ -404,6 +451,14 @@ struct ControllerGestureRecognizer: Sendable {
             dpadInLayer = false
         }
         if leftStickInLayer { leftRepeatAt = nil }
+        // Blättern endet mit der Ebene; der noch ausgelenkte Stick ruht, bis
+        // er in die Mitte zurückkehrt (kein Umschalten aufs Scrollen).
+        if var state = page {
+            state.ended = true
+            state.direction = nil
+            state.nextAt = nil
+            page = state
+        }
     }
 
     /// L1 oder R1 losgelassen (ohne eigene Ebene): beendet einen Akkord.

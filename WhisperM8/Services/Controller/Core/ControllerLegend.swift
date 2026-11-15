@@ -31,6 +31,8 @@ enum ControllerLegendLabel: String, CaseIterable, Sendable {
     case clipboardWithL2
     // Insel-Paket: App-Raute unter R1
     case limitsCard, alertLevel, stayAwake, clipboardWithR1
+    // WM8-116: Kreis im hochgescrollten Chat, R1 + rechter Stick
+    case jumpToEnd, pageScroll
 }
 
 struct ControllerLegendEntry: Equatable, Sendable {
@@ -72,7 +74,15 @@ enum ControllerLegend {
     static func entries(
         for context: ControllerContext, traits: ControllerInputTraits = .standard
     ) -> [ControllerLegendEntry] {
-        candidates(for: context)
+        // Die kurze Sperre nach „Ans Ende“ (0,5 s) gehört nicht in die Leiste:
+        // Sie wird nach dem Sprung neu gelesen und zeigte Kreis sonst gar nicht,
+        // bis zur nächsten Eingabe.
+        var context = context
+        if case var .chat(state) = context, state.jumpedToEndJustNow {
+            state.jumpedToEndJustNow = false
+            context = .chat(state)
+        }
+        return candidates(for: context)
             .filter { traits.supports($0.entry) }
             .filter { candidate in
                 candidate.probes.contains { probe in
@@ -92,6 +102,7 @@ enum ControllerLegend {
                 entry(.leftStick, .move),
                 entry(.button(.cross), .confirm),
                 entry(.button(.circle), .back),
+                entry(.button(.circle), .jumpToEnd),
                 entry(.button(.circle), .interruptHold),
                 entry(.button(.r2), .dictate),
                 entry(.button(.triangle), .space),
@@ -125,6 +136,7 @@ enum ControllerLegend {
                 combination(.r1, .square, .commands),
                 combination(.r1, .circle, .switchAccount),
                 combination(.r1, .l3, .transcript),
+                ControllerLegendEntry(inputs: [.button(.r1), .rightStick], label: .pageScroll, isCombination: true),
                 combination(.r1, .dpadUp, .limitsCard),
                 combination(.r1, .dpadLeft, .alertLevel),
                 combination(.r1, .dpadRight, .stayAwake),
@@ -183,7 +195,8 @@ enum ControllerLegend {
                 [false, true].map { ControllerGesture.move(direction, source: .dpad, isRepeat: $0) }
             }
         case .rightStick:
-            return [.scroll(lines: 1), .scroll(lines: -1)]
+            // Unter R1 kommt der Stick als Blättern an (WM8-116).
+            return [.scroll(lines: 1), .scroll(lines: -1), .scrollPage(step: 1), .scrollPage(step: -1)]
         case .bumpers:
             return [.tap(.l1), .tap(.r1), .chordPending(duration: 1), .chordCompleted, .chordCancelled]
         }
@@ -310,8 +323,7 @@ enum ControllerLegend {
             candidate(.button(.cross), crossLabel, [.press(.cross)]),
         ]
         let keys: [Candidate] = [
-            candidate(.button(.circle), ControllerBindingResolver.viewOpen(state) ? .closeView : (awaiting ? .reject : .back),
-                      [.tap(.circle)]),
+            candidate(.button(.circle), circleLabel(state, awaiting: awaiting), [.tap(.circle)]),
             candidate(.button(.circle), .interruptHold, [.holdBegan(.circle)]),
             candidate(.button(.square), .backspace, [.tap(.square)]),
             candidate(.button(.triangle), .space, [.press(.triangle)]),
@@ -324,6 +336,14 @@ enum ControllerLegend {
             candidate(.button(.r3), .clearInputHold, [.holdBegan(.r3)]),
         ]
         return head + keys + back + tail
+    }
+
+    /// Kreis getippt im Chat: hochgescrollt „Ans Ende“ (WM8-116), sonst
+    /// Ansicht schließen, Ablehnen oder Zurück.
+    private static func circleLabel(_ state: ControllerChatState, awaiting: Bool) -> ControllerLegendLabel {
+        if state.scrolledBack { return .jumpToEnd }
+        if ControllerBindingResolver.viewOpen(state) { return .closeView }
+        return awaiting ? .reject : .back
     }
 
     /// Verlauf: dieselbe Tabelle liefert die Fußzeile des Verlauf-Fensters,

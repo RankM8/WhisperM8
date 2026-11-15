@@ -102,10 +102,11 @@ final class ControllerGestureRecognizerLayerTests: XCTestCase {
         XCTAssertTrue(recognizer.isIdle)
     }
 
-    /// Rechter Stick scrollt weiter (nie in der Ebene), zählt aber als
-    /// zweite Eingabe: danach kein Tippen mehr (Review nach Runde 4, Punkt 5).
+    /// Rechter Stick scrollt unter L1 und L2 weiter (nie in der Ebene), zählt
+    /// aber als zweite Eingabe: danach kein Tippen mehr (Review nach Runde 4,
+    /// Punkt 5). Unter R1 blättert er (WM8-116, `ControllerScrollTests`).
     func testScrollingKeepsWorkingButCancelsTheTap() {
-        for key in [ControllerButton.l1, .r1, .l2] {
+        for key in [ControllerButton.l1, .l2] {
             recognizer = ControllerGestureRecognizer()
             _ = down(key, at: 0)
             _ = recognizer.handle(.stick(.right, x: 0, y: -1), at: 0.05)

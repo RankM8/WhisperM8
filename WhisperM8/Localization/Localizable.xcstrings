@@ -6131,12 +6131,62 @@
         }
       }
     },
+    "Hold %@, then right stick up or down: one screen per push, repeats while held": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ halten, dann rechter Stick hoch oder runter: ein Bildschirm je Stoß, gehalten mit Wiederholung"
+          }
+        }
+      }
+    },
+    "In a chat that is scrolled up, %@ jumps to the end instead of sending Escape": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im hochgescrollten Chat springt %@ ans Ende, statt Escape zu schicken"
+          }
+        }
+      }
+    },
+    "Jump to end": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ans Ende"
+          }
+        }
+      }
+    },
     "No running chats": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Ohne laufende Chats"
+          }
+        }
+      }
+    },
+    "Page up / down": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blättern"
+          }
+        }
+      }
+    },
+    "Scroll the conversation; held all the way, it gets faster": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf scrollen; ganz ausgelenkt gehalten wird es schneller"
           }
         }
       }
@@ -16080,16 +16130,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Scrollen"
-          }
-        }
-      }
-    },
-    "Scroll the conversation": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Verlauf scrollen"
           }
         }
       }

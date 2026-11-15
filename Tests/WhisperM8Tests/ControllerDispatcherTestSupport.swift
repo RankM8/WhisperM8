@@ -14,6 +14,15 @@ final class ControllerTerminalSpy: ControllerTerminalControlling {
     func state(of sessionID: UUID) -> ControllerTerminalState? { states[sessionID] }
     func sendKey(_ key: TerminalControlKey, to sessionID: UUID) -> Bool { keys.append(key); return true }
     func scroll(lines: Int, in sessionID: UUID) { scrolled.append(lines) }
+    private(set) var pages: [Int] = []
+    private(set) var jumpsToBottom = 0
+    func scrollPage(_ step: Int, in sessionID: UUID) { pages.append(step) }
+    /// Wie die echte Ansicht: Danach ist der Chat nicht mehr hochgescrollt.
+    func scrollToBottom(in sessionID: UUID) {
+        jumpsToBottom += 1
+        states[sessionID]?.scrolledBack = false
+    }
+    func isScrolledBack(_ sessionID: UUID) -> Bool { states[sessionID]?.scrolledBack ?? false }
     var clearResult = true
     private(set) var clearedSessions: [UUID] = []
     func clearInput(in sessionID: UUID) -> Bool {

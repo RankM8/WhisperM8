@@ -60,7 +60,12 @@ extension ControllerBindingResolver {
             // Gestoppter Chat: Kreuz startet ihn wieder (wie „Starten“ im Kopf).
             guard state.acceptsKeys else { return .chatResume }
             return confirmAllowed(state) ? .chatKey(.enter) : nil
+        // Kreis getippt im hochgescrollten Chat: ans Ende, kein Escape
+        // (WM8-116). Das Eingabefeld ist dann nicht zu sehen; erst am Ende
+        // ist Kreis wieder Escape mit allen Schutzregeln. Kreis halten
+        // (unterbrechen) bleibt unberührt.
         case .tap(.circle):
+            if state.scrolledBack { return .scrollToBottom }
             return escapeAllowed(state) ? .chatKey(.escape) : nil
         case .holdBegan(.circle):
             return interruptAllowed(state) ? .chatInterrupt : nil
@@ -224,7 +229,11 @@ extension ControllerBindingResolver {
     /// In einer erkannten Ansicht auch bei „arbeitet“ und gerade gesendet,
     /// mit nur 0,3 s Sperre statt 1 s (Runde 5, R2): Escape schließt dort die
     /// Ansicht; ein zweites, bevor sie zu ist, träfe den Hauptchat.
+    ///
+    /// Direkt nach einem Sprung ans Ende (0,5 s) nie: Ein Doppeldruck auf Kreis
+    /// lehnte sonst eine Rückfrage ab, die erst mit dem Sprung sichtbar wurde.
     static func escapeAllowed(_ state: ControllerChatState) -> Bool {
+        if state.jumpedToEndJustNow { return false }
         if viewOpen(state) { return !state.escapeSentJustNow }
         guard state.acceptsKeys, !state.escapeSentRecently else { return false }
         guard state.status == .idle || state.status == .awaitingInput else { return false }

@@ -75,6 +75,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     static let escapeRepeatWindow: TimeInterval = 1
     /// In einer erkannten Ansicht genügt eine kürzere Sperre (Runde 5).
     static let escapeInViewWindow: TimeInterval = 0.3
+    /// So lange nach „Ans Ende“ schickt Kreis kein Escape (WM8-116, Doppeldruck).
+    static let jumpToEndEscapeLock: TimeInterval = 0.5
+    /// Letzter Sprung ans Ende per Kreis, je Chat.
+    var lastJumpToEnd: (sessionID: UUID, at: Date)?
     /// So lange nach einer Eingabe ins Feld (Rücktaste, Diktat, Text ohne
     /// Senden) darf Kreuz auch bei arbeitendem Chat Enter schicken. 30 s
     /// reichen, um einen diktierten Entwurf zu überfliegen; ein Entwurf von
@@ -185,7 +189,11 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             openView: terminal.screen?.openView,
             promptField: terminal.screen?.promptField,
             onlyRecalledPrompt: terminal.onlyRecalledPrompt,
-            questionAcceptsText: terminal.questionAcceptsText
+            questionAcceptsText: terminal.questionAcceptsText,
+            scrolledBack: terminal.scrolledBack,
+            jumpedToEndJustNow: lastJumpToEnd.map {
+                $0.sessionID == sessionID && moment.timeIntervalSince($0.at) < Self.jumpToEndEscapeLock
+            } ?? false
         )
     }
 
@@ -295,7 +303,16 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case let .adjacentChat(step): moveToAdjacentChat(step)
         case .newChat: newChat()
         case .toggleMaximize: command(.toggleMaximize, orReject: true)
-        case let .scroll(lines): withSelectedSession { terminals.scroll(lines: lines, in: $0) }
+        case let .scroll(lines): scrollSelected(in: context) { terminals.scroll(lines: lines, in: $0) }
+        case let .scrollPage(step):
+            // Wie ein Schnellbefehl: Die R1-Insel geht zu und kommt in diesem
+            // Halten nicht wieder (sie läge sonst über dem Blättern).
+            spendIsland(.quickDraw)
+            scrollSelected(in: context) { terminals.scrollPage(step, in: $0) }
+        case .scrollToBottom:
+            // Vor dem Neulesen der Legende merken: Die Sperre gilt ab jetzt.
+            if let sessionID = selectedSessionID { lastJumpToEnd = (sessionID, now()) }
+            scrollSelected(in: context) { terminals.scrollToBottom(in: $0) }
 
         // Liste links
         case let .enterList(step): enterList(step: step)
@@ -388,6 +405,18 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     private func withSelectedSession(_ body: (UUID) -> Void) {
         guard let sessionID = selectedSessionID else { return }
         body(sessionID)
+    }
+
+    /// Scrollen im ausgewählten Chat. Kippt dabei „hochgescrollt“, liest die
+    /// Legende gleich neu (Kreis: „Ans Ende“ oder wieder „Zurück“) — sonst
+    /// stünde dort bis zur nächsten Eingabe der Stand von vor dem Scrollen.
+    /// Nur dann: Ein voller Schnappschuss je Scroll-Geste wäre bei hohem Tempo
+    /// zu teuer.
+    private func scrollSelected(in context: ControllerContext, _ body: (UUID) -> Void) {
+        guard let sessionID = selectedSessionID else { return }
+        body(sessionID)
+        guard case let .chat(state) = context else { return }
+        if terminals.isScrolledBack(sessionID) != state.scrolledBack { refreshContext() }
     }
 
     private func sendKey(_ key: TerminalControlKey) {

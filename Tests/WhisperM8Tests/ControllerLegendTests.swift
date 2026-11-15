@@ -200,13 +200,13 @@ final class ControllerLegendTests: XCTestCase {
     func testAllBindingsHasCoreExtraAndLayers() {
         let sections = ControllerLegend.allBindings()
         XCTAssertEqual(sections.map(\.kind), [.core, .extra, .layers])
-        XCTAssertEqual(sections[0].entries.count, 9)
+        XCTAssertEqual(sections[0].entries.count, 10, "WM8-116: Kreis „Ans Ende“")
         XCTAssertEqual(sections[1].entries.count, 11, "Runde 4: L2 halten und L2 + R2 stehen bei den Ebenen")
         XCTAssertEqual(sections[0].entries.first { $0.inputs == [.bumpers] }?.label, .previousNextChat)
         // Alle drei Ebenen mit jeder Taste der Tabelle.
         XCTAssertEqual(sections[2].entries.map(\.label), [
             .deleteToLineStart, .newline, .wordJump, .lineMove, .pasteNewest, .escapeOnce, .undo,
-            .continueWork, .cycleMode, .commands, .switchAccount, .transcript,
+            .continueWork, .cycleMode, .commands, .switchAccount, .transcript, .pageScroll,
             .limitsCard, .alertLevel, .stayAwake, .clipboardWithR1,
             .whereToHold, .nextWaiting, .reopenClosed, .clipboardWithL2, .pickAndDictate,
         ])

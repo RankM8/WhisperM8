@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-11-13
+updated: 2026-11-15
 description: Controller-Steuerung — WhisperM8 mit einem Gamepad (PS5 DualSense, Xbox-Controller samt Paddles des Elite) bedienen; Belegung, Aufbau, Schalter, Prüfwege und Grenzen.
 ---
 
@@ -72,12 +72,12 @@ hat), dazu eine Markierung in der Liste. Die Legende zeigt immer nur die Tasten,
 |---|---|
 | Linker Stick | Liste hoch/runter; nach rechts in den Inhalt, nach links zurück in die Liste; in der Einzelansicht springt die Markierung mit hoch/runter in die Liste (Start beim aktuellen Chat, sofort ein Schritt, der offene Chat bleibt); im Raster von Kachel zu Kachel; während Aufnahme, Transkription und Nacharbeit ohne Wirkung |
 | Kreuz | in der Liste öffnen (Chat, Workspace, Projekt als Workspace) und hinein — ein Chat unter einem Workspace, der nicht sichtbar ist, öffnet diesen Workspace mit dem Chat als Kachel-Fokus (nur Kreuz; der Mausklick folgt der Klickregel; besitzt ein anderes Fenster den Workspace, wird der Chat nach der Klickregel geöffnet); im Chat Enter; gestoppter Chat: starten |
-| Kreis | zurück (aus der Liste ohne Wechsel in den bisherigen Chat); im Chat Escape (nur wenn er ruht oder fragt); halten (0,4 s): arbeitenden Chat unterbrechen |
+| Kreis | zurück (aus der Liste ohne Wechsel in den bisherigen Chat); im Chat Escape (nur wenn er ruht oder fragt); im hochgescrollten Chat stattdessen **ans Ende**, ohne Escape (siehe „Scrollen“); halten (0,4 s): arbeitenden Chat unterbrechen |
 | R2 | Diktat an und aus (Umschalter wie der Hotkey, kein Halten) |
 | Dreieck | im Chat ein Leerzeichen (lebende Claude- und Codex-Chats, kein Wiederholen beim Halten; in Shells „geht nicht“); aus anderen Fenstern und außerhalb der App: Agent Chats nach vorn; im Zwischenablage-Verlauf korrigieren und einfügen. Den Sprung zum nächsten wartenden Chat gibt es am Controller nicht mehr (Tastatur: ⌃⌥Tab) |
 | L1 / R1 tippen | voriger / nächster Chat in der Reihenfolge der Liste (auch im Raster, kein Umlauf); in der Liste der Filter Aktiv / Zuletzt / Alle. Die Tastatur (⌘⌥←/→) bleibt bei den Tabs. Gehalten sind sie Ebenen (siehe „Ebenen und Dynamic Island“), ein Durchlaufen beim Halten gibt es nicht |
 | Steuerkreuz | in jedem lebenden Chat Pfeiltasten ins Terminal (Claude, Codex, Shell; ruhend, arbeitend oder fragend, auch im Raster), mit Wiederholung beim Halten. So erreicht man Subagenten-, Workflow- und Aufgabenansichten von Claude und jede Auswahlliste der CLI. Rechts übernimmt in Claude den grauen Vorschlag, Kreuz schickt ihn dann ab. **Ausnahme links:** Im vermutlich leeren Claude-Feld (direkt nach dem Absenden, seither nichts im Feld, keine Rückfrage, keine offene Auswahl) „geht nicht“, denn dort schickt ← die ganze Sitzung in Claudes Agent-Ansicht. Hoch holt den letzten Prompt zurück; er gilt dann als Rückleger, den „Weiter“, Menü-Befehle und `chats send` vorher leeren. In der App (Liste, Kacheln) bewegt nur der linke Stick. Ohne lebendes Terminal (beendeter Chat) wie der Stick. Entscheidung vom 12.11.2026; vorher gab es Pfeile nur in Rückfragen, offenen Listen und Codex |
-| Rechter Stick | Verlauf scrollen (im Alternate-Puffer als Mausrad an die TUI), auch während Aufnahme, Transkription und Nacharbeit |
+| Rechter Stick | Verlauf scrollen (im Alternate-Puffer als Mausrad an die TUI), auch während Aufnahme, Transkription und Nacharbeit; am Anschlag gehalten immer schneller, mit R1 bildschirmweise (siehe „Scrollen“) |
 
 **Zusatz**
 
@@ -94,6 +94,55 @@ hat), dazu eine Markierung in der Liste. Die Legende zeigt immer nur die Tasten,
 
 Nicht belegt: PlayStation-Taste (gehört macOS), Create doppelt oder lang (macOS: Screenshot bzw.
 Bildschirmaufnahme). Zwei schnelle Create-Drücke ergeben deshalb einen Screenshot.
+
+**Scrollen (WM8-116, 15.11.2026):** Der rechte Stick scrollt wie bisher nach Ausschlag (quadratisch, 2 bis
+30 Zeilen/s). Neu: Steht er am Anschlag (Ausschlag ab 0,9), bleibt das Tempo 0,5 s lang bei 30 Zeilen/s und
+steigt dann in 1,5 s gleichmäßig bis zum Zehnfachen (300 Zeilen/s nach 2 s). Loslassen, Richtungswechsel
+oder ein Ausschlag unter 0,7 setzen den Anstieg zurück; zwischen 0,7 und 0,9 bleibt er (ein Daumen, der am
+Anschlag etwas nachgibt, verliert das Tempo nicht). Wenig Ausschlag scrollt fein wie vorher. Rechnung
+pur im Erkenner (`ControllerGestureRecognizer+Axes`: `boostFactor`, `boostIntegral`), Werte in
+`ControllerGestureRecognizer.Config` (`scrollBoost…`, `scrollMinInterval`, `pageRepeat…`).
+
+- **R1 + rechter Stick** blättert bildschirmweise: ein Stoß (ab 0,6, frei unter 0,4) gleich ein Bildschirm
+  sofort, gehalten nach 0,5 s der nächste, dann alle 0,3 s. Ein Bildschirm sind die sichtbaren Zeilen minus
+  3 Zeilen Überlappung (`ControllerScrollPaging`, mindestens eine Zeile). Unter R1 kommt der Stick nur als
+  Blättern an, nie als Scrollen und nie als Schnellbefehl. Jede Auslenkung zählt als zweite Eingabe: R1
+  wechselt beim Loslassen den Chat nicht (kein Tippen), und das Loslassen der Ebene ohne Schnellbefehl tut
+  wie immer nichts. Die R1-Insel geht beim ersten Blättern zu und kommt in diesem Halten nicht wieder.
+  Lässt man R1 los, solange der Stick noch ausgelenkt ist, ruht der Stick, bis er in die Mitte zurückkehrt
+  (kein Umschalten aufs Scrollen). Ein Scrollen, das schon vor R1 lief, läuft dagegen weiter, bis der Stick
+  in der Mitte ist. Unter L1 und L2 scrollt der Stick wie ohne Ebene. Im Alternate-Puffer gehen die
+  Zeilen eines Bildschirms als Mausrad an die TUI (höchstens 30 je Schritt, wie beim Scrollen).
+- **Alternate-Puffer:** Dort wird jede Zeile ein Mausrad-Schritt, und viele TUIs scrollen je Schritt drei
+  Zeilen. Das fließende Scrollen schickt deshalb höchstens 90 Schritte je Sekunde (etwa das Dreifache des
+  alten Höchsttempos; Eimer mit 30 Schritten auf einmal, `ControllerWheelBudget`, je Chat in
+  `LiveControllerTerminals`). Bis 30 je Sekunde ändert sich nichts; was darüber hinausgeht, verfällt
+  (kein Nachlaufen nach dem Loslassen). Das Blättern geht nicht über den Deckel.
+- **Kreis im hochgescrollten Chat** springt ans Ende und schickt nichts ans Terminal. Die Legende zeigt
+  dann „Ans Ende“ an Kreis; am Ende ist Kreis wieder Escape mit allen Schutzregeln (siehe dort). Kreis
+  halten (unterbrechen) bleibt unverändert. „Hochgescrollt“ kommt aus derselben Quelle wie der Sendeschutz
+  und das Bildschirm-Lesen (`AgentTerminalController.isScrolledBack`, WM8-107): normaler Puffer, Verlauf
+  vorhanden, Ausschnitt nicht ganz unten. Im Alternate-Puffer gibt es kein „ans Ende“; dort bleibt Kreis
+  Escape. Gilt für Claude, Codex und Shell, im Raster und in der Einzelansicht. Während Aufnahme,
+  Transkription und Nacharbeit verwirft Kreis weiter das Diktat; Scrollen und Blättern gehen dort.
+  **Doppeldruck:** 0,5 s nach dem Sprung schickt Kreis getippt kein Escape (`jumpedToEndJustNow`), sonst
+  lehnte ein zweiter schneller Druck eine Rückfrage ab, die erst mit dem Sprung sichtbar wurde. Halten
+  und L1 + Kreis gelten in dieser Zeit wie sonst; die Legende zeigt Kreis trotzdem.
+- **L1 + Kreis** bleibt „genau ein Escape“, auch hochgescrollt: Es ist der ausdrückliche Weg, wenn man
+  wirklich Escape will (etwa um von oben einen Turn abzubrechen, ohne zu halten).
+- **R3** bekommt keine Sprung-Funktion: Man drückt ihn beim Scrollen leicht aus Versehen.
+- **Legende nach dem Scrollen:** Kippt „hochgescrollt“ durch eine Controller-Eingabe, liest der Ausführer
+  den Zusammenhang sofort neu. Nach Scrollen mit Maus oder Trackpad steht bis zur nächsten Eingabe oder
+  Statusänderung noch die alte Beschriftung; die Belegung selbst liest bei jedem Druck frisch.
+- **Kosten im Ereignis-Pfad:** Der Erkenner gibt höchstens 60 Scroll-Gesten je Sekunde aus
+  (`scrollMinInterval`); bei 300 Zeilen/s trägt jede rund 5 Zeilen, bis 60 Zeilen/s bleibt es eine Geste
+  je Zeile wie vorher. Jede Geste kostet wie bisher einen Sprung auf den Main Thread mit Schnappschuss
+  (bei Claude und Codex unten: Lesen der untersten 16 Zeilen; hochgescrollt bei Claude nichts, bei Codex
+  die Freigabe-Probe aus WM8-107) und einen `scrollUp`/`scrollDown` von SwiftTerm. Das Blättern sind
+  höchstens gut drei Gesten je Sekunde. „Hochgescrollt“ liest nur Zahlen der Ansicht.
+- Xbox: RB + rechter Stick blättert, B springt ans Ende (Belegung nach Lage). Paddles ändern sich nicht:
+  Sie lösen eigene Aktionen aus und wirken in keiner Ebene; die Tastatur-Insel (⌥Tab) kennt weder Kreis
+  noch Stick.
 
 **Zurück mit L2:** L2 getippt führt an den vorigen Ort des Fensters, ein zweites Tippen wieder zurück
 (wie ein kurzes Alt-Tab). Ein Ort ist ein einzelner Chat oder ein Workspace im Raster. Kachelwechsel im
@@ -189,6 +238,7 @@ ohne Ebene. R2 diktiert auf jeder Ebene (unter L2 heißt R2 „hin und diktieren
 | | Steuerkreuz ◀ | Mitteilungen eine Stufe weiter, wie die Glocke in der Seitenleiste: alles an → Ton aus → alles aus („Ton aus“ fällt weg, wenn es nichts stumm zu schalten gibt) |
 | | Steuerkreuz ▶ | Wach bleiben eine Stufe weiter, wie der Wach-Knopf: aus → bei Arbeit am Strom → immer → aus. Fehlt die einmalige Admin-Freigabe, öffnet sich kein Dialog: Die Dynamic Island sagt „Erst in der Seitenleiste freigeben“, der Controller vibriert „geht nicht“ |
 | | Steuerkreuz ▼ | Zwischenablage-Verlauf auf und zu (schließt die Dynamic Island) |
+| | Rechter Stick ▲ ▼ | einen Bildschirm blättern im selben Chat, mit Wiederholung beim Halten (WM8-116, siehe „Scrollen“); schließt die Dynamic Island wie ein Schnellbefehl. Kein Chatwechsel |
 | L2 Wohin | (halten) | die Liste steht sofort da, die Markierung auf dem aktuellen Eintrag; der vorige Ort trägt „vorher“ (siehe unten) |
 | | Stick/Steuerkreuz hoch/runter | Markierung bewegen (mit Wiederholung) |
 | | links/rechts | Reiter „Chats“ / „Workspaces & Projekte“; die Markierung beginnt dort wieder auf dem aktuellen Eintrag |
@@ -587,6 +637,9 @@ legen (so ist es beim Nutzer); die Weiche beurteilt diese Tasten wie die Gesicht
   vorsichtige Regel hat dieselbe Lücke, solange eine Eingabe per Controller frisch ist (30 s); dort
   gibt es keine Nachprüfung.
 - Ein zweites Escape innerhalb 1 s wird verschluckt (Claude öffnet sonst das Zurückspulen).
+- Im hochgescrollten Chat schickt Kreis getippt nie ein Escape, sondern springt ans Ende (WM8-116). Das
+  ersetzt nur Escapes, die vorher erlaubt waren; gesperrte bleiben gesperrt. Halten und L1 + Kreis sind
+  davon nicht berührt.
 - Escape per Tippen nur bei ruhendem oder fragendem Chat; „gerade gesendet“ (3 s nach jedem
   Versand: Enter vom Controller oder der Tastatur, Diktat mit Senden, `chats send`) und unbekannter
   Status zählen als arbeitend — außer bei offener Auswahl des Menüs.
@@ -691,10 +744,12 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
   Ausführer; `--filter ControllerFamily` Tastennamen und Legende ohne Touchpad; `--filter XboxHID` das
   Bündeln der HID-Berichte und den Debug-Schritt `hid:`; `--filter ControllerManagerHID` HID-Quelle,
   Notbremse und Belegung im Manager.
+- `swift test --filter ControllerScroll` — Tempo-Anstieg, Bündelung, Blättern mit R1, Kreis „Ans Ende“
+  samt Legende und Ausführer (WM8-116).
 - `swift test --filter Controller` — Kern, Ausführer, Manager, Debug-Kanal; die Ebenen in
   `ControllerGestureRecognizerLayerTests`, `ControllerBindingResolverLayerTests` und
   `ControllerActionDispatcherIslandTests`.
-- `make snapshots ONLY=controller` — Einstellungsseite, Legende in zehn Zuständen (mit Raster samt Ziel von L2, offener Auswahl und Shell),
+- `make snapshots ONLY=controller` — Einstellungsseite, Legende in elf Zuständen (mit Raster samt Ziel von L2, offener Auswahl, Shell und hochgescrollt mit „Ans Ende“),
   Menü mit beiden Ebenen, Liste der Ausgabemodi an der Pill; `ONLY=controller-menue-karte` die Menü-Karte am
   Chat (Einzelansicht, Raster mit Gruppe Workspace, Rastergröße, Liste, große Kachel, kleines Fenster mit
   Scrollen); `ONLY=controller-insel` die Dynamic Island (Wohin:
@@ -765,5 +820,7 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
 - Ein mit ↑ zurückgeholter Prompt zählt nur, wenn der Controller das ↑ geschickt hat; ein ↑ auf der
   Tastatur sieht der Entwurfs-Tracker nicht als Zurückholen. Bei „arbeitet“ schickt Kreuz einen so
   geholten Prompt deshalb ab, sobald das Feld sichtbar ist (offen, Entscheidung beim User).
+- Das Tempo-Gefühl beim Scrollen (WM8-116) ist nicht testbar; die Werte in
+  `ControllerGestureRecognizer.Config` sind am echten Controller abzustimmen.
 - „Jetzt senden“ hängt an Claudes Warteschlange im Transcript (`queue-operation`); 2.1.322 nimmt
   Wartendes meist schon an der nächsten Tool-Grenze auf.

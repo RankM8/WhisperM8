@@ -86,7 +86,15 @@ final class ControllerGestureRecognizerStickTests: XCTestCase {
         XCTAssertNil(recognizer.nextDeadline)
     }
 
+    /// Grundtempo ohne Anstieg am Anschlag (der hat eigene Tests, WM8-116).
+    private static var noBoost: ControllerGestureRecognizer.Config {
+        var config = ControllerGestureRecognizer.Config()
+        config.scrollBoostMaxFactor = 1
+        return config
+    }
+
     func testRightStickScrollsWithBoundedRate() {
+        recognizer = ControllerGestureRecognizer(config: Self.noBoost)
         XCTAssertEqual(right(-1, at: 0), [], "Scrollen kommt nur über tick")
         var lines = 0
         var ticks = 0
@@ -105,7 +113,7 @@ final class ControllerGestureRecognizerStickTests: XCTestCase {
 
     func testRightStickRateGrowsWithDeflection() {
         func linesInOneSecond(_ y: Float) -> Int {
-            var recognizer = ControllerGestureRecognizer()
+            var recognizer = ControllerGestureRecognizer(config: Self.noBoost)
             _ = recognizer.handle(.stick(.right, x: 0, y: y), at: 0)
             var lines = 0
             for step in 0..<100 {
@@ -126,6 +134,7 @@ final class ControllerGestureRecognizerStickTests: XCTestCase {
     }
 
     func testRightStickLateTickIsCapped() {
+        recognizer = ControllerGestureRecognizer(config: Self.noBoost)
         _ = right(-1, at: 0)
         _ = recognizer.tick(at: 0)
         let gestures = recognizer.tick(at: 5)

@@ -120,4 +120,8 @@ enum ControllerGesture: Hashable, Sendable {
     case move(ControllerDirection, source: ControllerMoveSource, isRepeat: Bool)
     /// Rechter Stick; positiv heißt nach unten scrollen.
     case scroll(lines: Int)
+    /// Rechter Stick bei gehaltenem R1 (WM8-116): ein Bildschirm weiter,
+    /// negativ heißt nach oben. Kommt nur als `.inLayer`, ein Stoß ein
+    /// Bildschirm, mit Wiederholung beim Halten.
+    case scrollPage(step: Int)
 }
