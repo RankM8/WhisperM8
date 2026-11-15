@@ -332,12 +332,6 @@ extension AgentChatsView {
                                     if group.count <= 1 { multiSelection = [] }
                                 }
                             ))
-                            // Gesamtbreite des Inhalts → Überlauf-Erkennung fürs Chevron.
-                            .background(
-                                GeometryReader { geo in
-                                    Color.clear.preference(key: TabStripContentWidthKey.self, value: geo.size.width)
-                                }
-                            )
                         }
                         .background {
                             // Unsichtbare Shortcut-Anker: ⌘1–⌘9 springen auf
@@ -361,7 +355,6 @@ extension AgentChatsView {
                                 )
                             }
                         )
-                        .onPreferenceChange(TabStripContentWidthKey.self) { stripContentWidth = $0 }
                         .onPreferenceChange(TabStripFrameKey.self) { frame in
                             stripFrameInWindow = frame
                             stripViewportWidth = frame.width
@@ -391,42 +384,34 @@ extension AgentChatsView {
 
                 } trailing: {
                 HStack(spacing: 5) {
-                TitlebarIconButton(
-                    systemImage: "rectangle.stack",
-                    help: tabGroupingEnabled ? String(localized: "Turn tab groups off") : String(localized: "Turn tab groups on"),
-                    isActive: tabGroupingEnabled
-                ) {
-                    tabGroupingEnabled.toggle()
-                }
-
-                // Overflow-Menü: erscheint nur bei Tab-Überlauf (Fenstermodus).
-                // Listet ALLE offenen Tabs; Klick selektiert → bestehender
-                // onChange scrollt den Tab in Sicht. Im Fullscreen unsichtbar.
-                if hasTabOverflow {
-                    Menu {
-                        ForEach(visualHeaderTabs) { session in
-                            Button {
-                                selectedSessionID = session.id
-                            } label: {
-                                if session.id == selectedSession?.id {
-                                    Label(session.title, systemImage: "checkmark")
-                                } else {
-                                    Text(session.title)
-                                }
+                // Ein Tab-Menü statt zwei Knöpfen (WM8-80, Kleinkram 4): Es ist
+                // immer da, listet alle offenen Tabs und trägt den Schalter für
+                // die Tab-Gruppen, der vorher ein eigener Knopf war.
+                Menu {
+                    ForEach(visualHeaderTabs) { session in
+                        Button {
+                            selectedSessionID = session.id
+                        } label: {
+                            if session.id == selectedSession?.id {
+                                Label(session.title, systemImage: "checkmark")
+                            } else {
+                                Text(session.title)
                             }
                         }
-                    } label: {
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 11, weight: .bold))
-                            .foregroundStyle(AgentTheme.textSecondary)
-                            .frame(width: 22, height: 22)
-                            .background(AgentTheme.control.opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
                     }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .fixedSize()
-                    .help("All tabs")
+                    if !headerTabs.isEmpty { Divider() }
+                    Toggle("Tab groups", isOn: $tabGroupingEnabled)
+                } label: {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(AgentTheme.textSecondary)
+                        .frame(width: 22, height: 22)
+                        .background(AgentTheme.control.opacity(0.6), in: RoundedRectangle(cornerRadius: 6))
                 }
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("All tabs and tab groups")
 
                 Menu {
                     newChatMenuContent

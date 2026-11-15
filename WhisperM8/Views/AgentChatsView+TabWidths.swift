@@ -18,12 +18,6 @@ struct TabStripWidthState: Equatable {
     var chipWidths: [AgentTabGroupingKey: CGFloat] = [:]
 }
 
-/// Gesamtbreite des Tab-Strip-Inhalts (HStack aller Tabs).
-struct TabStripContentWidthKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
-}
-
 extension AgentChatsView {
     /// Platz, den der Streifen selbst haben darf.
     var tabStripViewportWidth: CGFloat {

@@ -172,10 +172,14 @@ extension AgentChatsView {
             Button {
                 createWorkspaceFromSidebar()
             } label: {
+                // 20 statt 14 pt Trefferfläche (WM8-80), ohne die Kopfzeile
+                // höher zu machen.
                 Image(systemName: "plus")
-                    .font(.system(size: 8, weight: .bold))
-                    .frame(width: 14, height: 14)
+                    .font(.system(size: 9, weight: .bold))
+                    .frame(width: 20, height: 20)
+                    .background(AgentTheme.hover, in: RoundedRectangle(cornerRadius: 4))
                     .contentShape(Rectangle())
+                    .padding(.vertical, -3)
             }
             .buttonStyle(.plain)
             .help("New workspace")

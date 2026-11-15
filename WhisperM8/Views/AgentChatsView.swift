@@ -373,7 +373,6 @@ struct AgentChatsView: View {
     /// Sichtbare Breite des Tab-Strip-ScrollViews + Gesamtbreite seines Inhalts.
     /// Differenz > 0 ⇒ Überlauf ⇒ Chevron-Overflow-Menü einblenden.
     @State var stripViewportWidth: CGFloat = 0
-    @State var stripContentWidth: CGFloat = 0
     @State private var renameTargetID: UUID?
     @State private var renameDraft: String = ""
     @State var renameProjectTargetID: UUID?
@@ -1987,108 +1986,6 @@ struct AgentChatsView: View {
             }
         }
         return healed
-    }
-
-    /// Scope-Umschalter (Aktiv·Zuletzt·Alle) + Layout-Toggle (gruppiert·flach)
-    /// + „N von M sichtbar"-Hinweis. Fest verankert über der Chat-Liste,
-    /// scrollt also nicht mit.
-    private func sidebarScopeBar(counts: SidebarScopeCounts) -> some View {
-        let visibleCount: Int = {
-            switch sidebarScope {
-            case .active: return counts.active
-            case .recent: return counts.recent
-            case .all: return counts.all
-            }
-        }()
-        let searching = !searchText.trimmingCharacters(in: .whitespaces).isEmpty
-        return VStack(spacing: 5) {
-            HStack(spacing: 6) {
-                // Eigener Segmented-Control: der native Picker(.segmented)
-                // expandiert auf macOS NICHT auf volle Breite — das darunter
-                // liegende NSSegmentedControl behält seine intrinsische Größe,
-                // `.frame(maxWidth:.infinity)` wird ignoriert. Eigene Buttons
-                // mit maxWidth füllen die Breite zuverlässig (wie im Entwurf,
-                // wo `.seg button { flex: 1 }` galt).
-                HStack(spacing: 2) {
-                    ForEach(SidebarScope.allCases) { scope in
-                        let isOn = sidebarScope == scope
-                        Button { sidebarScope = scope } label: {
-                            Text(scope.label)
-                                .font(.system(size: 11, weight: isOn ? .semibold : .medium))
-                                .foregroundStyle(isOn ? AgentTheme.textPrimary : AgentTheme.textSecondary)
-                                .frame(maxWidth: .infinity, minHeight: 22)
-                                .background {
-                                    if isOn {
-                                        RoundedRectangle(cornerRadius: 6)
-                                            .fill(AgentTheme.segmentActive)
-                                            .shadow(color: .black.opacity(0.18), radius: 1, y: 0.5)
-                                    }
-                                }
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(2)
-                .frame(maxWidth: .infinity)
-                .background(AgentTheme.control, in: RoundedRectangle(cornerRadius: 8))
-                .disabled(searching)
-                .opacity(searching ? 0.55 : 1)
-                .help(searching ? String(localized: "Search shows all chats") : String(localized: "Which chats the list shows"))
-
-                Button {
-                    sidebarLayout = (sidebarLayout == .grouped ? .flat : .grouped)
-                } label: {
-                    Image(systemName: sidebarLayout.toggleIcon)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(AgentTheme.textSecondary)
-                        .frame(width: 30, height: 26)
-                        .background(AgentTheme.control, in: RoundedRectangle(cornerRadius: 7))
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(sidebarLayout == .grouped
-                    ? String(localized: "Show flat (sorted by activity)")
-                    : String(localized: "Group by project"))
-            }
-
-            if searching {
-                captionRow(text: "Search shows all chats", action: nil, actionLabel: nil)
-            } else if sidebarScope != .all {
-                captionRow(
-                    text: "\(visibleCount) of \(counts.all) chats",
-                    action: { sidebarScope = .all },
-                    actionLabel: "Show all"
-                )
-            }
-        }
-        .padding(.horizontal, 8)
-        .padding(.bottom, 6)
-    }
-
-    @ViewBuilder
-    private func captionRow(text: LocalizedStringKey, action: (() -> Void)?, actionLabel: LocalizedStringKey?) -> some View {
-        HStack(spacing: 4) {
-            Text(text)
-                .font(.system(size: 11))
-                .foregroundStyle(AgentTheme.textTertiary)
-            Spacer(minLength: 0)
-            if let action, let actionLabel {
-                Button(action: action) {
-                    Text(actionLabel)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(AgentTheme.textSecondary)
-                        // Trefferfläche größer als der Text, Layout unverändert.
-                        .padding(.vertical, 5)
-                        .padding(.leading, 10)
-                        .contentShape(Rectangle())
-                        .padding(.vertical, -5)
-                        .padding(.leading, -10)
-                }
-                .buttonStyle(.plain)
-                .help("Clear filter — show all chats")
-            }
-        }
     }
 
     private var mainWorkspace: some View {

@@ -87,13 +87,6 @@ final class AgentTabOrderTests: XCTestCase {
         XCTAssertEqual(tabs.map(\.title), ["zwei", "eins"])
     }
 
-    func testOverflowNeedsMoreThanOnePointExtra() {
-        XCTAssertFalse(AgentTabOrder.hasOverflow(contentWidth: 500, viewportWidth: 500))
-        XCTAssertFalse(AgentTabOrder.hasOverflow(contentWidth: 501, viewportWidth: 500))
-        XCTAssertTrue(AgentTabOrder.hasOverflow(contentWidth: 501.5, viewportWidth: 500))
-        XCTAssertFalse(AgentTabOrder.hasOverflow(contentWidth: 0, viewportWidth: 0))
-    }
-
     // MARK: - Ziehen
 
     private func key(_ id: UUID) -> AgentTabGroupingKey? {
