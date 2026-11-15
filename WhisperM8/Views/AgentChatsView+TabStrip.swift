@@ -32,9 +32,7 @@ extension AgentChatsView {
         in sessionIDs: [UUID],
         collapsed: Bool
     ) -> [UUID] {
-        guard collapsed else { return sessionIDs }
-        guard let selectedSessionID, sessionIDs.contains(selectedSessionID) else { return [] }
-        return [selectedSessionID]
+        AgentTabOrder.visibleMemberIDs(sessionIDs, collapsed: collapsed, selectedID: selectedSessionID)
     }
 
     func chromeTabGroup(

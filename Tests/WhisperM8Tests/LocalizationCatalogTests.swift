@@ -239,6 +239,7 @@ final class LocalizationCatalogTests: XCTestCase {
         "WhisperM8/Views/AgentChatsView+SubagentChildren.swift",
         "WhisperM8/Views/AgentChatsView+Subagents.swift",
         "WhisperM8/Views/AgentChatsView+Tabs.swift",
+        "WhisperM8/Views/AgentChatsView+TabOrder.swift",
         "WhisperM8/Views/AgentChatsView+TabStrip.swift",
         "WhisperM8/Views/AgentChatsView+Tickets.swift",
         "WhisperM8/Views/AgentChatsView+Workspaces.swift",
