@@ -21,6 +21,9 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     var playHaptic: (ControllerHapticPattern) -> Void = { _ in }
     /// „Geht nicht“ per Tastatur (Insel per ⌥Tab): der macOS-Warnton.
     var keyboardRejected: () -> Void = {}
+    /// Buchstaben der Tastenzeile im aktuellen Layout, wo sie von S M O B K ·
+    /// L N A C abweichen (live über das Tastaturlayout, nur im Ereignis-Pfad).
+    var keyboardLetters: () -> [KeyboardIslandCommand: String] = { [:] }
     var togglePause: () -> Void = {}
     /// Angaben des Debug-Kanals (Test-Instanz ohne aktives Fenster).
     var debugOverride: () -> ControllerDebugOverride? = { nil }

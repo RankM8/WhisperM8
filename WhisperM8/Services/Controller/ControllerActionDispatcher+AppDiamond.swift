@@ -41,7 +41,7 @@ extension ControllerActionDispatcher {
         }
     }
 
-    private func stayAwakeCycled(_ result: ControllerStayAwakeResult, generation: Int) {
+    func stayAwakeCycled(_ result: ControllerStayAwakeResult, generation: Int) {
         let open = islandGeneration == generation && spentLayer != .quickDraw
         var slots = open ? quickDrawSlots : nil
         switch result {
@@ -155,14 +155,22 @@ extension ControllerActionDispatcher {
 
     // MARK: - Zugriff auf die offene R1-Insel
 
+    /// Die R1-Raute, oder per Tastatur die Tastenzeile in „Wohin“ (WM8-104):
+    /// Schalter, Karte und Bestätigung nehmen denselben Weg.
     var quickDrawSlots: ControllerQuickDrawSlots? {
-        guard case let .quickDraw(slots)? = islandState?.model.content else { return nil }
-        return slots
+        if case let .quickDraw(slots)? = islandState?.model.content { return slots }
+        return islandState?.model.keyboard?.slots
     }
 
     func setQuickDrawSlots(_ slots: ControllerQuickDrawSlots) {
-        guard var state = islandState, case .quickDraw = state.model.content else { return }
-        state.model.content = .quickDraw(slots)
+        guard var state = islandState else { return }
+        if case .quickDraw = state.model.content {
+            state.model.content = .quickDraw(slots)
+        } else if state.model.keyboard != nil {
+            state.model.keyboard?.slots = slots
+        } else {
+            return
+        }
         islandState = state
         present()
     }

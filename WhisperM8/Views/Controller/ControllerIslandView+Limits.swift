@@ -42,23 +42,31 @@ extension ControllerIslandView {
             .padding(.horizontal, 8)
             .padding(.bottom, 4)
 
-            IslandFlow(spacing: 12, lineSpacing: 5) {
-                if card.canScroll { footItem("L", String(localized: "stick: scroll"), round: false) }
-                // Während eines Diktats ist ✕ unter R1 „geht nicht“.
-                if card.canRefresh {
-                    footItem(ControllerButton.cross.glyph(family),
-                             card.isLoading ? String(localized: "refreshing …") : String(localized: "refresh"))
-                }
-                footItem(ControllerButton.r1.glyph(family), String(localized: "release: close"), round: false)
+            if display.model.input == .keyboard {
+                keyboardLimitsFooter(card)
+            } else {
+                limitsFooter(card)
             }
-            .font(.system(size: 11))
-            .foregroundStyle(palette.secondary)
-            .padding(.horizontal, 14)
-            .padding(.top, 7)
-            .padding(.bottom, 11)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .overlay(alignment: .top) { Rectangle().fill(palette.line).frame(height: 1) }
         }
+    }
+
+    private func limitsFooter(_ card: ControllerLimitsCard) -> some View {
+        IslandFlow(spacing: 12, lineSpacing: 5) {
+            if card.canScroll { footItem("L", String(localized: "stick: scroll"), round: false) }
+            // Während eines Diktats ist ✕ unter R1 „geht nicht“.
+            if card.canRefresh {
+                footItem(ControllerButton.cross.glyph(family),
+                         card.isLoading ? String(localized: "refreshing …") : String(localized: "refresh"))
+            }
+            footItem(ControllerButton.r1.glyph(family), String(localized: "release: close"), round: false)
+        }
+        .font(.system(size: 11))
+        .foregroundStyle(palette.secondary)
+        .padding(.horizontal, 14)
+        .padding(.top, 7)
+        .padding(.bottom, 11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .overlay(alignment: .top) { Rectangle().fill(palette.line).frame(height: 1) }
     }
 
     private func limitsSection(_ kind: ControllerAccountChoice.Kind) -> some View {

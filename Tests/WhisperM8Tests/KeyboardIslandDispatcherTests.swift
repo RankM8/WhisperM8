@@ -162,9 +162,9 @@ final class KeyboardIslandDispatcherTests: XCTestCase {
 
     func testOtherKeysAreSwallowedAndMissedReleasePassesThrough() {
         press(K.tab)
-        XCTAssertTrue(press(0), "⌥A gehört der Insel")
+        XCTAssertTrue(press(2), "⌥D gehört der Insel")
         XCTAssertTrue(dispatcher.isKeyboardIslandOpen)
-        XCTAssertFalse(press(0, []), "Taste ohne ⌥: Loslassen verpasst, Taste läuft weiter")
+        XCTAssertFalse(press(2, []), "Taste ohne ⌥: Loslassen verpasst, Taste läuft weiter")
         XCTAssertFalse(dispatcher.isKeyboardIslandOpen)
         XCTAssertTrue(window.commands.isEmpty)
     }

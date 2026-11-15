@@ -103,6 +103,8 @@ struct ControllerMenuCard: View {
     var peekAbove: ControllerMenuRow? = nil
     var peekBelow: ControllerMenuRow? = nil
     @Environment(\.controllerFamily) private var family
+    /// Per Tastatur geöffnet (B, K in der Insel): Tastenkappen statt Controller-Zeichen.
+    @Environment(\.controllerMenuByKeyboard) private var byKeyboard
 
     private var palette: IslandPalette { .notch }
     private typealias Metrics = ControllerMenuCardMetrics
@@ -175,7 +177,7 @@ struct ControllerMenuCard: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer(minLength: 4)
-            Text(verbatim: ControllerButton.options.glyph(family))
+            Text(verbatim: byKeyboard ? "esc" : ControllerButton.options.glyph(family))
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(palette.hint)
                 .padding(.horizontal, 6)
@@ -275,9 +277,17 @@ struct ControllerMenuCard: View {
     private var footer: some View {
         let cross = ControllerButton.cross.glyph(family), circle = ControllerButton.circle.glyph(family)
         let options = ControllerButton.options.glyph(family)
-        return Text(verbatim: isSubmenu
-            ? String(localized: "\(cross) select · \(circle) back · \(options) closes")
-            : String(localized: "\(cross) select · \(circle) or \(options) closes"))
+        let text: String
+        if byKeyboard {
+            text = isSubmenu
+                ? String(localized: "↑↓ move · ↩ select · esc back")
+                : String(localized: "↑↓ move · ↩ select · esc closes")
+        } else {
+            text = isSubmenu
+                ? String(localized: "\(cross) select · \(circle) back · \(options) closes")
+                : String(localized: "\(cross) select · \(circle) or \(options) closes")
+        }
+        return Text(verbatim: text)
             .font(.system(size: 11))
             .foregroundStyle(palette.secondary)
             .lineLimit(1)
@@ -303,6 +313,7 @@ struct ControllerMenuCardHost: View {
                 menu: menu, fallbackTitle: model.targetTitle, anchors: anchors,
                 bottomInset: legendEnabled ? ControllerLegendBar.height : 0)
                 .environment(\.controllerFamily, status.device?.family ?? .playStation)
+                .environment(\.controllerMenuByKeyboard, model.menuByKeyboard)
                 .transition(.opacity)
         }
     }

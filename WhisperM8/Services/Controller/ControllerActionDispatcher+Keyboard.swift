@@ -44,6 +44,7 @@ extension ControllerActionDispatcher {
         guard var session = built, var whereTo = session.model.whereTo else { return false }
         whereTo.markPreviousForKeyboard()
         session.model.content = .whereTo(whereTo)
+        makeKeyboardCommands(for: &session)
         session.revealed = false
         islandGeneration += 1
         islandState = session
@@ -60,12 +61,32 @@ extension ControllerActionDispatcher {
 
     /// Tab/⇧Tab, ↓/↑: Markierung bewegen, ohne Umlauf.
     func keyboardIslandStep(_ step: Int) {
+        guard isKeyboardIslandOpen, !keyboardIslandStepConsumed(step) else { return }
+        keyboardMarkerMoved()
         updateKeyboardWhereTo { $0.move(step) }
     }
 
     /// ←/→: Reiter wechseln, Markierung dort auf „vorher“ bzw. dem aktuellen.
+    /// Nicht bei offener Karte oder offenem Spickzettel.
     func keyboardIslandTab(_ step: Int) {
+        guard isKeyboardIslandOpen else { return }
+        guard keyboardCommands?.slots.card == nil, keyboardCommands?.cheatSheet != true else {
+            return keyboardRejected()
+        }
+        keyboardMarkerMoved()
         updateKeyboardWhereTo { $0.switchTabForKeyboard(step) }
+    }
+
+    /// Return: wie ⌥ loslassen; bei offener Karte frisch abrufen, im
+    /// Spickzettel schließen.
+    func keyboardIslandReturn() {
+        guard isKeyboardIslandOpen, !keyboardIslandReturnConsumed() else { return }
+        commitKeyboardIsland()
+    }
+
+    /// Karte oder Spickzettel offen: Dort wirken Leertaste, W und R nicht.
+    private var keyboardIslandShowsList: Bool {
+        keyboardCommands?.slots.card == nil && keyboardCommands?.cheatSheet != true
     }
 
     /// ⌥ losgelassen oder Return: zum markierten Eintrag. Steht die
@@ -74,7 +95,11 @@ extension ControllerActionDispatcher {
     /// die Insel nur (wie am Controller).
     func commitKeyboardIsland() {
         guard isKeyboardIslandOpen, let whereTo = islandState?.model.whereTo else { return }
+        let switches = keyboardCommands?.releaseSwitches ?? true
         closeIsland()
+        // Nach einem Schalter, der Karte oder dem Spickzettel wechselt das
+        // Loslassen nicht mehr, bis sich die Markierung bewegt.
+        guard switches else { return }
         guard keyboardIslandAllowed() else { return }
         if !go(to: whereTo.destination, previous: whereTo.previous) { keyboardRejected() }
     }
@@ -91,6 +116,7 @@ extension ControllerActionDispatcher {
     /// ein Projekt ist kein Ziel — „hin und diktieren“ braucht einen Chat.
     func keyboardIslandDictate() {
         guard isKeyboardIslandOpen, let whereTo = islandState?.model.whereTo else { return }
+        guard keyboardIslandShowsList else { return keyboardRejected() }
         if let phase = dictation.phase {
             guard phase == .recording else { return keyboardRejected() }
             closeIsland()
@@ -120,6 +146,8 @@ extension ControllerActionDispatcher {
     /// wartenden Chat Warnton, die Insel bleibt.
     func keyboardIslandNextWaiting() {
         guard isKeyboardIslandOpen else { return }
+        // Nur, wo W in der Fußzeile steht: im Reiter „Chats“ mit Liste.
+        guard keyboardIslandShowsList, islandState?.model.whereTo?.tab == .chats else { return keyboardRejected() }
         guard command(.nextWaitingChat, orReject: false) else { return keyboardRejected() }
         closeIsland()
         refreshContext()
@@ -129,6 +157,7 @@ extension ControllerActionDispatcher {
     /// geschlossenen Chat Warnton, die Insel bleibt.
     func keyboardIslandReopen() {
         guard isKeyboardIslandOpen else { return }
+        guard keyboardIslandShowsList, islandState?.model.whereTo?.tab == .chats else { return keyboardRejected() }
         guard closedChats.reopen() else { return keyboardRejected() }
         closeIsland()
         refreshContext()

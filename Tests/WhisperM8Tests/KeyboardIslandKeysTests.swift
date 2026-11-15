@@ -37,7 +37,7 @@ final class KeyboardIslandKeysTests: XCTestCase {
     /// Andere Tasten bei gehaltenem ⌥ werden geschluckt: Ein ⌥-Zeichen soll
     /// nicht ins Terminal rutschen, solange die Insel offen ist.
     func testOtherOptionKeysAreSwallowed() {
-        XCTAssertEqual(KeyboardIslandKeys.action(keyCode: 0, modifiers: [.option]), .ignore, "⌥A")
+        XCTAssertEqual(KeyboardIslandKeys.action(keyCode: 2, modifiers: [.option]), .ignore, "⌥D")
         XCTAssertEqual(KeyboardIslandKeys.action(keyCode: K.w, modifiers: [.option, .shift]), .ignore)
         XCTAssertEqual(KeyboardIslandKeys.action(keyCode: K.tab, modifiers: [.option, .control]), .ignore)
         XCTAssertEqual(KeyboardIslandKeys.action(keyCode: K.leftArrow, modifiers: [.option, .command]), .ignore)
@@ -154,5 +154,49 @@ final class KeyboardIslandWhereToTests: XCTestCase {
         XCTAssertEqual(workspacesTab.map(\.keys.first), ["⇥", "←", "␣", "esc", "⌥"])
         let dictating = KeyboardIslandFooter.items(tab: .chats, dictating: true, canReopen: true)
         XCTAssertEqual(dictating.map(\.keys.first), ["␣", "⇥", "esc", "⌥"])
+    }
+}
+
+/// Paket 2: Buchstaben der Tastenzeile, Spickzettel, Options-Menü per Tastatur.
+final class KeyboardIslandCommandKeysTests: XCTestCase {
+    private typealias K = KeyboardIslandKeys.KeyCode
+
+    func testLettersByKeyCode() {
+        let expected: [(UInt16, KeyboardIslandCommand)] = [
+            (1, .sendNow), (46, .cycleMode), (31, .transcript), (11, .commands), (40, .account),
+            (37, .limits), (45, .alerts), (0, .stayAwake), (8, .clipboard),
+        ]
+        for (keyCode, command) in expected {
+            XCTAssertEqual(KeyboardIslandKeys.action(keyCode: keyCode, modifiers: [.option]), .command(command))
+            XCTAssertEqual(command.keyCode, keyCode)
+        }
+        XCTAssertEqual(KeyboardIslandKeys.action(keyCode: 1, modifiers: [.option, .shift]), .ignore, "⌥⇧S")
+        XCTAssertEqual(KeyboardIslandKeys.action(keyCode: 1, modifiers: [.option, .command]), .ignore)
+        XCTAssertEqual(Set(KeyboardIslandCommand.allCases.map(\.letter)).count, 9, "jeder Buchstabe einmal")
+        XCTAssertFalse(KeyboardIslandCommand.allCases.map(\.letter).contains { ["Y", "Z", "W", "R"].contains($0) })
+    }
+
+    /// „?“ liegt je nach Layout woanders (US ⇧/, DE ⇧ß): erkannt am Zeichen.
+    func testQuestionMarkByCharacter() {
+        XCTAssertEqual(KeyboardIslandKeys.action(keyCode: 44, modifiers: [.option, .shift], characters: "?"), .cheatSheet)
+        XCTAssertEqual(KeyboardIslandKeys.action(keyCode: 27, modifiers: [.option, .shift], characters: "?"), .cheatSheet)
+        XCTAssertEqual(KeyboardIslandKeys.action(keyCode: 44, modifiers: [.option], characters: "/"), .ignore)
+    }
+
+    func testMenuKeys() {
+        XCTAssertEqual(KeyboardIslandKeys.menuAction(keyCode: K.downArrow, modifiers: [.function]), .move(1))
+        XCTAssertEqual(KeyboardIslandKeys.menuAction(keyCode: K.upArrow, modifiers: [.option, .function]), .move(-1))
+        XCTAssertEqual(KeyboardIslandKeys.menuAction(keyCode: K.tab, modifiers: [.shift]), .move(-1))
+        XCTAssertEqual(KeyboardIslandKeys.menuAction(keyCode: K.returnKey, modifiers: []), .activate)
+        XCTAssertEqual(KeyboardIslandKeys.menuAction(keyCode: K.rightArrow, modifiers: [.function]), .activate)
+        XCTAssertEqual(KeyboardIslandKeys.menuAction(keyCode: K.escape, modifiers: []), .back)
+        XCTAssertEqual(KeyboardIslandKeys.menuAction(keyCode: K.leftArrow, modifiers: [.function]), .back)
+        XCTAssertEqual(KeyboardIslandKeys.menuAction(keyCode: 0, modifiers: []), .closeAndPassThrough, "Tippen schließt")
+        XCTAssertEqual(KeyboardIslandKeys.menuAction(keyCode: K.downArrow, modifiers: [.command]), .closeAndPassThrough)
+    }
+
+    func testFooterAfterToggle() {
+        let items = KeyboardIslandFooter.items(tab: .chats, dictating: false, canReopen: true, releaseSwitches: false)
+        XCTAssertEqual(items.map(\.keys), [["⌥"]], "nur: loslassen wechselt nichts")
     }
 }

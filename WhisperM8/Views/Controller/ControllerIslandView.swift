@@ -34,10 +34,19 @@ struct ControllerIslandDisplay: Equatable {
         // Zwei Rauten nebeneinander (Insel-Paket): rund 700 pt.
         case .quickDraw: width = 704
         // Per Tastatur (⌥Tab) etwas breiter: Die Fußzeile nennt mehr Tasten.
-        case .whereTo: width = model.input == .keyboard ? 460 : 440
+        case .whereTo: width = Self.keyboardWidth(model) ?? 440
         }
         if case .notch(let notchWidth, _) = style { return max(width, notchWidth) }
         return width
+    }
+
+    /// Per Tastatur (WM8-104): mit Tastenzeile 520 pt wie im Entwurf, die
+    /// Limits-Karte so breit wie unter R1, der Spickzettel schmal.
+    private static func keyboardWidth(_ model: ControllerIslandModel) -> CGFloat? {
+        guard model.input == .keyboard else { return nil }
+        guard let keyboard = model.keyboard else { return 460 }
+        if keyboard.slots.card != nil { return 704 }
+        return keyboard.cheatSheet ? 400 : 520
     }
 }
 
@@ -158,7 +167,8 @@ struct ControllerIslandView: View {
             } else {
                 IslandGlyph(text: display.model.layer.key.glyph(family), round: false, palette: palette)
             }
-            Text(verbatim: limitsCard == nil ? display.model.layer.title : String(localized: "Limits"))
+            Text(verbatim: limitsCard != nil ? String(localized: "Limits")
+                 : display.model.keyboard?.cheatSheet == true ? ControllerLayer.writing.title : display.model.layer.title)
                 .font(.system(size: 11, weight: .bold))
                 .tracking(0.2)
                 .foregroundStyle(palette.text)
@@ -180,7 +190,7 @@ struct ControllerIslandView: View {
         // Die Zähler der Notch-Anzeige nur bei „Wohin“ (Entwurf, Zustand 8):
         // Schreiben und Schnellbefehle wirken auf einen Chat, der muss im
         // Kopf stehen.
-        if let counts = display.counts, display.model.layer == .whereTo {
+        if let counts = display.counts, display.model.layer == .whereTo, display.model.keyboard?.cheatSheet != true {
             HStack(spacing: 12) {
                 if counts.working > 0 { count(.working, counts.working, palette.working) }
                 if counts.waiting > 0 { count(.awaiting, counts.waiting, palette.awaiting) }
@@ -229,7 +239,15 @@ struct ControllerIslandView: View {
         switch display.model.content {
         case .writing(let slots): writing(slots)
         case .quickDraw(let slots): quickDraw(slots)
-        case .whereTo(let state): whereTo(state)
+        case .whereTo(let state):
+            // Per Tastatur ersetzen Limits-Karte (L) und Spickzettel (?) die Liste.
+            if let card = display.model.keyboard?.slots.card {
+                limits(card)
+            } else if display.model.keyboard?.cheatSheet == true {
+                keyboardCheatSheet
+            } else {
+                whereTo(state)
+            }
         }
     }
 
@@ -276,8 +294,12 @@ struct ControllerIslandView: View {
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 4)
+            if let commands = display.model.keyboard, state.tab == .chats {
+                keyboardCommandRow(commands)
+            }
             if display.model.input == .keyboard {
-                keyboardFooter(state, dictating: display.model.target.dictating)
+                keyboardFooter(state, dictating: display.model.target.dictating,
+                               releaseSwitches: display.model.keyboard?.releaseSwitches ?? true)
             } else {
                 footer(state.tab, reopenTitle: state.reopenTitle)
             }

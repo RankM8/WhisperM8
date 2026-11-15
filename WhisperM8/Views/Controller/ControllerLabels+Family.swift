@@ -139,3 +139,15 @@ extension EnvironmentValues {
         set { self[ControllerFamilyKey.self] = newValue }
     }
 }
+
+private struct ControllerMenuByKeyboardKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    /// Das Options-Menü wurde per Tastatur aus der Insel geöffnet (WM8-104).
+    var controllerMenuByKeyboard: Bool {
+        get { self[ControllerMenuByKeyboardKey.self] }
+        set { self[ControllerMenuByKeyboardKey.self] = newValue }
+    }
+}

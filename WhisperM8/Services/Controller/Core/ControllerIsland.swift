@@ -542,6 +542,8 @@ struct ControllerIslandModel: Equatable, Sendable {
     var target: ControllerIslandTarget
     var content: Content
     var input: ControllerIslandInput = .controller
+    /// Nur per Tastatur: Tastenzeile, Schalter, Karte, Spickzettel (Paket 2).
+    var keyboard: ControllerKeyboardCommands?
 
     var layer: ControllerLayer {
         switch content {

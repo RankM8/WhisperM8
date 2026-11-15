@@ -57,26 +57,34 @@ final class KeyboardIslandMonitor {
     private func handle(_ event: NSEvent) -> NSEvent? {
         switch event.type {
         case .keyDown:
-            return keyDown(keyCode: event.keyCode, modifiers: event.modifierFlags) ? nil : event
+            return keyDown(keyCode: event.keyCode, modifiers: event.modifierFlags,
+                           characters: event.charactersIgnoringModifiers) ? nil : event
         case .flagsChanged:
             flagsChanged(event.modifierFlags)
             return event
         default:
-            // Ein Klick irgendwo schließt die Insel ohne Wechsel.
+            // Ein Klick irgendwo schließt die Insel ohne Wechsel, ebenso das
+            // per Tastatur geöffnete Options-Menü.
             dispatcher?.cancelKeyboardIsland()
+            if dispatcher?.isKeyboardMenuOpen == true { dispatcher?.keyboardMenu(.closeAndPassThrough) }
             return event
         }
     }
 
     /// `true`: Taste gehört der Insel und wird geschluckt.
-    func keyDown(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {
+    func keyDown(keyCode: UInt16, modifiers: NSEvent.ModifierFlags, characters: String? = nil) -> Bool {
         guard let dispatcher else { return false }
-        guard dispatcher.isKeyboardIslandOpen else { return open(keyCode: keyCode, modifiers: modifiers) }
+        guard dispatcher.isKeyboardIslandOpen else {
+            if dispatcher.isKeyboardMenuOpen { return menuKeyDown(keyCode: keyCode, modifiers: modifiers) }
+            return open(keyCode: keyCode, modifiers: modifiers)
+        }
         lastModifiers = modifiers
-        switch KeyboardIslandKeys.action(keyCode: keyCode, modifiers: modifiers) {
+        switch KeyboardIslandKeys.action(keyCode: keyCode, modifiers: modifiers, characters: characters) {
         case let .step(step): dispatcher.keyboardIslandStep(step)
         case let .tab(step): dispatcher.keyboardIslandTab(step)
-        case .commit: dispatcher.commitKeyboardIsland()
+        case .commit: dispatcher.keyboardIslandReturn()
+        case let .command(command): dispatcher.keyboardIslandCommand(command)
+        case .cheatSheet: dispatcher.toggleKeyboardCheatSheet()
         case .cancel: dispatcher.cancelKeyboardIsland()
         case .dictate: dispatcher.keyboardIslandDictate()
         case .nextWaiting: dispatcher.keyboardIslandNextWaiting()
@@ -87,6 +95,14 @@ final class KeyboardIslandMonitor {
             return false
         }
         return true
+    }
+
+    /// Options-Menü, das B oder K geöffnet hat.
+    private func menuKeyDown(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {
+        guard let dispatcher else { return false }
+        let action = KeyboardIslandKeys.menuAction(keyCode: keyCode, modifiers: modifiers)
+        dispatcher.keyboardMenu(action)
+        return action != .closeAndPassThrough
     }
 
     private func open(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {

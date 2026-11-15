@@ -12,7 +12,8 @@ Dieselbe Dynamic Island wie am Controller (L2 „Wohin“), bedient mit der Tast
 Schnellbefehle als Buchstaben); Ticket WM8-104. Die Insel selbst beschreibt
 [controller.md](controller.md#ebenen-und-dynamic-island).
 
-**Stand:** Paket 1 (Wohin). Schnellbefehle als Buchstaben, Spickzettel und die Tastatur-Legende folgen.
+**Stand:** Paket 1 (Wohin) und Paket 2 (Schnellbefehle, Spickzettel, Options-Menü per Tastatur). Die
+Tastatur-Legende unten im Fenster folgt.
 
 ## Einschalten
 
@@ -46,6 +47,42 @@ läuft normal weiter. Dasselbe gilt für ein ⌥-Loslassen, das wir nicht gesehe
 
 **Geht nicht** (W ohne wartenden Chat, R ohne geschlossenen Chat, Leertaste auf einem Workspace,
 gescheiterter Wechsel): macOS-Warnton, die Insel bleibt offen (Entscheidung Giuliano, 15.11.2026).
+
+## Schnellbefehle (Paket 2)
+
+Unter der Liste steht im Reiter „Chats“ die Tastenzeile, jeder Buchstabe sichtbar am Eintrag. Oben
+„für ‹aktueller Chat›“: S, M, O, B und K wirken wie am Controller auf den aktuellen Chat (Kopf der
+Insel), nicht auf die markierte Zeile. Darunter „App“.
+
+| Taste | Wirkung | am Controller |
+|---|---|---|
+| S | Jetzt senden (Claude: Ctrl+X Ctrl+S; Codex: Enter bzw. „Weiter“), Beschriftung wie unter R1 | R1 + Kreuz |
+| M | Modus wechseln (Shift+Tab) | R1 + Dreieck |
+| O | ausführliches Transkript an/aus (Ctrl+O), nur Claude | R1 + L3 |
+| B | Befehle › — Options-Menü direkt auf dieser Unterseite | R1 + Viereck |
+| K | Konto wechseln › | R1 + Kreis |
+| L | Limits-Karte statt der Liste; ↑/↓ blättern, Return holt frisch, L zurück zur Liste | R1 + ▲ |
+| N | Mitteilungen eine Stufe weiter, Insel bleibt, Stand und nächste Stufe stehen da | R1 + ◀ |
+| A | Wach bleiben eine Stufe weiter, ebenso; fehlt die Freigabe, Hinweis und Warnton | R1 + ▶ |
+| C | Zwischenablage-Verlauf (schließt die Insel) | R1 + ▼ |
+| ? | Spickzettel der Schreib-Tasten statt der Liste; noch mal ? zurück | — |
+
+- **Regeln:** dieselben wie bei den R1-Rauten (`ControllerQuickDrawSlots`, `ControllerMenuModel`):
+  Rückfrage offen, Chat arbeitet, Shell. Was nicht geht, steht ausgegraut da und gibt den Warnton.
+  Befehle schließen die Insel nach einer kurzen Markierung, N und A lassen sie offen.
+- **Diktat:** Während eines Diktats sind S M O B K aus („aus, solange das Diktat läuft“), L N A C gehen.
+- **Loslassen nach einem Befehl:** Nach N, A, L oder ? wechselt ⌥ loslassen nicht, bis sich die
+  Markierung wieder bewegt; die Fußzeile sagt dann „⌥ loslassen: nichts wechselt (Markierung
+  unbewegt)“. Bei offener Karte oder offenem Spickzettel schließt das Loslassen nur.
+- **Reiter „Workspaces & Projekte“:** Dort fehlt die Tastenzeile (wie im Entwurf), und die Buchstaben, W
+  und R wirken dort nicht (Warnton). Was nicht zu sehen ist, geht auch nicht.
+- **Layout:** Erkannt über den keyCode (ANSI-Lage, auf QWERTZ und QWERTY gleich). Die Tastenzeile zeigt
+  den Buchstaben des aktuellen Layouts, wenn er abweicht (`KeyboardLayoutLetters`, AZERTY: Q statt A),
+  gelesen beim Öffnen auf dem Main Thread. „?“ wird am Zeichen erkannt (US ⇧/, DE ⇧ß).
+- **Options-Menü per Tastatur:** B und K öffnen dieselbe Menü-Karte wie am Controller. Per Tastatur gehen
+  ↑/↓ (und Tab), Return oder → wählen, Esc oder ← eine Ebene zurück bzw. schließen; jede andere Taste
+  schließt das Menü und läuft normal weiter, ein Klick schließt es. Die Fußzeile der Karte zeigt dann
+  Tastenkappen (`controllerMenuByKeyboard`, `ControllerUIModel.menuByKeyboard`).
 
 ## Diktat
 
@@ -86,7 +123,9 @@ gescheiterter Wechsel): macOS-Warnton, die Insel bleibt offen (Entscheidung Giul
 | Quelle | `KeyboardIslandMonitor.swift` | lokaler Monitor (keyDown, flagsChanged, Klick), Erscheinen nach 0,2 s, Diktat-Hotkey |
 | Ausführer | `ControllerActionDispatcher+Keyboard.swift` | dieselbe Insel (`makeIsland(.whereTo, input: .keyboard)`) und dieselben Wege wie L2 (`go(to:previous:)`); kein `spentLayer` |
 | Modell | `Core/ControllerIsland.swift` | `ControllerIslandInput`, `markPreviousForKeyboard`, `switchTabForKeyboard` |
-| Ansicht | `Views/Controller/ControllerIslandView+Keyboard.swift` | Tastenkappen in Kopf und Fußzeile (`KeyboardIslandFooter` pur) |
+| Ansicht | `Views/Controller/ControllerIslandView+Keyboard.swift` | Tastenkappen in Kopf und Fußzeile (`KeyboardIslandFooter` pur), Tastenzeile, Spickzettel |
+| Schnellbefehle | `Core/ControllerIslandKeyboard.swift`, `ControllerActionDispatcher+KeyboardCommands.swift` | Buchstaben und Stand der Tastenzeile (pur); Ausführung über dieselben Wege wie R1 (`sendOrContinue`, `perform(_:setup:)`, `openLimitsCard`, App-Schalter); Options-Menü per Tastatur |
+| Layout | `KeyboardIsland/KeyboardLayoutLetters.swift` | Buchstabe je keyCode im aktuellen Layout (`UCKeyTranslate`, nur Main Thread) |
 
 Leistung: Der Monitor prüft bei geschlossener Insel nur keyCode und Modifier; Einstellungen und
 Schnappschuss liest er erst bei ⌥Tab. Das Erscheinen misst dasselbe Signpost wie am Controller
@@ -96,8 +135,9 @@ Schnappschuss liest er erst bei ⌥Tab. Das Erscheinen misst dasselbe Signpost w
 
 - `swift test --filter KeyboardIsland` — Tastenregeln, Markierung im Modell, Fußzeile und der Ablauf
   durch Monitor und Ausführer (kurz getippt, halten, Esc, Return, Dialog, Diktat, Hotkey, Controller).
-- `make snapshots ONLY=insel-tastatur` — Chats mit Markierung auf „vorher“, Workspaces im Raster,
-  während eines Diktats, als Pille.
+- `make snapshots ONLY=insel-tastatur` — Chats mit Tastenzeile und Markierung auf „vorher“, ohne
+  Tastenzeile (Paket 1), Workspaces im Raster, während eines Diktats, nach N (Bestätigung), Spickzettel,
+  Limits-Karte, als Pille, Options-Menü per Tastatur.
 - Von Hand nach `make dev`: ⌥Tab kurz und gehalten in Einzelansicht und Raster; im Terminal mit Fokus
   (nichts kommt in der CLI an); mit offenem Einstellungsfenster vorne (⌥Tab läuft durch); ⌥Leertaste bei
-  offener Insel.
+  offener Insel; S, O und M an Claude und Codex; B und K mit Pfeilen und Return; N und A mehrfach.

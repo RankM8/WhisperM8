@@ -14,7 +14,8 @@ extension ControllerIslandView {
 
     var quickDrawSlots: ControllerQuickDrawSlots? {
         if case let .quickDraw(slots) = display.model.content { return slots }
-        return nil
+        // Per Tastatur trägt „Wohin“ Schalter und Limits-Karte selbst (WM8-104).
+        return display.model.keyboard?.slots
     }
 
     var limitsCard: ControllerLimitsCard? { quickDrawSlots?.card }
@@ -164,7 +165,9 @@ extension ControllerIslandView {
 
     /// Was der Schalter jetzt tut, und was der nächste Druck bringt. Fehlt
     /// die Admin-Freigabe für „Wach bleiben“, steht hier, wo man sie erteilt.
-    private func confirmation(_ confirmation: ControllerToggleConfirmation, app: ControllerAppToggles) -> some View {
+    func confirmation(
+        _ confirmation: ControllerToggleConfirmation, app: ControllerAppToggles, keyGlyph: String? = nil
+    ) -> some View {
         HStack(spacing: 8) {
             Image(systemName: confirmation.slot.symbolName(app))
                 .font(.system(size: 13, weight: .medium))
@@ -176,7 +179,11 @@ extension ControllerIslandView {
             Spacer(minLength: 8)
             if let next = confirmation.nextText {
                 HStack(spacing: 5) {
-                    IslandGlyph(text: confirmation.slot.direction.arrowGlyph, round: false, palette: palette)
+                    if let keyGlyph {
+                        IslandKeycap(text: keyGlyph, palette: palette)
+                    } else {
+                        IslandGlyph(text: confirmation.slot.direction.arrowGlyph, round: false, palette: palette)
+                    }
                     Text(verbatim: next)
                 }
                 .font(.system(size: 11))
