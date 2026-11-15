@@ -18,6 +18,49 @@ final class PromptDeliveryGateTests: XCTestCase {
         XCTAssertFalse(PromptDeliveryGate.sendBlockedByDraft(mayHaveUnsentInput: false, force: false))
         XCTAssertTrue(PromptDeliveryGate.draftMessage.contains("enqueue"))
     }
+
+    // MARK: Sichtbar leeres Feld (WM8-64)
+
+    /// 15.11.2026: Ein ruhender Chat mit laufendem Hintergrund-Befehl hatte ein
+    /// leeres Feld, die Tasten-Schätzung vermutete trotzdem einen Entwurf.
+    /// `send` merkte nur vor, die Warteschlange stellte nie zu. Ein am
+    /// Bildschirm sichtbar leeres Feld schlägt die Schätzung.
+    func testVisiblyEmptyFieldBeatsTrackerGuess() {
+        XCTAssertEqual(PromptDeliveryGate.forQueue(runtime: .idle, lifecycle: .ready, mayHaveUnsentInput: true,
+                                                   fieldVisiblyEmpty: true), .deliver)
+        XCTAssertFalse(PromptDeliveryGate.sendBlockedByDraft(mayHaveUnsentInput: true, force: false, fieldVisiblyEmpty: true))
+        // Sichtbarer Text bleibt ein Entwurf, ein arbeitender Chat bleibt beschäftigt.
+        XCTAssertEqual(PromptDeliveryGate.forQueue(runtime: .idle, lifecycle: .ready, mayHaveUnsentInput: true,
+                                                   visibleDraft: true, fieldVisiblyEmpty: false), .draftPending)
+        XCTAssertEqual(PromptDeliveryGate.forQueue(runtime: .working, lifecycle: .working, mayHaveUnsentInput: false,
+                                                   fieldVisiblyEmpty: true), .busy("working"))
+    }
+
+    func testFieldVisiblyEmptyOnlyForReadableClaudeField() {
+        let empty = ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: true, isEmpty: true)
+        let text = ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: false, isEmpty: false)
+        XCTAssertTrue(PromptSubmitCheck.fieldVisiblyEmpty(field: empty, profile: .claudeCodeChat))
+        XCTAssertFalse(PromptSubmitCheck.fieldVisiblyEmpty(field: text, profile: .claudeCodeChat))
+        XCTAssertFalse(PromptSubmitCheck.fieldVisiblyEmpty(field: nil, profile: .claudeCodeChat), "nicht ablesbar: Schätzung gilt")
+        XCTAssertFalse(PromptSubmitCheck.fieldVisiblyEmpty(field: empty, profile: .plainShell))
+    }
+
+    /// Unterer Rand eines ruhenden Chats mit Hintergrund-Befehl, abgelesen an
+    /// Claude Code 2.1.325 (15.11.2026): Name in der oberen Linie, leeres Feld,
+    /// darunter die Statuszeile mit „· 1 shell“. Das Feld gilt als leer.
+    func testEmptyFieldAboveShellStatusLineReadsEmpty() {
+        let screen = ControllerScreenReading.read(lines: [
+            .plain("  ⎿  Running…"),
+            .plain(""),
+            .plain(String(repeating: "─", count: 50) + " wm8-105-nik-7e0e6690 ─"),
+            .dimmed("❯ "),
+            .plain(String(repeating: "─", count: 73)),
+            .plain("  whisperm8 (main) | 32% 275k/1000k | [Opus 5.5] ⇄PowerUser | high | 3…"),
+            .plain("  ⏵⏵ bypass permissions on · 1 shell · Tasks 1 aktiv · 3 offen"),
+        ], cursor: (row: 3, col: 2), detectViews: true)
+        XCTAssertEqual(screen.promptField?.isEmpty, true)
+        XCTAssertTrue(PromptSubmitCheck.fieldVisiblyEmpty(field: screen.promptField, profile: .claudeCodeChat))
+    }
 }
 
 /// LR-CLI-008: Der Kontowechsel bekam dieselbe 10-s-Frist wie jede Mutation.

@@ -73,14 +73,16 @@ final class AgentPromptQueueDelivery {
         let runtime = coordinator.statusStore.status(for: sessionID)
         let profile = controller.command.keyboardProfile
         let inputPending = coordinator.startupInputPending(sessionID)
+        let field = controller.controllerScreenSnapshot()?.promptField
         switch PromptDeliveryGate.forQueue(
             runtime: runtime,
             lifecycle: coordinator.lifecycleState(for: sessionID),
             mayHaveUnsentInput: controller.composerDraft.mayHaveUnsentInput,
             inputPending: inputPending,
             visibleDraft: PromptSubmitCheck.visibleDraft(
-                field: controller.controllerScreenSnapshot()?.promptField, profile: profile,
-                clearsBeforeSubmit: controller.composerDraft.shouldClearBeforeSubmit)
+                field: field, profile: profile,
+                clearsBeforeSubmit: controller.composerDraft.shouldClearBeforeSubmit),
+            fieldVisiblyEmpty: PromptSubmitCheck.fieldVisiblyEmpty(field: field, profile: profile)
         ) {
         case .deliver:
             break

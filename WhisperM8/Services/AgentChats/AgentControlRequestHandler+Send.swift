@@ -98,15 +98,18 @@ extension AgentControlRequestHandler {
                 if let message = Self.statusGuardMessage(runtime, allowed: ifStatus, force: force) {
                     return .failure(.conflict, message)
                 }
+                // Ein sichtbar leeres Feld schlägt die Tasten-Schätzung (WM8-64).
+                let profile = controller.command.keyboardProfile
+                let field = controller.controllerScreenSnapshot()?.promptField
                 if PromptDeliveryGate.sendBlockedByDraft(
-                    mayHaveUnsentInput: controller.composerDraft.mayHaveUnsentInput, force: force) {
+                    mayHaveUnsentInput: controller.composerDraft.mayHaveUnsentInput, force: force,
+                    fieldVisiblyEmpty: PromptSubmitCheck.fieldVisiblyEmpty(field: field, profile: profile)) {
                     return .failure(.conflict, PromptDeliveryGate.draftMessage)
                 }
                 // WM8-100: Was am Bildschirm im Feld steht, zählt auch, wenn die
                 // Schätzung es für abgeschickt hält (liegengebliebener Auftrag).
-                let profile = controller.command.keyboardProfile
                 if !force, runtime == .idle, PromptSubmitCheck.visibleDraft(
-                    field: controller.controllerScreenSnapshot()?.promptField, profile: profile,
+                    field: field, profile: profile,
                     clearsBeforeSubmit: controller.composerDraft.shouldClearBeforeSubmit) {
                     return .failure(.conflict, PromptSubmitCheck.visibleDraftMessage)
                 }

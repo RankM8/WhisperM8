@@ -18,23 +18,26 @@ enum PromptDeliveryGate {
     }
 
     /// - Parameter inputPending: im Startfenster fehlt Claudes Eingabefeld
-    ///   noch (WM8-100); `visibleDraft`: am Bildschirm steht Text im Feld.
+    ///   noch (WM8-100); `visibleDraft`: am Bildschirm steht Text im Feld;
+    ///   `fieldVisiblyEmpty`: am Bildschirm ist das Feld leer, das schlägt die
+    ///   Tasten-Schätzung (WM8-64).
     static func forQueue(
         runtime: AgentSessionRuntimeStatus?,
         lifecycle: AgentSessionLifecycleState?,
         mayHaveUnsentInput: Bool,
         inputPending: Bool = false,
-        visibleDraft: Bool = false
+        visibleDraft: Bool = false,
+        fieldVisiblyEmpty: Bool = false
     ) -> Decision {
         if case .launching = lifecycle { return .notReady }
         if inputPending { return .notReady }
         if let runtime, runtime != .idle { return .busy(runtime.rawValue) }
-        if mayHaveUnsentInput || visibleDraft { return .draftPending }
+        if (mayHaveUnsentInput && !fieldVisiblyEmpty) || visibleDraft { return .draftPending }
         return .deliver
     }
 
-    static func sendBlockedByDraft(mayHaveUnsentInput: Bool, force: Bool) -> Bool {
-        mayHaveUnsentInput && !force
+    static func sendBlockedByDraft(mayHaveUnsentInput: Bool, force: Bool, fieldVisiblyEmpty: Bool = false) -> Bool {
+        mayHaveUnsentInput && !force && !fieldVisiblyEmpty
     }
 
     static let draftMessage = "Im Eingabefeld des Ziel-Chats steht vermutlich ein nicht abgeschickter Entwurf — "

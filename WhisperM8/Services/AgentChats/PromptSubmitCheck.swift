@@ -70,6 +70,16 @@ enum PromptSubmitCheck {
         profile == .claudeCodeChat && !clearsBeforeSubmit && field?.hasText == true
     }
 
+    /// Das Claude-Eingabefeld ist am Bildschirm sichtbar leer (WM8-64). Das
+    /// schlägt die Tasten-Schätzung: Sie hält ein Feld nach getippten und
+    /// wieder gelöschten Zeichen weiter für einen Entwurf, `send` merkte dann
+    /// vor und die Warteschlange stellte einem ruhenden Chat nie zu (15.11.,
+    /// Chat mit laufendem Hintergrund-Befehl). Nicht ablesbar heißt `false`,
+    /// dann gilt die Schätzung wie bisher.
+    static func fieldVisiblyEmpty(field: ControllerPromptField?, profile: TerminalKeyboardProfile) -> Bool {
+        profile == .claudeCodeChat && field?.isEmpty == true
+    }
+
     static let stuckMessage = "Der Text steht im Eingabefeld des Chats, wurde aber nicht abgeschickt. "
         + "Nicht noch einmal senden, sonst kommt er doppelt: `whisperm8 chats submit <ref>` schickt ihn ab, "
         + "`whisperm8 chats interrupt <ref> --clear-input --force` leert das Feld."
