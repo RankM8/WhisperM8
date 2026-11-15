@@ -149,6 +149,34 @@ final class TicketTriageTests: XCTestCase {
         XCTAssertEqual(viewModel.triage?.current, "WM8-2")
     }
 
+    func testMiddleShowsOnlyTheTextOfTheShownTicket() async {
+        let viewModel = TicketBoardViewModel(model: model(), documents: .background)
+        viewModel.openFromLane("WM8-1")
+        for _ in 0..<400 where viewModel.document(for: "WM8-1") == nil { try? await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertNotNil(viewModel.document(for: "WM8-1"))
+        viewModel.nextInTriage()
+        XCTAssertEqual(viewModel.triage?.current, "WM8-2")
+        XCTAssertNil(viewModel.document(for: "WM8-2"), "der neue Text ist noch im Bau")
+        for _ in 0..<400 where viewModel.document(for: "WM8-2") == nil { try? await Task.sleep(for: .milliseconds(5)) }
+        XCTAssertEqual(viewModel.document(for: "WM8-2")?.ticketKey, "WM8-2")
+        XCTAssertNil(viewModel.document(for: "WM8-1"), "der alte Text steht nicht unter der neuen Nummer")
+    }
+
+    func testTextIsCappedAgainstGiantParagraphs() {
+        let giant = String(repeating: "Ein sehr langer Absatz ohne Umbruch. ", count: 6_000)   // über 200.000 Zeichen
+        let comments = TicketComments(items: (0..<5).map {
+            TicketComment(id: "\($0)", author: "", createdAt: nil, body: giant, isReply: false)
+        }, hasMore: false)
+        let text = TicketTextDocument.make(.init(title: "T", description: giant, comments: .loaded(comments)))
+        XCTAssertLessThan(text.length, TicketTextDocument.maxCharacters + giant.count + 1_000,
+                          "Beschreibung gekappt, Kommentare enden an der Obergrenze")
+        XCTAssertTrue(text.string.contains("Older comments are in Linear.") || text.string.contains("Ältere Kommentare"))
+        let many = TicketComments(items: (0..<60).map { TicketComment(id: "\($0)", author: "", createdAt: nil, body: "k", isReply: false) },
+                                  hasMore: true)
+        let head = TicketTextDocument.make(.init(title: "T", description: "", comments: .loaded(many))).string
+        XCTAssertTrue(head.contains("40") && head.contains("60+"), "gezeigt 40 von 60+: \(head.prefix(200))")
+    }
+
     // MARK: Kommentare aus Linear
 
     func testCommentsAreParsedNewestFirst() {

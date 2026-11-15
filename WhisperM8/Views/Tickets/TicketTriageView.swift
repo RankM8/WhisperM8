@@ -159,6 +159,17 @@ private struct TicketTriageBar: View {
 
     var body: some View {
         HStack(spacing: 8) {
+            // Immer sichtbar: Im schmalen Fenster fällt die Liste samt ihrem
+            // Schließen-Knopf weg, und Esc wirkt nicht, solange ein Textfeld den Fokus hat.
+            Button { model.closeTriage() } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "chevron.left")
+                    Text("Board")
+                }
+            }
+            .help(Text("Back to the board (Esc)"))
+            .accessibilityLabel(Text("Back to the board"))
+            Rectangle().fill(AgentTheme.border).frame(width: 1, height: 16)
             Button { model.previousInTriage() } label: { Image(systemName: "chevron.up") }
                 .disabled(!triage.hasPrevious)
                 .help(Text("Previous ticket (K or ↑)"))
@@ -210,7 +221,9 @@ private struct TicketTriageText: View {
     let ticketKey: String
 
     var body: some View {
-        if let document = model.document {
+        // Nur der Text dieses Tickets: Beim Blättern ist der neue Text kurz noch
+        // im Bau, und der alte darf nicht unter der neuen Nummer stehen.
+        if let document = model.document(for: ticketKey) {
             TicketTextView(document: document.text, revision: document.revision, ticketKey: document.ticketKey)
         } else {
             Color.clear
@@ -279,7 +292,13 @@ private struct TicketTriageProperties: View {
                                     .foregroundStyle(AgentTheme.textSecondary)
                             }
                         }
-                        if !entry.handedOverBy.isEmpty {
+                        if entry.isHandedOver {
+                            // Wie auf der Karte: abgegeben heißt, es wartet auf den nächsten Schritt (Merge).
+                            Text("Handed over by \(entry.handedOverBy.joined(separator: ", "))")
+                                .font(.system(size: 11))
+                                .foregroundStyle(AgentTheme.textSecondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        } else if !entry.handedOverBy.isEmpty {
                             Text("Earlier: \(entry.handedOverBy.joined(separator: ", "))")
                                 .font(.system(size: 11))
                                 .foregroundStyle(AgentTheme.textSecondary)

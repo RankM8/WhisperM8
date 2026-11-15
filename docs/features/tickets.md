@@ -471,7 +471,8 @@ gezeigten Stands.
   Linear. Links die Liste, aus der es kommt (die Spalte, „N weitere · in der Liste“ öffnet die ganze Spalte, aus
   der Liste alle sichtbaren Tickets), in der Mitte Titel, Beschreibung und Verlauf, rechts die Eigenschaften
   (Status mit „wartet auf dich“, Priorität, Person, Bereich, Vorhaben, „Fertig, wenn“, Labels, Chats am Ticket mit
-  „Zum Chat“). Oben voriges/nächstes, „3 von 5“, „In Linear öffnen“ und Aktualisieren. J/K oder ↑↓ wechseln das
+  „Zum Chat“). Oben links „‹ Board“ (immer sichtbar, auch im schmalen Fenster), voriges/nächstes, „3 von 5“, „In Linear
+  öffnen“ und Aktualisieren. Beim Blättern steht in der Mitte nur der Text des gezeigten Tickets. J/K oder ↑↓ wechseln das
   Ticket, Esc führt zurück zum Board auf dieselbe Karte; das wirkt nur, wenn der Fokus nicht in einem Textfeld oder
   Terminal liegt. Unter 820 pt Breite fällt die Liste links weg. Knöpfe, die in Linear etwas ändern, gibt es nicht
   (Entscheidung E1 vom 15.11.2026: Das Board schreibt nicht nach Linear; die Triage-Knöpfe kommen mit dem
@@ -481,8 +482,9 @@ gezeigten Stands.
   `reconcile` nach einem neuen Abruf. Das ViewModel wendet sie an (`moveOnBoard`, `openSelected`, `openFromLane`,
   `nextInTriage`, `previousInTriage`, `closeTriage`, `handle(TicketBoardKey)`).
 - **Verlauf:** die Kommentare, neueste zuerst. Entscheidungen und Abschlüsse (`tickets decide`, `tickets done`)
-  stehen mit einer Kopfzeile in Akzent und ◆. Höchstens die neuesten 40 Kommentare und 200 Zeilen je Kommentar;
-  der Rest steht in Linear.
+  stehen mit einer Kopfzeile in Akzent und ◆. Höchstens die neuesten 40 Kommentare, 200 Zeilen je Kommentar,
+  60.000 Zeichen Beschreibung und 100.000 Zeichen insgesamt (ein Riesen-Absatz ließe das Layout auf dem Main Thread
+  lang laufen); der Rest steht in Linear, die Überschrift sagt dann „neueste 40 von 60“.
 - **Zeile „Chats ohne Ticket“:** zugeklappt eine Zeile mit der Zahl der laufenden Chats ohne offenes Ticket und
   dem Supervisor. Aufgeklappt die Chats mit dem Ticket, an dem sie zuletzt saßen; Supervisor-Chats stehen getrennt
   daneben und zählen nicht als Lücke.
@@ -518,7 +520,8 @@ So bleibt die Triage schnell:
 - **Kommentare erst beim Öffnen:** eine Anfrage je Ticket (`LinearTicketSource.comments`, bis zu 100 Kommentare),
   erst nach 300 ms Ruhe: Wer mit J/K durch zehn Tickets blättert, löst eine Anfrage aus, nicht zehn. Danach liegen
   sie für die Sitzung im Zwischenspeicher des Workspaces (`TicketBoardStore`), solange sich das Ticket nicht
-  geändert hat; Aktualisieren in der Triage holt neu. Während der Pause nach „Rate limited“ wird nicht gefragt.
+  geändert hat und höchstens zwei Minuten (Chats schreiben Zwischenstände als Kommentar); Aktualisieren in der
+  Triage holt sofort neu. Während der Pause nach „Rate limited“ wird nicht gefragt.
 - **Ein Text statt einer Ansicht je Absatz:** Titel, Beschreibung und Verlauf werden abseits des Main Threads zu
   einem `NSAttributedString` gebaut (`TicketTextDocument`, Messpunkt `tickets.document`) und in einem einzigen
   `NSTextView` (TextKit 2) gesetzt, wie der Chat-Verlauf. Ein Wechsel per J/K setzt nur diesen Text neu; die

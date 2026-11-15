@@ -35,12 +35,19 @@ enum TicketTextDocument {
     /// dem Main Thread wächst mit seiner Länge; so bleibt J/K auch bei einem
     /// Ticket mit langem Verlauf flüssig. Der Rest steht in Linear.
     static let maxComments = 40
+    /// Obergrenze für den ganzen Text: Ein einziger Riesen-Absatz ließe das
+    /// Layout auf dem Main Thread lang laufen. Die Beschreibung bekommt
+    /// höchstens `maxDescriptionCharacters`, Kommentare enden, wo das Ganze
+    /// `maxCharacters` erreicht.
+    static let maxCharacters = 100_000
+    static let maxDescriptionCharacters = 60_000
 
     nonisolated static func make(_ input: Input) -> NSAttributedString {
         let result = NSMutableAttributedString()
         let styles = Styles()
         result.append(NSAttributedString(string: input.title + "\n", attributes: styles.title))
-        let blocks = TicketDescriptionBlocks.make(input.description)
+        var blocks = TicketDescriptionBlocks.make(String(input.description.prefix(maxDescriptionCharacters)))
+        if input.description.count > maxDescriptionCharacters, blocks.last != .truncated { blocks.append(.truncated) }
         if blocks.isEmpty {
             result.append(NSAttributedString(string: String(localized: "No description.") + "\n", attributes: styles.muted))
         } else {
@@ -63,15 +70,28 @@ enum TicketTextDocument {
             result.append(NSAttributedString(string: String(localized: "Comments could not be loaded: \(reason)") + "\n",
                                              attributes: styles.muted))
         case .loaded(let comments):
-            result.append(NSAttributedString(string: String(localized: "Activity · \(comments.items.count)") + "\n",
-                                             attributes: styles.section))
+            let shown = min(comments.items.count, maxComments)
+            if shown < comments.items.count || comments.hasMore {
+                // Geholt sind bis zu 100, gezeigt die neuesten 40: Die Zahl soll das nicht verwischen.
+                let total = "\(comments.items.count)" + (comments.hasMore ? "+" : "")
+                result.append(NSAttributedString(string: String(localized: "Activity · newest \(shown) of \(total)") + "\n",
+                                                 attributes: styles.section))
+            } else {
+                result.append(NSAttributedString(string: String(localized: "Activity · \(comments.items.count)") + "\n",
+                                                 attributes: styles.section))
+            }
             if comments.items.isEmpty {
                 result.append(NSAttributedString(string: String(localized: "No comments yet.") + "\n", attributes: styles.muted))
             }
+            var cut = false
             for comment in comments.items.prefix(maxComments) {
+                if result.length > maxCharacters {
+                    cut = true
+                    break
+                }
                 appendComment(comment, to: result, styles: styles)
             }
-            if comments.hasMore || comments.items.count > maxComments {
+            if cut || comments.hasMore || comments.items.count > maxComments {
                 result.append(NSAttributedString(string: String(localized: "Older comments are in Linear.") + "\n",
                                                  attributes: styles.muted))
             }

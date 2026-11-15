@@ -72,6 +72,12 @@ extension TicketBoardViewModel {
         }
     }
 
+    /// Text für die Mitte der Triage, nur wenn er zu diesem Ticket gehört.
+    func document(for key: String) -> TicketDocument? {
+        guard let document, document.ticketKey == key else { return nil }
+        return document
+    }
+
     /// Tasten aus dem Fenster (J/K, ↑↓, Esc). `false`: Die Taste gehört nicht
     /// der Triage, das Fenster reicht sie weiter.
     @discardableResult

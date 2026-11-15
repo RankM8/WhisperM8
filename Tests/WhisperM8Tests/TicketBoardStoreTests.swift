@@ -361,4 +361,31 @@ final class TicketConfigTests: XCTestCase {
         try Data("kaputt".utf8).write(to: store.fileURL)
         XCTAssertEqual(store.load(), TicketConfig(), "unlesbare Datei: leere Zuordnung statt Absturz")
     }
+
+    // MARK: Kommentare
+
+    @MainActor
+    func testCommentCacheExpiresAfterTwoMinutesAndOnTicketChange() async throws {
+        let source = TicketSourceStub()
+        source.onComments = { _ in TicketComments(items: [], hasMore: false) }
+        var clock = Date(timeIntervalSince1970: 1_000)
+        let store = TicketBoardStore(source: source, now: { clock })
+        var ticket = TicketFixtures.ticket(1, updatedAt: Date(timeIntervalSince1970: 10))
+        func calls() -> Int { source.calls.filter { $0.hasPrefix("comments") }.count }
+
+        _ = try await store.comments(for: ticket)
+        _ = try await store.comments(for: ticket)
+        XCTAssertEqual(calls(), 1, "aus dem Zwischenspeicher")
+        clock = clock.addingTimeInterval(TicketBoardStore.commentLifetime - 1)
+        XCTAssertNotNil(store.cachedComments(for: ticket))
+        clock = clock.addingTimeInterval(2)
+        XCTAssertNil(store.cachedComments(for: ticket), "nach zwei Minuten verworfen")
+        _ = try await store.comments(for: ticket)
+        XCTAssertEqual(calls(), 2)
+        ticket.updatedAt = Date(timeIntervalSince1970: 20)
+        XCTAssertNil(store.cachedComments(for: ticket), "geändertes Ticket")
+        store.forgetComments(ticketID: ticket.id)
+        _ = try await store.comments(for: ticket)
+        XCTAssertEqual(calls(), 3)
+    }
 }

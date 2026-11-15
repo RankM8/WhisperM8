@@ -142,13 +142,18 @@ final class TicketBoardStore {
     // MARK: Kommentare
 
     /// Kommentare je Ticket für diese Sitzung der App. Ein Eintrag gilt,
-    /// solange sich das Ticket nicht geändert hat (`updatedAt`); „Aktualisieren“
-    /// in der Triage verwirft ihn. Je Workspace ein Speicher, also auch ein Cache.
-    @ObservationIgnored private var commentCache: [String: (updatedAt: Date?, comments: TicketComments)] = [:]
+    /// solange sich das Ticket nicht geändert hat (`updatedAt`) und höchstens
+    /// `commentLifetime` lang: Ob Linear `updatedAt` bei einem neuen Kommentar
+    /// setzt, ist nicht geprüft, und Chats schreiben Zwischenstände als
+    /// Kommentar. „Aktualisieren“ in der Triage verwirft ihn sofort. Je
+    /// Workspace ein Speicher, also auch ein Cache.
+    @ObservationIgnored private var commentCache: [String: (updatedAt: Date?, fetchedAt: Date, comments: TicketComments)] = [:]
+    static let commentLifetime: TimeInterval = 120
 
     /// Schon geholt und noch gültig?
     func cachedComments(for ticket: Ticket) -> TicketComments? {
-        guard let hit = commentCache[ticket.id], hit.updatedAt == ticket.updatedAt else { return nil }
+        guard let hit = commentCache[ticket.id], hit.updatedAt == ticket.updatedAt,
+              now().timeIntervalSince(hit.fetchedAt) < Self.commentLifetime else { return nil }
         return hit.comments
     }
 
@@ -165,7 +170,7 @@ final class TicketBoardStore {
         let source = source
         do {
             let fresh = try await PerfBudgets.ticketsComments.withInterval { try await source.comments(ticketID: ticket.id) }
-            commentCache[ticket.id] = (ticket.updatedAt, fresh)
+            commentCache[ticket.id] = (ticket.updatedAt, now(), fresh)
             return fresh
         } catch let error as TicketSourceError {
             if error == .rateLimited { pausedUntil = now().addingTimeInterval(Self.rateLimitPause) }

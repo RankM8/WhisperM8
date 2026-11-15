@@ -24283,6 +24283,16 @@
           }
         }
       }
+    },
+    "Activity · newest %lld of %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf · neueste %lld von %@"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
