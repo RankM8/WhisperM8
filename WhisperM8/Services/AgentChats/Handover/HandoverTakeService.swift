@@ -81,6 +81,17 @@ final class HandoverTakeService {
         let previous = dependencies.marker.beginRunDetailed()
         var summary = Summary(previous: previous)
         Self.lastSummary = summary
+        // WM8-98 (Vic, zweites Gesamt-Review): Läuft die App, der der Marker
+        // gehört, noch (etwa die alte gleich nach der Abgabe), ist diese hier
+        // eine zweite Instanz und beendet sich gleich wieder. Sie sähe sonst
+        // keinen Marker „übergeben“, nur einen lebenden Aufbewahrer, und
+        // beendete ihn wie bei einem verlorenen Marker; die Chats endeten, und
+        // keine App liefe mehr. Also nichts anfassen: Die nächste App findet
+        // Marker und Aufbewahrer unverändert vor.
+        if previous.ownerStillRunning {
+            Logger.agentStore.notice("handover_take_skipped reason=marker_owner_alive")
+            return summary
+        }
         let onMain = dependencies.isMainThread()
         if !onMain {
             Logger.agentStore.error("handover_take_not_on_main_thread")

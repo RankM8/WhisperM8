@@ -1055,7 +1055,8 @@ deshalb vollwertig. Plan: `docs/plans/claude-status-aus-registry.md`.
   `ChatsControlClient.swift`, `ChatsLiveCommands.swift`, `ChatsLiveMerge.swift`,
   `ChatsWaitEngine.swift`.
 - App: `Services/AgentChats/AgentControlServer.swift`,
-  `AgentControlRequestHandler.swift`, `AgentSessionTokenRegistry.swift`,
+  `AgentControlRequestHandler.swift` (Themen in `AgentControlRequestHandler+…`,
+  Grid-Workspaces in `+GridWorkspace.swift`), `AgentSessionTokenRegistry.swift`,
   `ChatsAuditLog.swift`; Änderungen in `AgentTerminalView.swift` (Env-Injektion,
   `sendPrompt`/`sendInterrupt`), `AgentChatLaunchService.swift`
   (`openChatViaControl`), `WhisperM8App.swift` (Server-Start).

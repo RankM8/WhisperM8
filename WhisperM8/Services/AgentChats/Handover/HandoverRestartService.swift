@@ -54,6 +54,10 @@ final class HandoverRestartService {
         defer { isRunning = false }
 
         let running = registry.runningControllers
+        // Kein Plattenzugriff (WM8-98): `loadWorkspace()` kopiert den Stand des
+        // Stores im Speicher unter dessen kurzem Lock. Von der Platte liest der
+        // Store nur beim allerersten Zugriff nach dem Start, geschrieben wird
+        // außerhalb dieses Locks.
         let sessions = Dictionary(
             AgentSessionStore().loadWorkspace().sessions.map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first })
