@@ -18,72 +18,52 @@ Dieser Modus gilt ab Aufruf **session-weit**, bis der User ihn beendet
 
 ## Arbeitsannahme (vom User so festgelegt)
 
-- **Das neueste Codex-Modell (`auto`, derzeit GPT-6 Astra) ist bei klar
-  definierten Tasks ≈ Fable-Niveau und über Opus.** Wo du sonst einen Opus/Sonnet-Subagent nehmen würdest,
-  ist GPT die bessere Wahl.
 - **GPT hat deutlich höhere Limits als Claude.** Lieber ein GPT-Agent zu
   viel als zu wenig: Zweitmeinungen, parallele Reviews und
   Planungs-Perspektiven schonen Claude-Limits und Main-Kontext. Gratis
-  sind sie nicht — der Fast-Default läuft im Priority-Tier mit 2,5×
-  ChatGPT-Credits (Gotcha „Kosten" in codex-subagent): bei größeren
+  sind sie nicht (Gotcha „Kosten" in codex-subagent): bei größeren
   Fan-outs die Agent-Spanne nennen, sinnlose Doppel-Spawns vermeiden.
+- **Rollen nach Vergleichsläufen:** Als Gegenprüfer war ein Claude-Modell
+  (Sonnet, effort high) schneller und gründlicher als GPT: Es rechnete
+  Behauptungen am Repo nach, statt sie zu übernehmen, und stufte
+  Schweregrade realistischer ein. GPT ergänzte andere Gesichtspunkte, und
+  seine Verwerfungen waren verlässlich. GPT, das GPT prüft, übersieht
+  systematisch.
 
-## Beobachtungen aus der Praxis (laufend nachführen)
+## Folgerung: wer was macht
 
-**Stand 29.09.2026, ListM8-Merge-Reife (hunderte Review-/Fix-Agenten):**
+- **Sonnet (effort high) macht die Hauptarbeit** (Reviews, Fixes).
+- **GPT ist die unabhängige Zweitmeinung** (Gegenprüfung, parallele
+  Perspektiven).
+- **Opus** für Kernpfade, Schiedsrichter und Abnahme.
+- **Nie prüft das bauende Modell.** Zweitprüfung immer durch ein anderes
+  Modell.
+- **Workflow-Betrieb:** Nachrichten der Hauptsitzung können in laufende
+  Workflow-Agenten gelangen (bei jedem Modell) und dort sogar eine zweite
+  Instanz starten. Ergebnis deshalb immer auf Vollständigkeit prüfen (je ID
+  ein Urteil) und bei Lücken mit einem Claude-Modell nachprüfen.
 
-- **GPT ist deutlich langsamer** als Sonnet 5.5 — bei gleichem Prüfauftrag
-  merklich längere Laufzeit.
-- **Sonnet 5.5 (effort high) war als Gegenprüfer klar stärker:** Im direkten
-  Vergleich auf denselben Plan fand Sonnet 5 Faktenfehler (GPT 1) und 8 fehlende
-  Punkte (GPT 6), rechnete Behauptungen am Repo nach statt sie zu übernehmen und
-  entdeckte als Einziger den relevantesten Punkt (develop mit neuem
-  Akquise-Mandanten weiter). GPT ergänzte andere Prozess-Aspekte — kombiniert
-  am besten. Datenbasis noch klein (1 Direktvergleich + 1 Gegenprüfwelle).
-- **GPT prüft GPT übersieht systematisch:** Eine Opus-Abnahme fand nach
-  GPT-Umsetzung + GPT-Zweitprüfung noch 10 Punkte in einer Welle. Zweitprüfung
-  daher immer durch ein anderes Modell (Sonnet/Opus).
-- **Tempo gemessen (29.09.):** Gegenprüfung von 57 Paketen (366 Befunde) mit
-  Sonnet 5.5 high: 9 Minuten, 0 Fehler. Vergleichbare GPT-Gegenprüf-Läufe
-  (W2/W3) brauchten 50–100 Minuten. Verwerfungsquote ähnlich (Sonnet 8 %,
-  GPT 7–8 %), Sonnet stufte aber deutlich mehr Schweregrade realistisch herab
-  (105 von 366 auf niedrig).
-- **Zweite Meinung zu GPT-Gegenprüfungen (29.09.):** Sonnet 5.5 high prüfte 327
-  von GPT bereits bestätigte Befunde erneut: 22 widerlegt (7 %), 63 in der
-  Schwere herabgestuft (GPT stuft tendenziell zu hoch ein: 37 von 114 „hoch“
-  sind nach Sonnet mittel/niedrig). Umgekehrt waren GPTs Verwerfungen
-  verlässlich: 77 von 78 hielt Sonnet ebenfalls für unbegründet.
-- **Verbrauch:** Sonnet 5.5 belastete die Claude-Limits in diesen Läufen
-  spürbar weniger als erwartet.
-- **Gotchas im Workflow-Betrieb:** Nachrichten an laufende Workflow-Agenten
-  starteten eine zweite Instanz; zweimal beantworteten GPT-Agenten eine
-  Chatnachricht des Users statt ihres Auftrags — trotz Schutzsatz. Nachrichten der Hauptsitzung gelangen in
-  laufende Workflow-Agenten — am 29.09. auch in einen Opus-Umsetzer belegt, also
-  modellunabhängig. Deshalb Ergebnis immer auf Vollständigkeit prüfen
-  (je ID ein Urteil) und bei Lücken mit einem Claude-Modell nachprüfen.
+Neue Vergleichswerte gehören in das Gedächtnis des Users, nicht in diesen
+Skill; die Folgerung oben ändert sich nur, wenn er sie ändert.
 
-Folgerung (vom User am 29.09. bestätigt): **Sonnet 5.5 high macht die Hauptarbeit**
-(Reviews, Fixes), **GPT ist die unabhängige Zweitmeinung** (Gegenprüfung),
-Opus für Kernpfade, Schiedsrichter und Abnahme. Nie prüft das bauende Modell.
-Weitere Vergleiche hier nachtragen; die Arbeitsannahme oben ggf. anpassen.
+## GPT spawnen
 
-## Harte Default-Regel: Subagent = GPT
-
-Für jeden Subagent-Spawn mit klar definiertem Auftrag gilt
-`subagent_type: "gpt"` als Standard. Claude-Subagents (Fable/Opus/Sonnet)
-nur mit explizitem Grund — z. B. wenn bewusst ein *Claude*-Zweiturteil
-gegen einen GPT-Befund gewünscht ist oder es um Claude-spezifisches
-Verhalten geht. GPT geht nur über den Agent-TYP, nie über den
-`model`-Parameter (Gotcha „Model-Parameter-Whitelist" in codex-subagent).
+Wo nach der Folgerung GPT drankommt, gilt `subagent_type: "gpt"`.
+Claude-Subagents (Fable/Opus/Sonnet) nimmst du für die Hauptarbeit und für
+jedes Zweiturteil gegen einen GPT-Befund. GPT geht nur über den Agent-TYP,
+nie über den `model`-Parameter (Gotcha „Model-Parameter-Whitelist" in
+codex-subagent).
 
 ## Delegations-Reflex
 
-Prüfe bei **jedem Arbeitspaket** zuerst: „Kann das ein GPT-Agent
-selbst-contained erledigen?" Gut abgebbar:
+Prüfe bei **jedem Arbeitspaket** zuerst: „Kann das ein Subagent
+selbst-contained erledigen?" Das Modell wählst du nach der Folgerung oben.
+Gut abgebbar:
 
-- **Implementierung** klar spezifizierter Tasks — GPT hat volles
+- **Implementierung** klar spezifizierter Tasks — Subagents haben volles
   Schreibrecht im Working Tree, inkl. Tests laufen lassen.
-- **Reviews** (Code, Pläne, Diffs) — default 2 unabhängige Reviewer.
+- **Reviews** (Code, Pläne, Diffs) — default 2 unabhängige Reviewer aus
+  verschiedenen Modellen.
 - **Planung** — 2–3 parallele GPT-Perspektiven statt einer eigenen.
 - **Zweitmeinungen** — parallel zur eigenen Arbeit starten, nicht danach.
 - **Recherche/Exploration** in Code oder Doku, deren Ergebnis sich in
@@ -98,10 +78,9 @@ delegieren, sondern selbst machen. Kein Delegations-Theater.
 **Ergebnis-Meldepflicht** (Gotcha in codex-subagent): das Resultat
 immer in der finalen Antwort einfordern.
 
-**Kontextbudget:** GPT-Subagents aus einer Claude-Main-Session haben nur
-das 200k-Fenster, ~177k nutzbar (272k/900k gibt es nur in GPT-gestempelten
-Main-Sessions — Gotcha „Kontextfenster" in codex-subagent). Große Scopes
-vor der Delegation splitten; Diffs und Dateien im Briefing referenzieren
+**Kontextbudget** (Gotcha „Kontextfenster" in codex-subagent, dort stehen
+die Fenstergrößen): Subagents kompaktieren nie. Große Scopes vor der
+Delegation splitten; Diffs und Dateien im Briefing referenzieren
 statt einbetten — ein volles Fenster tötet den Agent samt Ergebnis.
 
 ## Parallelität: Lesen breit, Schreiben seriell
@@ -145,7 +124,7 @@ Testdatei) kommen mit Diff + Tests durch.
 
 „Agent type 'gpt' not found" oder Backend aus → kurz melden (Diagnose:
 gleichnamiges Gotcha in codex-subagent), dann ohne Rückfrage mit
-Claude-Subagents weiterarbeiten. Die Arbeit blockiert nie. Für detachte
+Claude-Subagents weiterarbeiten, nicht automatisch über die CLI. Die Arbeit blockiert nie. Für detachte
 Langläufer ersatzweise den CLI-Weg (`whisperm8 agent`) erwägen.
 
 ## Verifikation

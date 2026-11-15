@@ -55,7 +55,7 @@ whisperm8 agent help                             # Hilfetext
 | `--allow-network` | Netzwerk in der Sandbox (u.a. `git push`, Paketinstallationen). Default aus — vorher den User fragen. |
 | `--config <key=value>` | Generischer Codex-Config-Override, wiederholbar — wird 1:1 als `-c` an codex exec durchgereicht und gilt auch für Folge-Turns (`send`). Kommt NACH den eingebauten Configs, übersteuert sie also (z.B. `--config tools.web_search=true`). Werte mit führendem `-` werden abgelehnt (Exit 1) — codex läse sie als Flag. |
 | `--playwright-storage-state <path>` | Browser-QA: startet den Playwright-MCP im Codex-Subagent isoliert mit dieser storageState-Datei (`--isolated --storage-state`). Relative Pfade werden relativ zu `--cd`/CWD aufgelöst; fehlt die Datei, bricht `run` sofort mit Exit 1 ab. Browser-Traffic braucht KEIN `--allow-network`. |
-| `--model <name>` | Codex-Modell-Override. **IMMER explizit `--model auto` setzen** — `auto` löst WhisperM8 auf das neueste Modell des Codex-Katalogs auf (derzeit gpt-6-astra), damit neue Modelle ohne Skill-Änderung greifen. NIEMALS ein älteres Modell wählen und das Flag nie weglassen (ohne Flag gilt die `~/.codex/config.toml`, deren Effort-Default niedrig ist). Konkrete IDs nur auf ausdrücklichen User-Wunsch; verfügbare Modelle listet `~/.codex/models_cache.json`. |
+| `--model <name>` | Codex-Modell-Override. **IMMER explizit `--model auto` setzen** — `auto` löst WhisperM8 auf das neueste Modell des Codex-Katalogs auf, damit neue Modelle ohne Skill-Änderung greifen. NIEMALS ein älteres Modell wählen und das Flag nie weglassen (ohne Flag gilt die `~/.codex/config.toml`, deren Effort-Default niedrig ist). Konkrete IDs nur auf ausdrücklichen User-Wunsch; verfügbare Modelle listet `~/.codex/models_cache.json`. |
 | `--effort <level>` | `model_reasoning_effort`-Override: minimal/low/medium/high/xhigh/max/ultra — modellabhängig (die Frontier-Modelle bis `ultra`, kleinere bis `max`/`xhigh`). **IMMER explizit setzen, Standard `high`** (ohne Flag greift der config.toml-Default `low`); für die härtesten Verifikationen `xhigh`+. Verfügbare Level pro Modell: `~/.codex/models_cache.json`. |
 | `--parent <session-id>` | Claude-Session-ID des spawnenden Chats — nur nötig, wenn du eine echte ID kennst. OHNE das Flag ordnet WhisperM8 den Job automatisch über den Prozessbaum dem Chat zu, in dem du läufst (`$CLAUDE_SESSION_ID` existiert NICHT als Env-Variable — nicht verwenden). |
 
@@ -114,7 +114,7 @@ whisperm8 agent help                             # Hilfetext
 
 0. **Modellwahl ist festgelegt, nicht deine Entscheidung:** jeder `run`
    bekommt `--model auto --effort high`. `auto` ist immer das neueste
-   Modell des Codex-Katalogs (derzeit gpt-6-astra) — so greifen neue
+   Modell des Codex-Katalogs — so greifen neue
    Modelle ohne Skill-Änderung. NIEMALS ein älteres Modell wählen und die
    Flags NIE weglassen — ohne sie zieht die `~/.codex/config.toml` mit
    Effort `low`. Härteste Verifikationen/Adjudikationen: `--effort xhigh`

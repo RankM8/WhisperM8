@@ -34,8 +34,7 @@ Hauptdatei deckt nur den nativen Weg und die gemeinsamen Grundregeln ab.
 
 Das WhisperM8-GPT-Backend verwaltet eine Agent-Definition
 (`<config-dir>/agents/gpt.md`, Frontmatter `model: <neuestes Codex-Modell>`
-— derzeit gpt-6-astra, bei jedem Backend-Start aus dem Codex-Katalog neu
-aufgelöst; bei aktivem Fast-Modus mit `-fast`-Suffix) für das
+— bei jedem Backend-Start aus dem Codex-Katalog neu aufgelöst; bei aktivem Fast-Modus mit `-fast`-Suffix) für das
 Main-Profil UND jedes Account-Profil; alle Requests laufen über den lokalen
 Mix-Router. Nutzung: normales Agent-Tool mit `subagent_type: "gpt"` — ein
 Spawn pro Teilaufgabe, parallele Fan-outs ausdrücklich erwünscht. Effort ist
@@ -93,8 +92,8 @@ vornehmen, nirgends duplizieren.
 ### Verbindliche Modell-Deklaration bei jedem Subagent
 
 Jeder Spawn muss das Modell **technisch und explizit** deklarieren, damit Claude
-Codes Agents-Ansicht den echten Modell-Chip (z. B. `[gpt-6-astra]` oder die
-zugehörige `-fast`-Variante) zeigt:
+Codes Agents-Ansicht den echten Modell-Chip (den Namen des Codex-Modells oder
+die zugehörige `-fast`-Variante) zeigt:
 
 - Standard-Aufruf: immer `subagent_type: "gpt"`; in Workflows ausnahmslos
   `agentType: "gpt"`. Den Agent-Typ niemals weglassen und nie nur im Prompt
@@ -104,8 +103,8 @@ zugehörige `-fast`-Variante) zeigt:
   `model: gpt-auto` (= neuestes Codex-Modell, vom Mix-Router aufgelöst) oder
   eine konkrete GPT-ID aus dem Codex-Katalog setzt. Vor dem Spawn prüfen;
   Custom-Prompt und Tool-Grenzen dürfen nicht durch `gpt` ersetzt werden.
-- Standard-Subagent-Modell ist immer das **neueste Codex-Modell** (`auto`,
-  derzeit GPT-6 Astra); eine andere Katalog-ID nur auf ausdrücklichen
+- Standard-Subagent-Modell ist immer das **neueste Codex-Modell** (`auto`);
+  eine andere Katalog-ID nur auf ausdrücklichen
   User-Wunsch. Niemals Haiku verwenden und nie auf ein implizit geerbtes
   Modell zurückfallen — im Zweifel den verwalteten `gpt`-Typ nehmen.
 - Bei Custom-Agent-Definitionen muss `model:` im Frontmatter gesetzt sein; keine
@@ -118,6 +117,10 @@ zugehörige `-fast`-Variante) zeigt:
   Nachweis bleibt das `"model"`-Feld im Agent-Transcript.
 
 ## CLI-Weg (explizit): Codex-Subagents via `whisperm8 agent`
+
+„Codex-Subagent“ ist der Name, unter dem die App diese Hintergrund-Jobs in der
+Seitenleiste zeigt. Gemeint ist ein Job der Codex-CLI, nicht der native
+Subagent eines Chats (Agent-Typ `gpt` oben).
 
 Die OpenAI Codex CLI hat kein Background-Konzept; das whisperm8-CLI ist der
 Supervisor: `whisperm8 agent run` startet einen headless `codex exec`-Lauf,

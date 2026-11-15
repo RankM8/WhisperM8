@@ -25,7 +25,10 @@ whisperm8 chats help          # zeigt alle Befehle; wenn "command not found":
 
 Lesen (immer erlaubt, ohne Rückfrage):
 ```bash
-whisperm8 chats overview [--json]                    # Lagebild, attention-sortiert
+whisperm8 chats snapshot --json                      # Lagebild für Agenten: kompakt, alle Sessions
+whisperm8 chats since --cursor <c> --json            # nur Änderungen seit dem Cursor aus snapshot
+whisperm8 chats overview [--json]                    # Lagebild für Menschen; --json wird bei vielen
+                                                     # Sessions sehr groß, dann snapshot nehmen
 whisperm8 chats list [--project P] [--status S] [--scope active|recent|all] \
                      [--open] [--pinned] [--all] [--limit N] [--json]
                      # höchstens 50 Zeilen (--limit 0 = alle); Kürzungs-Hinweis
@@ -59,12 +62,14 @@ Handeln (App muss laufen — sonst Exit 5). **Vor jeder dieser Aktionen: Regeln 
 ```bash
 whisperm8 chats send <ref> -- "<prompt>"  [--answer] [--no-queue] [--if-status S,S] [--no-submit] [--force]
                                                      # ruht der Chat nicht (arbeitet, Rückfrage, startet,
-                                                     # Entwurf, Limit): vorgemerkt statt Absage („vorgemerkt
+                                                     # Entwurf): vorgemerkt statt Absage („vorgemerkt
                                                      # als Nr. N“, Exit 0); --no-queue = Absage wie früher.
-                                                     # In eine offene Rückfrage NUR mit --answer
+                                                     # In eine offene Rückfrage NUR mit --answer.
+                                                     # Steht der Chat am Nutzungslimit: enqueue nehmen
 whisperm8 chats enqueue <ref> -- "<prompt>"          # Folgeauftrag vormerken (auch bei working)
 whisperm8 chats queue [<ref>]                        # was wartet? (auch bei geschlossener App)
-whisperm8 chats dequeue <ref> <Kurz-ID>… | --all   # stornieren; Kurz-ID aus `chats queue <ref>` (Nummern verschieben sich)
+whisperm8 chats dequeue <ref> <Kurz-ID|Nr>… | --all # stornieren; sicher ist die Kurz-ID aus `chats queue <ref>`
+                                                     # (Nummern verschieben sich, sobald vorn zugestellt wird)
 whisperm8 chats interrupt <ref> [--force] [--clear-input]
                                                      # ein ESC an eine working-Session. --clear-input
                                                      # leert danach den Composer (Ctrl+C) — nutzen, wenn
@@ -91,7 +96,8 @@ whisperm8 chats window list                          # Fenster-Inventar (+ shows
 whisperm8 chats resume <ref> [--prompt "…"]          # geschlossenen Chat wieder hochfahren; mit --prompt
                                                      # (oder -- "…") geht der Auftrag raus, sobald Claudes
                                                      # Eingabefeld steht. Statt `resume` + sofort `send`
-whisperm8 chats new --project <pfad|name> [--provider claude|codex] [--prompt "…"] [--account <profil>]
+whisperm8 chats new --project <pfad|name> [--provider claude|codex|terminal] [--title T] [--prompt "…"]
+                    [--command "…"] [--account <profil>]
                                                      # ohne --account: das in den WhisperM8-Einstellungen
                                                      # (Konten) aktive Claude-Konto; --account main = Hauptkonto.
                                                      # Unbekannt, abgemeldet oder Login abgelaufen → Exit 3
@@ -111,9 +117,8 @@ whisperm8 chats move-account <ref>… --to <profil> --stop-and-resume [--force]
                                                      # Feld "account" ("main" fürs Hauptkonto, null bei Codex)
 whisperm8 chats rename <ref> "<titel>"               # benennt immer um (auch manuelle Titel).
 whisperm8 chats rename <ref> --reset                  # hebt den Namen auf → nativer Titel des CLI (Claudes /rename bzw. generierter Titel, sonst erster Prompt)
-                                                     # Titel-Konvention des Users: Thema (1-2 Worte)
-                                                     # + optional Ausführung (2-5 Worte), z. B.
-                                                     # "Sidebar-Badges: offene Vorgänge (AM)"
+                                                     # Titel-Schema: Skill jarvis, Abschnitt „Benennung“
+                                                     # (z. B. "ABC-16 Fin · Insel: Tastatur-Entwurf")
 whisperm8 chats group <ref> "<gruppe>" | --clear
 whisperm8 chats archive <ref> [--force]              # nie bei working ohne --force
 whisperm8 chats unarchive <ref> [--resume|--open]    # NUR Markierung weg; Start nur via Flag
@@ -150,13 +155,21 @@ findet, ist der Chat WhisperM8 wirklich unbekannt.
 Mehrdeutige Referenz → Exit 3 mit Kandidatenliste. **Zeig dem User die
 Kandidaten, rate nie selbst.**
 
-## Zwei Wege zu einem anderen Chat: nativ zuerst, die CLI als Rückfall
+## Zwei Wege zu einem anderen Chat: die CLI und der native Weg
 
-Standard (WM8-85, Weg B): **Claude-Chats schreiben sich nativ** über Claude
-Codes eigenes `SendMessage`. Das kommt beim Empfänger zwischen zwei
-Arbeitsschritten an (nicht erst nach seinem Turn), lässt eine offene Rückfrage
-an den User unberührt und geht über alle Claude-Konten. Gemessen an Claude Code
-2.1.325: Ein klar formulierter Auftrag wird ausgeführt wie ein getippter.
+**Meldungen an den Supervisor** (fertig, blockiert, Urteil eines Prüfers) gehen
+immer über die CLI: `whisperm8 chats enqueue <Supervisor> -- "…"`. Bei
+unklarem Ausgang (Exit 5 oder 6) nicht wiederholen, erst
+`whisperm8 chats queue <Supervisor>` lesen. Antwortet die CLI gar nicht (App
+nicht erreichbar) und ist der Auftrag dort nicht angekommen, ist der native Weg
+unten der Rückfall. Eine Entscheidung des Users hält der Chat zusätzlich am
+Ticket fest (`whisperm8 tickets decide`).
+
+Für Rückfragen und Aufträge an laufende Claude-Chats gibt es außerdem den
+**nativen Weg** über Claude Codes eigenes `SendMessage`. Das kommt beim
+Empfänger zwischen zwei Arbeitsschritten an (nicht erst nach seinem Turn),
+lässt eine offene Rückfrage an den User unberührt und geht über alle
+Claude-Konten. Ein klar formulierter Auftrag wird ausgeführt wie ein getippter.
 
 **Adresse holen** — `ListAgents` sieht nur das eigene Konto, die Adresse aller
 Konten liefert die App:
@@ -180,15 +193,15 @@ Prozess läuft; nach einem Neustart des Chats neu holen, nicht merken. Wenn du
 nur wissen willst, wann der Chat fertig ist: `notify_when_idle: true`.
 
 **Nativ nehmen für:**
-- Meldungen und Rückfragen, auch **Fertig- und Blockiert-Meldungen an den
-  Supervisor** (sie erreichen ihn mitten in seiner Arbeit statt nach seinem
-  Turn, WM8-71).
+- Rückfragen an einen laufenden Claude-Chat.
 - Aufträge an einen **ruhenden** Claude-Chat.
+- Meldungen an den Supervisor nur als Rückfall (siehe oben).
 
 **Die CLI (`send`/`enqueue`) nehmen für:**
+- **Meldungen an den Supervisor**: `enqueue`.
 - Aufträge an einen **arbeitenden** Chat: `enqueue` bzw. `send` (merkt selbst
   vor). Nativ mischte sich der Auftrag in seine laufende Arbeit.
-- **Alles, was eine Entscheidung des Users trägt** („Giuliano hat entschieden“,
+- **Alles, was eine Entscheidung des Users trägt** („der User hat entschieden“,
   ein Go zum Merge, eine stehende Freigabe). Claude Code kennzeichnet native
   Nachrichten ausdrücklich als Wort eines Kollegen, das nie als Zustimmung des
   Users gilt.
@@ -246,7 +259,11 @@ wieder hochfahren macht `resume` (setzt Auto-Launch + Fokus → App startet mit
   „weg damit" → `archive` (mit Bestätigung).
 - **Fertig heißt `close --stop`, nicht Archiv.** „Der ist fertig", „können
   wir den beenden?", „schließ den Tab" für einen fertigen Chat → Standard ist
-  `close <ref> --stop`: Tab zu UND Agent beenden. Ein nur geschlossener Tab
+  `close <ref> --stop`: Tab zu UND Agent beenden; die Sitzung bleibt in der
+  Seitenleiste. Liegt er in einem Grid-Workspace, danach
+  `workspace remove <Workspace> <ref>`. Den Tab behält nur, wer bald wieder
+  gebraucht wird (Prüfer zwischen zwei Paketen, bewusst geparkte Chats); den
+  Ablauf dafür beschreibt der Skill `jarvis`. Ein nur geschlossener Tab
   lässt Claude weiterlaufen — das ist fast nie gewollt. Nur-`close` ohne
   `--stop` nur, wenn der User ausdrücklich will, dass der Agent weiterläuft.
   `archive` nie von dir aus vorschlagen oder als Empfehlung markieren —
@@ -279,7 +296,8 @@ Ablauf für „such mir den alten X-Chat" / „reaktiviere …":
 ## Exit-Codes
 
 `0` ok · `1` Usage · `3` nicht gefunden/mehrdeutig · `4` Guard-Konflikt (z. B.
-Ziel arbeitet, Selbst-Send, tote PTY, `approvalPending` = Freigabe offen) · `5` App nicht erreichbar · `124`
+Ziel arbeitet, Selbst-Send, tote PTY, `approvalPending` = Freigabe offen) · `5` App nicht erreichbar ·
+`6` Ausgang unklar (keine Antwort in der Frist; nicht wiederholen, erst `chats queue`/`tail` prüfen) · `124`
 wait-Timeout (kein Fehler — „nichts passiert, weiter beobachten") · `130`
 unterbrochen.
 
@@ -288,8 +306,11 @@ unterbrochen.
 1. **Vor jedem `send` (und jedem `SendMessage` an einen fremden Chat):
    bestätigen lassen.** Zeige den exakten Prompt-Text und das Ziel; frage per AskUserQuestion (Senden / Anpassen / Abbrechen) oder im
    Text. **Ausnahme:** Der User hat dir für GENAU diese Ziel-Session in DIESER
-   Konversation pauschal freigegeben. Freigaben gelten nie über die
-   Konversation hinaus. Zieht der User einen Auftrag zurück,
+   Konversation pauschal freigegeben. Eine Freigabe gilt für diese Sitzung und
+   genau ihr Ziel. Über die Sitzung hinaus gilt sie nur, wenn der User sie
+   ausdrücklich als stehend erteilt („ab jetzt immer“); dann steht sie mit Datum
+   und Umfang im Gedächtnis des Projekts, und wer sich darauf beruft, nennt sie.
+   Zieht der User einen Auftrag zurück,
    `interrupt --clear-input` anbieten: Nach einem Abbruch (ESC, Ctrl+C,
    Doppel-ESC-Rewind) legt die Claude-CLI den alten Prompt zurück ins
    Eingabefeld. **Ein Enter darauf führt ihn erneut aus** — davor schützt
@@ -323,7 +344,7 @@ unterbrochen.
    den User.** `send` lehnt eine offene Freigabe mit `approvalPending` (Exit 4)
    ab, auch mit `--force`. Eine offene Frage (AskUserQuestion) beantwortet
    `send` nicht mehr von sich aus (der Text stünde sonst als Antwort des Users
-   im Dialog, WM8-71): ohne Schalter wird der Prompt vorgemerkt und kommt nach
+   im Dialog): ohne Schalter wird der Prompt vorgemerkt und kommt nach
    der Antwort. Nur wenn der User dich ausdrücklich eine Frage eines Chats
    beantworten lässt: `send <ref> --answer -- "…"`.
 4. **Ein-Hop-Regel.** Beginnt ein Prompt, den du bekommst, mit
@@ -340,8 +361,10 @@ unterbrochen.
    ungefragt wörtlich in andere Projekt-Kontexte kopieren.
 6. **Aufräum-Runden:** eine Batch-Bestätigung per AskUserQuestion mit
    Multi-Select (Vorher→Nachher-Liste, Archives markiert), nicht 15 Einzelfragen.
-7. **Berichte kompakt:** Lagebild ≤ 5 Zeilen, Namen als `projekt/titel`, nie
-   UUIDs; „seit"-Angaben menschlich („seit 4 min").
+7. **Berichte kompakt:** Lagebild ≤ 5 Zeilen, Namen als `projekt/titel`, keine
+   vollen IDs (eine Kurz-Ref ist in Ordnung); „seit"-Angaben menschlich
+   („seit 4 min"). Das gilt für den Gelegenheits-Gebrauch; ein Supervisor im
+   Dauerbetrieb meldet nach dem Lagebild-Schema des Skills `jarvis`.
 8. **Fehler sauber erklären:** `send` meldet „vorgemerkt als Nr. N“, wenn der
    Chat nicht ruht — das ist kein Fehler, der Auftrag kommt beim nächsten
    Turn-Ende. Exit 4 → Konflikt benennen + Optionen; Exit 5 → „WhisperM8-App starten", Lese-Befehle gehen
@@ -351,7 +374,7 @@ unterbrochen.
    ist und das Eingabefeld leer); `--force` nur nach Rückfrage beim User.
    Die Queue zeigt solche Aufträge als „Entwurf im Eingabefeld". Ein Chat,
    der nur auf Hintergrundarbeit (Subagents, Background-Tasks) wartet, gilt
-   weiter als `working` (LR-AK-037, offen) — dann `enqueue` statt warten.
+   weiter als `working` — dann `enqueue` statt warten.
 9. **Nie Sichtbarkeit behaupten.** Was der User auf dem Bildschirm sieht,
    weiß die CLI NICHT. `workspace list --json` sagt nur, welchem Fenster ein
    Workspace zugeordnet ist (`hostWindowID`) und ob dieses Fenster das Grid
@@ -371,8 +394,8 @@ unterbrochen.
    **Nach Exit 5 oder 6 nie blind wiederholen.** Exit 6 („Ausgang unklar“)
    heißt: angefragt, aber keine Antwort in der Frist; die App hat es vielleicht
    schon ausgeführt. Erst `chats queue <ref>` bzw. `tail <ref>` prüfen, erst
-   dann neu senden, und nie in einer Schleife (Vorfall 15.11.: sechsmal
-   dieselbe Meldung beim Supervisor). Seit WM8-85 führt die App `send`,
+   dann neu senden, und nie in einer Schleife (sonst kommt dieselbe Meldung
+   mehrfach an). Die App führt `send`,
    `enqueue`, `submit`, `interrupt`, `new`, `resume`, `close --stop`,
    `move-account` und Board-Einträge nicht mehr aus, wenn deren Frist schon
    abgelaufen ist; bei anderen Befehlen ist das nicht sicher.
@@ -402,22 +425,17 @@ unterbrochen.
 
 Nur nach explizitem Auftrag. **Für den dauerhaften Betrieb den Skill `jarvis`
 mitladen** — er trägt die Arbeitskonventionen des Users (Chat-Benennung,
-Kommunikation, Aktiv-Workspace-Pflege, Delegations- und Widerrufs-Regeln,
-Verifikationspflicht, Sammel-Branch-Koordination). Dieser Skill hier bleibt
-die Mechanik-Referenz. Grundrhythmus ohne Jarvis-Modus:
+Kommunikation, Aktiv-Workspace-Pflege, Board und Wecken, Delegations- und
+Widerrufs-Regeln, Verifikationspflicht). Dieser Skill hier bleibt die
+Mechanik-Referenz. Ohne Jarvis-Modus:
 
-1. **Lagebild:** `overview --json` → kompakt berichten (needsYou zuerst).
-2. **Triage:** für jede needsYou-Session `tail --turns 1` → was will sie? →
-   melden + konkreten Vorschlag (antworten? öffnen? ignorieren?).
-3. **Warten:** `wait --until attention --since <maxRevision> --timeout 1800 --json`.
-   **Wichtig:** Der Bash-Tool-Timeout muss ÜBER dem wait-Timeout liegen (z. B.
-   wait 1800 s → Bash-Timeout ≥ 1810 s), sonst killt das Tool das wait.
-   Führe lange `wait`-Aufrufe als Background-Bash-Task aus.
-4. **Ereignis bewerten:** awaitingInput → Triage wie 2; idle/fertig → `tail`,
-   Ergebnis in 2 Sätzen melden; errored → `tail` + Fehler zusammenfassen.
-5. **Weiter** zu 3. Exit 124 (Timeout) → „alles ruhig, N arbeiten" + zurück zu
-   3. Der Loop läuft, bis der User stoppt (oder eine neue Nachricht schickt —
-   die unterbricht ihn ohnehin).
+1. **Lagebild:** `snapshot --json` → kompakt berichten (needsYou zuerst);
+   für eine needsYou-Session `tail --turns 1` und einen konkreten Vorschlag.
+2. **Änderungen:** `since --cursor <c> --json` mit dem Cursor aus `snapshot`
+   (`gap: true` heißt: neu `snapshot` ziehen). Lange Warte-Aufrufe
+   (`wait --timeout …`) als Background-Bash, mit einem Bash-Timeout über dem
+   wait-Timeout.
+3. **Dauerbetrieb:** Skill `jarvis` (dort weckt das Board).
 
 Auch im Supervisor-Modus gilt Regel 1 (Send-Bestätigung) — außer der User hat
 für eine konkrete Ziel-Session pauschal freigegeben. Erwähne im Bericht, wenn
@@ -425,7 +443,7 @@ du eine Freigabe genutzt hast („habe direkt geantwortet, wie freigegeben").
 
 ## Typische Abläufe
 
-- **„Was läuft?"** → `overview --json` → 3–5 Zeilen Zusammenfassung.
+- **„Was läuft?"** → `snapshot --json` → 3–5 Zeilen Zusammenfassung.
 - **„Was hat X gemacht?"** → `tail X --turns 2` → 2 Sätze + ggf. offene Frage
   der Session.
 - **„Antworte X: …"** → Prompt formulieren → **bestätigen lassen** → `send` →
@@ -451,37 +469,26 @@ du eine Freigabe genutzt hast („habe direkt geantwortet, wie freigegeben").
   Vorher→Nachher, Archives markiert) → EINE Batch-Bestätigung (Multi-Select) →
   ausgewählte Aktionen ausführen → Ergebnis melden. Tabs nur zumachen =
   `close`; `archive` nur, wenn die Session wirklich weg soll.
-- **„Zieh alle aktiven Chats auf Konto ai3"** → `list --scope active --json`
-  → Claude-Chats sammeln → `move-account <refs…> --to ai3 --dry-run` →
+- **„Zieh alle aktiven Chats auf Konto zweit"** → `list --scope active --json`
+  → Claude-Chats sammeln → `move-account <refs…> --to zweit --dry-run` →
   Vorschau zeigen (umziehbar / übersprungen mit Grund; bei „läuft gerade"
   sagen, ob `--stop-and-resume` sie mitnähme, nach dem Turn vormerkte
   (arbeitet, Entwurf im Eingabefeld) oder was sie blockiert (eigene Session,
   Ordner im Zielkonto nicht freigegeben) → bestätigen lassen →
-  `move-account <refs…> --to ai3` (bzw. mit `--stop-and-resume`, wenn der
+  `move-account <refs…> --to zweit` (bzw. mit `--stop-and-resume`, wenn der
   User laufende Chats mitnehmen will). Danach melden: N umgezogen, K
   vorgemerkt (wechseln nach dem Turn), M übersprungen (Grund), Neustarts
   starten beim Anzeigen des Tabs;
   Rückgängig geht in der App („Letzten Kontowechsel rückgängig machen").
   Hintergrund-Agenten bleiben immer im Haupt-Account.
-- **„Unterbrich X"** → bestätigen lassen → `interrupt X --if-status working`
-  (Default-Guard; ohne `--force` nur bei laufender Session).
+- **„Unterbrich X"** → bestätigen lassen → `interrupt X` (wirkt ohne
+  `--force` nur bei einer arbeitenden Session).
 
-## Empfohlene Permission-Allowlist
+## Freigabeliste für Lese-Befehle
 
-Lese-Befehle ohne Prompt freigeben, Mutationen bewusst nicht:
-
-```json
-{
-  "permissions": {
-    "allow": [
-      "Bash(whisperm8 chats list:*)",
-      "Bash(whisperm8 chats overview:*)",
-      "Bash(whisperm8 chats show:*)",
-      "Bash(whisperm8 chats tail:*)",
-      "Bash(whisperm8 chats wait:*)",
-      "Bash(whisperm8 chats audit:*)",
-      "Bash(whisperm8 chats archived:*)"
-    ]
-  }
-}
-```
+Ohne Rückfrage freigeben lassen sich die Lese-Befehle (`list`, `overview`,
+`snapshot`, `since`, `show`, `tail`, `wait`, `queue`, `address`, `audit`,
+`archived`, `duplicates`), etwa als `Bash(whisperm8 chats snapshot:*)` in den
+Claude-Code-Einstellungen. Mutationen bewusst nicht freigeben, auch nicht
+`board`: Derselbe Befehlsanfang ändert mit `set` oder `clear` das Board. Die fertige Liste steht in der Doku der
+CLI (`agent-chats-cli.md`, Abschnitt „Skill“).
