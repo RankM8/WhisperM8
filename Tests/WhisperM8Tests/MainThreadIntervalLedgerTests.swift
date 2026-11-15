@@ -238,7 +238,8 @@ final class MainThreadIntervalLedgerTests: XCTestCase {
         waiting.end(token)
         XCTAssertTrue(ledger.entries(overlapping: 0, 1_000).isEmpty)
         for budget in [PerfBudgets.sidebarStatusPollLatency, PerfBudgets.gridBuild,
-                       PerfBudgets.gridFocusSwitch, PerfBudgets.unifiedPillMorph] {
+                       PerfBudgets.gridFocusSwitch, PerfBudgets.unifiedPillMorph,
+                       PerfBudgets.recordingStart, PerfBudgets.recordingStop, PerfBudgets.ticketsFetch] {
             XCTAssertTrue(budget.measuresWaiting, "\(budget.name)")
         }
         XCTAssertFalse(PerfBudgets.chatSwitch.measuresWaiting)
