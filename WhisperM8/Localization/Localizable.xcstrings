@@ -651,6 +651,16 @@
         }
       }
     },
+    "%lld in workspace “%@”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld im Workspace „%@“"
+          }
+        }
+      }
+    },
     "%lld just finished": {
       "localizations": {
         "de": {
@@ -787,6 +797,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld davon laufen noch und werden beendet."
+          }
+        }
+      }
+    },
+    "%lld stopped": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld gestoppt"
           }
         }
       }
@@ -6047,6 +6067,46 @@
           "stringUnit": {
             "state": "translated",
             "value": "Losgelöster Job in einem isolierten Git-Worktree (Branch subagent/<id>)"
+          }
+        }
+      }
+    },
+    "Hide stopped chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gestoppte Chats ausblenden"
+          }
+        }
+      }
+    },
+    "No running chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ohne laufende Chats"
+          }
+        }
+      }
+    },
+    "Show stopped chats": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gestoppte Chats zeigen"
+          }
+        }
+      }
+    },
+    "These chats are shown above in the workspace": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Chats stehen oben im Workspace"
           }
         }
       }

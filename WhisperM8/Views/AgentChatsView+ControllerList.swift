@@ -22,7 +22,8 @@ extension AgentChatsView {
             query: searchText,
             flatVisibleLimit: flatVisibleSessionLimit,
             selectedSessionID: selectedSessionID,
-            globalOpenTabIDs: windowStore.allWindowOpenTabIDs
+            globalOpenTabIDs: windowStore.allWindowOpenTabIDs,
+            gridWorkspaces: windowStore.gridWorkspaces
         )
         let isSearching = !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let sessionsByID = Dictionary(workspace.sessions.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -45,16 +46,19 @@ extension AgentChatsView {
         if sidebarLayout == .flat {
             input.flatChats = snapshot.visibleFlatSessions.map { .init(id: $0.id, projectID: $0.projectID) }
         } else {
-            let limit = ProjectChatGroup.initialVisibleSessionLimit(for: effectiveScope)
             input.projects = snapshot.visibleProjects.map { project in
-                let sessions = snapshot.sessionsByProject[project.id] ?? []
-                let visible = ProjectChatGroup.visibleSlice(
-                    of: sessions, limit: limit, mustIncludeID: selectedSessionID
-                ).visible
+                // Seitenleiste A (WM8-80): laufende, dann gestoppte, so weit
+                // die Faltzeile „N gestoppt“ sie ohne Klick zeigt.
+                let visible = ProjectChatGroup.defaultVisibleRowIDs(
+                    blocks: snapshot.projectBlocks[project.id] ?? SidebarProjectBlocks(),
+                    scope: effectiveScope,
+                    isSearching: isSearching,
+                    selectedSessionID: selectedSessionID
+                )
                 return AgentChatsListRowsBuilder.Project(
                     id: project.id,
                     isExpanded: expandedProjectIDs.contains(project.id) || !searchText.isEmpty,
-                    visibleChats: visible.map(\.id),
+                    visibleChats: visible,
                     activeSessionIDs: snapshot.activeSessionIDsByProject[project.id] ?? []
                 )
             }

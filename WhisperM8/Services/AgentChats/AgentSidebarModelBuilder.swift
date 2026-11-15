@@ -110,7 +110,14 @@ struct SidebarScopeCounts: Equatable {
 struct AgentSidebarSnapshot {
     var projectByID: [UUID: AgentProject]
     var subagentChildrenByParent: [UUID: [AgentChatSession]]
+    /// Zeilen je Projektgruppe in Anzeige-Reihenfolge: laufende vor
+    /// gestoppten, ohne Chats, die oben in einem Workspace stehen (WM8-80).
     var sessionsByProject: [UUID: [AgentChatSession]]
+    /// Seitenleiste A je Projekt: Workspace-Hinweise, laufende, gestoppte.
+    var projectBlocks: [UUID: SidebarProjectBlocks] = [:]
+    /// Index in `visibleProjects`, ab dem „Ohne laufende Chats“ beginnt;
+    /// `nil`, wenn es nur einen der beiden Blöcke gibt.
+    var firstCalmProjectIndex: Int?
     /// AKTIVE Root-Chats (laufend ∪ offener Tab, inkl. Parents laufender
     /// Subagent-Kinder) pro Projekt — scope-, fenster- UND pin-unabhängig:
     /// Tabs zählen über ALLE Fenster (`globalOpenTabIDs`), gepinnte aktive
@@ -155,7 +162,8 @@ struct AgentSidebarModelBuilder {
         query: String,
         flatVisibleLimit: Int,
         selectedSessionID: UUID?,
-        globalOpenTabIDs: Set<UUID>? = nil
+        globalOpenTabIDs: Set<UUID>? = nil,
+        gridWorkspaces: [AgentGridWorkspace] = []
     ) -> AgentSidebarSnapshot {
         let projectParents = AgentProjectDisplay.parentByProjectID(projects: workspace.projects)
         let manualProjects: [AgentProject]
@@ -281,6 +289,8 @@ struct AgentSidebarModelBuilder {
         let pinnedOrderIDs = visiblePinned.map(\.id)
 
         var sessionsByProject: [UUID: [AgentChatSession]] = [:]
+        var projectBlocks: [UUID: SidebarProjectBlocks] = [:]
+        var firstCalmProjectIndex: Int?
         var visibleProjects: [AgentProject] = []
         var visibleFlatSessions: [AgentChatSession] = []
         var visibleFlatOrderIDs: [UUID] = []
@@ -290,14 +300,30 @@ struct AgentSidebarModelBuilder {
 
         switch layout {
         case .grouped:
-            sessionsByProject = grouped.mapValues { AgentSessionStore.sortedSessions($0) }
-            visibleProjects = Self.visibleProjects(
+            // Seitenleiste A (WM8-80): laufende vor gestoppten, Workspace-
+            // Chats nur als Hinweis, Projekte mit Laufendem zuerst.
+            let sortedByProject = grouped.mapValues { AgentSessionStore.sortedSessions($0) }
+            let workspaceBySession = AgentTabOrder.workspaceBySession(gridWorkspaces: gridWorkspaces)
+            for (projectID, sessions) in sortedByProject {
+                let blocks = AgentSidebarSorting.blocks(
+                    sortedSessions: sessions,
+                    runningSessionIDs: effectiveScope.runningSessionIDs,
+                    workspaceBySession: workspaceBySession,
+                    workspaces: gridWorkspaces
+                )
+                projectBlocks[projectID] = blocks
+                sessionsByProject[projectID] = blocks.rows
+            }
+            let candidates = Self.visibleProjects(
                 manualProjects: manualProjects,
-                sessionsByProject: sessionsByProject,
+                sessionsByProject: sortedByProject,
                 query: trimmedQuery
             ).filter {
-                scope.scope == .all || !(sessionsByProject[$0.id] ?? []).isEmpty
+                scope.scope == .all || !(sortedByProject[$0.id] ?? []).isEmpty
             }
+            let ordered = AgentSidebarSorting.orderedProjects(candidates, blocks: projectBlocks)
+            visibleProjects = ordered.projects
+            firstCalmProjectIndex = ordered.firstCalmIndex
             chatCount = visibleProjects.reduce(0) {
                 $0 + (sessionsByProject[$1.id]?.count ?? 0)
             }
@@ -325,6 +351,8 @@ struct AgentSidebarModelBuilder {
             projectByID: projectByID,
             subagentChildrenByParent: subagents.byParentLocalID,
             sessionsByProject: sessionsByProject,
+            projectBlocks: projectBlocks,
+            firstCalmProjectIndex: firstCalmProjectIndex,
             activeSessionIDsByProject: activeSessionIDsByProject,
             visibleProjects: visibleProjects,
             worktreesByProject: AgentProjectDisplay.worktreesByParent(projects: workspace.projects, parents: projectParents),

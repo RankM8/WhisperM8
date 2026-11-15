@@ -3,7 +3,8 @@ import SwiftUI
 
 struct ProjectChatGroup: View {
     let project: AgentProject
-    let sessions: [AgentChatSession]
+    /// Seitenleiste A (WM8-80): Workspace-Hinweise, laufende, gestoppte Chats.
+    let blocks: SidebarProjectBlocks
     let isExpanded: Bool
     let selectedSessionID: UUID?
     /// Mehrfach-Auswahl (geteilt mit der Tab-Leiste) — Cmd/Shift-Klick.
@@ -80,8 +81,18 @@ struct ProjectChatGroup: View {
     var onDeleteProject: (AgentProject) -> Void
     var onSessionDrop: (DraggableSession, _ beforeSessionID: UUID?, _ targetProjectID: UUID) -> Void
     var onProjectDrop: (DraggableProject, _ beforeProjectID: UUID?) -> Void
+    /// Klick auf einen Workspace-Hinweis: dorthin springen.
+    var onJumpToWorkspace: (UUID) -> Void = { _ in }
+    /// Eine Suche öffnet die Faltzeile „N gestoppt“, sonst wären Treffer
+    /// unsichtbar.
+    var isSearching = false
+
+    /// Zeilen der Gruppe in Anzeige-Reihenfolge (laufend vor gestoppt).
+    private var sessions: [AgentChatSession] { blocks.rows }
 
     @State private var isHeaderHovered = false
+    /// Klick auf „N gestoppt“; `nil` = Vorgabe des Scopes.
+    @State private var stoppedFoldOverride: Bool?
     @State private var isSessionDragOver = false
     @State private var isProjectDragOver = false
     /// Sidebar-Drop-Indikator: Session-Row, über der die Einfügelinie steht
@@ -128,55 +139,31 @@ struct ProjectChatGroup: View {
             groupHeader
                 .controllerListRow(.project(project.id))
 
-            if isExpanded && !sessions.isEmpty {
-                let slice = Self.visibleSlice(of: sessions, limit: visibleSessionLimit, mustIncludeID: revealTargetID)
+            if isExpanded && (!sessions.isEmpty || !blocks.workspaceHints.isEmpty) {
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(slice.visible) { session in
-                        // Split EINMAL pro Parent — speist den Fortschritts-Chip
-                        // (Segment-Bruch) UND die Kinder-Aufteilung.
-                        let children = subagentChildrenByParent[session.id] ?? []
-                        let split = children.isEmpty ? nil : AgentSidebarModelBuilder.subagentChildSplit(
-                            children: children,
-                            erroredIDs: erroredSubagentSessionIDs,
-                            workingIDs: workingSubagentSessionIDs,
-                            unreadIDs: unreadSubagentSessionIDs,
-                            selectedID: selectedSessionID
-                        )
-                        sessionRow(session, split: split)
-                            .controllerListRow(.chat(session.id))
-                        // Variante D (revidiert 2026-07-09): das Chip-Chevron
-                        // klappt ALLE Kinder zu — auch laufende. Zugeklappt
-                        // bleibt nur der Chip; dass noch etwas arbeitet, zeigt
-                        // dort der pulsierende Punkt. Ausgeklappt: aktive
-                        // Kinder (fehlgeschlagen + laufend) direkt, alles
-                        // Fertige hinter der Welle-Zeile (zweite Stufe, lokaler
-                        // State). Ein selektiertes Kind erzwingt die Expansion
-                        // (Reveal, z.B. nach Notification-Klick).
-                        if let split {
-                            let isTopExpanded = expandedSubagentParentIDs.contains(session.id)
-                                || children.contains { $0.id == selectedSessionID }
-                            if isTopExpanded {
-                                ForEach(split.visible) { child in
-                                    subagentChildRow(child)
-                                }
-                                if !split.hidden.isEmpty {
-                                    let finishedOpen = finishedExpandedParentIDs.contains(session.id)
-                                    subagentFooterRow(
-                                        parentID: session.id,
-                                        split: split,
-                                        isExpanded: finishedOpen
-                                    )
-                                    if finishedOpen {
-                                        ForEach(split.hidden) { child in
-                                            subagentChildRow(child)
-                                        }
-                                    }
-                                }
-                            }
+                    ForEach(blocks.workspaceHints) { hint in
+                        SidebarWorkspaceHintRow(hint: hint, statusStore: statusStore) {
+                            onJumpToWorkspace(hint.workspaceID)
                         }
                     }
-                    if slice.hiddenCount > 0 {
-                        showMoreRow(hiddenCount: slice.hiddenCount)
+                    ForEach(blocks.running) { session in
+                        sessionRowWithChildren(session)
+                    }
+                    if !blocks.stopped.isEmpty {
+                        let foldOpen = isStoppedFoldOpen
+                        SidebarStoppedFoldRow(count: blocks.stopped.count, isOpen: foldOpen) {
+                            stoppedFoldOverride = !foldOpen
+                        }
+                        if foldOpen {
+                            let slice = Self.visibleSlice(
+                                of: blocks.stopped, limit: visibleSessionLimit, mustIncludeID: revealTargetID)
+                            ForEach(slice.visible) { session in
+                                sessionRowWithChildren(session)
+                            }
+                            if slice.hiddenCount > 0 {
+                                showMoreRow(hiddenCount: slice.hiddenCount)
+                            }
+                        }
                     }
                     Color.clear
                         .frame(height: 8)
@@ -202,7 +189,88 @@ struct ProjectChatGroup: View {
         }
         // Wie `flatVisibleSessionLimit`: ein Scope-Wechsel startet wieder beim
         // Startwert des neuen Scopes.
-        .onChange(of: sidebarScope) { _, _ in expandedVisibleSessionLimit = nil }
+        .onChange(of: sidebarScope) { _, _ in
+            expandedVisibleSessionLimit = nil
+            stoppedFoldOverride = nil
+        }
+    }
+
+    /// Eine Chat-Zeile samt ihren Subagent-Kindern.
+    @ViewBuilder
+    private func sessionRowWithChildren(_ session: AgentChatSession) -> some View {
+        // Split EINMAL pro Parent — speist den Fortschritts-Chip
+        // (Segment-Bruch) UND die Kinder-Aufteilung.
+        let children = subagentChildrenByParent[session.id] ?? []
+        let split = children.isEmpty ? nil : AgentSidebarModelBuilder.subagentChildSplit(
+            children: children,
+            erroredIDs: erroredSubagentSessionIDs,
+            workingIDs: workingSubagentSessionIDs,
+            unreadIDs: unreadSubagentSessionIDs,
+            selectedID: selectedSessionID
+        )
+        sessionRow(session, split: split)
+            .controllerListRow(.chat(session.id))
+        // Variante D (revidiert 2026-07-09): das Chip-Chevron
+        // klappt ALLE Kinder zu — auch laufende. Zugeklappt
+        // bleibt nur der Chip; dass noch etwas arbeitet, zeigt
+        // dort der pulsierende Punkt. Ausgeklappt: aktive
+        // Kinder (fehlgeschlagen + laufend) direkt, alles
+        // Fertige hinter der Welle-Zeile (zweite Stufe, lokaler
+        // State). Ein selektiertes Kind erzwingt die Expansion
+        // (Reveal, z.B. nach Notification-Klick).
+        if let split {
+            let isTopExpanded = expandedSubagentParentIDs.contains(session.id)
+                || children.contains { $0.id == selectedSessionID }
+            if isTopExpanded {
+                ForEach(split.visible) { child in
+                    subagentChildRow(child)
+                }
+                if !split.hidden.isEmpty {
+                    let finishedOpen = finishedExpandedParentIDs.contains(session.id)
+                    subagentFooterRow(
+                        parentID: session.id,
+                        split: split,
+                        isExpanded: finishedOpen
+                    )
+                    if finishedOpen {
+                        ForEach(split.hidden) { child in
+                            subagentChildRow(child)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var isStoppedFoldOpen: Bool {
+        AgentSidebarSorting.isStoppedFoldOpen(
+            scope: sidebarScope,
+            override: stoppedFoldOverride,
+            isSearching: isSearching,
+            containsSelection: revealTargetID.map { id in blocks.stopped.contains { $0.id == id } } ?? false
+        )
+    }
+
+    /// Zeilen, die die Gruppe ohne Klicks zeigt (Faltzeile und „N weitere“ in
+    /// ihrer Vorgabe) — für die Navigation ohne Maus, die den lokalen Zustand
+    /// der Gruppe nicht kennt.
+    static func defaultVisibleRowIDs(
+        blocks: SidebarProjectBlocks,
+        scope: SidebarScope,
+        isSearching: Bool,
+        selectedSessionID: UUID?
+    ) -> [UUID] {
+        let selectionIsStopped = selectedSessionID.map { id in blocks.stopped.contains { $0.id == id } } ?? false
+        let foldOpen = AgentSidebarSorting.isStoppedFoldOpen(
+            scope: scope, override: nil, isSearching: isSearching, containsSelection: selectionIsStopped)
+        let stopped = foldOpen
+            ? Array(visibleSlice(
+                of: blocks.stopped,
+                limit: initialVisibleSessionLimit(for: scope),
+                mustIncludeID: selectedSessionID
+            ).visible)
+            : []
+        return (blocks.running + stopped).map(\.id)
     }
 
     /// Row, die trotz Row-Limit sichtbar sein muss: die selektierte Session

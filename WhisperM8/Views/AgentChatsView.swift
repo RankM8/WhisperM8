@@ -244,7 +244,7 @@ struct AgentChatsView: View {
     /// aktualisiert, damit SwiftUI Re-Renders triggert. Wir koennen das nicht
     /// ueber @Observable machen weil autoNamer lazy-init in einem optionalen
     /// State lebt.
-    @State private var autoRenamingSessionIDs: Set<UUID> = []
+    @State var autoRenamingSessionIDs: Set<UUID> = []
     /// Pending ambiguous-rebind-Picker. `nil` solange keine
     /// Mehrdeutigkeit erkannt wurde.
     @State private var pendingAmbiguousRebind: AmbiguousRebindRequest?
@@ -1254,7 +1254,8 @@ struct AgentChatsView: View {
                     selectedSessionID: selectedSessionID,
                     // Projekt-View-Aktivmenge: Tabs ALLER Fenster — die
                     // fensterlokale Sicht speist nur die Sidebar-Listen.
-                    globalOpenTabIDs: windowStore.allWindowOpenTabIDs
+                    globalOpenTabIDs: windowStore.allWindowOpenTabIDs,
+                    gridWorkspaces: windowStore.gridWorkspaces
                 )
             }
             snapshot = builtSnapshot
@@ -1434,73 +1435,13 @@ struct AgentChatsView: View {
                             .buttonStyle(.plain)
                         }
                     } else if showChatList {
-                    ForEach(snapshot.visibleProjects) { project in
-                        let projectSessions = snapshot.sessionsByProject[project.id] ?? []
-                        ProjectChatGroup(
-                            project: project,
-                            sessions: projectSessions,
-                            isExpanded: expandedProjectIDs.contains(project.id) || !searchText.isEmpty,
-                            selectedSessionID: selectedSessionID,
-                            multiSelection: multiSelection,
+                        sidebarProjectGroups(
+                            snapshot: snapshot,
                             openTabIDs: openTabIDSet,
-                            onSelectProject: {
-                                selectProject(project.id)
-                            },
-                            onToggleExpanded: {
-                                toggleProject(project.id)
-                            },
-                            onSelectSession: { sessionID in
-                                handleSidebarSessionClick(
-                                    sessionID,
-                                    project: project,
-                                    orderedSessionIDs: projectSessions.map(\.id)
-                                )
-                            },
-                            onNewChat: { target in
-                                selectedProjectID = target.id; expandedProjectIDs.insert(project.id)
-                                createDefaultSession()
-                            }, worktreeProjects: snapshot.worktreesByProject[project.id] ?? [],
-                            canOpenAsWorkspace: !(snapshot.activeSessionIDsByProject[project.id]?.isEmpty ?? true),
-                            isWorkspaceOpen: isGridActive
-                                && activeGridWorkspaceEntity?.sourceProjectID == project.id,
-                            workspaceOccupancyLabel: projectViewOccupancyLabel(
-                                for: project,
-                                activeCount: snapshot.activeSessionIDsByProject[project.id]?.count ?? 0
-                            ),
-                            onOpenAsWorkspace: {
-                                openProjectAsWorkspace(
-                                    project,
-                                    activeSessionIDs: snapshot.activeSessionIDsByProject[project.id] ?? []
-                                )
-                            },
-                            onCloseSession: { closeSelectionFromSidebar(forID: $0.id) },
-                            sidebarScope: effectiveScope,
-                            onRename: renameSession,
-                            sessionMenu: { AnyView(sessionContextMenu($0, context: .sidebarRow)) },
-                            subagentChildMenu: { AnyView(sessionContextMenu($0, context: .subagentChild)) },
-                            statusStore: runtimeStatusStore,
-                            autoRenamingSessionIDs: autoRenamingSessionIDs,
-                            missingTranscriptSessionIDs: missingTranscriptIDs,
-                            subagentChildrenByParent: snapshot.subagentChildrenByParent,
-                            workingSubagentSessionIDs: workingSubagentIDs,
-                            erroredSubagentSessionIDs: erroredSubagentIDs,
-                            unreadSubagentSessionIDs: windowStore.unreadSubagentSessionIDs,
-                            expandedSubagentParentIDs: windowStore.expandedSubagentParentIDs,
-                            onToggleSubagentChildren: { windowStore.toggleSubagentChildren($0) },
-                            onRenameProjectRequest: { beginRenameProject($0) },
-                            onSetProjectColor: setProjectColor,
-                            onChooseProjectIcon: { chooseProjectIcon($0) },
-                            onAutoDetectProjectIcon: { reAutoDetectProjectIcon($0) },
-                            onClearProjectIcon: { clearProjectIcon($0) },
-                            onDeleteProject: { projectPendingDeletion = $0 },
-                            onSessionDrop: { dropped, beforeID, targetProjectID in
-                                dropSession(dropped, in: targetProjectID, beforeSessionID: beforeID)
-                            },
-                            onProjectDrop: { dropped, beforeID in
-                                dropProject(dropped, beforeProjectID: beforeID)
-                            }
+                            workingSubagentIDs: workingSubagentIDs,
+                            erroredSubagentIDs: erroredSubagentIDs,
+                            listProxy: listProxy
                         )
-                    }
                     }
                 }
                 .padding(.vertical, 6)
