@@ -680,11 +680,21 @@ Aufrufer zu brechen.
   Cursor die Ereignisse nach.
 - **`backgroundTasks`** (seit WM8-105, nur bei `working → idle` eines
   Claude-Chats): Zahl der Hintergrund-Befehle (`run_in_background`,
-  Hintergrund-Subagents), die beim Turn-Ende noch laufen. Quelle ist das
-  Transcript (`ClaudeBackgroundTaskTracker`), nicht der Bildschirm. Fehlt das
-  Feld, ist die Zahl unbekannt (älterer Eintrag, Codex, Transcript noch nicht
-  angelesen). Bei `> 0` ist der Chat nicht fertig: Endet der Befehl, beginnt
-  Claude von selbst einen neuen Turn.
+  Hintergrund-Subagents), die **im gerade beendeten Turn** gestartet wurden
+  und noch laufen. Ein Dev-Server oder `tail -f` aus einem früheren Turn
+  zählt nicht, er endet nie (Preis: Schreibt jemand einem Chat mitten in
+  dessen Testlauf, meldet dieser Turn „fertig“). Quelle ist das Transcript
+  (`ClaudeBackgroundTaskTracker`), nicht der Bildschirm. Fehlt das Feld, ist
+  die Zahl unbekannt: älterer Eintrag, Codex, kein Prozess (`claude --bg`),
+  Turn-Start nicht gesehen, Transcript nie angelesen oder ersetzt, oder mehr
+  als 2 MB seit dem letzten Lesen. Bei `> 0` ist der Chat nicht fertig: Endet
+  der Befehl, beginnt Claude von selbst einen neuen Turn.
+  Gelesen wird beim Turn-Start und während des Turns alle 30 s im Hintergrund,
+  nacheinander für alle Chats; das Turn-Ende liest auf dem Main Thread nur
+  den Rest, höchstens 2 MB (`turnEndReadLimit`), sonst gilt „unbekannt“ und
+  der Rest folgt im Hintergrund. Der Turn-Start der App zählt mit 5 s
+  Spiel (`turnStartTolerance`), weil Registry und Hook etwas nach Claude
+  kommen.
 
 ### Zustandsachsen
 

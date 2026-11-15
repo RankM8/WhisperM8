@@ -251,18 +251,26 @@ final class AgentSessionStatusCoordinator {
     /// Uhr für `statusSince` — in Tests austauschbar.
     var now: () -> Date = { Date() }
 
-    /// Offene Hintergrund-Befehle eines Chats beim Turn-Ende, fürs Journal
-    /// (WM8-105); `nil` = unbekannt. Nur in der App: Unter `swift test` läse
-    /// der Live-Weg den echten Workspace.
-    var backgroundTaskCount: (UUID) -> Int? = { id in
-        AppInstance.isAppBundleProcess ? ClaudeBackgroundTaskMonitor.shared.openTaskCountIfRead(liveSessionID: id) : nil
+    /// Offene Hintergrund-Befehle des gerade beendeten Turns, fürs Journal
+    /// (WM8-105); `nil` = unbekannt. Zweiter Wert: Turn-Start. Nur in der
+    /// App: Unter `swift test` läse der Live-Weg den echten Workspace.
+    var backgroundTaskCount: (UUID, Date?) -> Int? = { id, turnStart in
+        AppInstance.isAppBundleProcess
+            ? ClaudeBackgroundTaskMonitor.shared.openTaskCountAtTurnEnd(liveSessionID: id, turnStartedAt: turnStart)
+            : nil
     }
-    /// Liest das Transcript beim Turn-Start im Hintergrund an, damit das
-    /// Turn-Ende auf dem Main Thread nur noch die neuen Zeilen liest.
+    /// Liest das Transcript im Hintergrund an: beim Turn-Start und während
+    /// des Turns alle `backgroundCatchUpSeconds`, damit das Turn-Ende auf dem
+    /// Main Thread kaum noch etwas liest.
     var prefetchBackgroundTasks: (UUID) -> Void = { id in
         guard AppInstance.isAppBundleProcess else { return }
         Task { @MainActor in await ClaudeBackgroundTaskMonitor.shared.prefetch(liveSessionIDs: [id]) }
     }
+    var backgroundCatchUpSeconds: TimeInterval = 30
+    /// Wann die App den laufenden Turn eines Chats beginnen sah.
+    var turnStartedAt: [UUID: Date] = [:]
+    /// Chats, für die gerade ein Nachlese-Takt läuft (höchstens einer je Chat).
+    var backgroundCatchUpRunning: Set<UUID> = []
 
     init(
         store: AgentSessionStore = AgentSessionStore(),
@@ -1150,7 +1158,7 @@ final class AgentSessionStatusCoordinator {
             source: registryLiveSessions.contains(sessionID)
                 ? "registry"
                 : hookLiveSessions.contains(sessionID) ? "hook" : "transcript",
-            backgroundTasks: turnEnded ? backgroundTaskCount(sessionID) : nil)
+            backgroundTasks: turnEnded ? backgroundTaskCount(sessionID, turnStartedAt[sessionID]) : nil)
 
         for effect in transition.effects {
             perform(effect, sessionID: sessionID)
@@ -1162,7 +1170,9 @@ final class AgentSessionStatusCoordinator {
         if case .working = transition.state, oldState.runtimeStatus != .working {
             AgentTerminalRegistry.shared.controller(for: sessionID)?.noteTurnStarted()
             startupInputSince[sessionID] = nil
+            turnStartedAt[sessionID] = now()
             prefetchBackgroundTasks(sessionID)
+            keepBackgroundTasksRead(sessionID)
         }
         // Chat ist nach dem Start bereit: ein während `launching`
         // zurückgestellter Folgeauftrag geht jetzt raus (LR-CLI-003).

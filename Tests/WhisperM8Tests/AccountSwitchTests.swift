@@ -472,6 +472,96 @@ final class ClaudeBackgroundTaskTrackerTests: XCTestCase {
         XCTAssertEqual(monitor.openTaskCount(sessionID: id, transcriptURL: url, processID: nil), 0)
     }
 
+    // MARK: Turn-Ende fürs Board (WM8-105, Auflagen von Uli)
+
+    private func append(_ text: String, to url: URL) throws {
+        let handle = try FileHandle(forWritingTo: url)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data(text.utf8))
+        try handle.close()
+    }
+
+    private let iso = ISO8601DateFormatter()
+
+    /// Auflage 4: Nur Läufe des gerade beendeten Turns zählen. Ein Server aus
+    /// einem früheren Turn endet nie und hielte sonst jedes „fertig“ auf.
+    func testTurnEndCountsOnlyRunsOfThatTurn() {
+        var tracker = ClaudeBackgroundTaskTracker()
+        tracker.consume(Data(bashStart("server", at: "2026-11-15T10:00:00.000Z").utf8))
+        let processStart = iso.date(from: "2026-11-15T09:00:00Z")!
+        let laterTurn = iso.date(from: "2026-11-15T11:00:00Z")!
+        XCTAssertEqual(tracker.openAtTurnEnd(processStart: processStart, turnStart: laterTurn), 0,
+                       "alter Server läuft, ein späterer Turn endet: fertig")
+
+        tracker.consume(Data(bashStart("tests", at: "2026-11-15T11:00:30.000Z").utf8))
+        XCTAssertEqual(tracker.openAtTurnEnd(processStart: processStart, turnStart: laterTurn), 1,
+                       "Turn startet Tests und endet: nicht fertig")
+        // Kurz vor dem Turn-Start der App (Registry kommt etwas später) zählt mit.
+        let lateSeen = iso.date(from: "2026-11-15T11:00:33Z")!
+        XCTAssertEqual(tracker.openAtTurnEnd(processStart: processStart, turnStart: lateSeen), 1)
+    }
+
+    /// Auflage 2: Ohne Prozess oder ohne Turn-Start ist die Zahl unbekannt —
+    /// Läufe längst beendeter Prozesse zählten sonst für immer.
+    func testTurnEndWithoutProcessOrTurnStartIsUnknown() throws {
+        var tracker = ClaudeBackgroundTaskTracker()
+        tracker.consume(Data(bashStart("alt", at: "2026-11-15T10:00:00.000Z").utf8))
+        XCTAssertNil(tracker.openAtTurnEnd(processStart: nil, turnStart: Date()))
+        XCTAssertNil(tracker.openAtTurnEnd(processStart: Date(), turnStart: nil))
+
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("bgpid-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try bashStart("alt").write(to: url, atomically: false, encoding: .utf8)
+        let monitor = ClaudeBackgroundTaskMonitor()
+        let id = UUID()
+        _ = monitor.openTaskCount(sessionID: id, transcriptURL: url, processID: nil)
+        XCTAssertNil(monitor.openTaskCountAtTurnEnd(sessionID: id, transcriptURL: url, processStart: nil, turnStart: Date()))
+    }
+
+    /// Auflage 1: Das Turn-Ende liest auf dem Main Thread höchstens die
+    /// Obergrenze. Mehr Neues, nie angelesen oder Datei ersetzt: unbekannt,
+    /// und der Rest wird im Hintergrund gelesen.
+    func testTurnEndReadIsCappedAndCatchesUpInBackground() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("bgcap-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        let start = iso.date(from: "2026-10-11T13:00:00Z")!
+        try bashStart("alt", at: "2026-10-11T12:00:00.000Z").write(to: url, atomically: false, encoding: .utf8)
+        let monitor = ClaudeBackgroundTaskMonitor()
+        let id = UUID()
+        XCTAssertNil(monitor.openTaskCountAtTurnEnd(sessionID: id, transcriptURL: url, processStart: start, turnStart: start),
+                     "nie angelesen: unbekannt")
+        monitor.waitForReads()
+
+        let filler = line(["type": "assistant", "text": String(repeating: "x", count: 4_000)])
+        try append(filler + bashStart("ba1") + filler, to: url)
+        XCTAssertNil(monitor.openTaskCountAtTurnEnd(sessionID: id, transcriptURL: url, processStart: start,
+                                                    turnStart: start, readLimit: 1_000),
+                     "mehr Neues als erlaubt: unbekannt")
+        monitor.waitForReads()
+        XCTAssertEqual(monitor.openTaskCountAtTurnEnd(sessionID: id, transcriptURL: url, processStart: start,
+                                                      turnStart: start, readLimit: 1_000), 1,
+                       "im Hintergrund nachgelesen, danach reicht die Obergrenze")
+
+        // Datei ersetzt: auf dem Main Thread nie von vorn.
+        try FileManager.default.removeItem(at: url)
+        try bashStart("neu").write(to: url, atomically: false, encoding: .utf8)
+        XCTAssertNil(monitor.openTaskCountAtTurnEnd(sessionID: id, transcriptURL: url, processStart: start, turnStart: start))
+    }
+
+    func testUpdateWithLimitReadsNothingWhenOverLimit() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("bglim-\(UUID().uuidString).jsonl")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try bashStart("ba1").write(to: url, atomically: false, encoding: .utf8)
+        var tracker = ClaudeBackgroundTaskTracker()
+        XCTAssertFalse(tracker.update(from: url, readLimit: 10_000), "neu angelegt heißt von vorn: nicht mit Grenze")
+        XCTAssertTrue(tracker.update(from: url))
+        try append(notification(["ba1"]), to: url)
+        XCTAssertFalse(tracker.update(from: url, readLimit: 10))
+        XCTAssertEqual(tracker.openTaskIDs(), ["ba1"], "nichts gelesen")
+        XCTAssertTrue(tracker.update(from: url, readLimit: 10_000))
+        XCTAssertEqual(tracker.openTaskIDs(), [])
+    }
+
     func testIdleChatWithBackgroundTasksWaits() {
         XCTAssertEqual(
             AccountSwitchPlanner.waitReason(status: .idle, mayHaveUnsentInput: false, openBackgroundTasks: 1),

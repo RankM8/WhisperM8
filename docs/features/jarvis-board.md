@@ -156,10 +156,14 @@ mehreren Boards stehen (`otherOwners`).
   Warteschleife; Feld `backgroundTasks` im Strom, § `chats watch` in
   `agent-chats-cli.md`), weckt die Mod nicht. Endet der Befehl, macht Claude
   von selbst weiter, und erst das Turn-Ende ohne offenen Befehl meldet
-  „fertig – prüfen“. „Wartet auf dich“ weckt immer. Sicherheitsnetz für
-  hängende Befehle: Ruht der Chat danach 30 Minuten unverändert, kommt
-  einmal „ruht, Hintergrund-Lauf läuft noch – prüfen“. Fehlt das Feld (ältere
-  App, Codex), weckt das Turn-Ende wie vorher. Vorher kamen an einem Tag rund
+  „fertig – prüfen“. „Wartet auf dich“ weckt immer. Es zählen nur Befehle,
+  die im beendeten Turn gestartet wurden; ein Dev-Server aus einem früheren
+  Turn hält kein „fertig“ auf. Sicherheitsnetz für hängende Befehle: Ruht der
+  Chat danach 30 Minuten unverändert, kommt einmal „ruht, Hintergrund-Lauf
+  läuft noch – prüfen“. Die Wache steht im Atom `backgroundWatch` (mit
+  Zeitpunkt) und übersteht so einen Reload der Mod; geprüft wird per Takt
+  und nach jedem Neulesen des Boards. Fehlt das Feld (ältere App, Codex,
+  unbekannt), weckt das Turn-Ende wie vorher. Vorher kamen an einem Tag rund
   25 solche Fehlalarme.
 - **Anzeige (seit WM8-99):** Aufbau oben unter „Was es ist“. Was im Kasten
   steht, rechnet `layoutBox` rein aus Einträgen, Breite und Höhe aus

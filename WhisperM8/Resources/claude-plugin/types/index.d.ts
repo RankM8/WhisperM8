@@ -69,6 +69,12 @@ declare module 'claude-code' {
       now: number
       /** Schon geweckte Zustände je Chat (`<sessionID>:<zustand>`), gegen Doppel-Wecken. */
       woken: string[]
+      /**
+       * Wachen des Sicherheitsnetzes (WM8-105): Chat, Zeitpunkt seines
+       * Turn-Endes mit offenem Hintergrund-Befehl, Beginn der Wache (Uhr der
+       * Engine). Im Atom, damit sie einen Reload der Mod übersteht.
+       */
+      backgroundWatch: { id: string; since: string; at: number }[]
       /** Callout-Modus der Session: Claude darf am Turn-Ende sprechen. */
       callout: boolean
       /** Tasks der laufenden Session, nach ID sortiert. */

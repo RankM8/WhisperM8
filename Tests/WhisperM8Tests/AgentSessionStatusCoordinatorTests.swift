@@ -450,8 +450,12 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         let (coordinator, sessionID, _, _, _) = try makeCoordinator()
         var open = 1
         var prefetched: [UUID] = []
-        coordinator.backgroundTaskCount = { _ in open }
+        var turnStarts: [Date?] = []
+        let clock = Date(timeIntervalSince1970: 1_800_000_000)
+        coordinator.now = { clock }
+        coordinator.backgroundTaskCount = { _, start in turnStarts.append(start); return open }
         coordinator.prefetchBackgroundTasks = { prefetched.append($0) }
+        coordinator.backgroundCatchUpSeconds = 3_600
 
         coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit))
         coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.stop))
@@ -460,11 +464,32 @@ final class AgentSessionStatusCoordinatorTests: XCTestCase {
         coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.stop))
 
         XCTAssertEqual(prefetched, [sessionID, sessionID], "je Turn-Start einmal anlesen")
+        XCTAssertEqual(turnStarts, [clock, clock], "das Turn-Ende kennt den Turn-Start")
         let rows = ChatsStatusJournal.readAll(fileURL: ChatsStatusJournal.sharedFileURL())
             .filter { $0.sessionID == sessionID }
         let ends = rows.filter { $0.from == "working" && $0.to == "idle" }
         XCTAssertEqual(ends.map(\.backgroundTasks), [1, 0])
         XCTAssertTrue(rows.filter { $0.to == "working" }.allSatisfy { $0.backgroundTasks == nil })
+    }
+
+    /// Während des Turns liest die App im Hintergrund nach, damit das
+    /// Turn-Ende auf dem Main Thread kaum etwas liest; der Takt endet mit dem Turn.
+    func testWorkingChatIsReadInBackgroundUntilTurnEnds() async throws {
+        let (coordinator, sessionID, _, _, _) = try makeCoordinator()
+        var prefetched = 0
+        coordinator.backgroundTaskCount = { _, _ in nil }
+        coordinator.prefetchBackgroundTasks = { _ in prefetched += 1 }
+        coordinator.backgroundCatchUpSeconds = 0.05
+
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.userPromptSubmit))
+        try await Task.sleep(nanoseconds: 300_000_000)
+        XCTAssertGreaterThan(prefetched, 2, "Start plus Takt")
+        coordinator.handleHookEvent(localID: sessionID, event: hookEvent(.stop))
+        try await Task.sleep(nanoseconds: 150_000_000)
+        let afterEnd = prefetched
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertEqual(prefetched, afterEnd, "nach dem Turn kein Nachlesen mehr")
+        XCTAssertTrue(coordinator.backgroundCatchUpRunning.isEmpty)
     }
 
     // MARK: working-Stau nach ESC-Interrupt (QA-Befund 2026-08-17)

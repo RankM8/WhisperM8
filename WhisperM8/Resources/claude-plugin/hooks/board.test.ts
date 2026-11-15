@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { areaOf, BACKGROUND_NET_MS, clean, countWord, groups, HEAD_JOIN, HEAD_LEFT, HEAD_NAME, isBefore, layoutBox, nextGenerationStart, planRows, restCounts, sameBoard, shortName, summaryLine, titleParts, waitingHead, waitingLines, waitingText, wakeReason, withStatus } from './register'
+import { areaOf, BACKGROUND_NET_MS, clean, dropBackgroundTimers, dueBackgroundWaits, countWord, groups, HEAD_JOIN, HEAD_LEFT, HEAD_NAME, isBefore, layoutBox, nextGenerationStart, planRows, restCounts, sameBoard, shortName, summaryLine, titleParts, waitingHead, waitingLines, waitingText, wakeReason, withStatus } from './register'
 
 // Tests der Board-Mod (`claude plugin test` auf den abgelegten Plugin-Ordner
 // oder diesen Ressourcen-Ordner samt Manifest). Werden nicht ausgeliefert.
@@ -683,6 +683,41 @@ describe('Wecken bei Hintergrund-Läufen (WM8-105)', () => {
     await clock.advance(BACKGROUND_NET_MS)
     await clock.settle()
     expect(calls.prompts.length).toBe(1)
+  })
+
+  test('die Wache übersteht einen Reload: ohne Takt prüft das nächste Neulesen des Boards', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const resting = { ...BOARD, entries: BOARD.entries.map(e => (e.sessionID === LEAD ? { ...e, status: 'idle', statusSince: minutesAgo(0) } : e)) }
+    const calls = world(on, { board: resting, watch: [
+      { event: 'started', cursor: '1:10' },
+      change('working', 'idle', { backgroundTasks: 1 }),
+    ] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    // Reload: der Takt ist weg, das Atom bleibt.
+    dropBackgroundTimers()
+    for (let i = 0; i < 40; i++) {
+      await clock.advance(60_000)
+      await clock.settle()
+    }
+    expect(calls.prompts.length).toBe(1)
+    expect(calls.prompts[0]).toContain('ruht, Hintergrund-Lauf läuft noch')
+  })
+
+  test('dueBackgroundWaits: fällig nach 30 Minuten, nur wenn der Chat seitdem unverändert ruht', () => {
+    const at = 0
+    const since = minutesAgo(40)
+    const idle = entry({ sessionID: LEAD, status: 'idle', statusSince: since })
+    const wait = { id: LEAD, since, at }
+    expect(dueBackgroundWaits([wait], [idle], BACKGROUND_NET_MS - 1).wake).toEqual([])
+    expect(dueBackgroundWaits([wait], [idle], BACKGROUND_NET_MS - 1).next).toBe(1)
+    expect(dueBackgroundWaits([wait], [idle], BACKGROUND_NET_MS).wake).toEqual([LEAD])
+    const later = entry({ sessionID: LEAD, status: 'idle', statusSince: minutesAgo(5) })
+    expect(dueBackgroundWaits([wait], [later], BACKGROUND_NET_MS).wake).toEqual([])
+    const working = entry({ sessionID: LEAD, status: 'working', statusSince: since })
+    const done = dueBackgroundWaits([wait], [working], BACKGROUND_NET_MS)
+    expect(done.wake).toEqual([])
+    expect(done.rest).toEqual([])
   })
 
   test('arbeitet der Chat vor Ablauf wieder, bleibt das Sicherheitsnetz still', async ($, on) => {

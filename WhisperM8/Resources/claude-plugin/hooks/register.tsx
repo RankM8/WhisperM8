@@ -20,6 +20,14 @@ import { registerTasks, startTasks } from './tasks'
 const board = atom({ plugin: 'whisperm8', key: 'board' } as const, null as BoardView | null)
 const folded = atom({ plugin: 'whisperm8', key: 'folded' } as const, false)
 const woken = atom({ plugin: 'whisperm8', key: 'woken' } as const, [] as string[])
+/**
+ * Chats, deren Turn mit offenem Hintergrund-Befehl endete (WM8-105): Chat,
+ * Zeitpunkt dieses Turn-Endes (`since`, aus dem Strom) und wann die Wache
+ * begann (`at`, Uhr der Engine). Im Atom wie `woken`, damit die Wache einen
+ * Reload der Mod übersteht (`make skills`, Symlink-Tausch, Neustart).
+ */
+export type BackgroundWait = { id: string; since: string; at: number }
+const backgroundWatch = atom({ plugin: 'whisperm8', key: 'backgroundWatch' } as const, [] as BackgroundWait[])
 const callout = atom({ plugin: 'whisperm8', key: 'callout' } as const, false)
 
 const TOOL = 'mcp__whisperm8__board'
@@ -61,12 +69,8 @@ let clipboardToolDeferred: boolean | null = null
 /** Weck-Zeilen bis zum nächsten Prompt; je Chat höchstens eine (WM8-105). */
 let wakeQueue: { id: string; line: string }[] = []
 let wakeTimerArmed = false
-/**
- * Chats, deren Turn mit offenem Hintergrund-Befehl endete (WM8-105): Chat →
- * Zeitpunkt dieses Turn-Endes. Ruht der Chat danach unverändert
- * `BACKGROUND_NET_MS` lang, weckt die Mod einmal (hängender Befehl).
- */
-const backgroundWaits = new Map<string, string>()
+/** Nur der jüngste Takt der Wache darf prüfen. */
+let backgroundTimerGeneration = 0
 let lastWakeAt = 0
 
 
@@ -134,6 +138,8 @@ const refresh = async ($: EngineInterface) => {
   // Nur schreiben, was sich geändert hat: jedes Schreiben zeichnet den
   // Kasten neu (WM8-87).
   if (!sameBoard(await read($, board), next)) await update($, board, () => next)
+  // Nach einem Reload der Mod gibt es keinen Takt mehr: hier nachsehen.
+  await checkBackgroundWatch($).catch(() => undefined)
   // Bewusst keine Statuszeile: Claude Code setzt „⚠“ davor, sie sah nach
   // einer Warnung aus und wiederholte nur die Zahlen aus dem Band.
   // Scheitert die Tool-Anmeldung, laufen Band und Wecken trotzdem.
@@ -362,14 +368,16 @@ let wakeMode = 'turn'
 const considerWake = async ($: EngineInterface, entry: BoardEntry, ev: WatchEvent) => {
   const id = entry.sessionID.toUpperCase()
   // Jeder neue Zustand beendet das Warten auf den eigenen Lauf.
-  backgroundWaits.delete(id)
+  if ((await read($, backgroundWatch)).some(w => w.id === id)) {
+    await update($, backgroundWatch, list => (list ?? []).filter(w => w.id !== id))
+  }
   if (ev.to === 'working') {
     // Arbeitet wieder: derselbe Zustand darf später erneut wecken.
     await update($, woken, list => (list ?? []).filter(key => !key.startsWith(`${id}:`)))
     return
   }
   if (waitsForOwnRun(ev)) {
-    armBackgroundNet($, entry, ev)
+    await armBackgroundNet($, entry, ev)
     return
   }
   await wake($, entry, ev.to ?? '', wakeReason(ev))
@@ -395,19 +403,61 @@ const wake = async ($: EngineInterface, entry: BoardEntry, state: string, reason
  * nach diesem Turn-Ende `BACKGROUND_NET_MS` lang unverändert, weckt die Mod
  * einmal. Jeder neue Zustand des Chats löscht die Wache.
  */
-const armBackgroundNet = ($: EngineInterface, entry: BoardEntry, ev: WatchEvent) => {
+const armBackgroundNet = async ($: EngineInterface, entry: BoardEntry, ev: WatchEvent) => {
   const id = entry.sessionID.toUpperCase()
-  const since = ev.at ?? `seq:${String(ev.cursor ?? '')}`
-  backgroundWaits.set(id, since)
-  $.clock.after(BACKGROUND_NET_MS, () => {
-    if (backgroundWaits.get(id) !== since) return
-    backgroundWaits.delete(id)
-    void (async () => {
-      const current = (await read($, board))?.entries.find(e => sameID(e.sessionID, entry.sessionID))
-      if (current === undefined || current.status !== 'idle') return
-      await wake($, current, 'idle', 'ruht, Hintergrund-Lauf läuft noch – prüfen')
-    })().catch(() => undefined)
+  const wait: BackgroundWait = { id, since: ev.at ?? '', at: await $.clock.now() }
+  await update($, backgroundWatch, list => [...(list ?? []).filter(w => w.id !== id), wait].slice(-200))
+  armBackgroundTimer($, BACKGROUND_NET_MS)
+}
+
+/** Nur für Tests: verwirft laufende Takte, wie es ein Reload der Mod tut. */
+export const dropBackgroundTimers = () => {
+  backgroundTimerGeneration += 1
+}
+
+/** Ein Takt für die älteste Wache; ein neuer ersetzt den alten. */
+const armBackgroundTimer = ($: EngineInterface, wait: number) => {
+  const generation = ++backgroundTimerGeneration
+  $.clock.after(Math.max(0, wait), () => {
+    if (generation !== backgroundTimerGeneration) return
+    void checkBackgroundWatch($).catch(() => undefined)
   })
+}
+
+/**
+ * Welche Wachen sind fällig, welche verworfen? Fällig: älter als
+ * `BACKGROUND_NET_MS`. Verworfen wird eine fällige Wache, wenn der Chat nicht
+ * mehr auf dem Board steht, nicht ruht oder seit einem späteren Zeitpunkt in
+ * seinem Zustand ist (ein Wechsel, den die Mod während eines Reloads
+ * verpasst hat; 2 s Spiel, weil App und Journal die Zeit getrennt nehmen).
+ */
+export const dueBackgroundWaits = (waits: BackgroundWait[], entries: BoardEntry[], now: number) => {
+  const due = waits.filter(w => now - w.at >= BACKGROUND_NET_MS)
+  const wake = due.filter(w => {
+    const entry = entries.find(e => sameID(e.sessionID, w.id))
+    if (entry === undefined || entry.status !== 'idle') return false
+    const since = Date.parse(w.since)
+    const current = Date.parse(entry.statusSince ?? '')
+    return Number.isNaN(since) || Number.isNaN(current) || current <= since + 2_000
+  })
+  const rest = waits.filter(w => !due.includes(w))
+  const next = rest.length === 0 ? null : Math.min(...rest.map(w => w.at + BACKGROUND_NET_MS - now))
+  return { wake: wake.map(w => w.id), rest, next }
+}
+
+/** Prüft die Wachen: beim Takt, nach jedem Neulesen des Boards (auch nach einem Reload). */
+const checkBackgroundWatch = async ($: EngineInterface) => {
+  const waits = await read($, backgroundWatch)
+  if (waits.length === 0) return
+  const view = await read($, board)
+  if (view === null) return
+  const result = dueBackgroundWaits(waits, view.entries, await $.clock.now())
+  if (result.rest.length !== waits.length) await update($, backgroundWatch, () => result.rest)
+  for (const id of result.wake) {
+    const entry = view.entries.find(e => sameID(e.sessionID, id))
+    if (entry !== undefined) await wake($, entry, 'idle', 'ruht, Hintergrund-Lauf läuft noch – prüfen')
+  }
+  if (result.next !== null) armBackgroundTimer($, result.next)
 }
 
 const armWake = ($: EngineInterface) => {
