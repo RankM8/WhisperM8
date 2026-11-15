@@ -329,6 +329,11 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
     /// Konto am Nutzungslimit (WM8-69), solange die Limit-Zeile die letzte
     /// Antwort im Verlauf ist. `nil` = kein Limit.
     var usageLimit: AgentUsageLimit?
+    /// Der automatische Titel ging bei diesem Verlaufsstand (`lastActivityAt`)
+    /// nicht: kein Verlauf oder kein echter Prompt (WM8-53). Der Auto-Namer
+    /// versucht es erst wieder, wenn der Verlauf wächst oder der Chat einen
+    /// Turn beendet. `nil` = kein Verzicht.
+    var autoNameGaveUpAt: Date?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -368,6 +373,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         case gptProfileName
         case workingCopy
         case usageLimit
+        case autoNameGaveUpAt
     }
 
     init(
@@ -485,6 +491,7 @@ struct AgentChatSession: Identifiable, Codable, Equatable, Hashable {
         // Workspace-Decode nicht scheitern lassen.
         workingCopy = (try? container.decodeIfPresent(AgentWorkingCopy.self, forKey: .workingCopy)) ?? nil
         usageLimit = (try? container.decodeIfPresent(AgentUsageLimit.self, forKey: .usageLimit)) ?? nil
+        autoNameGaveUpAt = try container.decodeIfPresent(Date.self, forKey: .autoNameGaveUpAt)
     }
 
     var isManuallyCreated: Bool { createdManually == true }

@@ -262,7 +262,20 @@ final class AgentSessionAutoNamer {
         onCompletion: ((Result<String, Error>) -> Void)? = nil
     ) {
         completed.remove(session.id)
-        generateTitleIfNeeded(session: session, cwd: cwd, onCompletion: onCompletion)
+        // Ein beendeter Turn heißt: der Chat läuft und der Verlauf ist
+        // gewachsen. Ein früherer Verzicht (WM8-53) gilt nicht mehr.
+        guard !completed.contains(session.id) else { return }
+        if let failure = failures[session.id], now() < failure.retryAfter { return }
+        enqueue(session: session, cwd: cwd, onCompletion: onCompletion)
+    }
+
+    /// Hat der Auto-Namer bei genau diesem Verlaufsstand schon aufgegeben?
+    /// Dann bringt ein neuer Versuch nichts, solange der Verlauf nicht wächst
+    /// (WM8-53: 15 alte Chats, je ein Versuch alle fünf Minuten, 727 Fehler-
+    /// zeilen in sechs Stunden). Ein laufender Chat wird nie übergangen.
+    nonisolated static func hasGivenUp(on session: AgentChatSession) -> Bool {
+        guard session.status != .running, let gaveUpAt = session.autoNameGaveUpAt else { return false }
+        return gaveUpAt == session.lastActivityAt
     }
 
     /// Automatischer Scan: alte Sessions sind erlaubt, Fehler umgehen aber
@@ -272,7 +285,7 @@ final class AgentSessionAutoNamer {
         cwd: String,
         onCompletion: ((Result<String, Error>) -> Void)? = nil
     ) {
-        guard !completed.contains(session.id) else { return }
+        guard !completed.contains(session.id), !Self.hasGivenUp(on: session) else { return }
         if let failure = failures[session.id], now() < failure.retryAfter { return }
         enqueue(session: session, cwd: cwd, onCompletion: onCompletion)
     }
@@ -364,6 +377,9 @@ final class AgentSessionAutoNamer {
                 }
                 failures.removeValue(forKey: sessionID)
                 completed.insert(sessionID)
+                if session.autoNameGaveUpAt != nil {
+                    try? store.setAutoNameGaveUp(id: sessionID, at: nil)
+                }
                 Logger.agentPerformance.info(
                     "auto_named session=\(sessionID.uuidString, privacy: .public) provider=\(session.provider.rawValue, privacy: .public)"
                 )
@@ -381,17 +397,49 @@ final class AgentSessionAutoNamer {
                 let delay = min(awaitingTranscript ? 300.0 : 3600.0,
                                 (awaitingTranscript ? 15.0 : 60.0) * pow(2, Double(count - 1)))
                 failures[sessionID] = Failure(count: count, retryAfter: now().addingTimeInterval(delay))
-                // Keine beliebigen localizedDescription-Texte loggen: CLI-
-                // Ausgaben können Secrets oder Inhalte des Prompts enthalten.
-                Logger.agentPerformance.warning(
-                    "auto_naming_failed session=\(sessionID.uuidString, privacy: .public) awaitingTranscript=\(awaitingTranscript) attempt=\(count) retrySeconds=\(delay)"
-                )
+                // Kein Verlauf oder kein echter Prompt bei einem Chat, der
+                // nicht läuft: Das ändert sich erst, wenn der Verlauf wächst.
+                // Den Verzicht am Chat merken (übersteht einen Neustart) und
+                // nur einmal leise loggen statt alle fünf Minuten als Fehler.
+                let givesUp = awaitingTranscript && session.status != .running
+                if givesUp {
+                    try? store.setAutoNameGaveUp(id: sessionID, at: session.lastActivityAt)
+                    Logger.agentPerformance.info(
+                        "auto_naming_gave_up session=\(sessionID.uuidString, privacy: .public) attempt=\(count)"
+                    )
+                } else if awaitingTranscript {
+                    // Läuft noch: der Verlauf kommt gleich, kein Fehler.
+                    Logger.agentPerformance.info(
+                        "auto_naming_waiting session=\(sessionID.uuidString, privacy: .public) attempt=\(count) retrySeconds=\(delay)"
+                    )
+                } else {
+                    // Keine beliebigen localizedDescription-Texte loggen: CLI-
+                    // Ausgaben können Secrets oder Inhalte des Prompts enthalten.
+                    Logger.agentPerformance.warning(
+                        "auto_naming_failed session=\(sessionID.uuidString, privacy: .public) attempt=\(count) retrySeconds=\(delay)"
+                    )
+                }
                 result = .failure(error)
             }
             activeCount -= 1
             inFlight.remove(sessionID)
             request.onCompletion?(result)
             startPendingRequests()
+        }
+    }
+}
+
+extension AgentSessionStore {
+    /// Merkt (oder löscht mit `nil`), bei welchem Verlaufsstand der
+    /// automatische Titel aufgegeben wurde (WM8-53). Bewusst nicht über
+    /// `updateSession`: das setzte `lastActivityAt` auf jetzt, der Chat
+    /// spränge nach oben und der Verzicht gälte sofort nicht mehr.
+    func setAutoNameGaveUp(id: UUID, at date: Date?) throws {
+        try mutateWorkspaceIfChanged { workspace in
+            guard let index = workspace.sessions.firstIndex(where: { $0.id == id }),
+                  workspace.sessions[index].autoNameGaveUpAt != date else { return false }
+            workspace.sessions[index].autoNameGaveUpAt = date
+            return true
         }
     }
 }
