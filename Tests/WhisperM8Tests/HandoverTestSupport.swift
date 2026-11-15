@@ -26,6 +26,20 @@ final class HandoverPTYChild {
         """, in: directory, name: name)
     }
 
+    /// Zählt Ctrl+C als Bytes statt als Signale (WM8-103): Zwei SIGINT im
+    /// Abstand von 80 ms verschmelzen zu einem, wenn die Shell dazwischen
+    /// keine Rechenzeit bekommt (unter Last gesehen). Mit `-isig` landet
+    /// jedes Ctrl+C als Byte 0x03 im Terminalpuffer; `dd` hängt es an den
+    /// Marker. Beim Schließen der Leitung kommt wie bei `ticking` „HUP“ dazu.
+    static func ctrlCCounting(in directory: URL, name: String = UUID().uuidString) throws -> HandoverPTYChild {
+        try spawn(script: """
+        trap 'echo HUP >> "$MARKER"; exit 129' HUP
+        stty -isig -icanon -echo min 1
+        : > "$READY"
+        dd bs=1 >> "$MARKER" 2>/dev/null
+        """, in: directory, name: name)
+    }
+
     /// Wartet, bis das Skript `$READY` angelegt hat (sofern es das tut): Ein
     /// Ctrl+C vor den `trap`-Zeilen beendete die Shell sonst sofort.
     static func spawn(script: String, in directory: URL, name: String = UUID().uuidString, cols: UInt16 = 80, rows: UInt16 = 24) throws -> HandoverPTYChild {
@@ -67,6 +81,9 @@ final class HandoverPTYChild {
     }
 
     var marker: String { (try? String(contentsOf: markerURL, encoding: .utf8)) ?? "" }
+
+    /// Angekommene Ctrl+C eines `ctrlCCounting`-Kinds.
+    var ctrlCBytes: Int { ((try? Data(contentsOf: markerURL)) ?? Data()).filter { $0 == 0x03 }.count }
 
     func closeMaster() {
         if master >= 0 { close(master); master = -1 }

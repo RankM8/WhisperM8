@@ -188,7 +188,7 @@ final class HandoverKeeperTests: XCTestCase {
     // MARK: Fristen und Freigabe
 
     func testHoldDeadlineShutsDownOrderly() throws {
-        let tui = try child { try .ticking(in: directory) }
+        let tui = try child { try .ctrlCCounting(in: directory) }
         let attach = try child { try .ticking(in: directory) }
         let finished = expectation(description: "Ende")
         var reason: HandoverKeeper.FinishReason?
@@ -201,7 +201,7 @@ final class HandoverKeeperTests: XCTestCase {
         XCTAssertEqual(reason, .holdExpired)
         XCTAssertNotNil(tui.waitForExit(timeout: 10))
         XCTAssertNotNil(attach.waitForExit(timeout: 10))
-        XCTAssertEqual(tui.marker.components(separatedBy: "INT").count - 1, 2, "zweimal Ctrl+C wie heute")
+        XCTAssertEqual(tui.ctrlCBytes, 2, "zweimal Ctrl+C wie heute")
         XCTAssertTrue(tui.marker.contains("HUP"))
         XCTAssertFalse(attach.marker.contains("INT"), "Attach-Clients bekommen kein Ctrl+C")
         XCTAssertTrue(attach.marker.contains("HUP"))
