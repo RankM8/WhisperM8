@@ -417,6 +417,10 @@ final class AgentControlServer: @unchecked Sendable {
         // nichts mehr ausführen (WM8-85). Lesen bleibt erlaubt.
         if request.isExpired(), !AgentControlRequestHandler.readOnlyMethods.contains(request.method) {
             Logger.agentStore.notice("control_request_expired method=\(request.method, privacy: .public)")
+            ChatsAuditLog.shared.append(ChatsAuditEntry(
+                at: Date(), actor: request.actor.sessionID.map { "Chat \($0.prefix(8))" } ?? "external",
+                verified: false, method: request.method, target: nil, outcome: "expired",
+                promptChars: nil, promptHead: nil))
             respond(fd, AgentControlRequestHandler.expiredResponse(request))
             return
         }

@@ -101,7 +101,7 @@ extension AgentControlRequestHandler {
                 await MainActor.run {
                     // Unmittelbar vor dem Start: Hat der Client aufgegeben, keinen
                     // Chat mehr anlegen (WM8-85).
-                    if request.isExpired() { return .failure(ControlLaunchError(message: Self.expiredMessage)) }
+                    if request.isExpired() { return .failure(ControlLaunchError(message: Self.expiredMessage, expired: true)) }
                     return AgentChatLaunchService().openChatViaControl(
                         provider: provider, projectRef: projectRef, title: title, prompt: prompt,
                         claudeProfile: selection)
@@ -122,7 +122,8 @@ extension AgentControlRequestHandler {
         }
         switch result {
         case .failure(let error):
-            return .failure(requestID: request.requestID, code: .notFound, message: error.message)
+            if error.expired { await audit(request.actor, method: "new", target: projectRef, outcome: "expired", prompt: nil) }
+            return .failure(requestID: request.requestID, code: error.expired ? .expired : .notFound, message: error.message)
         case .success(let launch):
             let session = Self.sessionNewPayload(
                 id: launch.id, title: launch.title, projectName: launch.projectName,
@@ -161,14 +162,15 @@ extension AgentControlRequestHandler {
                             message: "--account gilt nur für Claude-Chats")
         }
         let result = await MainActor.run { () -> Result<AgentChatLaunchService.ControlLaunchResult, ControlLaunchError> in
-            if request.isExpired() { return .failure(ControlLaunchError(message: Self.expiredMessage)) } // WM8-85
+            if request.isExpired() { return .failure(ControlLaunchError(message: Self.expiredMessage, expired: true)) } // WM8-85
             return AgentChatLaunchService().openChatViaControl(
                 provider: .claude, projectRef: projectRef, title: title, prompt: nil,
                 claudeProfile: .explicit(nil), terminalCommand: command, asTerminal: true)
         }
         switch result {
         case .failure(let error):
-            return .failure(requestID: request.requestID, code: .notFound, message: error.message)
+            if error.expired { await audit(request.actor, method: "new", target: projectRef, outcome: "expired", prompt: nil) }
+            return .failure(requestID: request.requestID, code: error.expired ? .expired : .notFound, message: error.message)
         case .success(let launch):
             // Der Befehl selbst gehört nicht ins Audit (kann Pfade, Tokens enthalten).
             await audit(request.actor, method: "new", target: "\(launch.projectName)/\(launch.title) [terminal]",

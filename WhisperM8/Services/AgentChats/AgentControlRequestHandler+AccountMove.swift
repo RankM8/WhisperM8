@@ -131,14 +131,13 @@ extension AgentControlRequestHandler {
             : ClaudeAccountPreflight.trustedPaths(
                 claudeJSON: ClaudeAccountProfiles().claudeJSONURL(forProfile: targetName))
 
-        // Vor dem ersten Anhalten: Hat der Client aufgegeben, nichts anfangen
-        // (WM8-85). Später nicht mehr abbrechen, sonst blieben Chats
-        // angehalten, ohne umzuziehen.
-        if request.isExpired() { return Self.expiredResponse(request) }
-
         // Phase 1 — planen und (nur bei echter Ausfuehrung) anhalten. EIN
         // MainActor-Block: Laufzustand, Status und Stop sehen denselben Stand.
         let phase: MoveAccountPhase = await MainActor.run {
+            // Erste Zeile im Block, vor dem ersten Anhalten: Hing die App, bis der
+            // Client aufgab, nichts anfangen (WM8-85). Später nicht mehr abbrechen,
+            // sonst blieben Chats angehalten, ohne umzuziehen.
+            if request.isExpired() { return .fail(.expired, Self.expiredMessage) }
             let profiles = ClaudeAccountProfiles()
             let target = AccountMovePlanner.normalize(targetName)
             let targetIsLoggedIn = targetCheck.loginProblem == nil
