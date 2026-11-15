@@ -24,6 +24,9 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     /// Buchstaben der Tastenzeile im aktuellen Layout, wo sie von S M O B K ·
     /// L N A C abweichen (live über das Tastaturlayout, nur im Ereignis-Pfad).
     var keyboardLetters: () -> [KeyboardIslandCommand: String] = { [:] }
+    /// Das Options-Menü per Tastatur nutzt `perform`; dann bucht es keine
+    /// Controller-Eingabe für die Legende.
+    var performingForKeyboard = false
     var togglePause: () -> Void = {}
     /// Angaben des Debug-Kanals (Test-Instanz ohne aktives Fenster).
     var debugOverride: () -> ControllerDebugOverride? = { nil }
@@ -250,7 +253,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         }
         // Die Legende folgt dem zuletzt benutzten Gerät (WM8-104). Der Halte-
         // Ring zählt mit: Er kommt nur vom Controller.
-        if ui.lastInput != .controller { ui.lastInput = .controller }
+        if !performingForKeyboard, ui.lastInput != .controller { ui.lastInput = .controller }
         // Der Controller greift ein, während die Insel per Tastatur offen ist:
         // Sie schließt ohne Wechsel (wie Maus oder Tastatur die Controller-Insel
         // schließen). Das Ende einer Ebene hat dann nichts mehr zu tun.

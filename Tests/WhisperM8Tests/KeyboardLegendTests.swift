@@ -1,4 +1,5 @@
 import AppKit
+import Observation
 import XCTest
 @testable import WhisperM8
 
@@ -52,5 +53,13 @@ final class KeyboardLegendTests: XCTestCase {
         ui.menuByKeyboard = true
         dispatcher.keyboardMenu(.move(1))
         XCTAssertEqual(ui.lastInput, .keyboard)
+        // Steht schon „Tastatur“, schreibt das Menü per Tastatur gar nicht mehr
+        // (kein Umweg über „Controller“, Gegenlesen Paket 3).
+        var changes = 0
+        withObservationTracking { _ = ui.lastInput } onChange: { changes += 1 }
+        dispatcher.keyboardMenu(.move(1))
+        XCTAssertEqual(changes, 0)
+        XCTAssertEqual(ui.lastInput, .keyboard)
+        XCTAssertFalse(dispatcher.performingForKeyboard)
     }
 }

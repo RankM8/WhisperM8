@@ -228,6 +228,9 @@ extension ControllerActionDispatcher {
     func keyboardMenu(_ action: KeyboardIslandKeys.MenuAction) {
         guard isKeyboardMenuOpen else { return }
         let context = ControllerContextResolver.context(for: snapshot())
+        performingForKeyboard = true
+        defer { performingForKeyboard = false }
+        if ui.lastInput != .keyboard { ui.lastInput = .keyboard }
         withKeyboardFeedback {
             switch action {
             case let .move(step): perform(.menuMove(step: step), in: context)
@@ -236,8 +239,6 @@ extension ControllerActionDispatcher {
             case .closeAndPassThrough: ui.menu = nil
             }
         }
-        // Über `perform` gebucht, kam aber von der Tastatur (Legende).
-        ui.lastInput = .keyboard
     }
 
     // MARK: - Hilfen
