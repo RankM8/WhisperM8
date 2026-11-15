@@ -811,8 +811,22 @@ dafür sicherer.
   (JSON `usageLimit`, `usageLimitResetsAt`; ohne `--json` eine Warnung auf
   stderr): Eine native Nachricht käme an, der Chat arbeitete aber nicht.
 
-### Nativ als Standard (WM8-85, Paket 2a)
+### Nativ als Standard (WM8-85, Paket 2a und 2b)
 
+- **Fester Name je Claude-Chat (2b).** Die App startet Claude-Chats im Vordergrund mit `claude --name <name>`
+  (Hintergrund-Chats und das Anhängen an einen Hintergrund-Lauf bekommen keinen Namen): Kopf des Titels bis
+  „·“ oder „:“ als Kürzel (höchstens 24 Zeichen), dazu acht Zeichen der Chat-ID (`gus-f0d79f2c`); ein
+  Platzhalter wie „Neue Session“ oder „Claude Chat“ ergibt `chat-<id>`. Nur ab Claude Code 2.1.325 (gemessen, auch mit `--resume`) und nur bei bekannter Version;
+  Notbremse `claudeNativeNameEnabled`. Ein `--name` aus den Einstellungen gewinnt.
+  - Claude schreibt den Namen als `custom-title` in den Verlauf. Die Titel-Übernahme übergeht ihn
+    (`NativeSessionTitle`, per Chat-ID und Namensmuster `kopf-1a2b3c4d`, das auch einen vom Abzweig
+    mitgebrachten Namen des Ursprungs trifft); ein echtes
+    `/rename` gewinnt weiter. Der Name wird nie aus einem Titel gebildet, der selbst schon dieser Name ist.
+  - Claude zeichnet den Namen in die obere Linie des Eingabefelds (gemessen an 2.1.325, Name mit L Zeichen):
+    ab L+6 Spalten „───── name ─“, bei L+5, L+4, L+3 zwei, eins, kein Linienzeichen links, darunter gekürzt
+    „ name-gekü… ─“. Die Feld-Erkennung (`isNamedRule`) lässt genau
+    einen kurzen Text zu; sonst sähen Freigabe-Schutz, Startprüfung, `submit` und Controller kein Feld mehr.
+  - Nicht gemessen: ob ein von Claude selbst abgezweigter Hintergrund-Lauf den Namen erbt.
 - **Native Nachrichten im Audit.** Der Watcher erkennt im Verlauf, den er ohnehin liest, Zeilen mit
   `"origin":{"kind":"peer",…}` und trägt jede Nachricht genau einmal (`msg_id`) in `chats audit` ein: Methode
   `native-message`, Absender (selbst angegebener Name und Adresse), Empfänger, Anfang des Textes. Nach einem

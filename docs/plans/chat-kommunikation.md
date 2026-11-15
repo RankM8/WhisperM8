@@ -249,9 +249,9 @@ Vier Befunde des Prüfers aus dem ersten echten Einsatz, die Weg B einschränken
    Rechte behandeln, ein Kollege kann nichts freigeben. Entscheidungen des Users (Go zum Merge, stehende
    Freigabe) laufen deshalb weiter über `chats send`/`enqueue`.
 2. **Der Absender ist nativ schwächer zu erkennen.** Ohne Angabe heißt eine Sitzung nach dem Ordner. Ein
-   fester Name je Chat (`claude --name`) ist als eigenes Paket geplant (WM8-85, Paket 2b). Gemessen an
-   2.1.325: `--name` geht mit `--resume`, Claude zeichnet den Namen in die obere Linie des Eingabefelds und
-   schreibt ihn als `custom-title` in den Verlauf; die Titel-Übernahme der App muss das übergehen.
+   fester Name je Chat (`claude --name`) kommt mit WM8-85, Paket 2b. Gemessen an 2.1.325: `--name` geht mit
+   `--resume`, Claude zeichnet den Namen in die obere Linie des Eingabefelds und schreibt ihn als
+   `custom-title` in den Verlauf; die Titel-Übernahme der App übergeht ihn.
 3. **Ein Auftrag an einen arbeitenden Chat mischt sich in dessen Turn.** Für Meldungen gut, für Aufträge
    nicht: Aufträge an arbeitende Chats gehen weiter per `enqueue` (oder `send`, das seit WM8-85 selbst vormerkt).
 4. **Der Antwortweg muss ausdrücklich genannt werden.** Claude schlägt dem Empfänger die Absenderadresse vor;

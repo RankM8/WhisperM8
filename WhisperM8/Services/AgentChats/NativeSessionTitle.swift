@@ -32,18 +32,23 @@ enum NativeSessionTitle {
     static let headBytes = 1 * 1024 * 1024
     static let tailBytes = 2 * 1024 * 1024
 
-    static func resolve(provider: AgentProvider, transcriptURL: URL) -> String? {
+    static func resolve(provider: AgentProvider, transcriptURL: URL,
+                        ignoringCustomTitle: (String) -> Bool = AgentCommandBuilder.looksLikeNativeName) -> String? {
         let text = headAndTail(of: transcriptURL)
         guard !text.isEmpty else { return nil }
         switch provider {
-        case .claude: return claudeTitle(fromJSONL: text)
+        case .claude: return claudeTitle(fromJSONL: text, ignoringCustomTitle: ignoringCustomTitle)
         case .codex: return codexTitle(fromJSONL: text)
         }
     }
 
     // MARK: Claude
 
-    static func claudeTitle(fromJSONL text: String) -> String? {
+    /// - Parameter ignoringCustomTitle: `claude --name` schreibt den festen
+    ///   Namen eines App-Chats als `custom-title` (WM8-85). Der wäre sonst der
+    ///   Titel jedes Chats; er wird übergangen, der generierte Titel gewinnt.
+    static func claudeTitle(fromJSONL text: String,
+                            ignoringCustomTitle: (String) -> Bool = AgentCommandBuilder.looksLikeNativeName) -> String? {
         var customTitle: String?
         var aiTitle: String?
         var firstPrompt: String?
@@ -59,7 +64,11 @@ enum NativeSessionTitle {
             }
             switch object["type"] as? String {
             case "custom-title":
-                if let value = cleaned(object["customTitle"] as? String) { customTitle = value }
+                if let value = cleaned(object["customTitle"] as? String) {
+                    // Ein späteres echtes /rename gewinnt weiter; der eigene Name
+                    // setzt einen früheren Titel nicht zurück.
+                    if !ignoringCustomTitle(value) { customTitle = value }
+                }
             case "ai-title":
                 if let value = cleaned(object["aiTitle"] as? String) { aiTitle = value }
             case "user":

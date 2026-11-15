@@ -181,7 +181,7 @@ Labs-Gruppe der Einstellungen, erweiterte Agent-Funktionen hinter `agentAdvanced
 `claudeSharedMemoryEnabled`, `accountSwitchAfterTurnEnabled`, `claudePluginEnabled`, `jarvisBoardEnabled`,
 `jarvisNotesEnabled`, `agentChatTasksInNotesEnabled`, `speechCalloutsEnabled`, `codexVoiceGateEnabled`, `agentStatusSoftPulseEnabled`, `notchStatusFeatureEnabled`,
 `clipboardHistoryEnabled`, `statisticsEnabled` (beide zugleich UI-Schalter), `controllerFeatureEnabled`, `controllerPaddleHIDEnabled`,
-`unifiedPillEnabled` (vereinte Pille; aus = getrennte Diktat- und Status-Pille).
+`unifiedPillEnabled` (vereinte Pille; aus = getrennte Pillen), `claudeNativeNameEnabled`.
 Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`, `ticketBoardEnabled`,
 `mcpAutoSyncEnabled`, `agentStatusPulseEnabled` (alter Puls, nur A/B-Messung), `restartKeepsChatsEnabled`
 (Labs-Schalter „Neustart ohne Chatverlust“: gebaut, Pflichttest Teil a grün, ab Werk aus, wirkt ab

@@ -317,9 +317,41 @@ enum ControllerScreenReading {
     static func isRule(_ line: String) -> Bool {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         guard trimmed.count >= 10 else { return false }
-        let ruleCharacters: Set<Character> = ["─", "━", "╭", "╮", "╰", "╯"]
         let ruleCount = trimmed.filter { ruleCharacters.contains($0) }.count
-        return ruleCount * 10 >= trimmed.count * 9
+        if ruleCount * 10 >= trimmed.count * 9 { return true }
+        return isNamedRule(line)
+    }
+
+    private static let ruleCharacters: Set<Character> = ["─", "━", "╭", "╮", "╰", "╯"]
+    /// Längster Name, den eine Linie tragen darf.
+    static let maxRuleLabel = 48
+
+    /// Claude schreibt den Namen der Sitzung (`claude --name`, WM8-85) in die
+    /// obere Linie des Eingabefelds. Gemessen an 2.1.325 mit einem Namen von
+    /// 32 Zeichen (L):
+    /// - ab L+6 Spalten: „───── name ─“ (drei und mehr Linienzeichen links)
+    /// - L+5: „── name ─“, L+4: „─ name ─“, L+3: „ name ─“ (links nichts)
+    /// - darunter gekürzt: „ wm8-100-gus-nachrichten-f0… ─“
+    /// Erlaubt ist genau ein kurzer Text mit Leerzeichen davor und danach,
+    /// rechts mindestens ein Linienzeichen. Links weniger als drei nur, wenn
+    /// der Text kein Leerzeichen enthält (Namen der App haben keines) und
+    /// rechts genau ein „─“ steht (so in allen gemessenen Formen); links
+    /// keines nur, wenn die Zeile mit einem Leerzeichen beginnt. Sonst hielte
+    /// die Regel auch „  Zusammenfassung ─────“ oder „╭─ Titel ─╮“ für eine Linie.
+    static func isNamedRule(_ line: String) -> Bool {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        let characters = Array(trimmed)
+        let leading = characters.prefix { ruleCharacters.contains($0) }.count
+        let trailing = characters.reversed().prefix { ruleCharacters.contains($0) }.count
+        guard trailing >= 1, leading + trailing < characters.count else { return false }
+        let middle = characters[leading..<(characters.count - trailing)]
+        guard middle.last == " ", leading == 0 || middle.first == " " else { return false }
+        let label = String(middle).trimmingCharacters(in: .whitespaces)
+        guard !label.isEmpty, label.count <= maxRuleLabel,
+              !label.contains(where: { ruleCharacters.contains($0) }) else { return false }
+        if leading >= 3 { return true }
+        guard trailing == 1, characters.last == "─", !label.contains(" ") else { return false }
+        return leading > 0 || line.first == " "
     }
 
     /// Spalte, an der der Text nach dem Prompt-Zeichen beginnt.

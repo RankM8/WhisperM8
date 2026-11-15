@@ -337,7 +337,14 @@ final class AgentSessionAutoNamer {
                   FileManager.default.fileExists(atPath: url.path) else {
                 throw AgentTitleGeneratorError.missingTranscript
             }
-            guard let title = NativeSessionTitle.resolve(provider: session.provider, transcriptURL: url) else {
+            guard let title = NativeSessionTitle.resolve(
+                provider: session.provider, transcriptURL: url,
+                // Eigener Name per Chat-ID, dazu jeder Name nach dem Muster: Ein
+                // Abzweig (--fork-session) könnte den des Ursprungs mitbringen.
+                ignoringCustomTitle: {
+                    AgentCommandBuilder.isOwnNativeName($0, sessionID: session.id)
+                        || AgentCommandBuilder.looksLikeNativeName($0.lowercased())
+                }) else {
                 // Noch kein Prompt im Transcript — später erneut versuchen.
                 throw AgentTitleGeneratorError.emptyExcerpt
             }
