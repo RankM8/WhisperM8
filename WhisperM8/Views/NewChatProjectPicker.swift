@@ -10,8 +10,11 @@ import SwiftUI
 /// neu auswerten — das machte die Auswahl spürbar träge. Beim Öffnen entsteht
 /// die View neu, Suchbegriff und Markierung starten also immer frisch.
 struct NewChatProjectPicker: View {
-    /// Projekte in Anzeige-Reihenfolge (manuell hinzugefügte, sortiert).
+    /// Projekte in Anzeige-Reihenfolge (manuell hinzugefügte, sortiert;
+    /// Arbeitsordner direkt unter ihrem Haupt-Projekt).
     let projects: [AgentProject]
+    /// Arbeitsordner → Haupt-Projekt (WM8-102): eingerückt, mit eigenem Symbol.
+    var projectParents: [UUID: UUID] = [:]
     /// Aktuelles Ziel-Projekt (Häkchen).
     let selectedProjectID: UUID?
     /// Vorauswahl beim Öffnen (Controller „Create“), einmalig abgeholt.
@@ -148,8 +151,20 @@ struct NewChatProjectPicker: View {
         return Button {
             onPick(project)
         } label: {
+            let isWorktree = projectParents[project.id] != nil
             HStack(spacing: 8) {
-                ProjectAvatar(project: project, size: 16)
+                if isWorktree {
+                    // Arbeitsordner: eingerückt unter dem Haupt-Projekt, damit
+                    // sichtbar ist, dass der Chat dort und nicht im Hauptordner startet.
+                    Image(systemName: AgentWorkingCopyBadge.iconName(.worktree))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(AgentWorkingCopyBadge.elsewhereColor)
+                        .frame(width: 16)
+                        .padding(.leading, 18)
+                        .help("Worktree next to the project")
+                } else {
+                    ProjectAvatar(project: project, size: 16)
+                }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(project.name)
                         .font(.system(size: 12, weight: .medium))

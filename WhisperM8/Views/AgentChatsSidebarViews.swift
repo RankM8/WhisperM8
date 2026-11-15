@@ -14,7 +14,12 @@ struct ProjectChatGroup: View {
     var onSelectProject: () -> Void
     var onToggleExpanded: () -> Void
     var onSelectSession: (UUID) -> Void
-    var onNewChat: () -> Void
+    /// Neuer Chat im gewählten Ordner: das Projekt selbst oder einer seiner
+    /// Arbeitsordner (WM8-102).
+    var onNewChat: (AgentProject) -> Void
+    /// Arbeitsordner neben dem Projekt, die unter ihm angezeigt werden. Gibt
+    /// es welche, fragt das Plus, wo der Chat starten soll.
+    var worktreeProjects: [AgentProject] = []
     /// ⊞ am Header / Kontextmenü: Projekt als LIVE-Grid seiner aktiven Chats
     /// öffnen. `canOpenAsWorkspace` steuert nur den Enabled-Zustand — WELCHE
     /// Chats aktiv sind, weiß allein der Aufrufer (scope-unabhängige
@@ -448,15 +453,41 @@ struct ProjectChatGroup: View {
                             ? String(localized: "Open project as workspace (live grid of the active chats)")
                             : String(localized: "No active chats in this project"))
                     if isHeaderHovered {
-                        Button(action: onNewChat) {
-                            Image(systemName: "plus")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundStyle(AgentTheme.textSecondary)
-                                .frame(width: 20, height: 20)
-                                .contentShape(Rectangle())
+                        if worktreeProjects.isEmpty {
+                            Button { onNewChat(project) } label: {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(AgentTheme.textSecondary)
+                                    .frame(width: 20, height: 20)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .help("Start a new Codex chat in the project")
+                        } else {
+                            // In der Gruppe stehen auch Chats aus Arbeitsordnern:
+                            // Das Plus fragt, wo der neue Chat startet, statt still
+                            // den Hauptordner zu nehmen (WM8-102).
+                            Menu {
+                                Button { onNewChat(project) } label: {
+                                    Label("Main folder", systemImage: "folder")
+                                }
+                                ForEach(worktreeProjects) { worktree in
+                                    Button { onNewChat(worktree) } label: {
+                                        Label(worktree.name, systemImage: AgentWorkingCopyBadge.iconName(.worktree))
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: "plus")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .foregroundStyle(AgentTheme.textSecondary)
+                                    .frame(width: 20, height: 20)
+                                    .contentShape(Rectangle())
+                            }
+                            .menuStyle(.borderlessButton)
+                            .menuIndicator(.hidden)
+                            .fixedSize()
+                            .help("New chat: choose the main folder or a worktree")
                         }
-                        .buttonStyle(.plain)
-                        .help("Start a new Codex chat in the project")
                     } else if let workspaceOccupancyLabel {
                         Text(workspaceOccupancyLabel)
                             .font(.system(size: 11, weight: .semibold).monospacedDigit())

@@ -58,12 +58,6 @@ extension AgentWindowStore {
     /// (`AgentTabGrouping.key`): Projekt-Ansichten zählen nicht, sonst trüge
     /// jeder aktive Chat eine Workspace-Färbung.
     var tabGroupWorkspaceBySession: [UUID: UUID] {
-        var result: [UUID: UUID] = [:]
-        for entity in gridWorkspaces where entity.sourceProjectID == nil {
-            for sessionID in entity.occupiedSessionIDs where result[sessionID] == nil {
-                result[sessionID] = entity.id
-            }
-        }
-        return result
+        AgentTabOrder.workspaceBySession(gridWorkspaces: gridWorkspaces)
     }
 }

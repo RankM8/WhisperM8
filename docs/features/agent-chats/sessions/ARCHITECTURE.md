@@ -248,7 +248,13 @@ selbst eigenständiges und manuell angelegtes Haupt-Projekt, sonst steht der
 Arbeitsordner wie bisher allein. Bewusst kein Umzug der Chats ins Haupt-Projekt: Start,
 Fortsetzen, Bindung und Verlaufssuche nutzen den Projektpfad als Ordner des Chats, und
 der Scan hängt Chats ohnehin wieder an den Ordner ihres Verlaufs. Ziehen innerhalb der
-Gruppe verschiebt einen solchen Chat deshalb nicht ins Haupt-Projekt. Die
+Gruppe verschiebt einen solchen Chat deshalb nicht ins Haupt-Projekt. „Neuer Chat“ (Auswahlmenü, ⌘N, Controller „Create“) führt
+die Arbeitsordner eingerückt unter ihrem Haupt-Projekt; das Plus am Gruppenkopf fragt
+per Menü, ob der Chat im Hauptordner oder in einem Arbeitsordner starten soll, sobald
+die Gruppe Arbeitsordner hat. Tab-Gruppen, `chats order --tabs` und der Tab-Umschalter
+leiten die Gruppe über eine einzige Funktion ab (`AgentTabOrder.groupingEntry`,
+`TabSwitcherScope.tabs`). Die Zuordnung bildet `AgentWorkspaceUIModel.projectParents`
+einmal je Änderung der Projekte, nicht je Tab oder Zeile. Die
 Arbeitskopie-Marke misst am Haupt-Repo und zeigt „Arbeitskopie akquise-ai-kurse“.
 
 Fremde Repos: Was in `.git` steht, bestimmt das Repo, und das kann fremd sein.

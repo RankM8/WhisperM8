@@ -45,7 +45,7 @@ struct TicketBoardEnvironment {
                 workspace.projects.map { ($0.id, (name: $0.name, path: TicketConfig.normalized($0.path))) },
                 uniquingKeysWith: { first, _ in first })
             // Arbeitsordner neben dem Projekt zählen zum Haupt-Projekt (WM8-102).
-            let parents = AgentProjectDisplay.parentByProjectID(projects: workspace.projects)
+            let parents = AgentWorkspaceUIModel.shared.projectParents
             return workspace.sessions.compactMap { session in
                 guard session.status != .archived,
                       let project = projects[AgentProjectDisplay.displayProjectID(session.projectID, parents: parents)]

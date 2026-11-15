@@ -10941,6 +10941,16 @@
         }
       }
     },
+    "New chat: choose the main folder or a worktree": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neuer Chat: Hauptordner oder Arbeitsordner wählen"
+          }
+        }
+      }
+    },
     "New chats": {
       "localizations": {
         "de": {
@@ -21560,6 +21570,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Workspaces & Projekte"
+          }
+        }
+      }
+    },
+    "Worktree next to the project": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeitsordner neben dem Projekt"
           }
         }
       }

@@ -49,6 +49,19 @@ enum TabSwitcherScope: Equatable {
     ///
     /// Weniger als 2 Ziele → `nil` (kein Switcher; bewusst KEIN Rückfall auf
     /// eine andere Situation, sonst wechselte der Umfang je nach Belegung).
+    /// Tabs für `resolve`: Ein Chat aus einem Arbeitsordner neben dem
+    /// Projekt zählt zum Haupt-Projekt (WM8-102), sonst spränge der Umschalter
+    /// in einer gemischten Gruppe nur zwischen Chats desselben Ordners.
+    static func tabs(from sessions: [AgentChatSession], projectParents: [UUID: UUID]) -> [Tab] {
+        sessions.map {
+            Tab(
+                id: $0.id,
+                projectID: AgentProjectDisplay.displayProjectID($0.projectID, parents: projectParents),
+                isArchived: $0.status == .archived
+            )
+        }
+    }
+
     static func resolve(
         showsGrid: Bool,
         activeWorkspace: AgentGridWorkspace?,

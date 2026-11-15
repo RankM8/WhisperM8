@@ -21,9 +21,7 @@ extension AgentChatsView {
     /// gewinnt vor der Projektzugehörigkeit.
     /// Arbeitsordner neben dem Projekt gruppieren unter ihrem Haupt-Projekt
     /// (WM8-102), wie in der Seitenleiste.
-    var tabProjectParents: [UUID: UUID] {
-        AgentProjectDisplay.parentByProjectID(projects: workspace.projects)
-    }
+    var tabProjectParents: [UUID: UUID] { projectParents }
 
     /// Projekt, unter dem ein Chat angezeigt wird (Symbol an Tab und Zeile):
     /// bei Arbeitsordnern neben dem Projekt das Haupt-Projekt (WM8-102).
@@ -47,10 +45,7 @@ extension AgentChatsView {
         let parents = tabProjectParents
         return AgentTabGrouping.items(
             entries: tabs.map {
-                AgentTabGroupingEntry(
-                    sessionID: $0.id,
-                    projectID: AgentProjectDisplay.displayProjectID($0.projectID, parents: parents)
-                )
+                AgentTabOrder.groupingEntry(sessionID: $0.id, projectID: $0.projectID, projectParents: parents)
             },
             workspaceBySession: tabWorkspaceBySession,
             enabled: tabGroupingEnabled
@@ -78,10 +73,8 @@ extension AgentChatsView {
             guard let session = sessionsByID[id], session.status != .archived else {
                 return nil
             }
-            return AgentTabGroupingEntry(
-                sessionID: session.id,
-                projectID: AgentProjectDisplay.displayProjectID(session.projectID, parents: parents)
-            )
+            return AgentTabOrder.groupingEntry(
+                sessionID: session.id, projectID: session.projectID, projectParents: parents)
         }
         return AgentTabOrder.orderIDs(of: AgentTabGrouping.items(
             entries: entries,
@@ -95,10 +88,8 @@ extension AgentChatsView {
             return nil
         }
         return AgentTabGrouping.key(
-            for: AgentTabGroupingEntry(
-                sessionID: session.id,
-                projectID: AgentProjectDisplay.displayProjectID(session.projectID, parents: tabProjectParents)
-            ),
+            for: AgentTabOrder.groupingEntry(
+                sessionID: session.id, projectID: session.projectID, projectParents: tabProjectParents),
             workspaceBySession: tabWorkspaceBySession
         )
     }
@@ -128,12 +119,11 @@ extension AgentChatsView {
         let moving = draggedTabIDs(for: dropped)
         // Gemischte Herkunft (nur bei ausgeschalteter Gruppierung möglich)
         // hat keinen Zielcluster — dann gilt allein die Grundregel.
-        let origins = Set(moving.compactMap(tabGroupingKey(for:)))
         return AgentTabGrouping.snappedInsertionIndex(
             requested: rawIndex,
             slots: tabStripSlots,
             movingIDs: Set(moving),
-            movingOrigin: origins.count == 1 ? origins.first : nil,
+            movingOrigin: AgentTabOrder.movingOrigin(moving, keyOf: { tabGroupingKey(for: $0) }),
             originOfSession: { tabGroupingKey(for: $0) },
             groupingEnabled: tabGroupingEnabled
         )

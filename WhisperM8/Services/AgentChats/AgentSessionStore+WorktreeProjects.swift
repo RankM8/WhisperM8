@@ -92,4 +92,21 @@ enum AgentProjectDisplay {
     static func displayProjectID(_ projectID: UUID, parents: [UUID: UUID]) -> UUID {
         parents[projectID] ?? projectID
     }
+
+    /// Arbeitsordner je Haupt-Projekt, nach Name sortiert.
+    static func worktreesByParent(projects: [AgentProject], parents: [UUID: UUID]) -> [UUID: [AgentProject]] {
+        var result: [UUID: [AgentProject]] = [:]
+        for project in projects {
+            guard let parentID = parents[project.id] else { continue }
+            result[parentID, default: []].append(project)
+        }
+        return result.mapValues { $0.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending } }
+    }
+
+    /// Reihenfolge für „Neuer Chat“: jedes Haupt-Projekt, direkt darunter
+    /// seine Arbeitsordner, damit man sieht, wo der Chat startet.
+    static func pickerOrder(mainProjects: [AgentProject], allProjects: [AgentProject], parents: [UUID: UUID]) -> [AgentProject] {
+        let children = worktreesByParent(projects: allProjects, parents: parents)
+        return mainProjects.flatMap { [$0] + (children[$0.id] ?? []) }
+    }
 }

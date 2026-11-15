@@ -607,7 +607,7 @@ extension AgentChatsView {
             workspace.sessions.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }
         )
         // Arbeitsordner neben dem Projekt gehören dazu (WM8-102).
-        let parents = AgentProjectDisplay.parentByProjectID(projects: workspace.projects)
+        let parents = projectParents
         let hasForeign = members.contains {
             sessionsByID[$0].map { AgentProjectDisplay.displayProjectID($0.projectID, parents: parents) } != sourceProjectID
         }

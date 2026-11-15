@@ -92,7 +92,6 @@ struct AgentChatLaunchService {
         do {
             let project = try store.upsertProject(path: projectPath)
             try? store.linkWorktreeProject(path: project.path)  // WM8-102
-        try? store.linkWorktreeProject(path: project.path)  // WM8-102
             let session: AgentChatSession
             switch provider {
             case _ where asTerminal:

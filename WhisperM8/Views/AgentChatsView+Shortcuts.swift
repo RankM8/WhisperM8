@@ -494,13 +494,7 @@ extension AgentChatsView {
             showsGrid: showsGrid,
             activeWorkspace: activeGridWorkspaceEntity,
             selectedSessionID: tabSwitcherCurrentID(amongHeaderTabs: openTabs),
-            openTabs: tabs.map {
-                TabSwitcherScope.Tab(
-                    id: $0.id,
-                    projectID: $0.projectID,
-                    isArchived: $0.status == .archived
-                )
-            }
+            openTabs: TabSwitcherScope.tabs(from: tabs, projectParents: projectParents)
         )
         let order = scope?.order ?? []
         // Darstellung folgt dem Umfang: A (`.grid`) markiert die Panes und hat

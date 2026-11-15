@@ -120,6 +120,8 @@ struct AgentSidebarSnapshot {
     /// überschreiben (Review-Befund 2026-08-12).
     var activeSessionIDsByProject: [UUID: Set<UUID>]
     var visibleProjects: [AgentProject]
+    /// Arbeitsordner je angezeigtem Projekt (WM8-102), für „Neuer Chat“.
+    var worktreesByProject: [UUID: [AgentProject]] = [:]
     var visibleFlatSessions: [AgentChatSession]
     var visibleFlatOrderIDs: [UUID]
     var flatHiddenCount: Int
@@ -325,6 +327,7 @@ struct AgentSidebarModelBuilder {
             sessionsByProject: sessionsByProject,
             activeSessionIDsByProject: activeSessionIDsByProject,
             visibleProjects: visibleProjects,
+            worktreesByProject: AgentProjectDisplay.worktreesByParent(projects: workspace.projects, parents: projectParents),
             visibleFlatSessions: visibleFlatSessions,
             visibleFlatOrderIDs: visibleFlatOrderIDs,
             flatHiddenCount: flatHiddenCount,

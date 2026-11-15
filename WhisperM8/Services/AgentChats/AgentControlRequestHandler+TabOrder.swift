@@ -49,7 +49,7 @@ extension AgentControlRequestHandler {
         func groupKey(_ id: UUID) -> AgentTabGroupingKey? {
             byID[id].map {
                 AgentTabGrouping.key(
-                    for: .init(sessionID: id, projectID: AgentProjectDisplay.displayProjectID($0.projectID, parents: projectParents)),
+                    for: AgentTabOrder.groupingEntry(sessionID: id, projectID: $0.projectID, projectParents: projectParents),
                     workspaceBySession: workspaceBySession)
             }
         }

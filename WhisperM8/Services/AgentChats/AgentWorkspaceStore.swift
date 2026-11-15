@@ -401,7 +401,16 @@ final class AgentWorkspaceStore: @unchecked Sendable {
 final class AgentWorkspaceUIModel {
     static let shared = AgentWorkspaceUIModel()
 
-    private(set) var workspace: AgentWorkspace
+    private(set) var workspace: AgentWorkspace {
+        didSet {
+            guard workspace.projects != oldValue.projects else { return }
+            let parents = AgentProjectDisplay.parentByProjectID(projects: workspace.projects)
+            if parents != projectParents { projectParents = parents }
+        }
+    }
+    /// Arbeitsordner → Haupt-Projekt (WM8-102), einmal je Änderung der
+    /// Projekte gebildet statt je Tab, Zeile oder Drop.
+    private(set) var projectParents: [UUID: UUID] = [:]
     /// `true`, solange der letzte Workspace-Write fehlgeschlagen ist (LR-AK-005).
     private(set) var persistenceFailing = false
     private let store: AgentWorkspaceStore
@@ -433,6 +442,7 @@ final class AgentWorkspaceUIModel {
         // Schließt das kleine Fenster zwischen Initial-Read und Callback-
         // Installation: eine genau dort erfolgte Mutation wird so nachgezogen.
         self.workspace = store.read { $0 }
+        self.projectParents = AgentProjectDisplay.parentByProjectID(projects: workspace.projects)
     }
 }
 

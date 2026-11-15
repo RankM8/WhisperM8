@@ -57,6 +57,7 @@ struct AgentChatsView: View {
     /// `workspace = store.loadWorkspace()`-Reloads entfallen.
     @State private var workspaceModel = AgentWorkspaceUIModel.shared
     var workspace: AgentWorkspace { workspaceModel.workspace }
+    var projectParents: [UUID: UUID] { workspaceModel.projectParents }  // WM8-102
 
     /// Phase-3 (S7-A): testbare Store-Aktionen. Zustandslos → on-demand erzeugt.
     /// internal, damit die Extensions (Session/Project-Lifecycle) es nutzen.
@@ -478,7 +479,7 @@ struct AgentChatsView: View {
 
     var manualProjects: [AgentProject] {
         // Arbeitsordner neben dem Projekt erscheinen unter ihrem Haupt-Projekt (WM8-102).
-        let parents = AgentProjectDisplay.parentByProjectID(projects: workspace.projects)
+        let parents = projectParents
         return AgentSessionStore.sortedProjects(workspace.projects.filter { $0.isManuallyAdded && parents[$0.id] == nil })
     }
 
@@ -1455,11 +1456,10 @@ struct AgentChatsView: View {
                                     orderedSessionIDs: projectSessions.map(\.id)
                                 )
                             },
-                            onNewChat: {
-                                selectedProjectID = project.id
-                                expandedProjectIDs.insert(project.id)
+                            onNewChat: { target in
+                                selectedProjectID = target.id; expandedProjectIDs.insert(project.id)
                                 createDefaultSession()
-                            },
+                            }, worktreeProjects: snapshot.worktreesByProject[project.id] ?? [],
                             canOpenAsWorkspace: !(snapshot.activeSessionIDsByProject[project.id]?.isEmpty ?? true),
                             isWorkspaceOpen: isGridActive
                                 && activeGridWorkspaceEntity?.sourceProjectID == project.id,
@@ -1948,7 +1948,7 @@ struct AgentChatsView: View {
     /// `NewChatProjectPicker`).
     private var newChatProjectPicker: some View {
         NewChatProjectPicker(
-            projects: manualProjects,
+            projects: AgentProjectDisplay.pickerOrder(mainProjects: manualProjects, allProjects: workspace.projects, parents: projectParents), projectParents: projectParents,
             selectedProjectID: selectedProjectID,
             takePreferredProjectID: { commandState.takePreferredNewChatProjectID() },
             onPick: { startNewChat(in: $0) },

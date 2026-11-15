@@ -108,7 +108,7 @@ extension AgentChatsView {
                 jobRuntimeModel: jobRuntimeModel,
                 windowStore: windowStore,
                 sessions: workspace.sessions,
-                projectParents: AgentProjectDisplay.parentByProjectID(projects: workspace.projects)
+                projectParents: projectParents
             )
         }
     }
