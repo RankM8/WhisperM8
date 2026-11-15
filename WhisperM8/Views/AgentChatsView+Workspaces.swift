@@ -27,8 +27,11 @@ struct ProjectViewLiveSync: View {
     let jobRuntimeModel: AgentJobRuntimeModel
     let windowStore: AgentWindowStore
     let sessions: [AgentChatSession]
+    /// Arbeitsordner → Haupt-Projekt (WM8-102), wie in der Seitenleiste.
+    var projectParents: [UUID: UUID] = [:]
 
     struct Inputs: Equatable {
+        var projectParents: [UUID: UUID] = [:]
         var running: Set<UUID>
         var globalTabs: Set<UUID>
         var sessionsFingerprint: Int
@@ -54,6 +57,7 @@ struct ProjectViewLiveSync: View {
 
     var body: some View {
         let inputs = Inputs(
+            projectParents: projectParents,
             running: AgentChatsView.runningSessionIDs(
                 terminalActive: terminalRegistry.activeSessionIDs, jobRuntime: jobRuntimeModel
             ),
@@ -66,7 +70,8 @@ struct ProjectViewLiveSync: View {
             .frame(width: 0, height: 0)
             .task(id: inputs) {
                 let active = AgentSidebarModelBuilder.activeSessionIDsByProject(
-                    sessions: sessions, runningSessionIDs: inputs.running, globalOpenTabIDs: inputs.globalTabs
+                    sessions: sessions, runningSessionIDs: inputs.running, globalOpenTabIDs: inputs.globalTabs,
+                    projectParents: inputs.projectParents
                 )
                 windowStore.syncActiveProjectGridWorkspaces(activeSessionIDsByProject: active)
             }
@@ -102,7 +107,8 @@ extension AgentChatsView {
                 terminalRegistry: terminalRegistry,
                 jobRuntimeModel: jobRuntimeModel,
                 windowStore: windowStore,
-                sessions: workspace.sessions
+                sessions: workspace.sessions,
+                projectParents: AgentProjectDisplay.parentByProjectID(projects: workspace.projects)
             )
         }
     }
@@ -331,7 +337,7 @@ extension AgentChatsView {
         let closeAction = SidebarCloseAction.resolveForWorkspaceRow(session: session)
         return PinnedSessionRow(
             session: session,
-            project: workspace.projects.first { $0.id == session.projectID },
+            project: displayProject(for: session),
             isSelected: selectedSessionID == session.id,
             isMultiSelected: multiSelection.contains(session.id),
             statusStore: runtimeStatusStore,

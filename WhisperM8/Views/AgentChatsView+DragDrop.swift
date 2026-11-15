@@ -15,6 +15,14 @@ extension AgentChatsView {
         in projectID: UUID,
         beforeSessionID: UUID?
     ) {
+        // Ein Chat aus einem Arbeitsordner neben dem Projekt (WM8-102) steht
+        // nur zur Anzeige unter dem Haupt-Projekt. Ziehen innerhalb dieser
+        // Gruppe darf ihn nicht ins Haupt-Projekt verschieben, sonst startete
+        // er dort statt in seinem Ordner.
+        if let source = workspace.sessions.first(where: { $0.id == dropped.sessionID }),
+           AgentProjectDisplay.parentByProjectID(projects: workspace.projects)[source.projectID] == projectID {
+            return
+        }
         switch AgentDragDropPlanner.sessionDropPlan(
             dropped: dropped,
             targetProjectID: projectID,

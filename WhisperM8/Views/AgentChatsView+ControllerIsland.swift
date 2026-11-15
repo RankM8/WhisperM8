@@ -39,7 +39,8 @@ extension AgentChatsView {
             sessions: workspace.sessions,
             runningSessionIDs: Self.runningSessionIDs(
                 terminalActive: terminalRegistry.activeSessionIDs, jobRuntime: jobRuntimeModel),
-            globalOpenTabIDs: windowStore.allWindowOpenTabIDs
+            globalOpenTabIDs: windowStore.allWindowOpenTabIDs,
+            projectParents: AgentProjectDisplay.parentByProjectID(projects: workspace.projects)
         )
     }
 

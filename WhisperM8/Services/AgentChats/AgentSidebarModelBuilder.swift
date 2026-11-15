@@ -155,22 +155,30 @@ struct AgentSidebarModelBuilder {
         selectedSessionID: UUID?,
         globalOpenTabIDs: Set<UUID>? = nil
     ) -> AgentSidebarSnapshot {
+        let projectParents = AgentProjectDisplay.parentByProjectID(projects: workspace.projects)
         let manualProjects: [AgentProject]
         let hasManualProjects: Bool
         switch layout {
         case .grouped:
             manualProjects = AgentSessionStore.sortedProjects(
-                workspace.projects.filter(\.isManuallyAdded)
+                workspace.projects.filter { $0.isManuallyAdded && projectParents[$0.id] == nil }
             )
             hasManualProjects = !manualProjects.isEmpty
         case .flat:
             manualProjects = []
             hasManualProjects = workspace.projects.contains(where: \.isManuallyAdded)
         }
-        let projectByID = Dictionary(
+        // Arbeitsordner neben dem Projekt (WM8-102) erscheinen unter ihrem
+        // Haupt-Projekt: eigene Gruppe gibt es für sie nicht, und wer über
+        // `projectByID` nach dem Projekt eines Chats fragt, bekommt das
+        // Haupt-Projekt (Symbol in flacher Liste, Gepinnt, Workspaces).
+        var projectByID = Dictionary(
             workspace.projects.map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first }
         )
+        for (childID, parentID) in projectParents {
+            projectByID[childID] = projectByID[parentID]
+        }
         let subagents = subagentChildren(workspaceSessions: workspace.sessions)
         var subagentChildIDs: Set<UUID> = []
         var parentIDByChildID: [UUID: UUID] = [:]
@@ -210,7 +218,8 @@ struct AgentSidebarModelBuilder {
             sessions: workspace.sessions,
             runningSessionIDs: scope.runningSessionIDs,
             globalOpenTabIDs: globalOpenTabIDs ?? scope.openTabIDs,
-            parentIDByChildID: parentIDByChildID
+            parentIDByChildID: parentIDByChildID,
+            projectParents: projectParents
         )
         let pinnedIDSet = Set(pinnedSessionIDs)
         let trimmedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -248,7 +257,8 @@ struct AgentSidebarModelBuilder {
 
             switch layout {
             case .grouped:
-                grouped[session.projectID, default: []].append(session)
+                grouped[AgentProjectDisplay.displayProjectID(session.projectID, parents: projectParents), default: []]
+                    .append(session)
             case .flat:
                 guard matchesSearch(
                     session: session,
@@ -403,7 +413,8 @@ struct AgentSidebarModelBuilder {
     static func activeSessionIDsByProject(
         sessions: [AgentChatSession],
         runningSessionIDs: Set<UUID>,
-        globalOpenTabIDs: Set<UUID>
+        globalOpenTabIDs: Set<UUID>,
+        projectParents: [UUID: UUID] = [:]
     ) -> [UUID: Set<UUID>] {
         var parentIDByChildID: [UUID: UUID] = [:]
         for (parentID, children) in subagentChildren(workspaceSessions: sessions).byParentLocalID {
@@ -413,7 +424,8 @@ struct AgentSidebarModelBuilder {
             sessions: sessions,
             runningSessionIDs: runningSessionIDs,
             globalOpenTabIDs: globalOpenTabIDs,
-            parentIDByChildID: parentIDByChildID
+            parentIDByChildID: parentIDByChildID,
+            projectParents: projectParents
         )
     }
 
@@ -421,7 +433,8 @@ struct AgentSidebarModelBuilder {
         sessions: [AgentChatSession],
         runningSessionIDs: Set<UUID>,
         globalOpenTabIDs: Set<UUID>,
-        parentIDByChildID: [UUID: UUID]
+        parentIDByChildID: [UUID: UUID],
+        projectParents: [UUID: UUID] = [:]
     ) -> [UUID: Set<UUID>] {
         let direct = runningSessionIDs.union(globalOpenTabIDs)
         var active = direct
@@ -434,7 +447,8 @@ struct AgentSidebarModelBuilder {
             && session.status != .archived
             && session.isManuallyCreated
             && parentIDByChildID[session.id] == nil {
-            result[session.projectID, default: []].insert(session.id)
+            result[AgentProjectDisplay.displayProjectID(session.projectID, parents: projectParents), default: []]
+                .insert(session.id)
         }
         return result
     }

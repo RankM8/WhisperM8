@@ -477,9 +477,9 @@ struct AgentChatsView: View {
     }
 
     var manualProjects: [AgentProject] {
-        AgentSessionStore.sortedProjects(
-            workspace.projects.filter(\.isManuallyAdded)
-        )
+        // Arbeitsordner neben dem Projekt erscheinen unter ihrem Haupt-Projekt (WM8-102).
+        let parents = AgentProjectDisplay.parentByProjectID(projects: workspace.projects)
+        return AgentSessionStore.sortedProjects(workspace.projects.filter { $0.isManuallyAdded && parents[$0.id] == nil })
     }
 
     // P4: Die frühere computed-Property `visibleProjects` lebt jetzt als

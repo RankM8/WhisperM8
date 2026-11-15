@@ -36,12 +36,29 @@ struct TicketConfig: Codable, Equatable {
 
     /// Team für ein Verzeichnis: das Projekt mit dem längsten passenden Pfad,
     /// damit auch Arbeitsordner unterhalb des Projekts (Worktrees) passen.
+    ///
+    /// Ein Arbeitsordner neben dem Projekt (`akquise-ai-kurse` zu `akquise-ai`,
+    /// WM8-102) gehört zum Team seines Haupt-Repos. Das liest die Datei `.git`
+    /// des Ordners: nicht auf dem Main Thread aufrufen.
     func team(forDirectory directory: String) -> String? {
+        directTeam(forDirectory: directory)
+            ?? siblingMainRepo(of: directory).flatMap(directTeam(forDirectory:))
+    }
+
+    private func directTeam(forDirectory directory: String) -> String? {
         let path = Self.normalized(directory)
         return teamsByProjectPath
             .filter { Self.contains($0.key, path) }
             .max { $0.key.count < $1.key.count }?
             .value
+    }
+
+    /// Haupt-Repo eines Arbeitsordners neben dem Projekt, nur wenn der Ordner
+    /// selbst keinem Projekt zugeordnet ist.
+    private func siblingMainRepo(of directory: String) -> String? {
+        // Auch aus einem Unterordner heraus: erst die Wurzel des Arbeitsordners.
+        let root = GitHeadReader.location(at: directory)?.root ?? directory
+        return AgentProjectPath.siblingWorktreeMainRepo(of: AgentProjectPath.canonicalProjectPath(root))
     }
 
     /// Liegt `path` im Projektordner `project`? Ohne Groß/Klein: Das Dateisystem
@@ -54,6 +71,11 @@ struct TicketConfig: Codable, Equatable {
 
     /// Projektordner zu einem Verzeichnis (für „Chats dieses Projekts“).
     func projectPath(forDirectory directory: String) -> String? {
+        directProjectPath(forDirectory: directory)
+            ?? siblingMainRepo(of: directory).flatMap(directProjectPath(forDirectory:))
+    }
+
+    private func directProjectPath(forDirectory directory: String) -> String? {
         let path = Self.normalized(directory)
         return teamsByProjectPath.keys
             .filter { Self.contains($0, path) }

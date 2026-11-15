@@ -49,9 +49,13 @@ struct ChatsWorkspaceReader {
         let workspace = AgentWorkspaceRepository(fileURL: workspaceFileURL).loadReadOnly()
         let uiState = loadUIStateReadOnly()
         let projectsByID = Dictionary(uniqueKeysWithValues: workspace.projects.map { ($0.id, $0) })
+        // Arbeitsordner neben dem Projekt tragen den Namen ihres Haupt-Projekts
+        // (WM8-102); der Pfad bleibt ihr eigener, dort liegt der Verlauf.
+        let parents = AgentProjectDisplay.parentByProjectID(projects: workspace.projects)
         let entries = workspace.sessions.compactMap { session -> ChatsSessionEntry? in
             guard let project = projectsByID[session.projectID] else { return nil }
-            return ChatsSessionEntry(session: session, projectName: project.name, projectPath: project.path)
+            let shown = parents[project.id].flatMap { projectsByID[$0] } ?? project
+            return ChatsSessionEntry(session: session, projectName: shown.name, projectPath: project.path)
         }
         var openTabs = Set(uiState?.openTabIDs ?? [])
         for window in uiState?.windows ?? [] {

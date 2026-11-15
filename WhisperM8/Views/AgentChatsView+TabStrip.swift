@@ -142,7 +142,7 @@ extension AgentChatsView {
     ) -> some View {
         ChatTabButton(
             session: session,
-            project: workspace.projects.first { $0.id == session.projectID },
+            project: displayProject(for: session),
             isSelected: session.id == selectedSession?.id,
             isMultiSelected: multiSelection.contains(session.id),
             statusStore: runtimeStatusStore,

@@ -606,7 +606,8 @@ final class AgentSessionRuntimeWatcher {
     nonisolated static func workingCopy(
         in tail: String, entry: WatchedSession,
         gitLocation: (String) -> GitLocation? = { GitHeadReader.location(at: $0) },
-        resolve: (String) -> String = AgentSessionRuntimeWatcher.realPath
+        resolve: (String) -> String = AgentSessionRuntimeWatcher.realPath,
+        owningProject: (String) -> String = { AgentProjectPath.owningProjectPath($0) }
     ) -> AgentWorkingCopy? {
         guard let location = AgentWorkingLocationExtractor.location(in: tail, provider: entry.provider) else {
             return entry.cachedWorkingCopy
@@ -615,8 +616,11 @@ final class AgentSessionRuntimeWatcher {
         // Claude den echten Pfad, und ohne Auflösung wäre jeder Chat des
         // Projekts „außerhalb“ (Vic, WM8-60).
         let cwd = resolve(location.cwd)
+        // Arbeitsordner neben dem Projekt (WM8-102): gemessen am Haupt-Repo,
+        // damit die Marke „Arbeitskopie akquise-ai-kurse“ zeigt statt
+        // „Hauptordner“. Liest höchstens die Datei `.git` (gemerkt).
         return AgentWorkingCopyClassifier.classify(
-            cwd: cwd, projectPath: resolve(entry.cwd),
+            cwd: cwd, projectPath: resolve(owningProject(entry.cwd)),
             git: gitLocation(cwd), transcriptBranch: location.branch)
     }
 
