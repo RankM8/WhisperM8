@@ -94,8 +94,15 @@ Stopp. Chats, die in einem kuratierten Workspace stehen, fallen aus der
 Projektgruppe heraus und erscheinen dort als `SidebarWorkspaceHint` (ein Chat in
 mehreren Workspaces zählt zum ersten, wie bei der Tab-Herkunft). Projekte mit
 laufenden Chats stehen zuerst; `firstCalmProjectIndex` markiert den Trenner
-„Ohne laufende Chats“. Die gestoppten liegen unter der Faltzeile „N gestoppt“,
-die unter „Aktiv“ zu und sonst offen ist; Suche und Auswahl öffnen sie. Ziehen
+„Ohne laufende Chats“; ein angepinnter laufender Chat zählt dabei für sein
+Projekt. Die gestoppten liegen unter der Faltzeile „N gestoppt“, die unter
+„Aktiv“ zu und sonst offen ist. Ein Klick darauf wird je Projekt im UI-Zustand
+gespeichert (`openedStoppedFoldProjectIDs`/`closedStoppedFoldProjectIDs`),
+übersteht Scope-Wechsel und Neustart und gilt auch für die Liste von Controller
+und Tastatur. Ist die Zeile zu, steht nur ein gewählter gestoppter Chat darunter;
+eine Suche öffnet sie. Während einer Suche stehen Workspace-Chats wieder in
+ihrem Projekt, sonst trägt die Hinweiszeile die Auswahl, wenn der gewählte Chat
+im Workspace steht. Ziehen
 ändert weiter nur die Handreihenfolge, ein laufender Chat bleibt beim Ablegen
 zwischen gestoppten im oberen Block. `chats order` setzt dieselbe
 Handreihenfolge, gibt aber die Blöcke nicht wieder. Die flache Ansicht bleibt

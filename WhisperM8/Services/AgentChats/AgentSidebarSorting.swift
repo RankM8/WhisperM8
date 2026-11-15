@@ -89,16 +89,36 @@ enum AgentSidebarSorting {
     }
 
     /// Ist die Faltzeile „N gestoppt“ offen? Unter „Aktiv“ ist sie zu, unter
-    /// „Zuletzt“ und „Alle“ offen; ein Klick überstimmt das (`override`).
-    /// Eine Suche oder ein gewählter gestoppter Chat öffnen sie immer, sonst
-    /// wären Treffer oder Auswahl unsichtbar.
+    /// „Zuletzt“ und „Alle“ offen; ein Klick überstimmt das je Projekt
+    /// (`override`, gespeichert im UI-Zustand). Eine Suche öffnet sie immer,
+    /// sonst wären Treffer unsichtbar.
     static func isStoppedFoldOpen(
         scope: SidebarScope,
         override: Bool?,
-        isSearching: Bool,
-        containsSelection: Bool
+        isSearching: Bool
     ) -> Bool {
-        if isSearching || containsSelection { return true }
+        if isSearching { return true }
         return override ?? (scope != .active)
+    }
+
+    /// Gestoppte Chats, die unter der Faltzeile stehen. Offen: bis zum
+    /// Zeilen-Limit, der gewählte Chat (`revealID`) immer. Zu: nur der
+    /// gewählte Chat, falls er gestoppt ist — so klappt beim Wechsel zwischen
+    /// laufendem und gestopptem Chat nicht jedes Mal der ganze Block auf.
+    static func visibleStopped(
+        _ stopped: [AgentChatSession],
+        foldOpen: Bool,
+        limit: Int,
+        revealID: UUID?
+    ) -> (visible: [AgentChatSession], hiddenCount: Int) {
+        guard foldOpen else {
+            return (stopped.filter { $0.id == revealID }, 0)
+        }
+        var effectiveLimit = max(0, limit)
+        if let revealID, let index = stopped.firstIndex(where: { $0.id == revealID }), index >= effectiveLimit {
+            effectiveLimit = index + 1
+        }
+        let visible = Array(stopped.prefix(effectiveLimit))
+        return (visible, stopped.count - visible.count)
     }
 }

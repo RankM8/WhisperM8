@@ -15,6 +15,7 @@ extension AgentChatsView {
         listProxy: ScrollViewProxy
     ) -> some View {
         let isSearching = !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let foldOverrides = windowStore.stoppedFoldOverrides
         ForEach(Array(snapshot.visibleProjects.enumerated()), id: \.element.id) { index, project in
             if index == snapshot.firstCalmProjectIndex {
                 SidebarCalmProjectsBand()
@@ -84,7 +85,9 @@ extension AgentChatsView {
                     dropProject(dropped, beforeProjectID: beforeID)
                 },
                 onJumpToWorkspace: { jumpToSidebarWorkspace($0, proxy: listProxy) },
-                isSearching: isSearching
+                isSearching: isSearching,
+                stoppedFoldOverride: foldOverrides[project.id],
+                onSetStoppedFold: { windowStore.setStoppedFold(open: $0, for: project.id) }
             )
         }
     }

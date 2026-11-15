@@ -53,9 +53,10 @@ extension UISnapshotGallery {
                                        workspaceBySession: workspaceBySession, workspaces: workspaces)
         }
 
-        func group(_ project: AgentProject, _ blocks: SidebarProjectBlocks, scope: SidebarScope) -> some View {
+        func group(_ project: AgentProject, _ blocks: SidebarProjectBlocks, scope: SidebarScope,
+                   selected: UUID?) -> some View {
             ProjectChatGroup(
-                project: project, blocks: blocks, isExpanded: true, selectedSessionID: nil,
+                project: project, blocks: blocks, isExpanded: true, selectedSessionID: selected,
                 multiSelection: [], openTabIDs: Set(blocks.running.map(\.id)),
                 onSelectProject: {}, onToggleExpanded: {}, onSelectSession: { _ in }, onNewChat: { _ in },
                 canOpenAsWorkspace: true, onOpenAsWorkspace: {}, onCloseSession: { _ in },
@@ -68,12 +69,12 @@ extension UISnapshotGallery {
             )
         }
 
-        func list(scope: SidebarScope) -> AnyView {
+        func list(scope: SidebarScope, selected: UUID? = nil) -> AnyView {
             AnyView(VStack(alignment: .leading, spacing: 2) {
-                group(listm8, blocks([pia, una, jarvis] + listStopped), scope: scope)
-                group(whisperm8, blocks([gus, vic, claude] + wmStopped), scope: scope)
+                group(listm8, blocks([pia, una, jarvis] + listStopped), scope: scope, selected: selected)
+                group(whisperm8, blocks([gus, vic, claude] + wmStopped), scope: scope, selected: selected)
                 SidebarCalmProjectsBand()
-                group(buchhaltung, blocks([buch]), scope: scope)
+                group(buchhaltung, blocks([buch]), scope: scope, selected: selected)
             }
             .padding(.vertical, 6)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -83,6 +84,14 @@ extension UISnapshotGallery {
         return [
             Fixture(name: "seitenleiste-sortiert-aktiv", size: CGSize(width: 270, height: 330)) { list(scope: .active) },
             Fixture(name: "seitenleiste-sortiert-zuletzt", size: CGSize(width: 270, height: 470)) { list(scope: .recent) },
+            // Gewählt: ein gestoppter Chat (nur er steht unter der zugeklappten
+            // Zeile) bzw. ein Chat im Workspace (die Hinweiszeile trägt die Auswahl).
+            Fixture(name: "seitenleiste-sortiert-auswahl-gestoppt", size: CGSize(width: 270, height: 350)) {
+                list(scope: .active, selected: listStopped[1].id)
+            },
+            Fixture(name: "seitenleiste-sortiert-auswahl-workspace", size: CGSize(width: 270, height: 330)) {
+                list(scope: .active, selected: gus.id)
+            },
         ]
     }
 }

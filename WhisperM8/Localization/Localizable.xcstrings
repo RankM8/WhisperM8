@@ -6131,6 +6131,16 @@
         }
       }
     },
+    "The selected chat is in this workspace – click to show it": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der ausgewählte Chat steht in diesem Workspace – Klick zeigt ihn"
+          }
+        }
+      }
+    },
     "These chats are shown above in the workspace": {
       "localizations": {
         "de": {

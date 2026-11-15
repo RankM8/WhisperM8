@@ -256,9 +256,8 @@ final class AgentSidebarSortedTests: XCTestCase {
     }
 
     func testStoppedFoldIsClosedOnlyUnderActiveUntilClicked() {
-        func open(_ scope: SidebarScope, _ override: Bool? = nil, search: Bool = false, selection: Bool = false) -> Bool {
-            AgentSidebarSorting.isStoppedFoldOpen(
-                scope: scope, override: override, isSearching: search, containsSelection: selection)
+        func open(_ scope: SidebarScope, _ override: Bool? = nil, search: Bool = false) -> Bool {
+            AgentSidebarSorting.isStoppedFoldOpen(scope: scope, override: override, isSearching: search)
         }
         XCTAssertFalse(open(.active))
         XCTAssertTrue(open(.recent))
@@ -266,7 +265,18 @@ final class AgentSidebarSortedTests: XCTestCase {
         XCTAssertTrue(open(.active, true))
         XCTAssertFalse(open(.all, false))
         XCTAssertTrue(open(.active, false, search: true), "Suche überstimmt das Zuklappen")
-        XCTAssertTrue(open(.active, false, selection: true), "gewählter Chat bleibt sichtbar")
+    }
+
+    func testClosedFoldShowsOnlyTheSelectedStoppedChat() {
+        let repo = project("repo")
+        let stopped = (0..<4).map { index in chat("S" + String(index), in: repo, sortIndex: index) }
+        let closed = AgentSidebarSorting.visibleStopped(stopped, foldOpen: false, limit: 20, revealID: stopped[2].id)
+        XCTAssertEqual(closed.visible.map(\.title), ["S2"], "kein Aufklappen des ganzen Blocks")
+        XCTAssertEqual(closed.hiddenCount, 0)
+        XCTAssertTrue(AgentSidebarSorting.visibleStopped(stopped, foldOpen: false, limit: 20, revealID: nil).visible.isEmpty)
+        let open = AgentSidebarSorting.visibleStopped(stopped, foldOpen: true, limit: 2, revealID: stopped[3].id)
+        XCTAssertEqual(open.visible.map(\.title), ["S0", "S1", "S2", "S3"], "Limit reicht bis zur Auswahl")
+        XCTAssertEqual(AgentSidebarSorting.visibleStopped(stopped, foldOpen: true, limit: 2, revealID: nil).hiddenCount, 2)
     }
 
     func testControllerListFollowsRunningThenStoppedAndRespectsTheFold() {
@@ -282,7 +292,15 @@ final class AgentSidebarSortedTests: XCTestCase {
         }
         XCTAssertEqual(ids(.active), [r1.id], "unter Aktiv ist „N gestoppt“ zu")
         XCTAssertEqual(ids(.recent), [r1.id, s1.id, s2.id])
-        XCTAssertEqual(ids(.active, selected: s2.id), [r1.id, s1.id, s2.id], "Auswahl öffnet die Faltzeile")
+        XCTAssertEqual(ids(.active, selected: s2.id), [r1.id, s2.id], "zu: nur der gewählte gestoppte Chat")
+        XCTAssertEqual(
+            ProjectChatGroup.defaultVisibleRowIDs(
+                blocks: blocks, scope: .active, isSearching: false, selectedSessionID: nil, stoppedFoldOverride: true),
+            [r1.id, s1.id, s2.id], "gespeichert offen gilt auch für Controller und Tastatur")
+        XCTAssertEqual(
+            ProjectChatGroup.defaultVisibleRowIDs(
+                blocks: blocks, scope: .all, isSearching: false, selectedSessionID: nil, stoppedFoldOverride: false),
+            [r1.id], "gespeichert zu gilt in jedem Scope")
     }
 
     /// Ablegeregel: Ein laufender Chat, der zwischen gestoppte gezogen wird,
@@ -314,5 +332,45 @@ final class AgentSidebarSortedTests: XCTestCase {
         XCTAssertEqual(blocks.running.map(\.title), ["R2", "R1"])
         XCTAssertEqual(blocks.stopped.map(\.title), ["S1", "S2"])
     }
-}
 
+    func testSearchShowsWorkspaceChatsInTheirProjectAgain() {
+        let repo = project("repo")
+        let hit = chat("Treffer", in: repo)
+        let entity = gridWorkspace("W", slots: [hit.id])
+        let result = snapshot(
+            AgentWorkspace(projects: [repo], sessions: [hit]),
+            scope: filter(), query: "Treffer", workspaces: [entity])
+        XCTAssertEqual(result.sessionsByProject[repo.id]?.map(\.title), ["Treffer"])
+        XCTAssertEqual(result.projectBlocks[repo.id]?.workspaceHints, [])
+    }
+
+    func testProjectWhoseOnlyRunningChatIsPinnedIsNotCalm() {
+        let calm = project("ruhig", sortIndex: 0)
+        let pinnedHome = project("gepinnt", sortIndex: 1)
+        let pinned = chat("Pin", in: pinnedHome)
+        let result = snapshot(
+            AgentWorkspace(projects: [calm, pinnedHome],
+                           sessions: [chat("x", in: calm), pinned, chat("y", in: pinnedHome)]),
+            scope: filter(running: [pinned.id]), pinned: [pinned.id])
+        XCTAssertEqual(result.visibleProjects.map(\.name), ["gepinnt", "ruhig"])
+        XCTAssertEqual(result.firstCalmProjectIndex, 1)
+    }
+
+    func testStoppedFoldStateSurvivesEncodingAndPrunesDeletedProjects() throws {
+        let kept = UUID(), gone = UUID()
+        var state = AgentUIState()
+        state.openedStoppedFoldProjectIDs = [kept, gone]
+        state.closedStoppedFoldProjectIDs = [gone]
+        let decoded = try JSONDecoder().decode(AgentUIState.self, from: JSONEncoder().encode(state))
+        XCTAssertEqual(decoded.openedStoppedFoldProjectIDs, [kept, gone])
+        XCTAssertEqual(decoded.closedStoppedFoldProjectIDs, [gone])
+        let old = try JSONDecoder().decode(AgentUIState.self, from: Data("{}".utf8))
+        XCTAssertEqual(old.openedStoppedFoldProjectIDs, [], "ältere Datei ohne das Feld")
+
+        var pruned = decoded
+        pruned.prune(workspace: AgentWorkspace(
+            projects: [AgentProject(id: kept, name: "da", path: "/tmp/da", createdManually: true)], sessions: []))
+        XCTAssertEqual(pruned.openedStoppedFoldProjectIDs, [kept])
+        XCTAssertEqual(pruned.closedStoppedFoldProjectIDs, [])
+    }
+}
