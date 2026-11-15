@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<!--
+  Klick-Entwurf zu WM8-111 „Ticket-Board für den Alltag“. Plan: docs/plans/ticket-board-alltag.md.
+  Kein App-Code. Farben aus AppTheme.swift wie in docs/design/geplante-aufgaben.html.
+  Tickets und Chats aus dem Team WM8 (Abzug vom 15.11.2026). Der Produkt-Chat „Pia“, die Vorratszahlen
+  und alle Zeilen aus anderen Teams sind erfundene Beispiele. Der Text im Terminal ist nachgestellt.
+-->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ticket-Board Alltag</title>
+<style>
+  :root {
+    --bg:#f2f2f4; --panel:#ffffff; --ink:#1c1c1e; --ink2:#5f6064; --ink3:#7d7e83; --line:rgba(0,0,0,.09);
+    --win:#ffffff; --sidebar:#eeeef0; --header:#f2f2f4; --term:#fbfbfc; --border:rgba(0,0,0,.08);
+    --field:#ffffff; --field-line:rgba(0,0,0,.14); --sel:rgba(127,127,127,.14); --hl:rgba(94,106,210,.10);
+    --accent:#5e6ad2; --accent-ink:#ffffff; --working:#3fa873; --awaiting:#b9861c; --error:#d6473d;
+    --error-bg:rgba(214,71,61,.08); --warn-bg:rgba(201,150,42,.12); --ok-bg:rgba(63,168,115,.10);
+    --shadow:0 14px 40px rgba(0,0,0,.18); --card:#ffffff; --lane:#f6f6f8;
+  }
+  :root[data-theme="dark"] {
+    --bg:#17181b; --panel:#1f2023; --ink:#f1f1f3; --ink2:#a4a5ab; --ink3:#86878d; --line:rgba(255,255,255,.09);
+    --win:#0f0f10; --sidebar:#131415; --header:#121213; --term:#0f0f10; --border:rgba(255,255,255,.08);
+    --field:#1c1c1f; --field-line:rgba(255,255,255,.14); --sel:rgba(255,255,255,.08); --hl:rgba(124,132,232,.14);
+    --accent:#7c84e8; --accent-ink:#ffffff; --working:#4cc38a; --awaiting:#e9b949; --error:#e5594f;
+    --error-bg:rgba(229,89,79,.10); --warn-bg:rgba(233,185,73,.12); --ok-bg:rgba(76,195,138,.12);
+    --shadow:0 14px 40px rgba(0,0,0,.5); --card:#18191b; --lane:#141517;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#17181b; --panel:#1f2023; --ink:#f1f1f3; --ink2:#a4a5ab; --ink3:#86878d; --line:rgba(255,255,255,.09);
+      --win:#0f0f10; --sidebar:#131415; --header:#121213; --term:#0f0f10; --border:rgba(255,255,255,.08);
+      --field:#1c1c1f; --field-line:rgba(255,255,255,.14); --sel:rgba(255,255,255,.08); --hl:rgba(124,132,232,.14);
+      --accent:#7c84e8; --accent-ink:#ffffff; --working:#4cc38a; --awaiting:#e9b949; --error:#e5594f;
+      --error-bg:rgba(229,89,79,.10); --warn-bg:rgba(233,185,73,.12); --ok-bg:rgba(76,195,138,.12);
+      --shadow:0 14px 40px rgba(0,0,0,.5); --card:#18191b; --lane:#141517;
+    }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.45 -apple-system,"SF Pro Text",system-ui,sans-serif; background:var(--bg); color:var(--ink); }
+  button { font:inherit; color:inherit; }
+  header.page { display:flex; align-items:center; gap:16px; padding:18px 28px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header.page h1 { font-size:16px; margin:0; font-weight:600; }
+  header.page p { margin:0; color:var(--ink2); }
+  header.page .sp { margin-left:auto; }
+  main { padding:22px 28px 80px; max-width:1600px; }
+  h2 { margin:30px 0 10px; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink3); font-weight:600; }
+  .rules { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 18px; color:var(--ink2); }
+  .rules b { color:var(--ink); }
+  .rules ul { margin:6px 0 0; padding-left:18px; } .rules li { margin:3px 0; }
+  .cap { color:var(--ink2); max-width:110ch; margin:12px 2px 0; min-height:40px; }
+  .cap b { color:var(--ink); }
+
+  .btn { border:1px solid var(--field-line); background:var(--field); color:var(--ink); border-radius:7px; padding:4px 11px; cursor:pointer; font-size:12px; white-space:nowrap; display:inline-flex; align-items:center; gap:6px; }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); font-weight:600; }
+  .btn.small { padding:2px 8px; font-size:11.5px; }
+  .btn.ghost { border-color:transparent; background:transparent; color:var(--ink2); }
+
+  .controls { display:grid; grid-template-columns:repeat(auto-fit,minmax(330px,1fr)); gap:10px 22px; margin:0 0 14px; }
+  .ctl { display:flex; flex-direction:column; gap:5px; }
+  .ctl .lab { font-size:11px; color:var(--ink3); text-transform:uppercase; letter-spacing:.05em; font-weight:600; }
+  .seg { display:inline-flex; flex-wrap:wrap; gap:2px; padding:2px; background:var(--sel); border-radius:8px; width:max-content; max-width:100%; }
+  .seg button { border:0; background:transparent; padding:4px 11px; border-radius:6px; font-size:12px; color:var(--ink2); cursor:pointer; font-weight:500; }
+  .seg button.on { background:var(--panel); color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.12); font-weight:600; }
+  .seg button .star { color:var(--accent); font-weight:700; margin-left:3px; }
+
+  /* Fenster */
+  .win { position:relative; height:720px; background:var(--win); border:1px solid var(--border); border-radius:11px; box-shadow:var(--shadow); display:grid; grid-template-columns:232px 1fr; overflow:hidden; }
+  .side { background:var(--sidebar); border-right:1px solid var(--border); display:flex; flex-direction:column; min-height:0; }
+  .lights { display:flex; gap:7px; padding:12px 12px 6px; }
+  .lights i { width:12px; height:12px; border-radius:50%; background:#ff5f57; } .lights i:nth-child(2){background:#febc2e;} .lights i:nth-child(3){background:#28c840;}
+  .newchat { margin:4px 10px 8px; border:1px solid var(--border); background:var(--panel); border-radius:8px; padding:6px 10px; font-size:12.5px; font-weight:600; }
+  .sidelist { flex:1; overflow:auto; padding:2px 8px 8px; font-size:12px; }
+  .sec { margin:12px 6px 4px; font-size:11px; font-weight:700; letter-spacing:.06em; color:var(--ink3); }
+  .grp { display:flex; align-items:center; gap:7px; padding:5px 8px 3px; font-weight:700; color:var(--ink); font-size:12.5px; }
+  .grp .n { margin-left:auto; color:var(--ink3); font-weight:500; font-size:11px; }
+  .row { display:flex; align-items:center; gap:7px; height:26px; padding:0 8px; border-radius:6px; color:var(--ink); white-space:nowrap; cursor:grab; }
+  .row .t { overflow:hidden; text-overflow:ellipsis; flex:1; }
+  .row .k { color:var(--ink3); font-size:11px; font-variant-numeric:tabular-nums; }
+  .row.sel { background:var(--sel); font-weight:600; }
+  .row.dim { color:var(--ink2); }
+  .row .pin { font-size:11px; color:var(--accent); }
+
+  .content { display:flex; flex-direction:column; min-width:0; min-height:0; }
+  .titlezone { height:38px; background:var(--header); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:6px; padding:0 10px; font-size:11.5px; color:var(--ink2); }
+  .tzbtn { width:28px; height:24px; border-radius:6px; border:1px solid transparent; background:transparent; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--ink2); font-size:13px; }
+  .tzbtn.on { background:var(--panel); border-color:var(--border); color:var(--ink); }
+  .tabs { display:flex; gap:4px; margin-left:8px; overflow:hidden; }
+  .tab { padding:3px 9px; border-radius:6px; white-space:nowrap; display:flex; align-items:center; gap:6px; cursor:pointer; border:1px solid transparent; }
+  .tab.on { background:var(--win); color:var(--ink); border-color:var(--border); }
+  .body { flex:1; min-height:0; display:flex; position:relative; }
+
+  .dot { width:8px; height:8px; border-radius:50%; display:inline-block; flex:none; background:var(--ink3); opacity:.75; }
+  .dot.working { background:var(--working); opacity:1; }
+  .dot.awaiting { background:var(--awaiting); border-radius:2px; transform:rotate(45deg) scale(.82); opacity:1; }
+  .dot.stopped { background:transparent; border:1.5px solid var(--ink3); }
+
+  /* Board */
+  .board { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .bhead { display:flex; align-items:center; gap:10px; padding:12px 16px 6px; flex-wrap:wrap; }
+  .bhead h3 { margin:0; font-size:15px; }
+  .bhead .sub { color:var(--ink3); font-size:11.5px; }
+  .bhead .sp { margin-left:auto; display:flex; gap:8px; align-items:center; color:var(--ink3); font-size:11.5px; }
+  .filters { display:flex; gap:6px; padding:2px 16px 10px; flex-wrap:wrap; align-items:center; }
+  .chip { border:1px solid var(--field-line); border-radius:999px; padding:2px 10px; font-size:12px; background:var(--field); cursor:pointer; display:inline-flex; gap:5px; align-items:center; }
+  .chip .n { color:var(--ink3); font-variant-numeric:tabular-nums; }
+  .chip.on { border-color:var(--accent); background:var(--hl); font-weight:600; }
+  .chip.me { border-color:var(--awaiting); }
+  .chip.me.on { background:var(--warn-bg); border-color:var(--awaiting); }
+  .flab { font-size:11px; color:var(--ink3); margin-left:6px; }
+  .lanes { flex:1; min-height:0; display:flex; gap:10px; padding:0 16px 12px; overflow-x:auto; }
+  .lane { width:250px; flex:none; background:var(--lane); border:1px solid var(--border); border-radius:10px; display:flex; flex-direction:column; min-height:0; }
+  .lane.wide { width:290px; }
+  .lane.mine { border-color:color-mix(in srgb, var(--awaiting) 55%, transparent); }
+  .lane.folded { width:150px; }
+  .lhead { display:flex; align-items:baseline; gap:6px; padding:9px 10px 6px; font-weight:700; font-size:12.5px; }
+  .lhead .n { color:var(--ink3); font-weight:500; font-size:11.5px; }
+  .lhead .why { margin-left:auto; font-weight:600; font-size:11px; color:var(--awaiting); }
+  .lhead .kind { margin-left:auto; font-weight:500; font-size:11px; color:var(--ink3); }
+  .cards { overflow:auto; padding:0 8px 8px; display:flex; flex-direction:column; gap:7px; }
+  .cardx { background:var(--card); border:1px solid var(--border); border-radius:8px; padding:8px 9px; cursor:pointer; }
+  .cardx.sel { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+  .cardx.dim { opacity:.45; }
+  .ctop { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--ink3); font-variant-numeric:tabular-nums; }
+  .ctop .ini { margin-left:auto; width:20px; height:20px; border-radius:50%; background:var(--sel); color:var(--ink2); font-size:10px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; }
+  .ctitle { font-weight:600; font-size:12.5px; margin:3px 0 2px; line-height:1.3; }
+  .cproj { font-size:11px; color:var(--ink3); }
+  .tag { display:inline-block; font-size:11px; padding:0 6px; border-radius:5px; background:var(--sel); color:var(--ink2); margin:4px 4px 0 0; }
+  .tag.block { background:var(--error-bg); color:var(--error); }
+  .tag.need { background:var(--warn-bg); color:var(--awaiting); font-weight:600; }
+  .cchat { display:flex; align-items:center; gap:6px; font-size:11.5px; margin-top:6px; padding-top:6px; border-top:1px solid var(--border); color:var(--ink2); }
+  .cchat b { color:var(--ink); }
+  .prio { display:inline-flex; gap:1px; align-items:flex-end; height:10px; }
+  .prio i { width:2.5px; background:var(--ink3); opacity:.3; border-radius:1px; }
+  .prio i:nth-child(1){height:4px} .prio i:nth-child(2){height:7px} .prio i:nth-child(3){height:10px}
+  .prio.p1 i, .prio.p2 i:nth-child(-n+3), .prio.p3 i:nth-child(-n+2), .prio.p4 i:nth-child(1) { opacity:1; }
+  .prio.p1 i { background:var(--error); }
+  .more { font-size:11.5px; color:var(--ink3); padding:6px 4px; text-align:center; }
+  .bfoot { border-top:1px solid var(--border); padding:7px 16px; font-size:11.5px; color:var(--ink3); display:flex; gap:14px; flex-wrap:wrap; }
+
+  /* Großes Ticket */
+  .big { flex:1; min-width:0; display:flex; flex-direction:column; background:var(--win); }
+  .bigbar { display:flex; align-items:center; gap:8px; padding:9px 16px; border-bottom:1px solid var(--border); font-size:12px; color:var(--ink2); flex-wrap:wrap; }
+  .bigbar .pos { font-variant-numeric:tabular-nums; }
+  .bigbar .sp { margin-left:auto; color:var(--ink3); font-size:11px; }
+  .bigscroll { overflow:auto; padding:16px 22px 22px; }
+  .bigkey { font-size:12px; color:var(--ink3); display:flex; gap:8px; align-items:center; }
+  .bigtitle { font-size:20px; font-weight:700; margin:4px 0 10px; line-height:1.25; max-width:60ch; }
+  .meta { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px; }
+  .pill { border:1px solid var(--border); border-radius:6px; padding:2px 8px; font-size:12px; background:var(--panel); }
+  .pill small { color:var(--ink3); font-size:11px; margin-right:4px; }
+  .actions { display:flex; flex-wrap:wrap; gap:8px; padding:10px 0 12px; border-top:1px solid var(--border); border-bottom:1px solid var(--border); margin-bottom:14px; align-items:center; }
+  .orders { display:flex; flex-wrap:wrap; gap:6px; margin:-4px 0 14px; align-items:center; }
+  .orders .lab { font-size:11px; color:var(--ink3); margin-right:2px; }
+  .cols2 { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(240px,1fr); gap:22px; }
+  .stand { background:var(--hl); border-radius:8px; padding:9px 11px; font-size:12.5px; margin-bottom:12px; }
+  .desc h4, .side2 h4 { margin:14px 0 6px; font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink3); }
+  .desc p { margin:0 0 8px; max-width:70ch; }
+  .desc ul { margin:0 0 8px; padding-left:18px; } .desc li { margin:3px 0; }
+  .check { display:flex; gap:8px; align-items:flex-start; margin:5px 0; font-size:12.5px; }
+  .check i { width:13px; height:13px; border:1.5px solid var(--ink3); border-radius:3px; flex:none; margin-top:3px; }
+  .note { font-size:11.5px; color:var(--ink3); }
+  .chatline { display:flex; align-items:center; gap:8px; padding:7px 0; border-bottom:1px solid var(--border); font-size:12px; }
+  .chatline .sp { margin-left:auto; }
+  .cmt { border:1px solid var(--border); border-radius:8px; padding:8px 10px; margin-bottom:8px; font-size:12px; background:var(--panel); }
+  .cmt .who { font-size:11px; color:var(--ink3); margin-bottom:3px; }
+  .cmt.dec { border-color:color-mix(in srgb, var(--accent) 40%, transparent); }
+  .cmt .warnline { margin-top:5px; font-size:11px; color:var(--awaiting); }
+
+  /* Triage wie in Linear */
+  .tri { flex:1; display:flex; min-width:0; min-height:0; }
+  .trilist { width:250px; flex:none; border-right:1px solid var(--border); overflow:auto; background:var(--sidebar); }
+  .trihead { padding:10px 12px 6px; font-weight:700; font-size:12.5px; display:flex; align-items:center; gap:6px; }
+  .trihead .n { color:var(--ink3); font-weight:500; font-size:11.5px; }
+  .trihead .sp { margin-left:auto; }
+  .trow { padding:7px 10px; border-radius:7px; margin:2px 6px; cursor:pointer; }
+  .trow.sel { background:var(--sel); }
+  .trow .tt { font-size:12.5px; font-weight:600; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .trow .tm { font-size:11px; color:var(--ink3); display:flex; gap:6px; margin-top:3px; }
+  .trow .tm .k { margin-left:auto; font-variant-numeric:tabular-nums; }
+  .trow .dec { font-size:11px; color:var(--accent); font-weight:600; margin-top:2px; }
+  .trow.decided .tt { color:var(--ink2); }
+  .tmain { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .tbar { display:flex; align-items:center; gap:6px; padding:7px 12px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+  .tbar .tk { font-size:12px; color:var(--ink3); white-space:nowrap; }
+  .tbar .tt { font-weight:600; font-size:12.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0; flex:1; }
+  .tacts { display:flex; gap:5px; flex-wrap:wrap; padding:7px 12px; border-bottom:1px solid var(--border); align-items:center; }
+  .tacts .lab { font-size:11px; color:var(--ink3); margin-right:2px; }
+  .tbody { flex:1; min-height:0; display:flex; }
+  .tdesc { flex:1; min-width:0; overflow:auto; padding:16px 20px; }
+  .props { width:196px; flex:none; border-left:1px solid var(--border); overflow:auto; padding:12px 12px; font-size:12px; }
+  .props .pl { font-size:11px; color:var(--ink3); margin:10px 0 2px; }
+  .props .pl:first-child { margin-top:0; }
+  .props .pv { display:flex; align-items:center; gap:6px; }
+  .dock.narrow { width:330px; }
+
+  /* Breites Panel / heute */
+  .panel { flex:none; border-left:1px solid var(--border); background:var(--panel); overflow:auto; }
+
+  /* Board-Chat */
+  .dock { width:380px; flex:none; border-left:1px solid var(--border); display:flex; flex-direction:column; background:var(--term); min-width:0; }
+  .dhead { display:flex; align-items:center; gap:6px; padding:6px 8px; background:var(--header); border-bottom:1px solid var(--border); font-size:11.5px; flex-wrap:wrap; }
+  .dhead .lbl { font-size:11px; color:var(--ink3); font-weight:600; text-transform:uppercase; letter-spacing:.05em; margin-right:2px; }
+  .dhead .sp { margin-left:auto; display:flex; gap:4px; }
+  .dchip { border:1px solid var(--border); border-radius:6px; padding:2px 8px; background:transparent; cursor:pointer; display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:var(--ink2); }
+  .dchip.on { background:var(--win); color:var(--ink); font-weight:600; border-color:var(--field-line); }
+  .term { flex:1; overflow:auto; padding:10px 12px; font:11.5px/1.6 "SF Mono",ui-monospace,monospace; color:var(--ink2); white-space:pre-wrap; }
+  .term b { color:var(--ink); font-weight:600; }
+  .term .u { color:var(--accent); }
+  .term .ok { color:var(--working); }
+  .inbox2 { margin:0 10px 10px; border:1px solid var(--field-line); border-radius:8px; background:var(--win); padding:7px 9px; font:11.5px/1.5 "SF Mono",ui-monospace,monospace; color:var(--ink); min-height:54px; }
+  .inbox2 .ctx { display:inline-flex; gap:6px; align-items:center; font:600 11px -apple-system,system-ui,sans-serif; background:var(--hl); color:var(--accent); border-radius:5px; padding:1px 7px; margin-bottom:5px; }
+  .inbox2 .ctx button { border:0; background:transparent; color:var(--accent); cursor:pointer; padding:0; font-size:11px; }
+  .inbox2 .draft::before { content:"> "; color:var(--accent); }
+  .inbox2 .draft { white-space:pre-wrap; }
+  .inbox2 .empty { color:var(--ink3); }
+  .dfoot { padding:0 12px 9px; font-size:11px; color:var(--ink3); }
+  .drop { margin:10px; border:1.5px dashed var(--field-line); border-radius:10px; padding:18px; text-align:center; color:var(--ink2); font-size:12px; }
+
+  /* Raster-Variante */
+  .gridv { flex:1; display:grid; grid-template-columns:minmax(0,1.6fr) minmax(0,1fr); grid-template-rows:1fr 1fr; gap:4px; padding:4px; background:var(--border); min-width:0; }
+  .tile { background:var(--win); display:flex; flex-direction:column; min-height:0; min-width:0; border-radius:6px; overflow:hidden; }
+  .tile.boardtile { grid-row:1 / span 2; }
+  .thead { height:26px; flex:none; background:var(--header); display:flex; align-items:center; gap:6px; padding:0 8px; font-size:11.5px; border-bottom:1px solid var(--border); }
+  .tile .term { font-size:11px; }
+
+  /* Wartet auf mich */
+  .inbox { flex:1; min-width:0; display:flex; flex-direction:column; }
+  .ibody { overflow:auto; padding:0 16px 16px; }
+  .igrp { margin:12px 0 4px; display:flex; align-items:baseline; gap:8px; }
+  .igrp b { font-size:12.5px; }
+  .igrp small { color:var(--ink3); font-size:11.5px; }
+  .irow { display:grid; grid-template-columns:44px 64px minmax(0,1fr) 170px auto; gap:10px; align-items:center; min-height:36px; border-bottom:1px solid var(--border); padding:0 6px; border-radius:6px; cursor:pointer; font-size:12.5px; }
+  .irow:hover { background:var(--hl); }
+  .team { font-size:11px; font-weight:700; border-radius:5px; padding:1px 6px; text-align:center; background:var(--sel); color:var(--ink2); }
+  .irow .k { color:var(--ink3); font-size:11.5px; font-variant-numeric:tabular-nums; }
+  .irow .t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .irow .c { font-size:11.5px; color:var(--ink2); display:flex; gap:6px; align-items:center; white-space:nowrap; overflow:hidden; }
+
+  /* Chats-Ansicht (Rückweg) */
+  .chatview { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .banner { margin:10px 14px 0; border-radius:8px; padding:8px 11px; font-size:12px; background:var(--hl); border:1px solid var(--border); }
+
+  .toast { position:absolute; left:50%; bottom:18px; transform:translateX(-50%); background:var(--panel); border:1px solid var(--field-line); box-shadow:var(--shadow); border-radius:9px; padding:9px 13px; font-size:12px; max-width:560px; display:none; z-index:5; }
+  .toast.show { display:block; }
+  .toast pre { margin:4px 0 0; font:11.5px/1.5 "SF Mono",ui-monospace,monospace; color:var(--ink2); white-space:pre-wrap; }
+
+  table.t { width:100%; border-collapse:collapse; background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:12.5px; }
+  table.t th, table.t td { text-align:left; padding:8px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  table.t th { font-size:11px; color:var(--ink3); text-transform:uppercase; letter-spacing:.05em; }
+  table.t tr:last-child td { border-bottom:0; }
+  .day { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:12px; }
+  .day > div { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .day h5 { margin:0 0 6px; font-size:12.5px; }
+  .day p { margin:0; color:var(--ink2); font-size:12.5px; }
+  .day .then { margin-top:8px; font-size:12px; color:var(--ink); }
+  .day .then::before { content:"Danach: "; font-weight:700; color:var(--accent); }
+  @media (max-width: 760px) { main { padding:16px; } header.page { padding:14px 16px; } .win { height:auto; grid-template-columns:1fr; } .side { display:none; } }
+</style>
+</head>
+<body>
+<header class="page">
+  <div>
+    <h1>Ticket-Board für den Alltag</h1>
+    <p>Entwurf zu WM8-111 · Plan: docs/plans/ticket-board-alltag.md · Stand 15.11.2026 · abgenommen</p>
+  </div>
+  <div class="sp seg" id="themeSeg">
+    <button data-theme="light">Hell</button><button data-theme="dark">Dunkel</button><button data-theme="system" class="on">System</button>
+  </div>
+</header>
+<main>
+  <div class="rules">
+    <b>Grundsatz (entschieden am 15.11.2026):</b> Das Board zeigt und sortiert. Was in Linear etwas ändert, tut der Board-Chat rechts
+    (der Jarvis des Projekts oder sein Produkt-Chat): Die Triage-Knöpfe sammeln deine Entscheidungen im Eingabefeld des Chats, abgeschickt wird erst mit deiner Eingabetaste.
+    So gelten weiter die Linear-Regeln des Teams, und Kollegen sehen nichts, was nicht ein Chat nach diesen Regeln geschrieben hat.
+    <ul>
+      <li><b>Neu sichtbar:</b> Spalten nach echtem Status, der Filter „Wartet auf mich“, die Triage wie in Linear, „Link kopieren“, der Board-Chat, „Wartet auf mich“ über alle Teams, Jarvis öffnet dir Tickets.</li>
+      <li><b>Daten:</b> Tickets und Chats aus dem Team WM8, Abzug vom 15.11.2026. Der Produkt-Chat „Pia“, die Vorratszahlen und alle Zeilen aus AKQ und DS sind erfundene Beispiele. Der Text im Terminal ist nachgestellt.</li>
+      <li><b>Stern ★</b> = Empfehlung, von Giuliano so gewählt. Alles ist ohne Überfahren mit der Maus sichtbar, Texte mindestens 11 pt.</li>
+    </ul>
+  </div>
+
+  <h2>Zum Anklicken</h2>
+  <div class="controls">
+    <div class="ctl"><span class="lab">Ansicht</span>
+      <div class="seg" id="sceneSeg">
+        <button data-v="board" class="on">Board</button><button data-v="ticket">Ticket groß</button><button data-v="inbox">Wartet auf mich (alle Teams)</button><button data-v="jarvis">Jarvis öffnet Tickets</button><button data-v="chats">Zurück in die Chats</button>
+      </div></div>
+    <div class="ctl"><span class="lab">Idee 3 · Chat neben dem Board</span>
+      <div class="seg" id="dockSeg">
+        <button data-v="dock" class="on">Seitenspalte<span class="star">★</span></button><button data-v="grid">Board als Kachel im Workspace</button><button data-v="none">Ohne (heute)</button>
+      </div></div>
+    <div class="ctl"><span class="lab">Idee 1 · Ticket groß</span>
+      <div class="seg" id="bigSeg">
+        <button data-v="triage" class="on">Triage wie in Linear<span class="star">★</span></button><button data-v="full">Ticket allein</button><button data-v="wide">Breites Feld rechts</button><button data-v="today">Heute (340 pt)</button>
+      </div></div>
+    <div class="ctl"><span class="lab">Triage-Knöpfe (Annehmen, Ablehnen …)</span>
+      <div class="seg" id="writeSeg">
+        <button data-v="chat" class="on">Sammeln, Jarvis führt aus<span class="star">★</span></button><button data-v="direct">Direkt in Linear</button>
+      </div></div>
+    <div class="ctl"><span class="lab">Spalten</span>
+      <div class="seg" id="laneSeg">
+        <button data-v="status" class="on">Nach echtem Status<span class="star">★</span></button><button data-v="groups">Drei Gruppen (heute)</button>
+      </div></div>
+  </div>
+
+  <div class="win" id="win">
+    <aside class="side">
+      <div class="lights"><i></i><i></i><i></i></div>
+      <div class="newchat">＋ Neuer Chat</div>
+      <div class="sidelist" id="sidelist"></div>
+    </aside>
+    <section class="content">
+      <div class="titlezone">
+        <button class="tzbtn" title="Seitenleiste">▤</button>
+        <button class="tzbtn on" id="ticketBtn" title="Tickets">▦</button>
+        <div class="tabs" id="tabs"></div>
+      </div>
+      <div class="body" id="body"></div>
+    </section>
+    <div class="toast" id="toast"></div>
+  </div>
+  <p class="cap" id="cap"></p>
+
+  <h2>Was du danach anders machst</h2>
+  <div class="day">
+    <div><h5>Morgens: Was wartet auf mich?</h5><p>Heute: „Was ist der Stand?“ an Jarvis oder den Produkt-Chat, dazu der PM-Tagesbericht in Linear.</p>
+      <p class="then">Ein Klick auf „Wartet auf mich“: alle Teams in einer Liste, getrennt nach Prüfung ohne Prüfer, Produktentscheidung, Abnahme, Entscheidungen, Handtests. „Durchgehen“ öffnet die Triage mit genau dieser Liste. Der Vorrat der Entwickler steht als Leiste über dem Board.</p></div>
+    <div><h5>Ticket an einen Chat geben</h5><p>Heute: Thema nennen, Jarvis findet die Nummer und startet den Chat. Für die Entwickler: Text in die Zwischenablage, dann in den Team-Chat.</p>
+      <p class="then">„→ Jarvis“ legt Nummer, Titel und Link in sein Eingabefeld rechts. „Link kopieren“ oder „Liste kopieren“ für alles andere. Jarvis kann dir umgekehrt Tickets groß aufs Board legen.</p></div>
+    <div><h5>Abnahme und Review</h5><p>Heute: Ticket in Linear lesen, Abschluss-Kommentar suchen, PR öffnen, zurück in den Chat.</p>
+      <p class="then">Die Triage zeigt Stand, „Fertig, wenn“, Entscheidungen und den Abschluss mit seinen Handtest-Schritten, rechts die Eigenschaften und Chats. J/K führt durch die Liste.</p></div>
+    <div><h5>Entscheiden</h5><p>Heute: im Chat entscheiden, der Chat schreibt es per <code>tickets decide</code> ans Ticket.</p>
+      <p class="then">Bleibt so, nur sichtbar: Entscheidungen stehen im Verlauf hervorgehoben. Triage-Entscheidungen sammelt das Board und gibt sie Jarvis mit einem Enter.</p></div>
+  </div>
+
+  <h2>Wer was tut</h2>
+  <table class="t">
+    <tr><th>Handgriff</th><th>Das Board selbst</th><th>Der Board-Chat (nach deinem Enter)</th></tr>
+    <tr><td>Ticket ansehen, durchgehen, filtern</td><td>ja, ohne Rückfrage</td><td>–</td></tr>
+    <tr><td>Link oder Liste kopieren, In Linear öffnen, Zum Chat</td><td>ja, ohne Rückfrage (nur auf diesem Mac)</td><td>–</td></tr>
+    <tr><td>Triage: Annehmen, Zurückfragen, Zuweisen, Später, Doppelt, Ablehnen</td><td>sammelt im Eingabefeld</td><td>führt aus, nach den Linear-Regeln des Teams</td></tr>
+    <tr><td>Auftrag formulieren („umsetzbar machen“, „Review vorbereiten“, „Chat starten“)</td><td>legt den Text ins Eingabefeld</td><td>führt aus</td></tr>
+    <tr><td>Status, Zuweisung, Priorität, Kästchen, Entscheidung, Kommentar, neues Ticket</td><td>nein</td><td>ja, über <code>whisperm8 tickets</code></td></tr>
+  </table>
+</main>
+
+<script>
+const $ = s => document.querySelector(s);
+const S = { scene:'board', dock:'dock', big:'triage', write:'chat', batch:[], lanes:'status', mine:false, sel:'WM8-104', dockChat:'jarvis', draft:null, ctx:null, from:'board' };
+const URL0 = 'https://linear.app/whisperm8/issue/';
+
+/* --- Daten: Team WM8, Abzug 15.11.2026 --- */
+const T = {
+  'WM8-104':{t:'Insel per Tastatur bauen: ⌥Tab, Schnellbefehle als Buchstaben (Variante B)',s:'Merge-bereit',p:3,a:'–',pr:'Insel und Pille',crit:'1/4',chat:['Vic','idle','ruht']},
+  'WM8-80':{t:'Seitenleiste sortiert und ohne Doppelungen, Tabs schrumpfen: Bau nach dem Zwilling',s:'In Progress',p:2,a:'–',pr:'Agent Chats',tags:['Feature'],chat:['Vic','idle','ruht']},
+  'WM8-82':{t:'Linear und Doku spiegeln: Bereiche als Projekte, Vorhaben als Meilensteine',s:'In Progress',p:2,a:'–',pr:'Tickets',crit:'3/6',chat:['Jarvis','working','arbeitet']},
+  'WM8-20':{t:'make dev und Handtest der Änderungen seit 2.25.0',s:'In Progress',p:2,a:'GC',pr:'Entwicklung und Release',tags:['Handtest']},
+  'WM8-23':{t:'Linear zwei Wochen an WhisperM8 testen, dann über den Umzug entscheiden',s:'In Progress',p:3,a:'GC',pr:'Tickets',tags:['Entscheidung'],chat:['Jon','stopped','gestoppt']},
+  'WM8-22':{t:'Wächter beobachten: halten Slack und Linear über die 12-Stunden-Grenze?',s:'In Progress',p:3,a:'–',pr:'Konten und Zugänge',chat:['Jon','stopped','gestoppt']},
+  'WM8-101':{t:'Befunde aus dem Pflichttest: Hänger nach dem Start, /exit ungeprüft, Kleinigkeiten',s:'In Progress',p:0,a:'–',pr:'App-Hülle und Neustart',crit:'0/20',chat:['Fin','stopped','gestoppt']},
+  'WM8-103':{t:'Zwei Tests wackeln auf GitHub: CI wird ohne Grund rot',s:'In Progress',p:0,a:'–',pr:'Entwicklung und Release',crit:'0/4',chat:['Vic','idle','ruht']},
+  'WM8-57':{t:'Linear-API-Key ersetzen',s:'Todo',p:2,a:'GC',pr:'Konten und Zugänge',tags:['Entscheidung']},
+  'WM8-112':{t:'Ticket-Board Paket 1: Triage und Lesen (großes Ticket, Link kopieren, Spalten nach Status)',s:'Todo',p:2,a:'–',pr:'Tickets',crit:'0/7',tags:['Feature']},
+  'WM8-113':{t:'Ticket-Board Paket 2: Board-Chat neben dem Board, Entscheidungen sammeln',s:'Todo',p:2,a:'–',pr:'Tickets',crit:'0/7',tags:['Feature']},
+  'WM8-114':{t:'Ticket-Board Paket 3: Jarvis steuert das Board per Befehl',s:'Todo',p:2,a:'–',pr:'Tickets',crit:'0/5',tags:['Feature']},
+  'WM8-115':{t:'Ticket-Board Paket 4: „Wartet auf mich“ über alle Teams, Vorrat je Entwickler',s:'Todo',p:2,a:'–',pr:'Tickets',crit:'0/4',tags:['Feature']},
+  'WM8-15':{t:'Handtests nach make dev: Runde 5, Insel und Xbox',s:'Todo',p:3,a:'GC',pr:'Controller',tags:['Handtest']},
+  'WM8-30':{t:'Variante für die neue Ordnung wählen (A, B oder C)',s:'Todo',p:3,a:'GC',pr:'Einstellungen',tags:['Entscheidung']},
+  'WM8-38':{t:'Offene Feldtests sammeln und abhaken',s:'Todo',p:3,a:'GC',pr:'Entwicklung und Release',crit:'0/5',tags:['Handtest']},
+  'WM8-91':{t:'Ticket-Board mit dem Controller bedienen',s:'Todo',p:0,a:'–',pr:'Tickets',crit:'0/9'},
+  'WM8-89':{t:'Board und Notizen aus dem Ticket speisen, Notiz als Zeile im Kachelkopf',s:'Backlog',p:2,a:'–',pr:'Tickets',crit:'0/10',tags:['Feature']},
+  'WM8-83':{t:'Chat-Verlauf am Ticket: nachlesen und auf einem anderen Rechner fortsetzen',s:'Backlog',p:3,a:'–',pr:'Tickets',crit:'0/4',tags:['Feature']},
+  'WM8-105':{t:'Board meldet „fertig – prüfen“, obwohl der Chat nur auf einen eigenen Hintergrund-Lauf wartet',s:'Backlog',p:3,a:'–',pr:'Chats-CLI, Skills und Jarvis',crit:'0/3'},
+  'WM8-14':{t:'Apple-Entwicklerkonto buchen, Übergabe-Geheimnis zurück in den Schlüsselbund',s:'Backlog',p:4,a:'GC',pr:'App-Hülle und Neustart',tags:['Entscheidung']},
+};
+const LANES_STATUS = [
+  {s:'Merge-bereit', n:1, why:'Abnahme bei dir', mine:true},
+  {s:'In Progress', n:9, why:'2 bei dir'},
+  {s:'Todo', n:16, why:'6 bei dir', mine:true, cut:6},
+  {s:'Backlog', n:36, cut:4},
+];
+const TRIAGE = ['WM8-112','WM8-113','WM8-114','WM8-115'];
+const EX = '<i style="color:var(--ink3)">Beispiel</i>';
+const INBOX = [
+  {g:'Prüfung ohne Prüfer', d:'gebaut, aber niemand prüft: du entscheidest, wer (erfundene Beispiele)', rows:[
+    ['DS',null,'Export der Liste als CSV · PR offen seit 3 Tagen',null],
+    ['AKQ',null,'Neue Spalte in der Kundenübersicht · PR ohne Prüfer',null]]},
+  {g:'Produktentscheidung offen', d:'Status mit Sonderbedeutung im Team (erfundenes Beispiel)', rows:[
+    ['AKQ',null,'Feld „Notiz“ beim Anlegen als optional kennzeichnen',null]]},
+  {g:'Abnahme', d:'Merge-bereit in WM8', rows:[
+    ['WM8','WM8-104','Insel per Tastatur bauen: ⌥Tab, Schnellbefehle als Buchstaben (Variante B)',['idle','Vic ruht']]]},
+  {g:'Entscheidungen', d:'Label „Entscheidung“, dir zugewiesen', rows:[
+    ['WM8','WM8-23','Linear zwei Wochen an WhisperM8 testen, dann über den Umzug entscheiden',['stopped','Jon gestoppt']],
+    ['WM8','WM8-57','Linear-API-Key ersetzen',null],
+    ['WM8','WM8-30','Variante für die neue Ordnung wählen (A, B oder C)',null],
+    ['WM8','WM8-14','Apple-Entwicklerkonto buchen, Übergabe-Geheimnis zurück in den Schlüsselbund',null]], more:'3 weitere'},
+  {g:'Handtests', d:'Label „Handtest“, dir zugewiesen', rows:[
+    ['WM8','WM8-20','make dev und Handtest der Änderungen seit 2.25.0',null],
+    ['WM8','WM8-15','Handtests nach make dev: Runde 5, Insel und Xbox',null],
+    ['WM8','WM8-38','Offene Feldtests sammeln und abhaken',null]]},
+];
+const MINE = k => T[k].s==='Merge-bereit' || (T[k].a==='GC' && (T[k].tags||[]).some(t=>t==='Entscheidung'||t==='Handtest'));
+const walkList = () => S.scene==='jarvis' ? TRIAGE : S.from==='inbox' ? INBOX.flatMap(g=>g.rows.map(r=>r[1])).filter(k=>k&&T[k]) : Object.keys(T).filter(k=>T[k].s===T[S.sel].s);
+const PERSON = a => a==='GC'?'Giuliano':'niemand';
+
+/* --- Seitenleiste und Tabs --- */
+function side() {
+  const pin = `<span class="pin" title="Board-Chat">▦</span>`;
+  const on = S.dock!=='none';
+  $('#sidelist').innerHTML = `
+    <div class="sec">WORKSPACES</div>
+    <div class="row dim"><span class="t">WM8 Aktiv</span><span class="k">6</span></div>
+    <div class="row dim"><span class="t">WM8 Wartet</span><span class="k">4</span></div>
+    <div class="sec">PROJEKTE</div>
+    <div class="grp">whisperm8 <span class="n">6</span></div>
+    <div class="row ${S.dockChat==='jarvis'?'sel':''}"><span class="dot working"></span><span class="t">Jarvis: Supervisor WhisperM8</span>${on&&S.dockChat==='jarvis'?pin:''}</div>
+    <div class="row ${S.dockChat==='pia'?'sel':''}"><span class="dot"></span><span class="t">Pia · Produkt WM8 (Beispiel)</span>${on&&S.dockChat==='pia'?pin:''}</div>
+    <div class="row"><span class="dot"></span><span class="t">Vic · Prüfer: Insel Paket 2, Seitenleiste Paket 4</span></div>
+    <div class="row"><span class="dot stopped"></span><span class="t">Fin · Insel-Tastatur: Entwurf abgenommen</span></div>
+    <div class="row"><span class="dot stopped"></span><span class="t">Jon · Ticket-Befehle: in main, fertig</span></div>
+    <div class="grp">ListM8 <span class="n">2</span></div>
+    <div class="row dim"><span class="dot"></span><span class="t">Jarvis: Supervisor ListM8</span></div>
+    <div class="grp">akquise-ai <span class="n">2</span></div>
+    <div class="row dim"><span class="dot"></span><span class="t">Jarvis: Supervisor Akquise AI</span></div>`;
+  const tabs = [['Jarvis','working'],['Vic','idle'],['Fin','stopped'],['Pia','idle']];
+  $('#tabs').innerHTML = tabs.map(([n,st],i)=>`<div class="tab ${S.scene==='chats'&&i===0?'on':''}"><span class="dot ${st}"></span>${n}</div>`).join('');
+  document.querySelectorAll('.tab').forEach(el=>el.onclick=()=>setScene('chats'));
+  $('#ticketBtn').classList.toggle('on', S.scene!=='chats');
+}
+
+/* --- Karten und Spalten --- */
+function prio(p){ return `<span class="prio p${p}"><i></i><i></i><i></i></span>`; }
+function card(k, extra='') {
+  const x=T[k]; const dim = S.mine && !MINE(k);
+  const tags = (x.tags||[]).map(t=>`<span class="tag ${t==='Entscheidung'||t==='Handtest'?'need':''}">${t}</span>`).join('');
+  const chat = x.chat ? `<div class="cchat"><span class="dot ${x.chat[1]}"></span><b>${x.chat[0]}</b> ${x.chat[2]}</div>` : '';
+  return `<div class="cardx ${dim?'dim':''}" data-k="${k}" draggable="true">
+    <div class="ctop"><span>${k}</span>${prio(x.p)}${x.crit?`<span>☰ ${x.crit}</span>`:''}${x.a==='GC'?'<span class="ini">GC</span>':''}</div>
+    <div class="ctitle">${x.t}</div><div class="cproj">${x.pr}${extra}</div>${tags}${chat}</div>`;
+}
+function lanesHTML() {
+  if (S.lanes==='groups') {
+    const started = ['WM8-104','WM8-80','WM8-82','WM8-20','WM8-23','WM8-22'];
+    const next = ['WM8-57','WM8-112','WM8-113','WM8-15','WM8-30'];
+    return `<div class="lane wide"><div class="lhead">In Arbeit <span class="n">10</span><span class="kind">8 mit Agent</span></div><div class="cards">${started.map(k=>card(k, ' · '+T[k].s)).join('')}<div class="more">4 weitere</div></div></div>
+      <div class="lane wide"><div class="lhead">Als Nächstes <span class="n">16</span><span class="kind">0 mit Agent</span></div><div class="cards">${next.map(k=>card(k)).join('')}<div class="more">11 weitere</div></div></div>
+      <div class="lane"><div class="lhead">Backlog <span class="n">36</span></div><div class="cards">${['WM8-89','WM8-83'].map(k=>card(k)).join('')}<div class="more">34 weitere</div></div></div>`;
+  }
+  return LANES_STATUS.map(L=>{
+    const ks = Object.keys(T).filter(k=>T[k].s===L.s);
+    const shown = L.cut ? ks.slice(0,L.cut) : ks;
+    const rest = L.n - shown.length;
+    return `<div class="lane ${L.mine?'mine':''}"><div class="lhead">${L.s} <span class="n">${L.n}</span>${L.why?`<span class="why">${L.why}</span>`:''}</div>
+      <div class="cards">${shown.map(k=>card(k)).join('')}${rest>0?`<div class="more">${rest} weitere · in der Liste</div>`:''}</div></div>`;
+  }).join('');
+}
+function boardHTML(compact) {
+  return `<div class="board">
+    <div class="bhead"><h3>Tickets · WM8</h3><div class="seg"><button class="on">Board</button><button>Liste</button></div>
+      <span class="sub">WhisperM8 · Linear-Workspace whisperm8</span>
+      <div class="sp">Aktualisiert 17:42 <button class="btn small ghost" title="Jetzt aktualisieren">↻</button></div></div>
+    <div class="filters">
+      <button class="chip me ${S.mine?'on':''}" id="mineChip">Wartet auf mich <span class="n">11</span></button>
+      <span class="flab">Person</span><button class="chip on">Alle</button><button class="chip">Giuliano <span class="n">10</span></button><button class="chip">Niemand <span class="n">52</span></button>
+      <span class="flab">Chat</span><button class="chip on">Alle</button><button class="chip">Mit Chat <span class="n">9</span></button>
+      <button class="btn small" id="copyList" style="margin-left:auto">⧉ Liste kopieren</button>
+    </div>
+    <div class="filters" style="padding-top:0"><span class="flab" style="margin-left:0">Vorrat umsetzbar (Beispiel, Team mit zwei Entwicklern)</span>
+      <button class="chip">Entwickler A <span class="n">3</span></button><button class="chip me">Entwickler B <span class="n">0</span></button>
+      <span class="flab">Prüfung ohne Prüfer <b style="color:var(--awaiting)">2</b></span>
+      <button class="btn small ghost">PM-Tagesbericht ↗</button></div>
+    <div class="lanes">${lanesHTML()}</div>
+    ${compact?'':`<div class="bfoot"><span>▸ Chats ohne offenes Ticket: 1</span><span>Supervisor: Jarvis: Supervisor WhisperM8 (arbeitet)</span></div>`}
+  </div>`;
+}
+
+/* --- Inhalte der Tickets --- */
+function descFor(k) {
+  if (k==='WM8-104') return `
+      <div class="stand">Giuliano hat den Entwurf am 14.11.2026 um 22:50 Uhr abgenommen (WM8-16), alle zehn Punkte wie empfohlen. Entwurf und Plan liegen in main.</div>
+      <h4>Ziel</h4><p>Chats und Workspaces auch mit der Tastatur über die Insel wechseln, ohne Controller.</p>
+      <h4>Abgenommen</h4>
+      <ul><li>⌥Tab öffnet die Insel wie L2 am Controller; kurz getippt springt zurück zum vorigen Ort.</li>
+      <li>⌃Tab bleibt der Kachel-Umschalter, die Insel läuft daneben.</li>
+      <li>Variante B: eine Insel, Schnellbefehle als Buchstaben (S M O B K · L N A C).</li>
+      <li>Leertaste in der Insel: hinspringen und diktieren; während eines Diktats „stopp“.</li></ul>
+      <p class="note">… 5 weitere Punkte.</p>
+      <h4>Fertig, wenn · 1 von 4</h4>
+      <div class="check"><i></i>die neun Punkte gebaut sind und sich mit der Tastatur allein bedienen lassen</div>
+      <div class="check"><i></i>⌃Tab und das Diktat auf ⌥Leertaste sich nicht ändern</div>
+      <div class="check"><i style="background:var(--working);border-color:var(--working)"></i>die Logik der Tasten pur und getestet ist</div>
+      <div class="check"><i></i>Giuliano es nach make dev von Hand ausprobiert hat</div>
+      <div class="note">Abgehakt wird im Chat oder in Linear, nicht hier.</div>`;
+  if (k==='WM8-112') return `
+      <div class="stand"><b>Stand 15.11.2026:</b> angelegt aus der Beratung WM8-111, noch nicht gestartet.</div>
+      <h4>Ziel</h4>
+      <ul><li><b>Als Giuliano will ich</b> ein Ticket groß sehen und Tickets der Reihe nach durchgehen, wie in der Triage von Linear, <b>damit</b> ich am Board wirklich arbeiten kann.</li>
+      <li><b>Als Giuliano will ich</b> den Link eines Tickets mit einem Knopf kopieren, <b>damit</b> ich es einem Jarvis geben kann.</li></ul>
+      <h4>Fertig, wenn · 0 von 7</h4>
+      <div class="check"><i></i>Klick auf ein Ticket öffnet die Triage-Ansicht: Liste links, Ticket in der Mitte, Eigenschaften rechts, Knöpfe oben.</div>
+      <div class="check"><i></i>Kommentare stehen am Ticket; „Entscheidung“ und „Abschluss“ sind hervorgehoben.</div>
+      <div class="check"><i></i>„Link kopieren“ am Ticket und „Liste kopieren“ (⌘⇧C) für die gezeigten Tickets.</div>
+      <div class="check"><i></i>Spalten folgen dem echten Status des Teams statt drei Gruppen.</div>
+      <div class="note">… 3 weitere. Nicht dabei: Board-Chat, Triage-Knöpfe mit Wirkung, „Wartet auf mich“ über alle Teams.</div>`;
+  if (k==='WM8-89') return `
+      <div class="stand"><b>Stand 14.11.2026:</b> Giuliano hat um 05:25 entschieden. Gebaut wird nach Stufe 1 des Ticket-Boards.</div>
+      <h4>Ziel</h4><p>Der Supervisor pflegt je Chat nicht mehr drei Stellen von Hand. Hängt ein Chat an einem Ticket, kommen Ziel, Stand und Fortschritt von dort. Im Raster wird aus der Notiz-Karte eine Zeile im Kopf der Kachel.</p>
+      <div class="note">„Fertig, wenn“ mit 10 Kästchen.</div>`;
+  return `<h4>Beschreibung</h4><p class="note">Im Entwurf sind WM8-104, WM8-112 und WM8-89 ausgeschrieben, die übrigen Tickets nur mit Titel.</p>`;
+}
+function activityFor(k) {
+  if (k!=='WM8-104') return `<p class="note">Noch keine Kommentare. Entscheidungen und Abschlüsse stehen hier hervorgehoben, sobald es welche gibt.</p>`;
+  return `
+      <div class="cmt dec"><div class="who">Abschluss · 15.11. 17:33 · Lev</div><b>Gebaut:</b> Insel per Tastatur in drei Paketen: ⌥Tab öffnet dieselbe Insel wie L2, darin Schnellbefehle als Buchstaben, Spickzettel mit ?, Options-Menü per Tastatur. <b>Commit</b> 12f485bc.
+        <div style="margin-top:6px"><b>Handtest</b></div>
+        <div class="check"><i></i>⌥Tab kurz: zurück zum vorigen Chat, ohne dass die Insel aufblitzt</div>
+        <div class="check"><i></i>⌥Tab halten: Insel mit Markierung auf vorher, ⌥ los wechselt, Esc bricht ab</div>
+        <div class="check"><i></i>Fokus im Terminal: die Tasten bei offener Insel kommen nicht in der CLI an</div>
+        <div class="note">… 5 weitere Schritte</div>
+        <div class="warnline">Geschrieben von einem Chat mit deinem Zugang, in Linear steht dein Name.</div></div>
+      <div class="cmt"><div class="who">15.11. 17:23 · Giuliano Costa</div>Paket 2 (Schnellbefehle, Spickzettel, Options-Menü per Tastatur) merge-bereit. Volle Suite: 6051 Tests, 0 Fehler.</div>
+      <div class="cmt dec"><div class="who">Entscheidung · 15.11. 15:55 · festgehalten von Lev</div><b>Frage:</b> Was passiert bei einer Taste, die in der Insel gerade nicht geht?<br><b>Gewählt:</b> macOS-Warnton, Insel bleibt · entschieden von Giuliano</div>`;
+}
+function sideFor(k) {
+  const x=T[k];
+  if (k==='WM8-104') return `
+      <h4>Chats am Ticket</h4>
+      <div class="chatline"><span class="dot"></span><b>Vic</b> ruht · Prüfer<span class="sp"><button class="btn small">Zum Chat</button></span></div>
+      <div class="chatline"><span class="dot stopped"></span><span>Lev</span> beendet · 15.11. 17:33<span class="sp note">hat gebaut</span></div>
+      <h4>Verlauf am Ticket · 3</h4>${activityFor(k)}
+      <h4>Verknüpft</h4><div class="chatline">WM8-93 Fenster nach vorn holen<span class="sp note">Backlog</span></div>`;
+  return `<h4>Chats am Ticket</h4><p class="note">${x.chat?x.chat[0]+' '+x.chat[2]:'Kein Chat. Mit „Chat dafür starten“ legst du den Auftrag in den Board-Chat.'}</p>`;
+}
+
+/* --- Triage wie in Linear --- */
+const TRI_ACTS = [['accept','Annehmen'],['ask','Zurückfragen'],['assign','Zuweisen…'],['later','Später'],['dup','Doppelt'],['decline','Ablehnen']];
+const TRI_TEXT = { accept:'annehmen, auf „Todo“', ask:'zurückfragen', assign:'Chat dafür starten, Priorität hoch', later:'später, in 2 Wochen wieder vorlegen', dup:'als doppelt schließen', decline:'ablehnen mit kurzer Begründung' };
+function triageHTML() {
+  const x=T[S.sel]; const list=walkList();
+  const who = S.dockChat==='pia'?'Pia':'Jarvis';
+  const listName = S.scene==='jarvis' ? 'Von Jarvis: neu angelegt' : S.from==='inbox' ? 'Wartet auf mich' : x.s;
+  const rows = list.map(k=>{ const d=S.batch.find(b=>b.k===k); return `<div class="trow ${k===S.sel?'sel':''} ${d?'decided':''}" data-tk="${k}">
+      <div class="tt">${T[k].t}</div><div class="tm"><span>${PERSON(T[k].a)}</span>${T[k].chat?`<span><span class="dot ${T[k].chat[1]}"></span> ${T[k].chat[0]}</span>`:''}<span class="k">${k}</span></div>
+      ${d?`<div class="dec">→ ${d.label}${S.write==='chat'?' · gesammelt':' · in Linear'}</div>`:''}</div>`; }).join('');
+  const props = `
+      <div class="pl">Status</div><div class="pv">${x.s}</div>
+      <div class="pl">Priorität</div><div class="pv">${prio(x.p)} ${['keine','dringend','hoch','mittel','niedrig'][x.p]}</div>
+      <div class="pl">Person</div><div class="pv">${PERSON(x.a)}</div>
+      <div class="pl">Vorhaben</div><div class="pv">${x.pr}</div>
+      ${x.crit?`<div class="pl">Fertig, wenn</div><div class="pv">☰ ${x.crit}</div>`:''}
+      <div class="pl">Chats am Ticket</div><div class="pv">${x.chat?`<span class="dot ${x.chat[1]}"></span><b>${x.chat[0]}</b> ${x.chat[2]}`:'keiner'}</div>
+      ${x.chat?'<button class="btn small" style="margin-top:6px">Zum Chat</button>':''}
+      <div class="pl">Labels</div><div class="pv">${(x.tags||['–']).join(', ')}</div>`;
+  return `<div class="tri">
+    <div class="trilist"><div class="trihead">${listName} <span class="n">${list.length}</span><span class="sp"><button class="btn small ghost" id="back" title="Zurück zum Board">✕</button></span></div>${rows}</div>
+    <div class="tmain">
+      <div class="tbar"><span class="tk">${S.sel}</span><span class="tt">${x.t}</span>
+        <button class="btn small" id="copy" title="Link kopieren (⌘⇧C)">⧉ Link</button><button class="btn small" title="In Linear öffnen">↗ Linear</button>
+        ${S.dock!=='none'?`<button class="btn small primary" id="give">→ ${who}</button>`:''}</div>
+      <div class="tacts"><span class="lab">${S.write==='chat'?'Triage, gesammelt für '+who+':':'Triage, schreibt sofort nach Linear:'}</span>
+        ${TRI_ACTS.map(([v,l])=>`<button class="btn small" data-tri="${v}">${l}</button>`).join('')}
+        <span class="note" style="margin-left:auto">J/K oder ↑↓ nächstes · Esc Board</span></div>
+      ${S.scene==='jarvis'?`<div class="banner" style="margin:8px 12px 0;display:flex;gap:10px;align-items:center"><span class="dot working"></span><span><b>Jarvis hat dir 4 neue Tickets zum Sichten geöffnet.</b> Er sieht, bei welchem du bist.</span><span style="margin-left:auto"><button class="btn small" id="jback">Zurück, wo ich war</button></span></div>`:''}
+      <div class="tbody"><div class="tdesc desc"><div class="bigtitle">${x.t}</div>${descFor(S.sel)}<h4>Verlauf</h4>${activityFor(S.sel)}</div><div class="props">${props}</div></div>
+    </div></div>`;
+}
+
+/* --- Ticket allein, breit, heute --- */
+function bigHTML(mode) {
+  const x=T[S.sel]; const lane = walkList(); const pos = lane.indexOf(S.sel)+1;
+  const who = S.dockChat==='pia'?'Pia':'Jarvis';
+  const dockOn = S.dock!=='none';
+  const orders = dockOn ? `<div class="orders"><span class="lab">Auftrag an ${who}:</span>
+      <button class="btn small" data-o="review">Review vorbereiten</button>
+      <button class="btn small" data-o="ready">Umsetzbar machen</button>
+      <button class="btn small" data-o="chat">Chat dafür starten</button>
+      <button class="btn small" data-o="decide">Entscheidung festhalten…</button>
+      <button class="btn small" data-o="free">Eigener Auftrag</button></div>` : '';
+  const head = mode==='full' ? `<div class="bigbar"><button class="btn small" id="back">← Board</button>
+      <button class="btn small" id="prev">←</button><span class="pos">${S.scene==='jarvis'?'Von Jarvis':x.s} · ${pos} von ${lane.length}</span><button class="btn small" id="next">→</button>
+      <span class="sp">← → blättern · Esc zurück zum Board · ⌘⇧C Link kopieren</span></div>` :
+      `<div class="bigbar"><span class="pos">${x.s} · ${pos} von ${lane.length}</span><button class="btn small" id="prev">←</button><button class="btn small" id="next">→</button><span class="sp"><button class="btn small ghost" id="back">✕</button></span></div>`;
+  const desc = descFor(S.sel), side2 = sideFor(S.sel);
+  return `<div class="big" style="${mode==='wide'?'width:600px;flex:none;border-left:1px solid var(--border)':mode==='today'?'width:340px;flex:none;border-left:1px solid var(--border)':''}">
+    ${head}
+    ${S.scene==='jarvis'?`<div class="banner" style="margin:10px 16px 0">Jarvis hat dir 4 neue Tickets zum Sichten geöffnet. <button class="btn small" id="jback">Zurück, wo ich war</button></div>`:''}
+    <div class="bigscroll">
+      <div class="bigkey">${S.sel} ${prio(x.p)} <span>${x.pr}</span></div>
+      <div class="bigtitle" style="${mode==='today'?'font-size:15px':''}">${x.t}</div>
+      <div class="meta"><span class="pill"><small>Status</small>${x.s}</span><span class="pill"><small>Person</small>${PERSON(x.a)}</span>${x.crit?`<span class="pill"><small>Fertig, wenn</small>${x.crit}</span>`:''}<span class="pill"><small>Vorhaben</small>${x.pr}</span></div>
+      <div class="actions">
+        <button class="btn" id="copy">⧉ Link kopieren</button>
+        ${dockOn?`<button class="btn primary" id="give">→ An ${who} geben</button>`:''}
+        <button class="btn">↗ In Linear öffnen</button>
+        ${mode==='today'?'':'<span class="note" style="margin-left:auto">Ziehen: Ticket auf einen Chat in Seitenleiste, Tab oder Kachel = Bezug ins Eingabefeld</span>'}
+      </div>
+      ${orders}
+      ${mode==='today' ? desc + side2 : `<div class="cols2"><div class="desc">${desc}</div><div class="side2">${side2}</div></div>`}
+    </div></div>`;
+}
+
+/* --- Board-Chat --- */
+const DOCK = {
+  jarvis:{full:'Jarvis: Supervisor WhisperM8', st:'working', lines:
+`<span class="u">❯ Was ist bei WM8 gerade offen für mich?</span>
+
+⏺ <b>WM8 heute, 15.11.</b>
+  Abnahme: WM8-104 (Insel per Tastatur) ist
+  merge-bereit, der Abschluss mit acht Schritten
+  für den Handtest steht am Ticket.
+  Entscheidungen bei dir: 7, die älteste ist
+  WM8-14 (Apple-Entwicklerkonto).
+  Handtests: WM8-20, WM8-15, WM8-38.
+
+<span class="u">❯ Erst die Abnahme.</span>
+
+⏺ WM8-104 liegt links groß. Sag mir je Schritt:
+  bestanden oder nicht.`},
+  pia:{full:'Pia · Produkt WM8 (erfundenes Beispiel)', st:'idle', lines:
+`⏺ <b>Vorrat WM8, 15.11.</b>
+  Vier neue Tickets fürs Ticket-Board sind
+  umsetzbar (WM8-112 bis WM8-115), keins hat
+  einen Chat. Vorschlag: WM8-112 zuerst, die
+  anderen bauen darauf auf.
+
+<span class="u">❯ passt, leg es Jarvis vor.</span>
+
+⏺ Ist an Jarvis vorgemerkt.`}
+};
+const JARVIS_OPEN = `<span class="u">❯ Was ist neu reingekommen?</span>
+
+⏺ Vier neue Tickets aus der Beratung zum
+  Ticket-Board, alle Todo, niemandem zugewiesen.
+  Ich lege sie dir aufs Board.
+
+⏺ Bash(whisperm8 tickets open WM8-112
+    --triage WM8-112,WM8-113,WM8-114,WM8-115)
+  ⎿ Board WM8, WM8-112 groß, Triage 1 von 4
+
+⏺ <b>WM8-112</b> ist Paket 1: Triage und Lesen,
+  sieben Kästchen, nur lesend. Vorschlag: als
+  Erstes bauen, Chat dafür starten. Passt das?
+
+<span class="u">❯ ja</span>
+
+⏺ Gemerkt. Weiter mit WM8-113, rechts →`;
+const ORDERS = {
+  review: k=>`${k} „${T[k].t}“: Review vorbereiten. Was ist gebaut, was ist laut „Fertig, wenn“ offen, was muss ich selbst prüfen? Kurz, mit Commit.`,
+  ready:  k=>`${k} „${T[k].t}“: umsetzbar machen (Ziel, „Fertig, wenn“, Nicht dabei) und mir Reihenfolge und Chat vorschlagen.`,
+  chat:   k=>`${k} „${T[k].t}“: Starte dafür einen Chat im Projekt whisperm8, häng ihn ans Ticket und gib ihm das Ticket als ersten Auftrag.`,
+  decide: k=>`${k}: Halte eine Entscheidung fest. Frage: … Möglichkeiten: … Gewählt: … (entschieden von Giuliano)`,
+  free:   k=>`${k} „${T[k].t}“: `,
+  give:   k=>`${k} „${T[k].t}“ ${URL0}${k.toLowerCase()}`,
+};
+const flow = t => t.replace(/\n {2,}(?![⎿])/g,' ');
+function dockHTML() {
+  const d = DOCK[S.dockChat];
+  const batch = S.batch.length && S.write==='chat' ? `<div class="draft">Triage in WM8, bitte ausführen:\n${S.batch.map(b=>'- '+b.k+': '+TRI_TEXT[b.v]).join('\n')}</div>` : '';
+  const draft = batch ? batch : S.draft ? `<div class="draft">${S.draft}</div>` : `<div class="empty">Diktieren oder tippen. Bezug wird vorangestellt.</div>`;
+  const ctx = S.ctx ? `<span class="ctx">Bezug: ${S.ctx} <button id="ctxx" title="Bezug entfernen">✕</button></span><br>` : '';
+  const narrow = (S.scene==='ticket'&&S.big==='triage')||(S.scene==='jarvis'&&S.big!=='full');
+  return `<aside class="dock ${narrow?'narrow':''}">
+    <div class="dhead"><span class="lbl">Board-Chat</span>
+      <button class="dchip ${S.dockChat==='jarvis'?'on':''}" data-d="jarvis"><span class="dot working"></span>Jarvis</button>
+      <button class="dchip ${S.dockChat==='pia'?'on':''}" data-d="pia"><span class="dot"></span>Pia · Produkt</button>
+      <span class="sp"><button class="btn small ghost" title="Als Tab öffnen">⤢</button><button class="btn small ghost" id="dockOff" title="Seitenspalte schließen">✕</button></span></div>
+    <div class="term">${flow(S.scene==='jarvis'&&S.dockChat==='jarvis'?JARVIS_OPEN:d.lines)}</div>
+    <div class="inbox2">${ctx}${draft}</div>
+    <div class="dfoot">${S.dockChat==='jarvis'?'Automatisch gewählt: Jarvis dieses Projekts. ':'Von dir gewählt. '}${d.full} · Enter schickt ab, nichts geht ohne dich raus. Diktat geht hierher, solange die Tickets offen sind.</div>
+  </aside>`;
+}
+function gridHTML() {
+  return `<div class="gridv">
+    <div class="tile boardtile"><div class="thead">▦ Tickets · WM8 <span class="note" style="margin-left:auto">Kachel 1 von 3</span></div>${boardHTML(true)}</div>
+    <div class="tile"><div class="thead"><span class="dot working"></span><b>Jarvis</b> WhisperM8</div><div class="term">${DOCK.jarvis.lines}</div></div>
+    <div class="tile"><div class="thead"><span class="dot"></span><b>Pia</b> · Produkt</div><div class="term">${DOCK.pia.lines}</div></div>
+  </div>`;
+}
+
+/* --- Wartet auf mich, alle Teams --- */
+function inboxHTML() {
+  return `<div class="inbox">
+    <div class="bhead"><h3>Wartet auf mich</h3><span class="sub">WM8 aus dem Abzug · AKQ und DS als erfundene Beispiele</span>
+      <div class="sp"><button class="btn primary small" id="walk">Durchgehen ab dem ersten →</button></div></div>
+    <div class="ibody">${INBOX.map(G=>`<div class="igrp"><b>${G.g}</b><small>${G.d}</small></div>
+      ${G.rows.map(r=>`<div class="irow" data-k="${r[1]||''}"><span class="team">${r[0]}</span><span class="k">${r[1]||EX}</span><span class="t">${r[2]}</span>
+        <span class="c">${r[3]?`<span class="dot ${r[3][0]}"></span>${r[3][1]}`:'kein Chat'}</span><button class="btn small">Öffnen</button></div>`).join('')}
+      ${G.more?`<div class="more" style="text-align:left">${G.more}</div>`:''}`).join('')}</div>
+  </div>`;
+}
+function chatsHTML() {
+  return `<div class="chatview"><div class="banner">Zurück in den Chats. <b>Jarvis</b> steht wieder in seinem Tab und an seinem Platz im Workspace „WM8 Aktiv“, so wie vorher. Das Board merkt sich die Wahl je Projekt; beim nächsten Klick auf ▦ wandert sein Terminal wieder in die Seitenspalte.</div>
+    <div class="term">${DOCK.jarvis.lines}</div><div class="inbox2"><div class="empty">Eingabe von Jarvis</div></div></div>`;
+}
+
+/* --- Zusammensetzen --- */
+const CAPS = {
+  board_dock:'<b>Board mit Board-Chat (entschieden).</b> Spalten nach echtem Status; Spalten, in denen etwas auf dich wartet, sind markiert. Der Filter „Wartet auf mich“ blendet den Rest aus. Rechts automatisch der Jarvis des Projekts; der Produkt-Chat steht als zweiter Knopf im Kopf, einen anderen Chat ziehst du aus der Seitenleiste auf die Spalte.',
+  board_grid:'<b>Variante: Board als Kachel im Workspace.</b> Das Board wird eine Kachel neben Chat-Kacheln. Flexibel, aber das Board bekommt nur eine Raster-Kachel, und die Triage hat keinen Platz. Dazu müsste das Raster lernen, dass eine Kachel kein Chat ist (Speichern, Neustart-Übergabe, Controller, <code>workspace</code>-Befehle). Nicht gewählt.',
+  board_none:'<b>Ohne Chat, wie heute.</b> Das Board für sich. Aufträge und gesammelte Triage fehlen dann; „Link kopieren“ bleibt.',
+  ticket_triage:'<b>Idee 1, entschieden: Triage wie in Linear.</b> Links die Liste, die du gerade durchgehst (eine Spalte, „Wartet auf mich“ oder was Jarvis dir hinlegt), in der Mitte das Ticket mit Verlauf (Entscheidung und Abschluss hervorgehoben), rechts die Eigenschaften. Oben die Triage-Knöpfe: Sie sammeln deine Entscheidungen im Eingabefeld rechts, ein Enter gibt alle an Jarvis.',
+  ticket_full:'<b>Variante: Ticket allein.</b> Groß, ohne Liste; ← → blättert durch die Spalte. Darunter die Aufträge an den Board-Chat.',
+  ticket_wide:'<b>Variante: breites Feld rechts (600 pt).</b> Das Board bleibt links sichtbar. Mit Board-Chat wird es eng.',
+  ticket_today:'<b>Heute: 340 pt.</b> So sieht das Detail heute aus. Ohne Verlauf, ohne Liste, ohne Aufträge.',
+  inbox:'<b>„Wartet auf mich“ über alle Teams.</b> Eine Liste für den Morgen, nach Grund getrennt, mit denselben Regeln wie der PM-Tagesbericht. „Durchgehen“ öffnet die Triage mit genau dieser Liste. Die Zeilen aus AKQ und DS sind erfundene Beispiele.',
+  jarvis:'<b>Jarvis steuert das Board (entschieden: nur, wenn du gerade mit ihm sprichst).</b> Ihr sprecht über Tickets, Jarvis öffnet sie dir per Befehl in der Triage. Du siehst dasselbe wie er und antwortest rechts. „Zurück, wo ich war“ stellt die Ansicht von vorher wieder her. Sprichst du gerade nicht mit ihm, legt er nur einen Hinweis hin.',
+  chats:'<b>Zurück in die Chats.</b> Der Board-Chat ist kein zweites Terminal, sondern derselbe Chat an einem anderen Ort. Beim Umschalten wandert er zurück an seinen Tab und seine Kachel. Läuft er gerade in einem anderen Fenster, zeigt die Spalte „läuft in Fenster 2 · hierher holen“.',
+};
+function render() {
+  side();
+  let html='', cap='';
+  if (S.scene==='chats') { html=chatsHTML(); cap=CAPS.chats; }
+  else if (S.dock==='grid' && S.scene==='board') { html=gridHTML(); cap=CAPS.board_grid; }
+  else {
+    let main;
+    if (S.scene==='board') { main = boardHTML(); cap = S.dock==='none'?CAPS.board_none:CAPS.board_dock; }
+    else if (S.scene==='inbox') { main = inboxHTML(); cap = CAPS.inbox; }
+    else if (S.scene==='jarvis') { if(!TRIAGE.includes(S.sel)) S.sel='WM8-112'; S.ctx=S.sel; S.dockChat='jarvis'; main = (S.big==='full') ? bigHTML('full') : triageHTML(); cap = CAPS.jarvis; }
+    else {
+      if (S.big==='triage') main = triageHTML();
+      else if (S.big==='full') main = bigHTML('full');
+      else main = boardHTML(true) + bigHTML(S.big);
+      cap = CAPS['ticket_'+S.big];
+    }
+    html = main + ((S.dock!=='none') ? dockHTML() : '');
+  }
+  $('#body').innerHTML = html; $('#cap').innerHTML = cap;
+  wire();
+}
+function toast(html){ const t=$('#toast'); t.innerHTML=html; t.classList.add('show'); clearTimeout(toast.h); toast.h=setTimeout(()=>t.classList.remove('show'),3800); }
+function setScene(v){ if(v!==S.scene){ S.draft=null; S.batch=[]; } if(v==='board'||v==='inbox') S.from=v; S.scene=v; if(v==='board'||v==='inbox'||v==='chats'){ S.ctx=null; } if(v==='ticket'&&!S.ctx) S.ctx=S.sel; syncSeg('#sceneSeg',v); render(); }
+function openTicket(k){ S.from = S.scene==='inbox' ? 'inbox' : 'board'; S.sel=k; S.ctx=k; S.draft=null; setScene('ticket'); }
+function wire() {
+  document.querySelectorAll('.cardx').forEach(c=>c.onclick=()=>openTicket(c.dataset.k));
+  document.querySelectorAll('.irow').forEach(c=>c.onclick=()=>{ if(T[c.dataset.k]) openTicket(c.dataset.k); else toast('Erfundenes Beispiel aus einem anderen Team. Echte Tickets öffnen in der Triage.'); });
+  const mc=$('#mineChip'); if(mc) mc.onclick=()=>{ S.mine=!S.mine; render(); };
+  const back=$('#back'); if(back) back.onclick=()=>setScene(S.from==='inbox'?'inbox':'board');
+  const step = d => { const lane=walkList(); let i=(lane.indexOf(S.sel)+d+lane.length)%lane.length; S.sel=lane[i]; S.ctx=S.sel; S.draft=null; render(); };
+  const p=$('#prev'); if(p) p.onclick=()=>step(-1); const n=$('#next'); if(n) n.onclick=()=>step(1);
+  const cp=$('#copy'); if(cp) cp.onclick=()=>toast(`<b>Kopiert</b> (zwei Zeilen, für Chat, Slack oder Mail):<pre>${S.sel} ${T[S.sel].t}\n${URL0}${S.sel.toLowerCase()}</pre>`);
+  const cl=$('#copyList'); if(cl) cl.onclick=()=>toast(`<b>Kopiert:</b> die sichtbaren Tickets als Liste, in Reihenfolge:<pre>WM8-104 Insel per Tastatur bauen …\n${URL0}wm8-104\nWM8-112 Ticket-Board Paket 1: Triage und Lesen …\n${URL0}wm8-112\n…</pre>`);
+  document.querySelectorAll('[data-tk]').forEach(r=>r.onclick=()=>{ S.sel=r.dataset.tk; S.ctx=S.sel; render(); });
+  document.querySelectorAll('[data-tri]').forEach(b=>b.onclick=()=>{
+    const v=b.dataset.tri, label=b.textContent.replace('…',''), list=walkList();
+    S.batch=S.batch.filter(x=>x.k!==S.sel); S.batch.push({k:S.sel,v,label});
+    if (S.write==='direct') toast(`<b>In Linear geändert:</b> ${S.sel} ${TRI_TEXT[v]}. Alle im Workspace sehen das sofort, als von dir. <button class="btn small">Rückgängig</button>`);
+    const i=list.indexOf(S.sel); if(i<list.length-1){ S.sel=list[i+1]; S.ctx=S.sel; } render(); });
+  const jb=$('#jback'); if(jb) jb.onclick=()=>setScene('board');
+  const gv=$('#give'); if(gv) gv.onclick=()=>{ S.ctx=S.sel; S.draft=ORDERS.give(S.sel); render(); toast(`In das Eingabefeld von ${S.dockChat==='pia'?'Pia':'Jarvis'} gelegt. Abgeschickt wird erst mit Enter.`); };
+  document.querySelectorAll('[data-o]').forEach(b=>b.onclick=()=>{ S.ctx=null; S.draft=ORDERS[b.dataset.o](S.sel); render(); });
+  document.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{ S.dockChat=b.dataset.d; render(); });
+  const x=$('#ctxx'); if(x) x.onclick=()=>{ S.ctx=null; render(); };
+  const off=$('#dockOff'); if(off) off.onclick=()=>{ S.dock='none'; syncSeg('#dockSeg','none'); render(); };
+  const w=$('#walk'); if(w) w.onclick=()=>openTicket('WM8-104');
+}
+function syncSeg(id,v){ document.querySelectorAll(id+' button').forEach(b=>b.classList.toggle('on',b.dataset.v===v)); }
+function seg(id,key){ document.querySelectorAll(id+' button').forEach(b=>b.onclick=()=>{ if(key==='scene') return setScene(b.dataset.v); S[key]=b.dataset.v; syncSeg(id,b.dataset.v); render(); }); }
+seg('#writeSeg','write'); seg('#sceneSeg','scene'); seg('#dockSeg','dock'); seg('#bigSeg','big'); seg('#laneSeg','lanes');
+$('#ticketBtn').onclick=()=>setScene(S.scene==='chats'?'board':'chats');
+document.addEventListener('keydown',e=>{ if(S.scene!=='ticket'&&S.scene!=='jarvis') return; if(e.key==='Escape') $('#back')?.click(); if(e.key==='ArrowRight') $('#next')?.click(); if(e.key==='ArrowLeft') $('#prev')?.click();
+  if(['j','k','ArrowDown','ArrowUp'].includes(e.key)&&document.querySelector('.trow')){ e.preventDefault(); const l=walkList(); let i=l.indexOf(S.sel)+((e.key==='j'||e.key==='ArrowDown')?1:-1); i=Math.max(0,Math.min(l.length-1,i)); S.sel=l[i]; S.ctx=S.sel; render(); } });
+document.querySelectorAll('#themeSeg button').forEach(b=>b.onclick=()=>{ const v=b.dataset.theme; if(v==='system') delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme=v; document.querySelectorAll('#themeSeg button').forEach(x=>x.classList.toggle('on',x===b)); });
+render();
+</script>
+</body>
+</html>
