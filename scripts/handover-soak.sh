@@ -207,8 +207,9 @@ nums = [n for n, _ in rows]
 if nums != list(range(1, len(nums) + 1)):
     print(f"FEHLER Nummern nicht lückenlos: {nums[-5:]}"); sys.exit(0)
 hits = [n for n, text in rows if text == probe]
-# chats send klammert die Eingabe (bracketed paste), auch wenn das Programm
-# das nie angefordert hat; ein einfaches `read` bekommt die Klammern mit.
+# Seit WM8-47/85 klammert chats send die Eingabe nur, wenn das Programm den
+# Einfüge-Modus angefordert hat; ein einfaches `read` bekommt den Text pur.
+# Die Prüfung auf Klammern bleibt als Rückfall-Erkennung für ältere Builds.
 bracketed = [n for n, text in rows if text == "\x1b[200~" + probe + "\x1b[201~"]
 if len(hits) == 1: print(f"OK als Nummer {hits[0]}")
 elif hits: print(f"FEHLER {len(hits)}-mal angekommen")

@@ -908,7 +908,10 @@ enum ChatsCLIHelp {
                                Ruht der Chat nicht (arbeitet, Rückfrage offen, startet,
                                Entwurf im Feld, Limit), wird vorgemerkt statt abgesagt;
                                --no-queue sagt wie früher ab (Exit 4).
-                               --answer: auch in eine offene Rückfrage (sonst nie).
+                               --answer: auch in eine offene Rückfrage (sonst nie, auch
+                               nicht mit --force). Mit --if-status wird nie automatisch
+                               vorgemerkt. Terminal-Tab ohne Einfüge-Modus (read, laufender
+                               Befehl): Text wie getippt, jeder Zeilenumbruch ist ein Enter.
                                --wait-started (Standard 20 s, sonst =N): wartet, bis der Chat arbeitet;
                                meldet gestartet, vorgemerkt oder nicht angekommen mit Grund
                                (am Limit, wartet auf Antwort, gestoppt; Exit 0/4/124).

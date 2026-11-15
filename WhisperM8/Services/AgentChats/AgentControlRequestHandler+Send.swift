@@ -92,8 +92,8 @@ extension AgentControlRequestHandler {
                 // Status-Guard (--if-status). --force überstimmt ihn (nie den
                 // Selbst-Send-Schutz).
                 let force = request.params["force"]?.boolValue ?? false
-                if !force, let runtime, !ifStatus.contains(runtime.rawValue) {
-                    return .failure(.conflict, Self.statusConflictMessage(runtime, allowed: ifStatus))
+                if let message = Self.statusGuardMessage(runtime, allowed: ifStatus, force: force) {
+                    return .failure(.conflict, message)
                 }
                 if PromptDeliveryGate.sendBlockedByDraft(
                     mayHaveUnsentInput: controller.composerDraft.mayHaveUnsentInput, force: force) {
@@ -181,6 +181,15 @@ extension AgentControlRequestHandler {
 // MARK: - Status-Konflikt (WM8-85)
 
 extension AgentControlRequestHandler {
+    /// Status-Guard. `--force` überspringt ihn, aber nie den Schutz einer
+    /// offenen Frage: Die beantwortet nur `--answer` (bzw. `awaitingInput` in
+    /// `--if-status`), Entscheidung Jarvis nach dem Vorfall vom 14.11.
+    static func statusGuardMessage(_ runtime: AgentSessionRuntimeStatus?, allowed: [String], force: Bool) -> String? {
+        guard let runtime, !allowed.contains(runtime.rawValue) else { return nil }
+        if force, runtime != .awaitingInput { return nil }
+        return statusConflictMessage(runtime, allowed: allowed)
+    }
+
     static func statusConflictMessage(_ runtime: AgentSessionRuntimeStatus, allowed: [String]) -> String {
         if runtime == .awaitingInput, !allowed.contains(runtime.rawValue) {
             return "Ziel wartet auf eine Antwort (Rückfrage an den User). send beantwortet sie nicht von sich aus. "

@@ -164,8 +164,13 @@ final class AgentPromptQueueDelivery {
         return sender
     }
 
-    nonisolated static func stuckNotice(targetTitle: String, targetID: UUID) -> String {
-        "Dein vorgemerkter Auftrag an „\(targetTitle)“ steht dort im Eingabefeld und wurde nicht abgeschickt. "
+    nonisolated static func stuckNotice(targetTitle: String, targetID: UUID, at: Date = Date()) -> String {
+        // Mit Uhrzeit: Die Meldung kann erst Tage später ankommen (Vic).
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "de_DE")
+        formatter.dateFormat = "dd.MM. HH:mm"
+        return "Stand \(formatter.string(from: at)): Dein vorgemerkter Auftrag an „\(targetTitle)“ steht dort im "
+            + "Eingabefeld und wurde nicht abgeschickt. "
             + "Nicht noch einmal senden: `whisperm8 chats submit \(ChatsOutput.shortID(targetID))` schickt ihn ab, "
             + "`whisperm8 chats tail \(ChatsOutput.shortID(targetID))` zeigt den Stand."
     }

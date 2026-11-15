@@ -358,7 +358,9 @@ siehe unten). Danach Bracketed Paste
 (`ESC[200~ … ESC[201~`, Pflicht gegen Newline-Auto-Submit) + CR nach 80 ms. In
 Terminal-Tabs nur, wenn das Programm den Einfüge-Modus eingeschaltet hat (zsh
 tut das); sonst kommt der Text wie getippt an, ohne Steuerzeichen, ein
-Zeilenumbruch wird zum Enter (WM8-47). Claude und Codex bekommen immer die
+Zeilenumbruch wird zum Enter (WM8-47). Mehrzeiliger Text wird dort also
+zeilenweise eingegeben; auch mit `--no-submit` gehen alle Zeilen bis auf die
+letzte schon raus. Claude und Codex bekommen immer die
 Klammern.
 Idempotenz-Cache (requestID, 60 s) verhindert Doppel-Paste bei Retry. Jeder Send
 an einen Claude- oder Codex-Chat bekommt die Marker-Zeile `[via whisperm8 chats ·
@@ -788,7 +790,12 @@ dafür sicherer.
   Auftrag selbst in die Warteschlange und meldet „vorgemerkt als Nr. N“
   (Exit 0, `outcome: queued`). `--no-queue` sagt wie früher mit Exit 4 ab. Nie
   vorgemerkt wird ein Text, der schon im Eingabefeld steht (WM8-100,
-  `resend: false`), und nichts mit gesetztem `--if-status` oder `--answer`.
+  `resend: false`), und automatisch nichts mit gesetztem `--if-status` oder
+  `--answer` (nur das ausdrückliche `--queue-if-busy` merkt dort wie seit
+  WM8-70 bei „startet“ und „Freigabe offen“ vor). `--json` trägt immer
+  `outcome` (`delivered`, `queued`, …).
+- **`--force` beantwortet keine Frage.** Es überspringt den Status-Guard, aber
+  nie den Schutz einer offenen Rückfrage; die beantwortet nur `--answer`.
 - **Terminal-Tabs** bekommen Text ohne Einfüge-Klammern, wenn das Programm sie
   nicht angefordert hat (WM8-47, siehe oben).
 - **Postfach mit Alter (WM8-71).** `chats queue` nennt je Chat die älteste

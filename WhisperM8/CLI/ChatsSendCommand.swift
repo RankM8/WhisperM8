@@ -102,8 +102,9 @@ enum ChatsSendCommand {
                 // Zurückgehaltenes Enter (WM8-75): Der Text steht schon im
                 // Eingabefeld — nie vormerken, sonst käme er doppelt.
                 let withheld = response.error?.detail?["resend"]?.boolValue == false
-                if queueIfBusy || autoQueue, !withheld, let error = response.error, let code, code.alternative == "enqueue",
-                   code == .notReady || code == .approvalPending || ifStatus == nil {
+                if let error = response.error, let code,
+                   shouldEnqueue(code: code, withheld: withheld, explicitQueue: queueIfBusy,
+                                 autoQueue: autoQueue, ifStatusGiven: ifStatus != nil) {
                     return enqueue(targetID: targetID, ref: ref, prompt: prompt, json: json,
                                    waitSeconds: waitSeconds, busyReason: error.message)
                 }
@@ -115,7 +116,8 @@ enum ChatsSendCommand {
             }
             if !json, let warning = response.result?["warning"]?.stringValue { CLIIO.err("⚠︎ \(warning)") }
             guard let waitSeconds else {
-                if queueIfBusy { return finish(.delivered, title: title, prompt: prompt, json: json, server: response) }
+                // `--json` trägt immer `outcome` (Vic zu WM8-85); die Textzeile bleibt.
+                if queueIfBusy || json { return finish(.delivered, title: title, prompt: prompt, json: json, server: response) }
                 ChatsLiveSupport.printResult(response, json: json) { result in
                     let ack = result["ack"]?.stringValue ?? "delivered"
                     return "✓ \(ack) an \(title) (\(prompt.count) Zeichen)"
@@ -150,6 +152,17 @@ enum ChatsSendCommand {
             return finish(.queued(position: position, status: status), title: title, prompt: prompt,
                           json: json, server: response)
         }
+    }
+
+    /// Merkt `send` nach einer Absage vor? Ausdrücklich (`--queue-if-busy`)
+    /// wie seit WM8-70; automatisch (WM8-85) nur ohne `--if-status`: Wer
+    /// bewusst nur an einen ruhenden Chat senden will, bekommt nie ein stilles
+    /// „vorgemerkt“ (Vic). Ein Text, der schon im Feld steht, nie.
+    static func shouldEnqueue(code: ChatsControlErrorCode, withheld: Bool, explicitQueue: Bool,
+                              autoQueue: Bool, ifStatusGiven: Bool) -> Bool {
+        guard !withheld, code.alternative == "enqueue" else { return false }
+        if explicitQueue { return code == .notReady || code == .approvalPending || !ifStatusGiven }
+        return autoQueue && !ifStatusGiven
     }
 
     private static func finish(_ outcome: ChatsSendOutcome, title: String, prompt: String, json: Bool,

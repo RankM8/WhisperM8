@@ -100,4 +100,41 @@ final class ChatsCLIFallbackTests: XCTestCase {
             QueuedPrompt(sessionID: UUID(), prompt: "y", enqueuedAt: Date(), enqueuedBy: "b", enqueuedBySessionID: UUID())))
         XCTAssertNotNil(roundTrip.enqueuedBySessionID)
     }
+
+    // MARK: Auflagen aus Vics Prüfung von Paket 1
+
+    func testAutomaticQueueingOnlyWithoutIfStatus() {
+        typealias C = ChatsSendCommand
+        for code in [ChatsControlErrorCode.notReady, .approvalPending, .conflict] {
+            XCTAssertTrue(C.shouldEnqueue(code: code, withheld: false, explicitQueue: false, autoQueue: true, ifStatusGiven: false))
+            XCTAssertFalse(C.shouldEnqueue(code: code, withheld: false, explicitQueue: false, autoQueue: true, ifStatusGiven: true),
+                           "--if-status idle heißt: nur an einen ruhenden Chat, nie still vormerken (\(code))")
+        }
+        // Ausdrücklich wie seit WM8-70: Start und Freigabe auch mit --if-status.
+        XCTAssertTrue(C.shouldEnqueue(code: .notReady, withheld: false, explicitQueue: true, autoQueue: false, ifStatusGiven: true))
+        XCTAssertFalse(C.shouldEnqueue(code: .conflict, withheld: false, explicitQueue: true, autoQueue: false, ifStatusGiven: true))
+        XCTAssertFalse(C.shouldEnqueue(code: .notReady, withheld: true, explicitQueue: true, autoQueue: true, ifStatusGiven: false),
+                       "Text steht schon im Feld: nie vormerken")
+        XCTAssertFalse(C.shouldEnqueue(code: .noPty, withheld: false, explicitQueue: false, autoQueue: true, ifStatusGiven: false))
+        XCTAssertFalse(C.shouldEnqueue(code: .notReady, withheld: false, explicitQueue: false, autoQueue: false, ifStatusGiven: false),
+                       "--no-queue")
+    }
+
+    func testForceNeverAnswersAnOpenQuestion() {
+        typealias H = AgentControlRequestHandler
+        XCTAssertNotNil(H.statusGuardMessage(.awaitingInput, allowed: ["idle"], force: true), "auch mit --force nicht in die Frage")
+        XCTAssertNil(H.statusGuardMessage(.awaitingInput, allowed: ["awaitingInput", "idle"], force: true), "--answer")
+        XCTAssertNil(H.statusGuardMessage(.working, allowed: ["idle"], force: true), "--force überspringt den Status")
+        XCTAssertNotNil(H.statusGuardMessage(.working, allowed: ["idle"], force: false))
+        XCTAssertNil(H.statusGuardMessage(.idle, allowed: ["idle"], force: false))
+        XCTAssertNil(H.statusGuardMessage(nil, allowed: ["idle"], force: false))
+    }
+
+    func testStuckNoticeCarriesItsTime() {
+        let at = DateComponents(calendar: Calendar(identifier: .gregorian), timeZone: .current,
+                                year: 2026, month: 11, day: 15, hour: 0, minute: 43).date!
+        let notice = AgentPromptQueueDelivery.stuckNotice(targetTitle: "Ole", targetID: UUID(), at: at)
+        XCTAssertTrue(notice.hasPrefix("Stand 15.11. 00:43:"), notice)
+    }
 }
+
