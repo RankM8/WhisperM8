@@ -196,6 +196,8 @@ final class ControllerUIModel {
     var context: ControllerContext = .noWindow
     /// Titel des Ziel-Chats für die Legende.
     var targetTitle: String?
+    /// Womit zuletzt bedient wurde: Danach richtet sich die Legende (WM8-104).
+    var lastInput: ControllerIslandInput = .controller
 
     @ObservationIgnored var listModel = SidebarNavigationModel()
 

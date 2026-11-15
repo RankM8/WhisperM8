@@ -55,6 +55,8 @@ struct ControllerLegendBar: View {
     let target: ControllerLegendTarget
     let entries: [ControllerLegendEntry]
     var holdProgress: ControllerHoldProgress?
+    /// Per Tastatur (WM8-104): Tastenkappen statt der Controller-Tasten.
+    var keyboardItems: [KeyboardIslandFooter.Item]?
 
     static let height: CGFloat = 30
 
@@ -89,13 +91,17 @@ struct ControllerLegendBar: View {
             // Kürzen stehen — es steht weit hinten, wäre sonst fast nie zu
             // sehen und ist die einzige Angabe, die sich nicht von selbst
             // versteht.
-            ViewThatFits(in: .horizontal) {
-                keys(entries)
-                keys(Self.shortened(entries, to: 6))
-                keys(Self.shortened(entries, to: 4))
-                keys(Array(entries.prefix(2)))
+            if let keyboardItems {
+                keyboardKeys(keyboardItems).layoutPriority(1)
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    keys(entries)
+                    keys(Self.shortened(entries, to: 6))
+                    keys(Self.shortened(entries, to: 4))
+                    keys(Array(entries.prefix(2)))
+                }
+                .layoutPriority(1)
             }
-            .layoutPriority(1)
         }
         .padding(.horizontal, 12)
         .frame(height: Self.height)
@@ -126,6 +132,23 @@ struct ControllerLegendBar: View {
                             }
                         }
                     Text(verbatim: entry.title)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(AppTheme.textPrimary)
+                        .lineLimit(1)
+                }
+                .fixedSize()
+            }
+        }
+    }
+
+    private func keyboardKeys(_ items: [KeyboardIslandFooter.Item]) -> some View {
+        HStack(spacing: 14) {
+            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                HStack(spacing: 5) {
+                    HStack(spacing: 2) {
+                        ForEach(item.keys, id: \.self) { LegendKeycap(text: $0) }
+                    }
+                    Text(verbatim: item.label)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(AppTheme.textPrimary)
                         .lineLimit(1)
@@ -182,10 +205,19 @@ struct ControllerLegendHost: View {
     @State private var model = ControllerUIModel.shared
     @State private var windows = AgentWindowStore.shared
     @AppStorage(PreferenceKeys.controllerLegendEnabled) private var legendEnabled = true
+    @AppStorage(PreferenceKeys.keyboardIslandEnabled) private var keyboardIslandEnabled = true
+    /// Diktat-Hotkey als Tastenkappen, einmal beim Erscheinen gelesen.
+    @State private var dictationKeys: [String]? = ["⌥", "␣"]
 
     var body: some View {
-        if legendEnabled, status.isRunning, status.device != nil {
-            let isThisWindow = windows.keyAgentChatWindowID == windowID
+        let mode = KeyboardLegend.mode(
+            legendEnabled: legendEnabled, controllerRunning: status.isRunning, deviceConnected: status.device != nil,
+            lastInput: model.lastInput, keyboardIslandEnabled: keyboardIslandEnabled)
+        let isThisWindow = windows.keyAgentChatWindowID == windowID
+        switch mode {
+        case .none:
+            EmptyView()
+        case .controller:
             let context: ControllerContext = status.isPaused ? .paused : (isThisWindow ? model.context : .otherWindow)
             let traits = status.traits
             ControllerLegendBar(
@@ -194,6 +226,14 @@ struct ControllerLegendHost: View {
                 holdProgress: isThisWindow ? model.holdProgress : nil
             )
             .environment(\.controllerFamily, traits.family)
+        case .keyboard:
+            // Ohne verbundenen Controller oder nach ⌥Tab: die Tastatur-Kürzel.
+            ControllerLegendBar(
+                target: .make(context: isThisWindow ? model.context : .otherWindow, chatTitle: model.targetTitle),
+                entries: [],
+                keyboardItems: isThisWindow ? KeyboardLegend.items(dictationKeys: dictationKeys) : []
+            )
+            .onAppear { dictationKeys = KeyboardLegend.dictationKeys() }
         }
     }
 }

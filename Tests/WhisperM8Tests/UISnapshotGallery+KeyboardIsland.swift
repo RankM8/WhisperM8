@@ -114,8 +114,19 @@ extension UISnapshotGallery {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .background(AppTheme.sidebar))
         }
+        // Legende unten im Fenster per Tastatur (Paket 3), folgt Hell und Dunkel.
+        func legend() -> AnyView {
+            AnyView(VStack(spacing: 0) {
+                Spacer()
+                ControllerLegendBar(
+                    target: ControllerLegendTarget(title: "Controller Insel", detail: "working", tone: .working),
+                    entries: [], keyboardItems: KeyboardLegend.items(dictationKeys: ["⌥", "␣"]))
+            }
+            .background(AppTheme.background))
+        }
         let size = CGSize(width: 620, height: 560)
         return [
+            Fixture(name: "insel-tastatur-legende", size: CGSize(width: 760, height: 80)) { legend() },
             Fixture(name: "insel-tastatur-menue", size: CGSize(width: 420, height: 1000)) { keyboardMenu() },
             Fixture(name: "insel-tastatur-chats", size: size) { island(chatsModel) },
             Fixture(name: "insel-tastatur-ohne-tastenzeile", size: size) { island(paket1) },

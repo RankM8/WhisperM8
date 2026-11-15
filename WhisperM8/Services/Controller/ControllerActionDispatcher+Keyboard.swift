@@ -48,6 +48,7 @@ extension ControllerActionDispatcher {
         session.revealed = false
         islandGeneration += 1
         islandState = session
+        if ui.lastInput != .keyboard { ui.lastInput = .keyboard }
         return true
     }
 

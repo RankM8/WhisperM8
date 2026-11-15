@@ -32,7 +32,7 @@ während die Steuerung aus ist, erscheint einmal eine Mitteilung.
 | Schalter | Standard | Wirkung |
 |---|---|---|
 | Controller-Steuerung | aus | liest Gamepads, zeigt Legende und Markierung |
-| Legende am unteren Rand | an | Leiste mit Ziel und Tastenbelegung |
+| Legende am unteren Rand | an | Leiste mit Ziel und Tastenbelegung; nach ⌥Tab oder ohne verbundenen Controller die Tastatur-Kürzel ([insel-tastatur.md](insel-tastatur.md#legende)) |
 | Vibration | an | Impulse bei Aufnahme, wartenden Chats und geleerter Eingabe |
 | Lichtleiste | an | Farbe nach Zustand |
 | Auch wenn ein anderes Programm vorne ist | aus | Diktat und Verlauf überall; in Spielen ist R2 meist Gas oder Schuss |

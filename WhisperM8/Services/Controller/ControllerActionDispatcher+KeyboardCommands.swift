@@ -226,6 +226,8 @@ extension ControllerActionDispatcher {
             case .closeAndPassThrough: ui.menu = nil
             }
         }
+        // Über `perform` gebucht, kam aber von der Tastatur (Legende).
+        ui.lastInput = .keyboard
     }
 
     // MARK: - Hilfen

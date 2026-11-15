@@ -12,8 +12,8 @@ Dieselbe Dynamic Island wie am Controller (L2 „Wohin“), bedient mit der Tast
 Schnellbefehle als Buchstaben); Ticket WM8-104. Die Insel selbst beschreibt
 [controller.md](controller.md#ebenen-und-dynamic-island).
 
-**Stand:** Paket 1 (Wohin) und Paket 2 (Schnellbefehle, Spickzettel, Options-Menü per Tastatur). Die
-Tastatur-Legende unten im Fenster folgt.
+**Stand:** gebaut in drei Paketen: Wohin (1), Schnellbefehle, Spickzettel und Options-Menü per
+Tastatur (2), Legende (3). Global außerhalb der App ist ein späteres eigenes Paket.
 
 ## Einschalten
 
@@ -85,6 +85,24 @@ Insel), nicht auf die markierte Zeile. Darunter „App“.
   schließt das Menü und läuft normal weiter, ein Klick schließt es. Die Fußzeile der Karte zeigt dann
   Tastenkappen (`controllerMenuByKeyboard`, `ControllerUIModel.menuByKeyboard`).
 
+## Legende
+
+Die Leiste unten im Fenster folgt dem zuletzt benutzten Gerät, aber nur mit eingeschalteter
+Controller-Steuerung (Entscheidung Giuliano, 15.11.2026; `KeyboardLegend.mode`):
+
+| Controller-Steuerung | Controller verbunden | zuletzt benutzt | Leiste |
+|---|---|---|---|
+| aus | – | – | keine, wie bisher (die Kürzel stehen in der Insel) |
+| an | ja | Controller | Controller-Tasten wie bisher |
+| an | ja | Tastatur (⌥Tab) | „⌥⇥ Wohin · ⌥␣ Diktat · ⌃⇥ Raster“ |
+| an | nein | – | Tastatur-Kürzel statt nichts |
+
+„Zuletzt benutzt“ merkt `ControllerUIModel.lastInput`: ⌥Tab setzt „Tastatur“, jede ausgeführte
+Controller-Aktion „Controller“; das Options-Menü per Tastatur zählt als Tastatur. Ist die Insel per
+Tastatur ausgeschaltet, nennt die Leiste keine Tastatur-Kürzel. Der Diktat-Eintrag zeigt den eingestellten
+Hotkey (ab Werk ⌥Leertaste), gelesen beim Erscheinen der Leiste; ohne Hotkey fehlt er. Der Schalter
+„Legende am unteren Rand“ (Einstellungen › Controller) gilt für beide.
+
 ## Diktat
 
 - **⌥Leertaste** ist der Diktat-Hotkey (global über Carbon) und kommt nie als Tastendruck an. Ist die
@@ -127,6 +145,7 @@ Insel), nicht auf die markierte Zeile. Darunter „App“.
 | Modell | `Core/ControllerIsland.swift` | `ControllerIslandInput`, `markPreviousForKeyboard`, `switchTabForKeyboard` |
 | Ansicht | `Views/Controller/ControllerIslandView+Keyboard.swift` | Tastenkappen in Kopf und Fußzeile (`KeyboardIslandFooter` pur), Tastenzeile, Spickzettel |
 | Schnellbefehle | `Core/ControllerIslandKeyboard.swift`, `ControllerActionDispatcher+KeyboardCommands.swift` | Buchstaben und Stand der Tastenzeile (pur); Ausführung über dieselben Wege wie R1 (`sendOrContinue`, `perform(_:setup:)`, `openLimitsCard`, App-Schalter); Options-Menü per Tastatur |
+| Legende | `Views/Controller/KeyboardLegend.swift`, `ControllerLegendHost` | Entscheidung Controller/Tastatur/keine (pur), Tastenkappen in der Leiste |
 | Layout | `KeyboardIsland/KeyboardLayoutLetters.swift` | Buchstabe je keyCode im aktuellen Layout (`UCKeyTranslate`, nur Main Thread) |
 
 Leistung: Der Monitor prüft bei geschlossener Insel nur keyCode und Modifier; Einstellungen und
@@ -135,11 +154,12 @@ Schnappschuss liest er erst bei ⌥Tab. Das Erscheinen misst dasselbe Signpost w
 
 ## Prüfen
 
+- `swift test --filter KeyboardLegend` — wann die Leiste was zeigt und der Merker des Geräts.
 - `swift test --filter KeyboardIsland` — Tastenregeln, Markierung im Modell, Fußzeile und der Ablauf
   durch Monitor und Ausführer (kurz getippt, halten, Esc, Return, Dialog, Diktat, Hotkey, Controller).
 - `make snapshots ONLY=insel-tastatur` — Chats mit Tastenzeile und Markierung auf „vorher“, ohne
   Tastenzeile (Paket 1), Workspaces im Raster, während eines Diktats, nach N (Bestätigung), Spickzettel,
-  Limits-Karte, als Pille, Options-Menü per Tastatur.
+  Limits-Karte, als Pille, Options-Menü per Tastatur, Legende hell und dunkel.
 - Von Hand nach `make dev`: ⌥Tab kurz und gehalten in Einzelansicht und Raster; im Terminal mit Fokus
   (nichts kommt in der CLI an); mit offenem Einstellungsfenster vorne (⌥Tab läuft durch); ⌥Leertaste bei
   offener Insel; S, O und M an Claude und Codex; B und K mit Pfeilen und Return; N und A mehrfach.
