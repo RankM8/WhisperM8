@@ -172,9 +172,18 @@ mehreren Boards stehen (`otherOwners`).
   zuerst zu (nach 0,6 s), in der Reihenfolge ihres Eingangs. Vorher hängte
   Claude jeden Weck-Prompt, der während eines Turns kam, direkt an dessen
   Ende; Jarvis ruhte dann nie, und Meldungen lagen am 15.11. bis zu
-  22 Minuten. Länger als 10 Minuten hält die Mod nie zurück; solange Jarvis
-  arbeitet, sieht sie alle 30 s nach (nur ein Takt, kein Prozess). Ist der
-  eigene Status unbekannt, weckt sie wie vorher.
+  22 Minuten. „Wartet auf dich“ hält die Mod höchstens 1 Minute zurück,
+  alles andere höchstens 10 Minuten; solange Jarvis arbeitet, sieht sie alle
+  30 s nach (nur ein Takt, kein Prozess). Wartet Jarvis selbst auf Giuliano
+  (eigener Status `awaitingInput`), hält sie ohne Obergrenze: Ein Prompt in
+  die offene Rückfrage hülfe niemandem, und ob `$.prompt.submit` dort wartet
+  oder die Frage stört, ist nicht geprüft. Ist der eigene Status unbekannt,
+  weckt sie wie vorher.
+  Zurückgehaltene Zeilen stehen im Atom `wakePending` und überstehen so einen
+  Reload der Mod; nach dem Reload liefert die Mod sie beim ersten Neulesen
+  des Boards zuerst aus. Als gemeldet (`woken`) gilt ein Zustand erst, wenn
+  seine Zeile wirklich raus ist. Arbeitet ein Chat wieder, fällt seine noch
+  zurückgehaltene Zeile weg.
 - **Anzeige (seit WM8-99):** Aufbau oben unter „Was es ist“. Was im Kasten
   steht, rechnet `layoutBox` rein aus Einträgen, Breite und Höhe aus
   (`waitingLines` für die Spalten, `summaryLine` für die Sammelzeile); der

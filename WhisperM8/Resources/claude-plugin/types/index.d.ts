@@ -75,6 +75,12 @@ declare module 'claude-code' {
        * Engine). Im Atom, damit sie einen Reload der Mod übersteht.
        */
       backgroundWatch: { id: string; since: string; at: number }[]
+      /**
+       * Zurückgehaltene Weck-Zeilen (WM8-64), je Chat höchstens eine; der
+       * Schlüssel kommt erst beim Ausliefern nach `woken`. Im Atom, damit sie
+       * einen Reload der Mod übersteht.
+       */
+      wakePending: { id: string; key: string; line: string; at: number; urgent: boolean }[]
       /** Callout-Modus der Session: Claude darf am Turn-Ende sprechen. */
       callout: boolean
       /** Tasks der laufenden Session, nach ID sortiert. */

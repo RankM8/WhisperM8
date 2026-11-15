@@ -829,14 +829,16 @@ dafür sicherer.
   nie den Schutz einer offenen Rückfrage; die beantwortet nur `--answer`.
 - **Terminal-Tabs** bekommen Text ohne Einfüge-Klammern, wenn das Programm sie
   nicht angefordert hat (WM8-47, siehe oben).
-- **Einzeln stornieren (WM8-64).** `chats dequeue <ref> 2` oder
-  `chats dequeue <ref> 3f9a1c2e` nimmt einzelne offene Aufträge heraus: die
-  Nummer aus `chats queue <ref>` oder die ID, auch gekürzt ab vier Zeichen
-  (`chats queue` zeigt die ersten acht). Aufgelöst wird gegen die gerade
+- **Einzeln stornieren (WM8-64).** `chats dequeue <ref> 3f9a1c2e` nimmt
+  einzelne offene Aufträge heraus, per ID, auch gekürzt ab vier Zeichen
+  (`chats queue` zeigt die ersten acht). Das ist der sichere Weg. Eine Nummer
+  aus `chats queue` (`chats dequeue <ref> 2`) geht auch, verschiebt sich aber,
+  sobald vorn ein Auftrag zugestellt wird. Aufgelöst wird gegen die gerade
   gelesene Liste, storniert dann nur genau diese IDs; ein inzwischen neu
   vorgemerkter Auftrag geht nie mit. Passt eine Angabe nicht (Nummer zu groß,
-  ID unbekannt oder mehrdeutig), wird nichts storniert (Exit 3). `--all` und
-  `--id <UUID>` bleiben.
+  ID unbekannt oder mehrdeutig), wird nichts storniert (Exit 3). Die Ausgabe
+  nennt je storniertem Auftrag Kurz-ID und Textanfang (JSON `items`).
+  `--all` und `--id <UUID>` bleiben.
 - **Postfach mit Alter (WM8-71).** `chats queue` nennt je Chat die älteste
   wartende Meldung, `chats board` unter dem Board das Postfach des Besitzers
   („2 Meldungen warten, älteste seit 12 min“, JSON `inbox.open`,

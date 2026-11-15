@@ -964,9 +964,10 @@ enum ChatsCLIHelp {
                                höchstens einmal, in Einstell-Reihenfolge. Ist
                                der Chat frei, geht es sofort raus.
       whisperm8 chats queue [<ref>] [--json]             Was wartet? (auch bei geschlossener App)
-      whisperm8 chats dequeue <ref> <Nr|ID>… | --all
-                               Offene Aufträge stornieren; Nr. und ID wie in
-                               `chats queue <ref>` (--id <UUID> geht weiter).
+      whisperm8 chats dequeue <ref> <ID|Nr>… | --all
+                               Offene Aufträge stornieren. Sicher ist die
+                               Kurz-ID aus `chats queue <ref>`; eine Nummer
+                               verschiebt sich, sobald vorn zugestellt wird.
       whisperm8 chats interrupt <ref> [--force] [--clear-input] [--json]
                                ESC an working-Session. --clear-input schickt
                                danach ein Ctrl+C hinterher und leert den

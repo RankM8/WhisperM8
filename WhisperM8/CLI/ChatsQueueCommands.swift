@@ -8,8 +8,21 @@ enum ChatsQueueSupport {
     /// Eine Zeile pro Auftrag. Position zählt nur OFFENE Aufträge; erledigte
     /// behalten keine Nummer, sonst sähe die Liste aus, als stünde noch etwas
     /// aus.
+    /// Textanfang eines Auftrags, einzeilig.
+    static func head(of prompt: String) -> String {
+        String(prompt.replacingOccurrences(of: "\n", with: " ").prefix(60))
+    }
+
+    /// Eine Zeile je storniertem Auftrag: Kurz-ID und Textanfang (WM8-64).
+    static func cancelledLines(_ items: [(id: String, head: String)]) -> [String] {
+        items.map { item in
+            let short = UUID(uuidString: item.id).map(shortID) ?? String(item.id.lowercased().prefix(8))
+            return "   × \(short)  \(item.head)"
+        }
+    }
+
     static func line(for prompt: QueuedPrompt, position: Int?, now: Date) -> String {
-        let head = String(prompt.prompt.replacingOccurrences(of: "\n", with: " ").prefix(60))
+        let head = head(of: prompt.prompt)
         let age = ChatsOutput.relative(from: prompt.enqueuedAt, to: now)
         let marker: String
         switch prompt.state {
@@ -62,7 +75,8 @@ enum ChatsQueueSupport {
     }
 
     /// `dequeue <ref> <Nr | ID>…` (WM8-64): Nummer aus `chats queue` (zählt
-    /// nur offene Aufträge) oder ID, auch gekürzt ab vier Zeichen. Aufgelöst
+    /// nur offene Aufträge) oder ID, auch gekürzt ab vier Zeichen. Sicher ist
+    /// die ID: Eine Nummer verschiebt sich, sobald vorn zugestellt wird. Aufgelöst
     /// wird vorher gegen die gelesene Liste, storniert dann nur genau diese
     /// IDs: Ein inzwischen neu vorgemerkter Auftrag geht so nie mit (15.11.,
     /// `--all` nahm einen zwischen Lesen und Stornieren eingetroffenen mit).
@@ -312,7 +326,7 @@ enum ChatsQueueCommand {
         }
         let selectors = Array(refs.dropFirst())
         guard all || !ids.isEmpty || !selectors.isEmpty else {
-            CLIIO.err("Was soll storniert werden? Nummer oder ID aus `chats queue <ref>`, oder --all für alle offenen.")
+            CLIIO.err("Was soll storniert werden? Kurz-ID aus `chats queue <ref>` (sicher), Nummer oder --all.")
             return ChatsCLIExit.usage
         }
         guard !(all && !(ids.isEmpty && selectors.isEmpty)) else {
@@ -347,7 +361,12 @@ enum ChatsQueueCommand {
                 let cancelled = result["cancelled"]?.intValue ?? 0
                 let remaining = result["remaining"]?.intValue ?? 0
                 if cancelled == 0 { return "– nichts zu stornieren (offen: \(remaining))" }
-                return "✓ \(cancelled) Auftrag/Aufträge storniert (offen: \(remaining))"
+                let items: [(id: String, head: String)] = (result["items"]?.arrayValue ?? []).compactMap { item in
+                    guard let id = item["id"]?.stringValue else { return nil }
+                    return (id, item["head"]?.stringValue ?? "")
+                }
+                return (["✓ \(cancelled) Auftrag/Aufträge storniert (offen: \(remaining))"]
+                    + ChatsQueueSupport.cancelledLines(items)).joined(separator: "\n")
             }
             return ChatsCLIExit.ok
         }

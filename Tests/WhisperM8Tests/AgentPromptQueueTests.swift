@@ -341,6 +341,13 @@ final class ChatsQueueSupportTests: XCTestCase {
                        [prompts[0].id])
     }
 
+    func testCancelledLinesNameShortIDAndHead() {
+        let id = UUID()
+        let lines = ChatsQueueSupport.cancelledLines([(id.uuidString, "Baue das Feature fertig")])
+        XCTAssertEqual(lines, ["   × \(ChatsQueueSupport.shortID(id))  Baue das Feature fertig"])
+        XCTAssertEqual(ChatsQueueSupport.head(of: "eins\nzwei"), "eins zwei")
+    }
+
     func testSelectorsRefuseWhatIsNotOpen() {
         let prompts = open(2)
         for selector in ["0", "3", "abc", "ffffffff"] {
