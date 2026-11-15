@@ -11,8 +11,7 @@ extension AgentChatsView {
     /// Globale Tab-Bar: alle offenen Tabs über alle Projekte, in der
     /// Reihenfolge von `openTabIDs`.
     var headerTabs: [AgentChatSession] {
-        let byID = Dictionary(workspace.sessions.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
-        return openTabIDs.compactMap { byID[$0] }.filter { $0.status != .archived }
+        AgentTabOrder.headerTabs(openTabIDs: openTabIDs, sessions: workspace.sessions)
     }
 
     /// Erste Workspace-Zugehörigkeit in der persistierten Sidebar-Reihenfolge.
@@ -140,7 +139,7 @@ extension AgentChatsView {
     var visibleTabOrderIDs: [UUID] {
         AgentTabOrder.visibleOrderIDs(
             items: tabGroupingItems,
-            collapsedKeys: collapsedTabGroups,
+            collapsedKeys: effectiveCollapsedTabGroups,
             selectedID: selectedSessionID
         )
     }
@@ -148,7 +147,7 @@ extension AgentChatsView {
     /// Drop-Einheiten der Leiste. Eine eingeklappte Gruppe ist EIN Slot —
     /// dadurch bleibt sie beim Ziehen ein gültiges Ziel, ohne aufzuklappen.
     var tabStripSlots: [AgentTabStripSlot] {
-        AgentTabGrouping.slots(items: tabGroupingItems, collapsedKeys: collapsedTabGroups)
+        AgentTabGrouping.slots(items: tabGroupingItems, collapsedKeys: effectiveCollapsedTabGroups)
     }
 
     /// Geometrie-Schlüssel der Slots (ein Eintrag je Drop-Einheit).
@@ -192,6 +191,6 @@ extension AgentChatsView {
     /// Bereich — dann blenden wir das Chevron-Overflow-Menü ein. Im Fullscreen
     /// (alle Tabs passen rein) ist das `false`.
     var hasTabOverflow: Bool {
-        stripContentWidth > stripViewportWidth + 1
+        AgentTabOrder.hasOverflow(contentWidth: stripContentWidth, viewportWidth: stripViewportWidth)
     }
 }

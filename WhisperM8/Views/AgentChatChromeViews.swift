@@ -186,6 +186,9 @@ struct ChatTabGroupLabel: View {
     let colorHex: String
     let isCollapsed: Bool
     let isActive: Bool
+    /// Wegen Platzmangel zugeklappt (WM8-80): Der Hinweis sagt, dass ein
+    /// Klick die Gruppe öffnet und offen hält.
+    var isAutoCollapsed = false
     let onToggle: () -> Void
 
     @State private var isHovered = false
@@ -237,7 +240,9 @@ struct ChatTabGroupLabel: View {
         .animation(.easeOut(duration: 0.12), value: isHovered)
         .animation(.easeOut(duration: 0.12), value: isCollapsed)
         .help(
-            isCollapsed
+            isAutoCollapsed
+                ? String(localized: "Collapsed for space – click to open the group")
+                : isCollapsed
                 ? String(localized: "Expand tab group · dragging moves the whole group")
                 : String(localized: "Collapse tab group · dragging moves the whole group")
         )
@@ -261,6 +266,12 @@ struct ChatTabButton: View {
     /// Herkunftsfarbe der sichtbaren Workspace-/Projektgruppe. `nil` bei
     /// Einzel-Tabs oder deaktivierter Gruppierung.
     var groupColor: Color? = nil
+    /// Breite aus der Breitenregel der Leiste (WM8-80); `nil` = alte Grenzen
+    /// 100–190 pt, solange der Platz noch nicht gemessen ist.
+    var width: CGFloat? = nil
+    /// Schmaler Tab unter 100 pt: Kurztitel, nur der Status-Punkt, kein
+    /// Schließen-Knopf (schließen per Mittelklick oder Kontextmenü).
+    var isNarrow = false
     var onSelect: () -> Void
     var onClose: () -> Void
 
@@ -280,7 +291,7 @@ struct ChatTabButton: View {
 
     var body: some View {
         Button(action: onSelect) {
-            HStack(spacing: 6) {
+            HStack(spacing: isNarrow ? 4 : 6) {
                 if let project {
                     ProjectAvatar(project: project, size: 13)
                         .help(project.name)
@@ -288,19 +299,32 @@ struct ChatTabButton: View {
                     AgentSessionIcon(session: session, size: 11, tint: AgentTheme.textTertiary)
                 }
 
-                Text(session.title)
+                Text(isNarrow ? AgentTabWidthResolver.shortTitle(session.title) : session.title)
                     .font(.system(size: 11, weight: isSelected ? .semibold : .regular))
                     .foregroundStyle(isSelected ? AgentTheme.textPrimary : AgentTheme.textSecondary)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    .help(isNarrow ? session.title : "")
+                    // Schmal nimmt der Kurztitel den ganzen Rest, damit „Gus“
+                    // auch bei 64 pt ganz zu lesen ist.
+                    .frame(maxWidth: isNarrow ? .infinity : nil, alignment: .leading)
 
-                AgentWorkingCopyMarker(copy: session.workingCopy)
-
-                trailingIndicator
-                    .frame(width: 18, alignment: .trailing)
+                if isNarrow {
+                    AgentStatusIndicator(status: resolvedStatus, compact: true, usageLimit: session.activeUsageLimit())
+                } else {
+                    AgentWorkingCopyMarker(copy: session.workingCopy)
+                    // Bei fester Breite stehen Status und Schließen rechts außen.
+                    Spacer(minLength: 0)
+                    trailingIndicator
+                        .frame(width: 18, alignment: .trailing)
+                }
             }
-            .padding(.horizontal, 8)
-            .frame(minWidth: 100, maxWidth: 190, minHeight: 28, maxHeight: 28)
+            .padding(.horizontal, isNarrow ? 6 : 8)
+            .frame(
+                minWidth: width ?? 100, maxWidth: width ?? 190,
+                minHeight: 28, maxHeight: 28,
+                alignment: .leading
+            )
             .background {
                 ZStack {
                     if isSelected {

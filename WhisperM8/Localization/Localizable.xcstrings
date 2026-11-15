@@ -4781,6 +4781,16 @@
         }
       }
     },
+    "Collapsed for space – click to open the group": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wegen Platzmangel zugeklappt – Klick öffnet die Gruppe"
+          }
+        }
+      }
+    },
     "Collect statistics": {
       "localizations": {
         "de": {

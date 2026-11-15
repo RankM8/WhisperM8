@@ -16,12 +16,6 @@ func adjacentTabID(in order: [UUID], current: UUID?, direction: Int) -> UUID? {
     return order[(raw + order.count) % order.count]
 }
 
-/// Gesamtbreite des Tab-Strip-Inhalts (HStack aller Tabs).
-struct TabStripContentWidthKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
-}
-
 /// Sichtbare Frame des Tab-Strip-ScrollViews in `.global` (Viewport-Breite +
 /// X-Spanne fürs Mausrad-Hit-Test-Gating).
 /// Pane-Rechtecke des Grids im Fenster-Koordinatenraum (LR-AU-016).
@@ -165,6 +159,7 @@ struct AgentChatsView: View {
     /// Eingeklappte Herkunftsgruppen sind bewusst ephemer: ein App-Neustart
     /// beginnt mit vollständig sichtbaren Tabs, ohne versteckte Altzustände.
     @State var collapsedTabGroups: Set<AgentTabGroupingKey> = []
+    @State var tabStripWidth = TabStripWidthState() // Platz und von Hand geöffnete Gruppen (WM8-80)
     /// Gepinnt-Sektion ein-/ausgeklappt (persistiert) — damit Pins nicht
     /// dauerhaft oben Platz belegen.
     @AppStorage("agentPinnedSectionCollapsed") var pinnedSectionCollapsed = false
@@ -895,7 +890,7 @@ struct AgentChatsView: View {
         .onChange(of: tabGroupingEnabled) { _, enabled in
             // @AppStorage gilt für alle Fenster; der ephemere Collapse-State
             // muss deshalb ebenfalls in jeder lebenden View zurückgesetzt werden.
-            if !enabled { collapsedTabGroups.removeAll() }
+            if !enabled { collapsedTabGroups.removeAll(); tabStripWidth.openedGroups.removeAll() }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { note in
             // Fenster verliert den Key-Status mitten im Ctrl+Tab-Durchlauf
