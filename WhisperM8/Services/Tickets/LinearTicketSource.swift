@@ -339,7 +339,39 @@ struct LinearTicketSource: TicketSource {
         }
     }
 
+    /// Eine Anfrage je geöffnetem Ticket: bis zu 100 Kommentare samt
+    /// Verfasser. Bilder und Anhänge holt das Board nicht (ihre Adressen
+    /// verfallen nach Minuten); sie stehen nur als Verweis da.
+    static let commentPageSize = 100
+
+    func comments(ticketID: String) async throws -> TicketComments {
+        let data = try await client.run("""
+        query($id: String!, $first: Int!) {
+          issue(id: $id) { comments(first: $first) { nodes { id body createdAt parent { id } user { name } } pageInfo { hasNextPage } } }
+        }
+        """, variables: ["id": ticketID, "first": Self.commentPageSize])
+        guard let issue = data["issue"] as? [String: Any] else { throw TicketSourceError.notFound(ticketID) }
+        return Self.comments(issue["comments"])
+    }
+
     // MARK: Übersetzung (pur, mit Fixtures getestet)
+
+    static func comments(_ value: Any?) -> TicketComments {
+        let items = nodes(value).compactMap { node -> TicketComment? in
+            guard let id = node["id"] as? String else { return nil }
+            return TicketComment(
+                id: id,
+                author: (node["user"] as? [String: Any])?["name"] as? String ?? "",
+                createdAt: (node["createdAt"] as? String).flatMap(date),
+                body: node["body"] as? String ?? "",
+                isReply: node["parent"] is [String: Any])
+        }
+        let info = (value as? [String: Any])?["pageInfo"] as? [String: Any] ?? [:]
+        // Neueste zuerst, gleich in welcher Reihenfolge Linear liefert.
+        let sorted = items.sorted { ($0.createdAt ?? .distantPast) > ($1.createdAt ?? .distantPast) }
+        return TicketComments(items: sorted, hasMore: info["hasNextPage"] as? Bool == true)
+    }
+
 
     static func nodes(_ value: Any?) -> [[String: Any]] {
         ((value as? [String: Any])?["nodes"] as? [[String: Any]]) ?? []

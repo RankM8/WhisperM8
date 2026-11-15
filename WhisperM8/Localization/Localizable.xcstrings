@@ -24004,16 +24004,6 @@
         }
       }
     },
-    "%lld more · show all": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld weitere · alle zeigen"
-          }
-        }
-      }
-    },
     "Board or list": {
       "localizations": {
         "de": {
@@ -24050,6 +24040,306 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wartet auf mich"
+          }
+        }
+      }
+    },
+    "Back to the board (Esc)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück zum Board (Esc)"
+          }
+        }
+      }
+    },
+    "Back to the board": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück zum Board"
+          }
+        }
+      }
+    },
+    "for you": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "für dich"
+          }
+        }
+      }
+    },
+    "Previous ticket (K or ↑)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voriges Ticket (K oder ↑)"
+          }
+        }
+      }
+    },
+    "Previous ticket": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voriges Ticket"
+          }
+        }
+      }
+    },
+    "Next ticket (J or ↓)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nächstes Ticket (J oder ↓)"
+          }
+        }
+      }
+    },
+    "Next ticket": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nächstes Ticket"
+          }
+        }
+      }
+    },
+    "%lld of %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld von %lld"
+          }
+        }
+      }
+    },
+    "waits for you": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "wartet auf dich"
+          }
+        }
+      }
+    },
+    "Labels": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Labels"
+          }
+        }
+      }
+    },
+    "Chats on this ticket": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats am Ticket"
+          }
+        }
+      }
+    },
+    "No description.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Beschreibung."
+          }
+        }
+      }
+    },
+    "Activity": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf"
+          }
+        }
+      }
+    },
+    "Loading comments…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kommentare werden geladen …"
+          }
+        }
+      }
+    },
+    "Comments could not be loaded: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kommentare ließen sich nicht laden: %@"
+          }
+        }
+      }
+    },
+    "Activity · %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf · %lld"
+          }
+        }
+      }
+    },
+    "No comments yet.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch keine Kommentare."
+          }
+        }
+      }
+    },
+    "Older comments are in Linear.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ältere Kommentare stehen in Linear."
+          }
+        }
+      }
+    },
+    "Decision": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entscheidung"
+          }
+        }
+      }
+    },
+    "Completion": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abschluss"
+          }
+        }
+      }
+    },
+    "reply": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Antwort"
+          }
+        }
+      }
+    },
+    "Image in Linear": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bild in Linear"
+          }
+        }
+      }
+    },
+    "%lld more · in the list": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld weitere · in der Liste"
+          }
+        }
+      }
+    },
+    "Activity · newest %lld of %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf · neueste %lld von %@"
+          }
+        }
+      }
+    },
+    "Copy link": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link kopieren"
+          }
+        }
+      }
+    },
+    "Copy list": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liste kopieren"
+          }
+        }
+      }
+    },
+    "Copy key, title and address of the ticket (⌘C)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nummer, Titel und Adresse des Tickets kopieren (⌘C)"
+          }
+        }
+      }
+    },
+    "Copy the tickets shown, with their addresses": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die gezeigten Tickets mit ihren Adressen kopieren"
+          }
+        }
+      }
+    },
+    "J/K or ↑↓ next · ⌘C link · Esc board": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "J/K oder ↑↓ blättern · ⌘C Link · Esc Board"
+          }
+        }
+      }
+    },
+    "Link copied": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link kopiert"
           }
         }
       }

@@ -150,6 +150,11 @@ auch kein Chat-Name und kein „laut Chat X“. Was die Kommandozeile selbst anh
   Befehl dazu: `whisperm8 tickets setup --remove-team ABC` nimmt es aus der Einrichtung. Hängt noch ein Ordner
   daran, bricht der Befehl ab und nennt die Folgen; `--with-projects` und das Umhängen in einen anderen Workspace
   (`--reassign`) entscheidet der Nutzer, nicht du.
+- Regel des Teams für das Board (was ein Status bedeutet, wann ein Ticket auf den Nutzer wartet):
+  `whisperm8 tickets setup --team ABC --status "Merge-bereit=wartet" --status "Wartet aufs Ausliefern=fertig"
+  --waiting-labels Entscheidung,Handtest`; `--show-rule` zeigt, `--clear-rule` löscht, `NAME=` nimmt eine Bedeutung
+  weg. Bedeutungen: `wartet`, `arbeit`, `fertig`. Was ein Status in einem Team bedeutet, entscheidet der Nutzer; nicht
+  raten. `doctor` meldet Statusnamen der Regel, die es im Team nicht gibt.
 - Was die CLI nicht kann (Zyklen, Vorhaben anlegen, Dokumente, Meilensteine, Releases): der Linear-MCP. Bei mehreren
   Workspaces hat jeder seinen eigenen Server; vor dem Schreiben prüfen, welcher zum Projekt gehört.
 - Die Verknüpfung ist ein Anhang am Ticket (`whisperm8://chat/<ID>`). Nicht von Hand ändern und nicht über den

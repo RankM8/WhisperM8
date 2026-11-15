@@ -142,6 +142,18 @@ enum TicketTeamRuleChange {
         return (changed, describe(rule, team: request.team))
     }
 
+    /// Namen der Regel, die das Team nicht als offenen Status kennt. Ein
+    /// Tippfehler machte den Status sonst still zu einer gewöhnlichen Spalte;
+    /// `tickets doctor` meldet ihn. `closed`: Den Status gibt es, er ist im Team
+    /// aber geschlossen (erledigt oder verworfen) und bekommt nie eine Spalte.
+    static func statusProblems(in rule: TicketTeamRule, statuses: [TicketStatus]) -> [(name: String, closed: Bool)] {
+        let open = Set(statuses.filter { !$0.kind.isClosed }.map { TicketTeamRule.key($0.name) })
+        let closed = Set(statuses.filter(\.kind.isClosed).map { TicketTeamRule.key($0.name) })
+        return rule.statusMeanings.keys.filter { !open.contains(TicketTeamRule.key($0)) }
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+            .map { (name: $0, closed: closed.contains(TicketTeamRule.key($0))) }
+    }
+
     static func describe(_ rule: TicketTeamRule, team: String) -> String {
         var lines = ["Regel für \(team):"]
         if rule.statusMeanings.isEmpty {

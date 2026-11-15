@@ -51,59 +51,92 @@ struct TicketBoardView: View {
     var body: some View {
         let presentation = model.presentation
         VStack(alignment: .leading, spacing: 10) {
-            TicketBoardHeader(title: title, mode: $model.mode, load: load, refresh: actions.refresh)
-            TicketBoardFilterBar(filter: $model.filter, counts: presentation.counts, projects: presentation.projects)
-            TicketBoardProblemLine(load: load)
-            GeometryReader { proxy in
-                // Breit: Detail neben dem Inhalt. Schmal: Detail liegt darüber,
-                // sonst bliebe für Spalten oder Liste nichts übrig.
-                let sideBySide = proxy.size.width >= Self.sideBySideFrom
-                HStack(alignment: .top, spacing: 12) {
-                    content(presentation)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    if sideBySide, let content = model.detail {
-                        detail(content).frame(width: Self.detailWidth)
+            if let triage = model.triage {
+                // Triage nimmt den Platz des Boards ein: Liste, Ticket, Eigenschaften.
+                TicketBoardProblemLine(load: load)
+                TicketTriageView(model: model, triage: triage, load: load, source: source, actions: actions)
+            } else {
+                TicketBoardHeader(title: title, mode: $model.mode, load: load, refresh: actions.refresh)
+                HStack(alignment: .center, spacing: 8) {
+                    TicketBoardFilterBar(filter: $model.filter, counts: presentation.counts, projects: presentation.projects)
+                    if model.copied == .link {
+                        // ⌘C auf dem Board: Dort gibt es keinen Link-Knopf, der „Kopiert“ zeigen könnte.
+                        Label("Link copied", systemImage: "checkmark")
+                            .font(.system(size: 11.5, weight: .medium))
+                            .foregroundStyle(AgentTheme.textSecondary)
+                            .fixedSize()
                     }
+                    TicketCopyButton(kind: .list, copied: model.copied) { model.copyList(title: listTitle) }
                 }
-                .overlay(alignment: .topTrailing) {
-                    if !sideBySide, let content = model.detail {
-                        detail(content)
-                            .frame(width: min(Self.detailWidth, max(240, proxy.size.width - 32)))
-                            .shadow(color: .black.opacity(0.18), radius: 14, x: -2, y: 2)
-                    }
-                }
+                TicketBoardProblemLine(load: load)
+                content(presentation)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                TicketLooseChatsBar(chats: presentation.looseChats, supervisors: presentation.supervisors, source: source,
+                                    openChat: actions.openChat)
             }
-            TicketLooseChatsBar(chats: presentation.looseChats, supervisors: presentation.supervisors, source: source,
-                                openChat: actions.openChat)
         }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(AgentTheme.background)
-        // Escape schließt das Detail.
-        .onExitCommand { model.selectedKey = nil }
     }
 
-    static let detailWidth: CGFloat = 340
-    /// Ab dieser Breite steht das Detail neben dem Inhalt.
-    static let sideBySideFrom: CGFloat = 940
+    /// Überschrift der kopierten Liste: Board, Ansicht und Filter.
+    private var listTitle: String {
+        model.filter.waitingForMe ? title + " · " + String(localized: "Waiting for me") : title
+    }
 
     @ViewBuilder
     private func content(_ presentation: TicketBoardPresentation) -> some View {
         switch model.mode {
         case .board:
             TicketBoardLanesView(lanes: presentation.lanes, rule: presentation.rule, selectedKey: model.selectedKey,
-                                 expanded: model.expandedLanes, source: source,
-                                 select: { model.toggle($0) }, expand: { model.expandedLanes.insert($0) })
+                                 source: source, open: { model.openFromLane($0) })
         case .list:
             TicketBacklogListView(groups: presentation.groups, selectedKey: model.selectedKey, source: source) {
-                model.toggle($0)
+                model.openFromList($0)
+            }
+        }
+    }
+}
+
+// MARK: - Kopieren
+
+/// „Link kopieren“ oder „Liste kopieren“, mit kurzer Rückmeldung „Kopiert“.
+struct TicketCopyButton: View {
+    let kind: TicketCopyFeedback
+    let copied: TicketCopyFeedback?
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: copied == kind ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 11, weight: .medium))
+                label
+            }
+            .font(.system(size: 12, weight: .medium))
+        }
+        .buttonStyle(SettingsButtonStyle.standard)
+        .fixedSize()
+        .help(help)
+    }
+
+    @ViewBuilder
+    private var label: some View {
+        if copied == kind {
+            Text("Copied")
+        } else {
+            switch kind {
+            case .link: Text("Copy link")
+            case .list: Text("Copy list")
             }
         }
     }
 
-    private func detail(_ content: TicketDetailContent) -> some View {
-        TicketDetailPanel(content: content, source: source, actions: actions) {
-            model.selectedKey = nil
+    private var help: Text {
+        switch kind {
+        case .link: return Text("Copy key, title and address of the ticket (⌘C)")
+        case .list: return Text("Copy the tickets shown, with their addresses")
         }
     }
 }

@@ -26,6 +26,11 @@ struct TicketBoardEnvironment {
     /// Ruhezeit, bevor eine Änderung an den Chats abgeglichen wird: Der
     /// Workspace ändert sich in Schüben.
     var chatsSettle: @Sendable () async -> Void = { try? await Task.sleep(for: .seconds(2)) }
+    /// Ruhe, bevor die Kommentare eines geöffneten Tickets geholt werden: Wer
+    /// mit J/K durch zehn Tickets blättert, löst eine Anfrage aus, nicht zehn.
+    var commentsSettle: @Sendable () async -> Void = { try? await Task.sleep(for: .milliseconds(300)) }
+    /// Wie der Text der Triage gebaut wird; Bilder und Tests bauen sofort.
+    var documents: TicketDocumentBuilding = .background
 
     @MainActor static let live = TicketBoardEnvironment(
         resolve: { projectPath in
@@ -92,7 +97,7 @@ enum TicketBoardPhase: Equatable {
 final class TicketBoardController {
     private(set) var phase: TicketBoardPhase = .noProject
     private(set) var title = ""
-    let viewModel = TicketBoardViewModel()
+    let viewModel: TicketBoardViewModel
     let load = TicketBoardLoad()
 
     @ObservationIgnored private let environment: TicketBoardEnvironment
@@ -114,9 +119,42 @@ final class TicketBoardController {
     @ObservationIgnored private var watchesChats = false
     @ObservationIgnored private var chatsTask: Task<Void, Never>?
     @ObservationIgnored private var isVisible = false
+    @ObservationIgnored private var commentsTask: Task<Void, Never>?
 
     init(environment: TicketBoardEnvironment) {
         self.environment = environment
+        viewModel = TicketBoardViewModel(documents: environment.documents)
+        viewModel.onShowTicket = { [weak self] ticket in self?.showComments(for: ticket, fresh: false) }
+        viewModel.onReloadComments = { [weak self] ticket in self?.showComments(for: ticket, fresh: true) }
+    }
+
+    /// Kommentare des Tickets in der Triage: aus dem Zwischenspeicher sofort,
+    /// sonst nach kurzer Ruhe genau eine Anfrage. Liest nur.
+    private func showComments(for ticket: Ticket?, fresh: Bool) {
+        commentsTask?.cancel()
+        guard let ticket, let store = active?.store else { return }
+        if fresh { store.forgetComments(ticketID: ticket.id) }
+        if let cached = store.cachedComments(for: ticket) {
+            viewModel.setComments(.loaded(cached), ticketID: ticket.id)
+            return
+        }
+        let settle = environment.commentsSettle
+        commentsTask = Task { [weak self, weak store] in
+            await settle()
+            guard !Task.isCancelled, let self, let store else { return }
+            let load: TicketCommentsLoad
+            do {
+                load = .loaded(try await store.comments(for: ticket))
+            } catch is CancellationError {
+                return
+            } catch let error as TicketSourceError {
+                load = .failed(error.userText)
+            } catch {
+                load = .failed(TicketSourceError.network("Netzfehler").userText)
+            }
+            guard !Task.isCancelled else { return }
+            self.viewModel.setComments(load, ticketID: ticket.id)
+        }
     }
 
     /// Die Ansicht ist sichtbar, oder das Projekt hat gewechselt.
@@ -176,6 +214,7 @@ final class TicketBoardController {
         isVisible = false
         active?.store.deactivate()
         chatsTask?.cancel()
+        commentsTask?.cancel()
     }
 
     func refresh() {

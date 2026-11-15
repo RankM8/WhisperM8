@@ -109,7 +109,9 @@ final class TicketBoardControllerTests: XCTestCase {
                 },
                 chats: { [self] in chats },
                 whenChatsChange: { [self] notify in subscribe(notify) },
-                chatsSettle: {}
+                chatsSettle: {},
+                commentsSettle: {},
+                documents: .immediate
             )
         }
     }
@@ -461,5 +463,58 @@ final class TicketBoardControllerTests: XCTestCase {
         world.wake()
         try? await Task.sleep(for: .milliseconds(40))
         XCTAssertEqual(boards(world), 1, "ohne Schlüssel kein Abruf mehr")
+    }
+
+    // MARK: Kommentare in der Triage
+
+    private func comments(_ world: World) -> [String] { world.source.calls.filter { $0.hasPrefix("comments") } }
+
+    func testCommentsLoadOnOpenOncePerTicketAndComeFromTheCacheAfterwards() async {
+        let world = readyWorld(tickets: [TicketFixtures.ticket(1), TicketFixtures.ticket(2), TicketFixtures.ticket(3, status: "Backlog")])
+        world.source.onComments = { id in
+            TicketComments(items: [TicketComment(id: "c-\(id)", author: "Erika Beispiel", createdAt: nil, body: "Hallo", isReply: false)],
+                           hasMore: false)
+        }
+        let controller = TicketBoardController(environment: world.environment)
+        await controller.show(projectPath: projectA, projectName: "whisperm8")
+        await settle { controller.phase == .ready }
+        XCTAssertEqual(comments(world), [], "das Board selbst holt keine Kommentare")
+
+        let model = controller.viewModel
+        model.openFromLane("WM8-1")
+        XCTAssertEqual(model.triage?.keys, ["WM8-1", "WM8-2"], "Liste = die Spalte des Tickets")
+        await settle { model.comments != .loading }
+        XCTAssertEqual(comments(world), ["comments id-1"])
+        XCTAssertEqual(model.document?.ticketKey, "WM8-1")
+        XCTAssertTrue(model.document?.text.string.contains("Hallo") == true)
+
+        model.nextInTriage()
+        await settle { self.comments(world).count == 2 && model.comments != .loading }
+        model.previousInTriage()
+        XCTAssertNotEqual(model.comments, .loading, "aus dem Zwischenspeicher, ohne Anfrage")
+        XCTAssertEqual(comments(world), ["comments id-1", "comments id-2"])
+
+        model.reloadComments()
+        await settle { self.comments(world).count == 3 }
+        model.closeTriage()
+        XCTAssertNil(model.triage)
+        XCTAssertNil(model.document)
+        XCTAssertEqual(model.selectedKey, "WM8-1", "zurück zum Board auf derselben Karte")
+        XCTAssertTrue(world.source.calls.allSatisfy { !$0.hasPrefix("set") && !$0.hasPrefix("save") && !$0.hasPrefix("add") },
+                      "die Triage schreibt nichts nach Linear")
+    }
+
+    func testCommentErrorIsShownAndRateLimitPausesFurtherRequests() async {
+        let world = readyWorld()
+        world.source.onComments = { _ in throw TicketSourceError.rateLimited }
+        let controller = TicketBoardController(environment: world.environment)
+        await controller.show(projectPath: projectA, projectName: "whisperm8")
+        await settle { controller.phase == .ready }
+        let model = controller.viewModel
+        model.openFromLane("WM8-1")
+        await settle { model.comments == .failed(TicketSourceError.rateLimited.userText) }
+        model.reloadComments()
+        await settle { model.comments == .failed(TicketSourceError.rateLimited.userText) }
+        XCTAssertEqual(comments(world).count, 1, "während der Pause wird nicht gefragt")
     }
 }
