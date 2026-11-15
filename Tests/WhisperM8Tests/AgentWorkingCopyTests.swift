@@ -443,4 +443,26 @@ final class AgentWorkingCopyTests: XCTestCase {
         XCTAssertEqual(workspace.sessions[2].workingCopy?.branch, "w", "anderer Ordner bleibt")
         XCTAssertFalse(AgentSessionStore.applyWorkingCopy(fresh, for: a.id, to: &workspace), "nichts Neues")
     }
+
+    func testBranchOfNestedRepoIsNotSharedWithFolder() {
+        let nested = GitLocation(root: "/p/.build/checkouts/SwiftTerm", gitDir: "/p/.build/checkouts/SwiftTerm/.git",
+                                 branch: nil, isDetached: true)
+        let copy = AgentWorkingCopyClassifier.classify(cwd: "/p/.build/checkouts/SwiftTerm", projectPath: "/p", git: nested)
+        XCTAssertEqual(copy.kind, .mainFolder)
+        XCTAssertEqual(copy.branchFromNestedRepo, true)
+        let atRoot = AgentWorkingCopyClassifier.classify(
+            cwd: "/p/src", projectPath: "/p", git: GitLocation(root: "/p", gitDir: "/p/.git", branch: "main"))
+        XCTAssertNil(atRoot.branchFromNestedRepo)
+
+        let project = AgentProject(name: "p", path: "/p")
+        var a = AgentChatSession(provider: .claude, projectID: project.id, title: "a")
+        var b = AgentChatSession(provider: .claude, projectID: project.id, title: "b")
+        a.workingCopy = atRoot
+        b.workingCopy = atRoot
+        var workspace = AgentWorkspace(projects: [project], sessions: [a, b])
+        XCTAssertTrue(AgentSessionStore.applyWorkingCopy(copy, for: a.id, to: &workspace))
+        XCTAssertEqual(workspace.sessions[0].workingCopy?.detachedHead, true, "eigener Chat merkt sich das")
+        XCTAssertEqual(workspace.sessions[1].workingCopy?.branch, "main", "ruhender Chat bleibt beim Branch der Wurzel")
+        XCTAssertNil(workspace.sessions[1].workingCopy?.detachedHead)
+    }
 }

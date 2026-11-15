@@ -22,6 +22,9 @@ extension AgentSessionStore {
             workspace.sessions[index].workingCopy = copy
             changed = true
         }
+        // Nur einen an der Wurzel des Ordners gelesenen Branch teilen; der
+        // Branch eines inneren Repos (Submodul) gilt nur für diesen Chat.
+        guard copy.branchFromNestedRepo != true else { return changed }
         for other in workspace.sessions.indices where other != index {
             guard var shared = workspace.sessions[other].workingCopy, shared.path == copy.path,
                   shared.branch != copy.branch || shared.detachedHead != copy.detachedHead else { continue }

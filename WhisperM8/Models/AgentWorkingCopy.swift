@@ -28,6 +28,10 @@ struct AgentWorkingCopy: Codable, Equatable, Hashable {
     var defaultBranch: String? = nil
     /// HEAD zeigt auf einen Commit statt auf einen Branch (WM8-73).
     var detachedHead: Bool? = nil
+    /// Der Branch stammt aus einem inneren Repo unterhalb von `path`
+    /// (Submodul, `.build/checkouts/…`). Dann gilt er nur für diesen Chat und
+    /// wird nicht an andere Chats im selben Ordner weitergegeben (Vic, WM8-73).
+    var branchFromNestedRepo: Bool? = nil
 
     /// Der Pfad für Anzeige und Terminal: nur druckbare Zeichen (WM8-73).
     /// Vergleiche nutzen `path`.
@@ -71,6 +75,21 @@ enum AgentWorkingCopyClassifier {
         projectPath: String,
         git: GitLocation?,
         transcriptBranch: String? = nil
+    ) -> AgentWorkingCopy {
+        var copy = classifyPlace(cwd: cwd, projectPath: projectPath, git: git, transcriptBranch: transcriptBranch)
+        // Inneres Repo: Wurzel und Git-Verzeichnis gehören nicht zum Ort
+        // (ein Projekt hinter einem Symlink erkennt `isProjectRepo` am Git-Verzeichnis).
+        if let git, normalized(git.root) != copy.path, normalized(git.gitDir) != copy.path + "/.git" {
+            copy.branchFromNestedRepo = true
+        }
+        return copy
+    }
+
+    private static func classifyPlace(
+        cwd: String,
+        projectPath: String,
+        git: GitLocation?,
+        transcriptBranch: String?
     ) -> AgentWorkingCopy {
         let cwd = normalized(cwd)
         let project = normalized(projectPath)
