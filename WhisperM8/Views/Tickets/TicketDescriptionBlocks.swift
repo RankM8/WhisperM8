@@ -1,4 +1,4 @@
-import SwiftUI
+import Foundation
 
 // MARK: - Beschreibung eines Tickets, leicht gesetzt
 
@@ -98,6 +98,7 @@ enum TicketDescriptionBlocks {
     /// Alles andere (`file:`, `smb:`, Schemata fremder Apps) wird zu Text.
     static func inline(_ text: String) -> AttributedString {
         let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        let text = withoutImages(text)
         var result = (try? AttributedString(markdown: text, options: options)) ?? AttributedString(text)
         for run in result.runs {
             guard let link = run.link, !isSafe(link) else { continue }
@@ -106,81 +107,17 @@ enum TicketDescriptionBlocks {
         return result
     }
 
+    /// Bilder (`![Alt](Adresse)`) werden zum Verweis „Bild in Linear“. Ihre
+    /// Adressen bei Linear verfallen nach Minuten und brauchen eine Anmeldung;
+    /// geladen wird von hier nichts.
+    static func withoutImages(_ text: String) -> String {
+        guard text.contains("![") else { return text }
+        let placeholder = "[" + String(localized: "Image in Linear") + "]"
+        return text.replacingOccurrences(of: #"!\[[^\]]*\]\([^)]*\)"#, with: placeholder, options: .regularExpression)
+    }
+
     static func isSafe(_ url: URL) -> Bool {
         guard let scheme = url.scheme?.lowercased() else { return false }
         return (scheme == "https" || scheme == "http") && url.host != nil
-    }
-}
-
-/// Zeichnet die zerlegte Beschreibung.
-struct TicketDescriptionView: View {
-    let blocks: [TicketDescriptionBlock]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                switch block {
-                case .heading(let title):
-                    Text(verbatim: title)
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .foregroundStyle(AgentTheme.textPrimary)
-                        .padding(.top, 4)
-                case .check(let done, let text):
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        TicketCheckMark(done: done)
-                        Text(text)
-                            .foregroundStyle(done ? AgentTheme.textSecondary : AgentTheme.textPrimary)
-                    }
-                case .bullet(let text):
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(verbatim: "•").foregroundStyle(AgentTheme.textSecondary)
-                        Text(text)
-                    }
-                case .numbered(let number, let text):
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(verbatim: number).foregroundStyle(AgentTheme.textSecondary).monospacedDigit()
-                        Text(text)
-                    }
-                case .truncated:
-                    Text("The text continues in Linear.")
-                        .foregroundStyle(AgentTheme.textSecondary)
-                        .padding(.top, 4)
-                case .text(let text):
-                    Text(text)
-                case .code(let line):
-                    // Eine leere Zeile hätte sonst keine Höhe.
-                    Text(verbatim: line.isEmpty ? " " : line)
-                        .font(.system(size: 11.5, design: .monospaced))
-                        .foregroundStyle(AgentTheme.textSecondary)
-                case .gap:
-                    Color.clear.frame(height: 4)
-                }
-            }
-        }
-        .font(.system(size: 12))
-        .foregroundStyle(AgentTheme.textPrimary)
-        .lineSpacing(2)
-        .textSelection(.enabled)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        // Zweite Sicherung neben dem Entfernen beim Zerlegen.
-        .environment(\.openURL, OpenURLAction { url in
-            TicketDescriptionBlocks.isSafe(url) ? .systemAction : .discarded
-        })
-    }
-}
-
-private struct TicketCheckMark: View {
-    let done: Bool
-
-    var body: some View {
-        Group {
-            if done {
-                Image(systemName: "checkmark.square.fill").foregroundStyle(AgentTheme.statusWorking)
-            } else {
-                Image(systemName: "square").foregroundStyle(AgentTheme.textSecondary)
-            }
-        }
-        .font(.system(size: 11, weight: .medium))
-        .accessibilityHidden(true)
     }
 }

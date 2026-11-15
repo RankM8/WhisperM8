@@ -146,9 +146,44 @@ extension UISnapshotGallery {
         let rule = TicketTeamRule(statusMeanings: ["Merge-bereit": .waitsForMe, "Wartet aufs Ausliefern": .done],
                                   waitingLabels: ["Entscheidung", "Handtest"])
         let board = TicketBoardBuilder.build(snapshot: snapshot, chats: chats, projectPath: project, rule: rule)
+        // Verlauf am Ticket: Abschluss und Entscheidung im festen Aufbau, dazu
+        // ein gewöhnlicher Kommentar. Personen und Zeiten sind erfunden.
+        func at(_ hour: Int, _ minute: Int) -> Date { Date(timeIntervalSince1970: 1_794_614_400 + Double(hour * 3600 + minute * 60)) }
+        let comments = TicketComments(items: [
+            TicketComment(id: "c3", author: "Giuliano Costa", createdAt: at(17, 33), body: """
+            **Abschluss · 15.11.2026, 17:33 Uhr · Jon**
+
+            **Gebaut:** Board und Backlog lesen, Chat je Ticket mit Live-Status, Detail mit „Zum Chat“.
+
+            **Commit:** 12f485bc
+
+            **Handtest:**
+            - [ ] Board öffnen, Spalten und Karten stimmen mit Linear überein
+            - [ ] „Zum Chat“ springt in den richtigen Tab
+            - [ ] Bild: ![Bildschirmfoto](https://uploads.linear.app/beispiel.png)
+            """, isReply: false),
+            TicketComment(id: "c2", author: "Erika Beispiel", createdAt: at(17, 23),
+                          body: "Paket A ist merge-bereit. Volle Suite grün. Prüfer bitte gegenlesen: [Plan](https://example.com/plan).",
+                          isReply: false),
+            TicketComment(id: "c1", author: "Giuliano Costa", createdAt: at(15, 55), body: """
+            **Entscheidung · 15.11.2026, 15:55 Uhr**
+
+            **Frage:** Wie viele Spalten zeigt das Board?
+
+            **Gewählt:** Drei Gruppen nach Art des Status
+
+            **Entschieden von:** Giuliano
+            """, isReply: false),
+        ], hasMore: false)
+        let paragraph = "Ein langer Kommentar mit Begründung, Zwischenstand und offenen Fragen. Er läuft über mehrere Zeilen, damit man sieht, wie der Verlauf liest, wenn Kollegen und Chats ausführlich schreiben."
+        let longComments = TicketComments(items: (1...12).reversed().map { n in
+            TicketComment(id: "l\(n)", author: n.isMultiple(of: 2) ? "Erika Beispiel" : "Jon (Chat)", createdAt: at(8 + n, 5),
+                          body: "**Zwischenstand \(n)**\n\n" + Array(repeating: paragraph, count: 3).joined(separator: "\n\n")
+                              + "\n\n- Punkt eins\n- Punkt zwei mit `Code`", isReply: n == 5)
+        }, hasMore: true)
         let source = TicketChatStatusSource.fixed(Dictionary(uniqueKeysWithValues: chats.compactMap { chat in chat.state.map { (chat.id, $0) } }))
         func view(_ configure: (TicketBoardViewModel) -> Void = { _ in }, problem: String? = nil) -> AnyView {
-            let model = TicketBoardViewModel(model: board)
+            let model = TicketBoardViewModel(model: board, documents: .immediate)
             configure(model)
             let load = TicketBoardLoad(fetchedAt: snapshot.fetchedAt, problem: problem)
             return AnyView(TicketBoardView(title: "Tickets · whisperm8", model: model, load: load, source: source, actions: .none))
@@ -156,10 +191,8 @@ extension UISnapshotGallery {
         let size = CGSize(width: 1340, height: 860)
         return [
             Fixture(name: "tickets-board", size: size) { view() },
-            Fixture(name: "tickets-board-detail", size: size) { view { $0.selectedKey = "WM8-81" } },
             Fixture(name: "tickets-board-ohne-agent", size: size) { view { $0.filter.agent = .withoutAgent } },
             Fixture(name: "tickets-board-wartet-auf-mich", size: size) { view { $0.filter.waitingForMe = true } },
-            Fixture(name: "tickets-board-spalte-offen", size: size) { view { $0.expandedLanes = ["s0"] } },
             Fixture(name: "tickets-chats-ohne-ticket-offen", size: CGSize(width: 900, height: 120)) {
                 AnyView(TicketLooseChatsBar(chats: board.looseChats, supervisors: board.supervisors, source: source, openChat: { _ in },
                                             isExpanded: true)
@@ -167,11 +200,26 @@ extension UISnapshotGallery {
             },
             Fixture(name: "tickets-board-person", size: size) { view { $0.filter.person = .person(id: "u1") } },
             Fixture(name: "tickets-backlog", size: size) { view { $0.mode = .list } },
-            Fixture(name: "tickets-backlog-detail", size: size) { view { $0.mode = .list; $0.selectedKey = "WM8-69" } },
-            Fixture(name: "tickets-board-schmal-detail", size: CGSize(width: 760, height: 640)) { view { $0.selectedKey = "WM8-81" } },
             Fixture(name: "tickets-backlog-schmal", size: CGSize(width: 560, height: 640)) { view { $0.mode = .list } },
             Fixture(name: "tickets-board-stoerung", size: size) {
                 view(problem: TicketSourceError.network("-1009").userText)
+            },
+            // Triage: Liste links (die Spalte), Ticket mit Verlauf, Eigenschaften rechts.
+            Fixture(name: "tickets-triage", size: size) {
+                view { $0.openFromLane("WM8-81"); $0.setComments(.loaded(comments), ticketID: "id-81") }
+            },
+            Fixture(name: "tickets-triage-lange-kommentare", size: size) {
+                view { $0.openFromLane("WM8-86"); $0.setComments(.loaded(longComments), ticketID: "id-86") }
+            },
+            Fixture(name: "tickets-triage-laedt", size: size) { view { $0.openFromLane("WM8-57") } },
+            Fixture(name: "tickets-triage-fehler", size: size) {
+                view { $0.openFromLane("WM8-57"); $0.setComments(.failed(TicketSourceError.network("-1009").userText), ticketID: "id-57") }
+            },
+            Fixture(name: "tickets-triage-liste", size: size) {
+                view { $0.mode = .list; $0.openFromList("WM8-69"); $0.setComments(.loaded(TicketComments(items: [], hasMore: false)), ticketID: "id-69") }
+            },
+            Fixture(name: "tickets-triage-schmal", size: CGSize(width: 760, height: 640)) {
+                view { $0.openFromLane("WM8-81"); $0.setComments(.loaded(comments), ticketID: "id-81") }
             },
         ] + ticketEmptyStateFixtures()
     }

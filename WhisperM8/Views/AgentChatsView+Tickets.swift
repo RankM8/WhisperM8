@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Einstieg in die Ticket-Ansicht: ein Knopf in der Titelzone schaltet den
@@ -20,6 +21,27 @@ extension AgentChatsView {
             selectedProjectID = session.projectID
         }
         windowStore.clearSubagentUnread(sessionID)
+    }
+
+    /// J/K, ↑↓ und Esc in der Triage. Nur in diesem Fenster, nur bei offenen
+    /// Tickets, und nie, wenn der Fokus in einem Textfeld oder Terminal liegt:
+    /// Dort gehören die Tasten dem Text. Ohne offene Triage geht die Taste weiter.
+    func handleTicketBoardKey(_ event: NSEvent) -> NSEvent? {
+        guard let hostWindow, event.window === hostWindow, isTicketsModeActive,
+              TicketBoardControllers.shared.hasController(for: windowID) else { return event }
+        let responder = hostWindow.firstResponder
+        guard TabNavShortcut.shouldHandle(firstResponder: responder),
+              !String(describing: type(of: responder as Any)).contains("TerminalView") else { return event }
+        let flags = event.modifierFlags
+        var modifiers: TicketBoardKey.ModifierSet = []
+        if flags.contains(.command) { modifiers.insert(.command) }
+        if flags.contains(.option) { modifiers.insert(.option) }
+        if flags.contains(.control) { modifiers.insert(.control) }
+        if flags.contains(.shift) { modifiers.insert(.shift) }
+        guard let key = TicketBoardKey.resolve(keyCode: event.keyCode, characters: event.charactersIgnoringModifiers,
+                                               modifiers: modifiers) else { return event }
+        let handled = TicketBoardControllers.shared.controller(for: windowID).viewModel.handle(key)
+        return handled ? nil : event
     }
 
     /// Tickets des Projekts, das in diesem Fenster gewählt ist.

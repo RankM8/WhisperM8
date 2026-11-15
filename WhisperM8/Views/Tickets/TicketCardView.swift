@@ -101,10 +101,9 @@ struct TicketBoardLanesView: View {
     let lanes: [TicketBoardLane]
     let rule: TicketTeamRule
     let selectedKey: String?
-    let expanded: Set<String>
     let source: TicketChatStatusSource
-    let select: (String) -> Void
-    let expand: (String) -> Void
+    /// Öffnet das Ticket groß (Triage) mit seiner Spalte als Liste.
+    let open: (String) -> Void
 
     /// Schmaler wird keine Spalte; darunter scrollt das Board waagrecht.
     static let minColumnWidth: CGFloat = 260
@@ -114,9 +113,9 @@ struct TicketBoardLanesView: View {
         GeometryReader { proxy in
             // Eingeklappte Spalten sind schmal; die gefüllten teilen sich den Rest.
             let folded = CGFloat(lanes.filter(\.isFolded).count)
-            let open = CGFloat(max(lanes.count - Int(folded), 1))
+            let filled = CGFloat(max(lanes.count - Int(folded), 1))
             let free = proxy.size.width - Self.spacing * CGFloat(max(lanes.count - 1, 0)) - folded * TicketBoardLanes.foldedWidth
-            let width = max(Self.minColumnWidth, free / open)
+            let width = max(Self.minColumnWidth, free / filled)
             ScrollView(.horizontal, showsIndicators: true) {
                 HStack(alignment: .top, spacing: Self.spacing) {
                     ForEach(lanes) { lane in
@@ -124,9 +123,7 @@ struct TicketBoardLanesView: View {
                             TicketBoardFoldedLaneView(lane: lane)
                                 .frame(width: TicketBoardLanes.foldedWidth)
                         } else {
-                            TicketBoardLaneView(lane: lane, rule: rule, selectedKey: selectedKey,
-                                                isExpanded: expanded.contains(lane.id), source: source,
-                                                select: select, expand: { expand(lane.id) })
+                            TicketBoardLaneView(lane: lane, rule: rule, selectedKey: selectedKey, source: source, open: open)
                                 .frame(width: width)
                         }
                     }
@@ -164,13 +161,12 @@ private struct TicketBoardLaneView: View {
     let lane: TicketBoardLane
     let rule: TicketTeamRule
     let selectedKey: String?
-    let isExpanded: Bool
     let source: TicketChatStatusSource
-    let select: (String) -> Void
-    let expand: () -> Void
+    let open: (String) -> Void
 
     var body: some View {
-        let (shown, hidden) = TicketBoardLanes.shown(lane, expanded: isExpanded)
+        // Auf dem Board ist eine Spalte nie aufgeklappt: Der Rest steht in der Triage.
+        let (shown, hidden) = TicketBoardLanes.shown(lane, expanded: false)
         let isMine = lane.meaning == .waitsForMe
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
@@ -196,12 +192,13 @@ private struct TicketBoardLaneView: View {
                 LazyVStack(spacing: 8) {
                     ForEach(shown) { entry in
                         TicketCardView(entry: entry, rule: rule, isSelected: selectedKey == entry.ticket.key, source: source) {
-                            select(entry.ticket.key)
+                            open(entry.ticket.key)
                         }
                     }
                     if hidden > 0 {
-                        Button(action: expand) {
-                            Text("\(hidden) more · show all")
+                        // Der Rest steht in der Liste der Triage: erstes verborgenes Ticket groß.
+                        Button { open(lane.entries[shown.count].ticket.key) } label: {
+                            Text("\(hidden) more · in the list")
                                 .font(.system(size: 11.5, weight: .medium))
                                 .foregroundStyle(AgentTheme.textSecondary)
                                 .frame(maxWidth: .infinity)

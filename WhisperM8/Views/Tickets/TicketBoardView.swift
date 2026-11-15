@@ -51,59 +51,35 @@ struct TicketBoardView: View {
     var body: some View {
         let presentation = model.presentation
         VStack(alignment: .leading, spacing: 10) {
-            TicketBoardHeader(title: title, mode: $model.mode, load: load, refresh: actions.refresh)
-            TicketBoardFilterBar(filter: $model.filter, counts: presentation.counts, projects: presentation.projects)
-            TicketBoardProblemLine(load: load)
-            GeometryReader { proxy in
-                // Breit: Detail neben dem Inhalt. Schmal: Detail liegt darüber,
-                // sonst bliebe für Spalten oder Liste nichts übrig.
-                let sideBySide = proxy.size.width >= Self.sideBySideFrom
-                HStack(alignment: .top, spacing: 12) {
-                    content(presentation)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                    if sideBySide, let content = model.detail {
-                        detail(content).frame(width: Self.detailWidth)
-                    }
-                }
-                .overlay(alignment: .topTrailing) {
-                    if !sideBySide, let content = model.detail {
-                        detail(content)
-                            .frame(width: min(Self.detailWidth, max(240, proxy.size.width - 32)))
-                            .shadow(color: .black.opacity(0.18), radius: 14, x: -2, y: 2)
-                    }
-                }
+            if let triage = model.triage {
+                // Triage nimmt den Platz des Boards ein: Liste, Ticket, Eigenschaften.
+                TicketBoardProblemLine(load: load)
+                TicketTriageView(model: model, triage: triage, load: load, source: source, actions: actions)
+            } else {
+                TicketBoardHeader(title: title, mode: $model.mode, load: load, refresh: actions.refresh)
+                TicketBoardFilterBar(filter: $model.filter, counts: presentation.counts, projects: presentation.projects)
+                TicketBoardProblemLine(load: load)
+                content(presentation)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                TicketLooseChatsBar(chats: presentation.looseChats, supervisors: presentation.supervisors, source: source,
+                                    openChat: actions.openChat)
             }
-            TicketLooseChatsBar(chats: presentation.looseChats, supervisors: presentation.supervisors, source: source,
-                                openChat: actions.openChat)
         }
         .padding(14)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(AgentTheme.background)
-        // Escape schließt das Detail.
-        .onExitCommand { model.selectedKey = nil }
     }
-
-    static let detailWidth: CGFloat = 340
-    /// Ab dieser Breite steht das Detail neben dem Inhalt.
-    static let sideBySideFrom: CGFloat = 940
 
     @ViewBuilder
     private func content(_ presentation: TicketBoardPresentation) -> some View {
         switch model.mode {
         case .board:
             TicketBoardLanesView(lanes: presentation.lanes, rule: presentation.rule, selectedKey: model.selectedKey,
-                                 expanded: model.expandedLanes, source: source,
-                                 select: { model.toggle($0) }, expand: { model.expandedLanes.insert($0) })
+                                 source: source, open: { model.openFromLane($0) })
         case .list:
             TicketBacklogListView(groups: presentation.groups, selectedKey: model.selectedKey, source: source) {
-                model.toggle($0)
+                model.openFromList($0)
             }
-        }
-    }
-
-    private func detail(_ content: TicketDetailContent) -> some View {
-        TicketDetailPanel(content: content, source: source, actions: actions) {
-            model.selectedKey = nil
         }
     }
 }

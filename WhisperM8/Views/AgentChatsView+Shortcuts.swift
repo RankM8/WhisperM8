@@ -44,6 +44,7 @@ extension AgentChatsView {
             guard let event = handleNewChatShortcut(event) else { return nil }
             guard let event = handleJarvisNotesShortcut(event) else { return nil }
             guard let event = handleTabNavShortcut(event) else { return nil }
+            guard let event = handleTicketBoardKey(event) else { return nil }
             guard let event = handleGridFocusShortcut(event) else { return nil }
             observeTerminalInterruptKey(event)
             return handleCloseTabShortcut(event)

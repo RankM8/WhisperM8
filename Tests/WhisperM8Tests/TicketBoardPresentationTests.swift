@@ -58,7 +58,7 @@ final class TicketBoardPresentationTests: XCTestCase {
 
     func testViewModelRebuildsOnFilterAndKeepsSelection() {
         let viewModel = TicketBoardViewModel(model: model())
-        viewModel.toggle("WM8-1")
+        viewModel.selectedKey = "WM8-1"
         XCTAssertEqual(viewModel.selected?.ticket.key, "WM8-1")
 
         viewModel.filter.agent = .withoutAgent
@@ -67,9 +67,6 @@ final class TicketBoardPresentationTests: XCTestCase {
         XCTAssertEqual(viewModel.selectedKey, "WM8-1", "die Auswahl selbst bleibt, bis der Filter zurückgeht")
         viewModel.filter.agent = .all
         XCTAssertEqual(viewModel.selected?.ticket.key, "WM8-1")
-
-        viewModel.toggle("WM8-1")
-        XCTAssertNil(viewModel.selectedKey, "ein zweiter Klick schließt das Detail")
     }
 
     func testAStatusChangeDoesNotRebuildAnything() {
@@ -100,7 +97,7 @@ final class TicketBoardPresentationTests: XCTestCase {
             TicketAgent(link: first, chat: nil),   // läuft auf einem anderen Rechner
             TicketAgent(link: TicketFixtures.link(ole), chat: chat(ole, "Ole · Terminal", .idle)),
         ])
-        let content = TicketDetailContent.make(entry, description: [])
+        let content = TicketDetailContent.make(entry)
         XCTAssertEqual(content.localChatID, ole, "„Zum Chat“ nimmt den ersten Chat auf diesem Rechner")
         XCTAssertEqual(content.agents.map(\.since), [first.since, nil])
         XCTAssertEqual(content.agents.map { $0.entry.agents.count }, [1, 1])
@@ -108,7 +105,7 @@ final class TicketBoardPresentationTests: XCTestCase {
 
         for bad in ["http://linear.app/x", "file:///Applications/Calculator.app", "whisperm8://chat/1", "kein link"] {
             ticket.url = bad
-            XCTAssertNil(TicketDetailContent.make(TicketBoardEntry(ticket: ticket, agents: []), description: []).url,
+            XCTAssertNil(TicketDetailContent.make(TicketBoardEntry(ticket: ticket, agents: [])).url,
                          "„In Linear öffnen“ nur mit https: \(bad)")
         }
     }
@@ -166,18 +163,6 @@ final class TicketBoardPresentationTests: XCTestCase {
         XCTAssertNil(viewModel.selectedKey)
         XCTAssertNil(viewModel.filter.project, "ein Filter auf ein verschwundenes Projekt blendete sonst alles aus")
         XCTAssertEqual(viewModel.presentation.visibleCount, 3)
-    }
-
-    func testDescriptionIsParsedWhenSelectingNotWhenDrawing() {
-        var tickets = model().entries
-        tickets[0].ticket.description = "## Ziel\nText mit **Fett**.\n\n- [x] fertig\n- [ ] offen\n* Punkt"
-        let viewModel = TicketBoardViewModel(model: TicketBoardModel(entries: tickets, looseChats: [], supervisors: []))
-        XCTAssertTrue(viewModel.selectedDescription.isEmpty)
-        viewModel.selectedKey = tickets[0].ticket.key
-        XCTAssertEqual(viewModel.selectedDescription.count, 6)
-        XCTAssertEqual(viewModel.selectedDescription.first, .heading("Ziel"))
-        viewModel.selectedKey = nil
-        XCTAssertTrue(viewModel.selectedDescription.isEmpty)
     }
 
     // MARK: Beschreibung

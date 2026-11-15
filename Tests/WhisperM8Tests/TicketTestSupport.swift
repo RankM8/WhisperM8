@@ -19,6 +19,7 @@ final class TicketSourceStub: TicketSource, @unchecked Sendable {
     var onTeams: () async throws -> [String] = { ["WM8"] }
     var onProjects: (String) async throws -> [String] = { _ in [] }
     var onUpload: (Data, String, String) async throws -> String = { _, name, _ in "https://uploads.linear.app/test/\(name)" }
+    var onComments: (String) async throws -> TicketComments = { _ in TicketComments(items: [], hasMore: false) }
     /// Fehler für alle schreibenden Operationen (`nil` = gelingt).
     var writeError: TicketSourceError?
     /// Nur Schreibaufrufe, die so beginnen, scheitern (z. B. `saveLink`).
@@ -41,6 +42,7 @@ final class TicketSourceStub: TicketSource, @unchecked Sendable {
     }
 
     func board(team: String) async throws -> TicketBoardSnapshot { note("board \(team)"); return try await onBoard(team) }
+    func comments(ticketID: String) async throws -> TicketComments { note("comments \(ticketID)"); return try await onComments(ticketID) }
     func ticket(key: String) async throws -> TicketContext { note("ticket \(key)"); return try await onTicket(key) }
     func tickets(linkedTo chatID: UUID) async throws -> [Ticket] { note("linked"); return try await onLinked(chatID) }
     func setStatus(ticketID: String, statusID: String) async throws { try write("setStatus \(ticketID) \(statusID)") }

@@ -272,6 +272,11 @@ enum PerfBudgets {
     /// Abgleich des Abzugs mit den Chats der App (wer sitzt woran), abseits des
     /// Main Threads. Startwert für bis zu 500 Tickets.
     static let ticketsBuild = PerformanceBudget(name: "tickets.build", budget: 0.030, signposter: PerfSignposts.store, tier: .detail)
+    /// Kommentare eines geöffneten Tickets bei Linear (eine Anfrage). Netz-Latenz.
+    static let ticketsComments = PerformanceBudget(name: "tickets.comments", budget: 1.5, signposter: PerfSignposts.store, tier: .detail)
+    /// Text der Triage (Titel, Beschreibung, Kommentare) als ein
+    /// `NSAttributedString`, abseits des Main Threads. Startwert.
+    static let ticketsDocument = PerformanceBudget(name: "tickets.document", budget: 0.050, signposter: PerfSignposts.store, tier: .detail)
 
     /// Die Arbeit, die JEDER abgeschlossene Scan auf dem Main Thread nach sich
     /// zieht: Workspace neu laden, Projekt-Icons erkennen, Auto-Benennung

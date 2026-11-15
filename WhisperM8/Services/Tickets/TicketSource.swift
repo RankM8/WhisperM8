@@ -18,6 +18,9 @@ protocol TicketSource {
     func saveLink(ticketID: String, chat: TicketChat, active: Bool, at date: Date) async throws
     func removeLink(id: String) async throws
     func addComment(ticketID: String, body: String) async throws
+    /// Kommentare eines Tickets, neueste zuerst (höchstens eine Seite). Nur
+    /// lesend; das Board holt sie erst, wenn ein Ticket geöffnet wird.
+    func comments(ticketID: String) async throws -> TicketComments
     func setDescription(ticketID: String, description: String) async throws
     func create(_ draft: TicketDraft) async throws -> Ticket
     /// `nil` hebt die Zuweisung auf.

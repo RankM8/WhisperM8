@@ -298,8 +298,12 @@ Views/Tickets/TicketBoardPresentation.swift  fertig gerechneter Inhalt, Zustand 
 Views/Tickets/TicketBoardView.swift          Kopf, Umschalter Board/Liste, Filter
 Views/Tickets/TicketCardView.swift           Karte und Spalten
 Views/Tickets/TicketBacklogListView.swift    Liste nach Projekt, Zeile „Chats ohne Ticket“
-Views/Tickets/TicketDetailPanel.swift        Detail rechts
-Views/Tickets/TicketDescriptionBlocks.swift  Beschreibung leicht gesetzt (Überschriften, Kästchen, Listen)
+Views/Tickets/TicketTriageView.swift         Triage: Liste links, Ticket in der Mitte, Eigenschaften rechts
+Views/Tickets/TicketBoardSelection.swift     Auswahl und Tasten der Triage, pur (gewählt, nächstes, voriges, schließen, Abgleich)
+Views/Tickets/TicketBoardViewModel+Triage.swift  Triage auf den Zustand der Ansicht angewendet
+Views/Tickets/TicketTextDocument.swift       Titel, Beschreibung und Kommentare als ein Text, dazu die Textansicht
+Views/Tickets/TicketDescriptionBlocks.swift  Beschreibung zerlegen (Überschriften, Kästchen, Listen), sichere Links, Bilder als Verweis
+Models/Tickets/TicketComment.swift           Kommentar am Ticket, Art (Entscheidung, Abschluss)
 Views/Tickets/TicketBoardText.swift          Texte und kleine Bausteine (Status-Punkt, Priorität, Person)
 Views/Settings/Models/TicketsSettingsModel.swift   Zustand und Regeln der Einstellungsseite
 Views/Settings/Pages/TicketsSettingsPage.swift     Einstellungen › Tickets
@@ -335,7 +339,7 @@ CLI/TicketsCLIRunner.swift                   Ausführung und Ausgabe
 
 ## Die Ansicht in der App
 
-Die Ansicht liest nur. Bilder: `make snapshots ONLY=tickets` (Board, Liste, Detail, Leerzustände), Beispiele
+Die Ansicht liest nur. Bilder: `make snapshots ONLY=tickets` (Board, Liste, Triage, Leerzustände), Beispiele
 in [`../design/ticket-board/`](../design/ticket-board/).
 
 ### Einstieg
@@ -451,8 +455,10 @@ gezeigten Stands.
 - **Board:** eine Spalte je Status des Teams, der offene Tickets hat (seit WM8-112; vorher drei Gruppen nach Art
   des Status, die genau die Engpässe versteckten). Reihenfolge: zuerst Status, die nach der Regel des Teams auf
   mich warten, dann Eingang, Begonnenes (darin „fertig“ hinter „in Arbeit“), als Nächstes, Backlog; sonst der
-  weiteste Stand links. Leert ein Filter eine Spalte, klappt sie an ihrem Platz schmal ein (150 pt, nur Statusname und 0), und die gefüllten rücken zusammen (Giuliano, 15.11.2026); ohne Filter bleibt eine leere Spalte breit. Die Regel steht pur in `TicketBoardLanes.isFolded`. Eine Spalte zeigt die ersten acht
-  Karten, darunter „N weitere · alle zeigen“. Im Kopf der Spalte steht „Wartet auf dich“ (Status bedeutet das,
+  weiteste Stand links. Leert ein Filter eine Spalte, klappt sie an ihrem Platz schmal ein (150 pt, nur Statusname
+  und 0), und die gefüllten rücken zusammen (Giuliano, 15.11.2026); ohne Filter bleibt eine leere Spalte breit. Die
+  Regel steht pur in `TicketBoardLanes.isFolded`. Eine Spalte zeigt die ersten acht Karten, darunter „N weitere · in
+  der Liste“ (öffnet die Triage mit der ganzen Spalte). Im Kopf der Spalte steht „Wartet auf dich“ (Status bedeutet das,
   Rahmen in Bernstein) oder „N für dich“. Jede Karte zeigt Nummer, Priorität, Fortschritt der Kästchen, Person,
   Titel, Projekt und Meilenstein, Status und Labels; Labels, mit denen ein Ticket auf mich wartet, in Bernstein.
   Die Chat-Zeile steht nur da, wo ein Chat sitzt oder abgegeben hat („Abgegeben von …“). „Kein Agent“ gibt es
@@ -461,14 +467,27 @@ gezeigten Stands.
 - **Filter:** „Wartet auf mich“ (Bernstein, vorn), Agent (alle, mit, ohne) und Person (alle, nicht zugewiesen, je
   Person) lassen sich kombinieren, dazu die Auswahl eines Projekts. Jede Zahl gilt innerhalb der übrigen Auswahl.
   „Ohne Agent“ zählt keine Status, die nach der Regel „fertig“ oder „wartet auf mich“ bedeuten.
-- **Detail:** Eckdaten, der Chat mit „arbeitet seit …“, „Zum Chat“ und „In Linear öffnen“, darunter die
-  Beschreibung, leicht gesetzt (Überschriften, Kästchen, Listen mit ihren Nummern). Escape schließt es.
+- **Triage:** Ein Klick auf eine Karte (oder eine Zeile der Liste) öffnet das Ticket groß, wie die Triage in
+  Linear. Links die Liste, aus der es kommt (die Spalte, „N weitere · in der Liste“ öffnet die ganze Spalte, aus
+  der Liste alle sichtbaren Tickets), in der Mitte Titel, Beschreibung und Verlauf, rechts die Eigenschaften
+  (Status mit „wartet auf dich“, Priorität, Person, Bereich, Vorhaben, „Fertig, wenn“, Labels, Chats am Ticket mit
+  „Zum Chat“). Oben voriges/nächstes, „3 von 5“, „In Linear öffnen“ und Aktualisieren. J/K oder ↑↓ wechseln das
+  Ticket, Esc führt zurück zum Board auf dieselbe Karte; das wirkt nur, wenn der Fokus nicht in einem Textfeld oder
+  Terminal liegt. Unter 820 pt Breite fällt die Liste links weg. Knöpfe, die in Linear etwas ändern, gibt es nicht
+  (Entscheidung E1 vom 15.11.2026: Das Board schreibt nicht nach Linear; die Triage-Knöpfe kommen mit dem
+  Board-Chat, WM8-113). Die Auswahl-Logik ist pur (`TicketBoardSelection`), damit Controller und Tastatur-Insel
+  (WM8-91) dieselben Funktionen nutzen: auf dem Board `columns(lanes)`, `start`, `move(key, .up/.down/.left/.right)`
+  (überspringt eingeklappte und leere Spalten), in der Triage `open`, `next`, `previous`, `select`, `close` und
+  `reconcile` nach einem neuen Abruf. Das ViewModel wendet sie an (`moveOnBoard`, `openSelected`, `openFromLane`,
+  `nextInTriage`, `previousInTriage`, `closeTriage`, `handle(TicketBoardKey)`).
+- **Verlauf:** die Kommentare, neueste zuerst. Entscheidungen und Abschlüsse (`tickets decide`, `tickets done`)
+  stehen mit einer Kopfzeile in Akzent und ◆. Höchstens die neuesten 40 Kommentare und 200 Zeilen je Kommentar;
+  der Rest steht in Linear.
 - **Zeile „Chats ohne Ticket“:** zugeklappt eine Zeile mit der Zahl der laufenden Chats ohne offenes Ticket und
   dem Supervisor. Aufgeklappt die Chats mit dem Ticket, an dem sie zuletzt saßen; Supervisor-Chats stehen getrennt
   daneben und zählen nicht als Lücke.
 - **Schmales Fenster:** Die Spalten werden nicht schmaler als 260 pt, darunter scrollt das Board waagrecht.
-  Unter 940 pt Breite liegt das Detail über dem Inhalt statt daneben; die Liste lässt dann Status und
-  Fortschritt weg.
+  Die Liste lässt unter 640 pt Status und Fortschritt weg.
 - **Labels auf der Karte:** höchstens zwei, zuerst alles, was etwas über den Stand sagt; die Art des Tickets
   (Linears Bug, Feature, Improvement) zuletzt und zurückhaltend. Der Status steht nur auf der Karte, wenn er
   mehr sagt als die Spalte.
@@ -489,9 +508,25 @@ So bleibt die Ansicht ruhig und billig:
   bei jedem Zeichnen. Der Zustand der Chats gehört nicht zum Vergleich des Modells: Ein neuer Abzug, in dem
   sich nur Zustände geändert haben, rechnet nichts neu.
 
-Tickets stammen auch von anderen Leuten. In der Beschreibung bleibt ein Link nur anklickbar, wenn er mit
-`http` oder `https` ins Web führt; `file:`, `smb:` und Schemata fremder Apps werden zu Text. Mehr als 400
-Zeilen werden nicht gesetzt, der Rest steht in Linear.
+Tickets und Kommentare stammen auch von anderen Leuten und von Chats. Ein Link bleibt nur anklickbar, wenn er mit
+`http` oder `https` ins Web führt; `file:`, `smb:` und Schemata fremder Apps werden zu Text (beim Zerlegen und noch
+einmal beim Klick). Bilder werden nicht geladen, sie stehen als „[Bild in Linear]“ da. HTML bleibt Text. Mehr als
+400 Zeilen Beschreibung werden nicht gesetzt, der Rest steht in Linear.
+
+So bleibt die Triage schnell:
+
+- **Kommentare erst beim Öffnen:** eine Anfrage je Ticket (`LinearTicketSource.comments`, bis zu 100 Kommentare),
+  erst nach 300 ms Ruhe: Wer mit J/K durch zehn Tickets blättert, löst eine Anfrage aus, nicht zehn. Danach liegen
+  sie für die Sitzung im Zwischenspeicher des Workspaces (`TicketBoardStore`), solange sich das Ticket nicht
+  geändert hat; Aktualisieren in der Triage holt neu. Während der Pause nach „Rate limited“ wird nicht gefragt.
+- **Ein Text statt einer Ansicht je Absatz:** Titel, Beschreibung und Verlauf werden abseits des Main Threads zu
+  einem `NSAttributedString` gebaut (`TicketTextDocument`, Messpunkt `tickets.document`) und in einem einzigen
+  `NSTextView` (TextKit 2) gesetzt, wie der Chat-Verlauf. Ein Wechsel per J/K setzt nur diesen Text neu; die
+  Liste links ist ein `LazyVStack`, ihre Zeilen schlagen das Ticket über einen Index nach.
+- Gemessen am 15.11.2026 im Debug-Build auf einem stark ausgelasteten Rechner (Last über 40): Text setzen und den
+  sichtbaren Teil layouten 30 bis 40 ms, kurz wie lang; ein extrem langes Ticket (Beschreibung mit 200 Zeilen,
+  40 lange Kommentare, 64.000 Zeichen) baut im Hintergrund in rund 0,4 s. Im Release-Build auf einem ruhigen
+  Rechner nachmessen (`TicketTriageTests.testDocumentCostForALongTicket` druckt beide Werte).
 
 ## Grenzen
 
@@ -503,6 +538,9 @@ Zeilen werden nicht gesetzt, der Rest steht in Linear.
 - **Die Verknüpfung ist für alle im Workspace sichtbar:** Am Ticket steht ein Anhang „Chat: <Titel des Chats>“
   mit Projektname und Zeit. In einem Workspace mit Kollegen lesen alle den Chat-Titel mit. Entschieden am
   14.11.2026: Der Anhang bleibt in jedem Workspace an, es gibt keinen Schalter dafür.
+- **Kommentare:** Das Board holt höchstens 100 je Ticket und zeigt die neuesten 40. Ob Linear beim neuen
+  Kommentar die Änderungszeit des Tickets setzt, ist nicht geprüft; ein neuer Kommentar erscheint spätestens nach
+  „Aktualisieren“ in der Triage oder beim nächsten App-Start.
 - **Linears eigene Agent-Sitzungen nutzt WhisperM8 nicht.** Die Filter „Agent“ und „Agent Session“ in Linear
   kennen deshalb keinen unserer Chats; „Mit Agent“ und „Ohne Agent“ sind eigene Ansichten auf den Anhang.
 - **Text an Tickets:** höchstens 64 KB je Text, aus Argument, stdin oder `@datei`. Was gesendet wird, liegt
@@ -537,7 +575,8 @@ Zeilen werden nicht gesetzt, der Rest steht in Linear.
 `TicketsCLITests`: pure Typen, Quelle gegen feste Antworten, Speicher mit eingespeister Wartefunktion,
 Kommandozeile gegen eine Quelle aus Closures. Kein Test braucht Netz, Schlüsselbund oder die App.
 
-Für die Ansicht: `TicketBoardPresentationTests` (Spalten, Filter, Zählungen, Detail), `TicketTeamRuleTests`
+Für die Ansicht: `TicketBoardPresentationTests` (Spalten, Filter, Zählungen, Detail), `TicketTriageTests`
+(Auswahl, Tasten, Triage im ViewModel, Kommentare aus Linear, sicherer Text, Kosten), `TicketTeamRuleTests`
 (Regel je Team, Spalten nach Status, „Wartet auf mich“, Befehl `setup --status`),
 `TicketBoardControllerTests` (Zuordnung, Abruf nur bei sichtbarer Ansicht, Leerzustände, Projektwechsel, überholte
 Antworten) und `AgentWindowStoreTicketsModeTests` (Umschalter je Fenster, Rückkehr zu den Chats, Schnappschuss für
