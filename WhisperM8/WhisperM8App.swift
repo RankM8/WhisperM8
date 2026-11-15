@@ -105,12 +105,16 @@ struct WhisperM8App: App {
     private func setupHotkeys() {
         KeyboardShortcuts.onKeyDown(for: .toggleRecording) {
             Task { @MainActor in
+                // Bei offener Insel per Tastatur (⌥Tab gehalten) heißt der
+                // Diktat-Hotkey dort „hin und diktieren“ (WM8-104).
+                if KeyboardIslandMonitor.shared.consumeDictationHotkeyDown() { return }
                 await AppState.shared.startRecording()
             }
         }
 
         KeyboardShortcuts.onKeyUp(for: .toggleRecording) {
             Task { @MainActor in
+                if KeyboardIslandMonitor.shared.consumeDictationHotkeyUp() { return }
                 await AppState.shared.stopRecording()
             }
         }

@@ -356,6 +356,10 @@ final class ControllerRuntime {
             }
             self.dispatcher = dispatcher
             self.feedback = feedback
+            // Insel per Tastatur (⌥Tab, WM8-104): eigener Schalter, unabhängig
+            // davon, ob die Controller-Steuerung läuft.
+            dispatcher.keyboardRejected = { NSSound.beep() }
+            KeyboardIslandMonitor.shared.start(dispatcher: dispatcher)
         }
         manager.applyPreferences()
         ControllerConnectHint.shared.sync()

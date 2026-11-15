@@ -33,7 +33,8 @@ struct ControllerIslandDisplay: Equatable {
         case .writing: width = 420
         // Zwei Rauten nebeneinander (Insel-Paket): rund 700 pt.
         case .quickDraw: width = 704
-        case .whereTo: width = 440
+        // Per Tastatur (⌥Tab) etwas breiter: Die Fußzeile nennt mehr Tasten.
+        case .whereTo: width = model.input == .keyboard ? 460 : 440
         }
         if case .notch(let notchWidth, _) = style { return max(width, notchWidth) }
         return width
@@ -152,7 +153,11 @@ struct ControllerIslandView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            IslandGlyph(text: display.model.layer.key.glyph(family), round: false, palette: palette)
+            if display.model.input == .keyboard {
+                keyboardHeaderKeys
+            } else {
+                IslandGlyph(text: display.model.layer.key.glyph(family), round: false, palette: palette)
+            }
             Text(verbatim: limitsCard == nil ? display.model.layer.title : String(localized: "Limits"))
                 .font(.system(size: 11, weight: .bold))
                 .tracking(0.2)
@@ -271,7 +276,11 @@ struct ControllerIslandView: View {
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 4)
-            footer(state.tab, reopenTitle: state.reopenTitle)
+            if display.model.input == .keyboard {
+                keyboardFooter(state, dictating: display.model.target.dictating)
+            } else {
+                footer(state.tab, reopenTitle: state.reopenTitle)
+            }
         }
     }
 

@@ -17,6 +17,9 @@ struct ControllerIslandSession: Equatable {
     /// Konten der Limits-Karte, einmal beim Öffnen der Karte gelesen. Neue
     /// Zahlen ordnen sich diesen Namen zu, ohne die Profile neu zu lesen.
     var limitAccounts: ControllerLimitAccounts?
+    /// Sichtbar. Per Tastatur erscheint die Insel erst nach 0,2 s (⌥Tab kurz
+    /// getippt blitzt sie nicht auf); bis dahin zeigt `present()` nichts.
+    var revealed = true
 }
 
 extension ControllerAction {
@@ -79,13 +82,14 @@ extension ControllerActionDispatcher {
     }
 
     func present() {
-        guard let islandState else { return }
+        guard let islandState, islandState.revealed else { return }
         island.show(islandState.model, screenDisplayID: islandState.screenDisplayID)
     }
 
     /// Baut die Insel aus dem Zustand des Fensters, auf das der Controller
-    /// wirkt. `nil` ohne Agent-Chats-Fenster.
-    private func makeIsland(_ layer: ControllerLayer) -> ControllerIslandSession? {
+    /// wirkt. `nil` ohne Agent-Chats-Fenster. `input`: per Tastatur geöffnet
+    /// (⌥Tab), dann Tastenkappen in Kopf und Fußzeile.
+    func makeIsland(_ layer: ControllerLayer, input: ControllerIslandInput = .controller) -> ControllerIslandSession? {
         guard let windowID = targetWindowID, let window = chats.snapshot(of: windowID) else { return nil }
         let sessionID = window.selectedSessionID
         var target = ControllerIslandTarget(
@@ -93,7 +97,8 @@ extension ControllerActionDispatcher {
         // Während eines Diktats nennt der Kopf dessen Ziel (Runde 5, Punkt 9).
         if dictation.phase != nil, let dictationTarget = dictation.targetSessionID {
             let title = titleForSession(dictationTarget) ?? String(localized: "Chat")
-            target = ControllerIslandTarget(title: "→ \(title)", status: islandStatus(dictationTarget))
+            target = ControllerIslandTarget(
+                title: "→ \(title)", status: islandStatus(dictationTarget), dictating: true)
         }
         var setup: ControllerMenuSetup?
         var usageAccount: ControllerUsageAccount?
@@ -132,7 +137,7 @@ extension ControllerActionDispatcher {
             content = .whereTo(whereTo)
         }
         return ControllerIslandSession(
-            model: ControllerIslandModel(target: target, content: content),
+            model: ControllerIslandModel(target: target, content: content, input: input),
             sessionID: sessionID, setup: setup, screenDisplayID: window.screenDisplayID,
             usageAccount: usageAccount)
     }
@@ -251,7 +256,7 @@ extension ControllerActionDispatcher {
     /// anderen Fenster, kommt nichts nach vorn und kein Dialog. `false`, wenn
     /// der Wechsel nicht ging; „geht nicht“ meldet der Aufrufer.
     @discardableResult
-    private func go(
+    func go(
         to destination: ControllerWhereToState.Destination, previous: ControllerWhereToState.Destination
     ) -> Bool {
         if destination != .stay, destination == previous { return command(.lastChat, orReject: false) }

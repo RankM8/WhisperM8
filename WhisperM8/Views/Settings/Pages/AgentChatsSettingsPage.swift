@@ -69,6 +69,7 @@ struct AgentChatsWorkspaceSettingsTab: View {
     @AppStorage(PreferenceKeys.isAutoChatRenameEnabled) private var isAutoChatRenameEnabled = true
     @AppStorage(PreferenceKeys.isAutoSummaryEnabled) private var isAutoSummaryEnabled = false
     @AppStorage(PreferenceKeys.isTabSwipeEnabled) private var isTabSwipeEnabled = true
+    @AppStorage(PreferenceKeys.keyboardIslandEnabled) private var isKeyboardIslandEnabled = true
     @AppStorage(PreferenceKeys.agentAdvancedFeaturesEnabled) private var isAdvancedEnabled = false
 
     @State private var defaultProjectPath = AppPreferences.shared.agentDefaultProjectPath
@@ -128,6 +129,12 @@ struct AgentChatsWorkspaceSettingsTab: View {
                     title: "Switch tabs with a two-finger swipe",
                     subtitle: "Swiping sideways on the trackpad moves to the next or previous tab. Ignored for a moment after you type, so a resting palm cannot switch chats while you write.",
                     isOn: $isTabSwipeEnabled
+                )
+
+                SettingsToggleRow(
+                    title: "Dynamic Island with the keyboard (⌥Tab)",
+                    subtitle: "Hold ⌥ and press Tab to switch chats, workspaces and projects, like L2 on a controller. Tap ⌥Tab to go back to the previous place. Ctrl+Tab stays the tab switcher. Works while an Agent Chats window is in front.",
+                    isOn: $isKeyboardIslandEnabled
                 )
 
                 SettingsToggleRow(

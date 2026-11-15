@@ -15,6 +15,9 @@ enum ControllerIslandStatus: String, CaseIterable, Sendable {
 struct ControllerIslandTarget: Equatable, Sendable {
     var title: String?
     var status: ControllerIslandStatus?
+    /// Ein Diktat läuft, der Kopf nennt sein Ziel („→ Chat“). Per Tastatur
+    /// heißt Leertaste dann „stopp“, Esc schließt nur die Insel.
+    var dictating = false
 }
 
 /// Ein Chat im Reiter „Chats“.
@@ -88,6 +91,16 @@ struct ControllerIslandList<Row: Identifiable & Equatable & Sendable>: Equatable
     var hiddenCount: Int { rows.count - visibleRows.count }
 
     func contains(_ id: UUID) -> Bool { rows.contains { $0.id == id } }
+
+    /// Markierung auf diese Zeile (Tastatur: Start auf „vorher“). `false`,
+    /// wenn sie nicht in der Liste steht; dann bleibt alles, wie es ist.
+    @discardableResult
+    mutating func select(_ id: UUID) -> Bool {
+        guard let index = rows.firstIndex(where: { $0.id == id }) else { return false }
+        selectedIndex = index
+        scrollToSelection()
+        return true
+    }
 
     mutating func move(_ step: Int) {
         guard !rows.isEmpty else { return }
@@ -225,6 +238,43 @@ struct ControllerWhereToState: Equatable, Sendable {
             workspaces = ControllerIslandList(rows: workspaces.rows, startID: workspaces.rows.first(where: \.isCurrent)?.id)
         }
         return true
+    }
+
+    // MARK: Tastatur (⌥Tab, WM8-104)
+
+    /// Start per Tastatur: Wie bei ⌘Tab ist der Druck auf Tab schon ein
+    /// Schritt. Die Markierung steht auf dem vorigen Ort, im Reiter, der ihn
+    /// führt — so führt ⌥Tab kurz getippt dorthin wie L2 getippt. Ohne vorigen
+    /// Ort ein Schritt weiter im Start-Reiter (die Zeile unter dem aktuellen).
+    mutating func markPreviousForKeyboard() {
+        guard selectPrevious(switchingTab: true) else { return move(1) }
+    }
+
+    /// ←/→ per Tastatur: anderer Reiter, die Markierung dort auf „vorher“,
+    /// wenn der Reiter den vorigen Ort führt, sonst auf dem aktuellen Eintrag.
+    @discardableResult
+    mutating func switchTabForKeyboard(_ step: Int) -> Bool {
+        guard switchTab(step) else { return false }
+        selectPrevious(switchingTab: false)
+        return true
+    }
+
+    /// Markiert den vorigen Ort. `switchingTab`: auch in den Reiter wechseln,
+    /// der ihn führt; sonst nur, wenn er im sichtbaren Reiter steht.
+    @discardableResult
+    private mutating func selectPrevious(switchingTab: Bool) -> Bool {
+        switch previous {
+        case .stay:
+            return false
+        case let .chat(id):
+            guard switchingTab || tab == .chats, chats.contains(id) else { return false }
+            tab = .chats
+            return chats.select(id)
+        case let .workspace(id), let .project(id):
+            guard switchingTab || tab == .workspaces, workspaces.contains(id) else { return false }
+            tab = .workspaces
+            return workspaces.select(id)
+        }
     }
 
     var destination: Destination {
@@ -474,6 +524,13 @@ struct ControllerQuickDrawSlots: Equatable, Sendable {
     }
 }
 
+/// Womit die Insel bedient wird: Controller (Ebenen-Tasten) oder Tastatur
+/// (⌥Tab, WM8-104). Dieselbe Insel, dieselben Wege; nur Kopf und Fußzeile
+/// zeigen Tastenkappen statt Controller-Zeichen.
+enum ControllerIslandInput: String, Sendable {
+    case controller, keyboard
+}
+
 /// Alles, was die Insel zeigt.
 struct ControllerIslandModel: Equatable, Sendable {
     enum Content: Equatable, Sendable {
@@ -484,6 +541,7 @@ struct ControllerIslandModel: Equatable, Sendable {
 
     var target: ControllerIslandTarget
     var content: Content
+    var input: ControllerIslandInput = .controller
 
     var layer: ControllerLayer {
         switch content {

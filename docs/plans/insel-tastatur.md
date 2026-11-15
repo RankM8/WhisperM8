@@ -1,5 +1,5 @@
 ---
-status: Plan (2026-11-13), Entscheidung durch Giuliano offen; kein Swift
+status: abgenommen (14.11.2026, Variante B), im Bau (WM8-104); Doku: docs/features/insel-tastatur.md
 stand: 2026-11-13
 feature: Dynamic Island per Tastatur — Wohin, Schnellbefehle und Diktat ohne Controller
 branch: design/insel-tastatur
