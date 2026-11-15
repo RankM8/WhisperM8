@@ -486,6 +486,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 WindowRequestCenter.shared.request(.onboarding)
             }
         }
+        // Start bis zum ersten Agent-Chats-Fenster (WM8-101): nach jedem
+        // Start stand die App rund eine Sekunde, ohne dass es ein Messpunkt sah.
+        LaunchMeasurement.didFinishLaunching()
     }
 
     /// Re-Activate (Klick auf Dock-Icon, wenn die App schon läuft). Nur wenn

@@ -75,6 +75,18 @@ final class QuietableTerminalView: LocalProcessTerminalView {
     private var isRestoringScroll: Bool = false
     private var isOutputScrollInFlight: Bool = false
 
+    /// Größenänderung samt Umbruch des Puffers messen (WM8-101). Nur bei
+    /// echter Änderung; ohne Detail-Stufe kostet das einen Vergleich.
+    override func setFrameSize(_ newSize: NSSize) {
+        guard newSize != frame.size, PerfBudgets.terminalResize.isActive else {
+            super.setFrameSize(newSize)
+            return
+        }
+        PerfBudgets.terminalResize.withInterval {
+            super.setFrameSize(newSize)
+        }
+    }
+
     override func bell(source: Terminal) {
         guard AppPreferences.shared.isTerminalBellEnabled,
               !AppPreferences.shared.agentAlertLevel.silencesNotifications else { return }
@@ -1337,6 +1349,13 @@ final class AgentTerminalContainerView: NSView {
             .filter { $0 !== terminal }
             .forEach { $0.removeFromSuperview() }
         guard terminal.superview !== self else { return }
+        // Bis nach dem nächsten Commit: Layout, gegebenenfalls Umbruch und das
+        // erste Zeichnen gehören zum Einhängen (WM8-101). Nur mit Detail-Stufe,
+        // sonst entfiele auch der Beobachter.
+        if PerfBudgets.paneAttach.isActive {
+            let token = PerfBudgets.paneAttach.begin()
+            MainRunLoopCommit.afterNextCommit { PerfBudgets.paneAttach.end(token) }
+        }
         terminal.removeFromSuperview()
         terminal.translatesAutoresizingMaskIntoConstraints = false
         addSubview(terminal)

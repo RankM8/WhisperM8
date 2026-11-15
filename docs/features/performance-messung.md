@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-11-14
+updated: 2026-11-15
 description: Performance-Messung in WhisperM8 — Signposts, Budgets, Messstufen, Stall-Monitor und Watchdog, Messskripte.
 ---
 
@@ -39,6 +39,43 @@ die App steht, gestaffelt bei Verdopplung der Dauer (1 s, 2 s, 4 s …), damit
 das Log nicht überläuft. Messläufe: `scripts/perf-load.sh` (Last mit
 definierter Rate, im Chat-Terminal starten) und `scripts/perf-report.sh`
 (Log → Tabelle). Befunde: `docs/plans/workspace-performance/`.
+
+## Hänger mit Verursacher (WM8-101)
+
+Seit 15.11.2026 nennt jede Hänger-Meldung, was in ihrem Zeitfenster lief:
+`main_thread_freeze durationMs=1340 recent=chat.switch:1310,sidebar.modelBuild:62 open=-`.
+`recent` sind gemessene Intervalle ab 50 ms, die auf dem Main Thread begannen und
+sich mit dem Hänger überschneiden, längstes zuerst (höchstens fünf); `open` die bei
+der Meldung noch offenen. `main_thread_blocked_ongoing` nennt mit `open=`, welches
+Intervall WÄHREND einer laufenden Blockade offen ist. Buch führt
+`MainThreadIntervalLedger`, gefüttert von `PerformanceBudget.begin/end`; es kostet
+je Main-Thread-Intervall zwei kurze Lock-Abschnitte. Steht `recent=-`, lief eine
+Stelle ohne Messpunkt.
+
+Hänger in den ersten 15 s nach dem Aufwachen des Macs heißen
+`main_thread_wake_stall` (Stufe info), damit sie in keiner Hänger-Zählung landen; der
+Watchdog schweigt in dieser Zeit. Am 14.11. waren das 18 von 21 Meldungen eines
+Vormittags.
+
+Neue Messpunkte, Kategorie `perf.chats`:
+
+| Name | Budget | Stufe | misst |
+| -- | -- | -- | -- |
+| `chat.switch` | 100 ms | immer | Auswahlwechsel im `AgentWindowStore` bis nach dem nächsten Commit von Core Animation: Body, Layout und Zeichnen des Fensters samt Seitenleiste |
+| `launch.firstWindow` | 500 ms | immer | Ende von `applicationDidFinishLaunching` bis nach dem ersten Commit des Agent-Chats-Fensters (verworfen nach 30 s) |
+| `pane.attach` | 50 ms | Detail | Umhängen einer Terminal-Ansicht bis nach dem nächsten Commit |
+| `terminal.resize` | 16 ms | Detail | `setFrameSize` einer Terminal-Ansicht samt Umbruch des Puffers |
+
+„Nach dem nächsten Commit“ heißt: ein einmaliger `beforeWaiting`-Beobachter mit
+höchster Ordnungszahl (`MainRunLoopCommit`). Ein `DispatchQueue.main.async` endete zu
+früh, weil die Main-Queue vor dem Commit geleert wird.
+
+Auswerten, welcher Verursacher wie viel Hängerzeit hat:
+
+```bash
+/usr/bin/log show --last 6h --predicate 'subsystem == "com.whisperm8.app" AND process == "WhisperM8"' --info \
+  | grep -oE 'main_thread_freeze durationMs=[0-9]+ recent=[^ ,:]+' | awk '{print $3}' | sort | uniq -c | sort -rn
+```
 
 ## Statistik-Protokollleser
 

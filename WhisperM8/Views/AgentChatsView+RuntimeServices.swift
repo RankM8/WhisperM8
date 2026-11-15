@@ -16,6 +16,9 @@ extension AgentChatsView {
     /// Fenster denselben Status und ein Fenster-Schließen reißt das Tracking
     /// nicht mehr ab.
     func setupRuntimeServicesIfNeeded() {
+        // Läuft beim Erscheinen des Fensters: misst den Start bis hierher
+        // (`launch.firstWindow`, WM8-101); nach dem ersten Fenster ein No-op.
+        LaunchMeasurement.agentWindowAppeared()
         if autoNamer == nil {
             autoNamer = AgentSessionStatusCoordinator.shared.autoNamer
         }
