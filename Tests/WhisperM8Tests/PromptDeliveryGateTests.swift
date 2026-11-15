@@ -18,6 +18,127 @@ final class PromptDeliveryGateTests: XCTestCase {
         XCTAssertFalse(PromptDeliveryGate.sendBlockedByDraft(mayHaveUnsentInput: false, force: false))
         XCTAssertTrue(PromptDeliveryGate.draftMessage.contains("enqueue"))
     }
+
+    // MARK: Sichtbar leeres Feld (WM8-64)
+
+    /// 15.11.2026: Ein ruhender Chat mit laufendem Hintergrund-Befehl hatte ein
+    /// leeres Feld, die Tasten-Schätzung vermutete trotzdem einen Entwurf.
+    /// `send` merkte nur vor, die Warteschlange stellte nie zu. Ein am
+    /// Bildschirm sichtbar leeres Feld schlägt die Schätzung.
+    func testVisiblyEmptyFieldBeatsTrackerGuess() {
+        XCTAssertEqual(PromptDeliveryGate.forQueue(runtime: .idle, lifecycle: .ready, mayHaveUnsentInput: true,
+                                                   fieldVisiblyEmpty: true), .deliver)
+        XCTAssertFalse(PromptDeliveryGate.sendBlockedByDraft(mayHaveUnsentInput: true, force: false, fieldVisiblyEmpty: true))
+        // Sichtbarer Text bleibt ein Entwurf, ein arbeitender Chat bleibt beschäftigt.
+        XCTAssertEqual(PromptDeliveryGate.forQueue(runtime: .idle, lifecycle: .ready, mayHaveUnsentInput: true,
+                                                   visibleDraft: true, fieldVisiblyEmpty: false), .draftPending)
+        XCTAssertEqual(PromptDeliveryGate.forQueue(runtime: .working, lifecycle: .working, mayHaveUnsentInput: false,
+                                                   fieldVisiblyEmpty: true), .busy("working"))
+    }
+
+    func testFieldVisiblyEmptyOnlyForReadableClaudeField() {
+        let empty = ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: true, isEmpty: true, isBlank: true)
+        let text = ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: false, isEmpty: false)
+        XCTAssertTrue(PromptSubmitCheck.fieldVisiblyEmpty(field: empty, profile: .claudeCodeChat))
+        XCTAssertFalse(PromptSubmitCheck.fieldVisiblyEmpty(field: text, profile: .claudeCodeChat))
+        XCTAssertFalse(PromptSubmitCheck.fieldVisiblyEmpty(field: nil, profile: .claudeCodeChat), "nicht ablesbar: Schätzung gilt")
+        XCTAssertFalse(PromptSubmitCheck.fieldVisiblyEmpty(field: empty, profile: .plainShell))
+    }
+
+    /// Unterer Rand eines ruhenden Chats mit Hintergrund-Befehl, abgelesen an
+    /// Claude Code 2.1.325 (15.11.2026): Name in der oberen Linie, leeres Feld,
+    /// darunter die Statuszeile mit „· 1 shell“. Das Feld gilt als leer.
+    func testEmptyFieldAboveShellStatusLineReadsEmpty() {
+        let screen = ControllerScreenReading.read(lines: [
+            .plain("  ⎿  Running…"),
+            .plain(""),
+            .plain(String(repeating: "─", count: 50) + " wm8-105-nik-7e0e6690 ─"),
+            .dimmed("❯ "),
+            .plain(String(repeating: "─", count: 73)),
+            .plain("  whisperm8 (main) | 32% 275k/1000k | [Opus 5.5] ⇄PowerUser | high | 3…"),
+            .plain("  ⏵⏵ bypass permissions on · 1 shell · Tasks 1 aktiv · 3 offen"),
+        ], cursor: (row: 3, col: 2), detectViews: true)
+        XCTAssertEqual(screen.promptField?.isEmpty, true)
+        XCTAssertTrue(PromptSubmitCheck.fieldVisiblyEmpty(field: screen.promptField, profile: .claudeCodeChat))
+    }
+
+    // MARK: Auflagen Uli: „sichtbar leer“ nur mit Cursor am Anfang
+
+    private func visiblyEmpty(_ lines: [ControllerScreenLine], cursor: (row: Int, col: Int)?) -> Bool {
+        let screen = ControllerScreenReading.read(lines: lines, cursor: cursor, detectViews: true)
+        return PromptSubmitCheck.fieldVisiblyEmpty(field: screen.promptField, profile: .claudeCodeChat)
+    }
+
+    private func dimmedField(_ text: String) -> ControllerScreenLine {
+        let full = "❯ " + text
+        return ControllerScreenLine(full: full, plain: String(repeating: " ", count: full.count), dim: full)
+    }
+
+    /// Abgelesen an Claude Code 2.1.325 (15.11.2026, Wegwerf-Chat): 40 Zeilen
+    /// per `send --no-submit` stehen als „[Pasted text #1 +40 lines]“ im Feld,
+    /// ein Bildpfad als „[Image #2]“. Ob Claude das abgeblendet zeichnet, ist
+    /// nicht abgelesen; der Cursor steht dahinter, also gilt es nie als leer.
+    func testPastedTextAndImagePlaceholdersAreNotEmpty() {
+        let rule = String(repeating: "─", count: 60) + " wegwerf-69057110 ─"
+        let lower = String(repeating: "─", count: 78)
+        for token in ["[Pasted text #1 +40 lines]", "[Image #2]", "[Image #1][Pasted text #2 +12 lines]"] {
+            let after = 2 + token.count
+            XCTAssertFalse(visiblyEmpty([.plain(rule), .plain("❯ " + token), .plain(lower)], cursor: (1, after)), token)
+            XCTAssertFalse(visiblyEmpty([.plain(rule), dimmedField(token), .plain(lower)], cursor: (1, after)),
+                           "auch abgeblendet: \(token)")
+        }
+    }
+
+    /// Schmale Kachel: Claude kürzt den Namen in der Linie („ wegwerf-6905… ─“),
+    /// der Platzhalter bleibt. Nicht am echten Chat abgelesen (die CLI kann
+    /// eine Kachel nicht verkleinern), Form nach den Messungen zu WM8-85.
+    func testNarrowTilePlaceholdersAreNotEmptyButEmptyFieldIs() {
+        let rule = " wegwerf-6905… ─"
+        let lower = String(repeating: "─", count: 30)
+        XCTAssertFalse(visiblyEmpty([.plain(rule), dimmedField("[Pasted text #1 +40 lines]"), .plain(lower)], cursor: (1, 28)))
+        XCTAssertFalse(visiblyEmpty([.plain(rule), dimmedField("[Image #2]"), .plain(lower)], cursor: (1, 12)))
+        XCTAssertTrue(visiblyEmpty([.plain(rule), .dimmed("❯ "), .plain(lower), .plain("  · 1 shell")], cursor: (1, 2)))
+    }
+
+    /// Uli: Ein abgeblendeter Platzhalter, auf dessen Anfang der Nutzer den
+    /// Cursor gesetzt hat (Pos1, Ctrl-A, Klick), ist nicht leer. Ebenso ein
+    /// grauer Vorschlag: Dort entscheidet die Schätzung.
+    func testDimmedContentWithCursorAtStartIsNotEmpty() {
+        let rule = String(repeating: "─", count: 60) + " wegwerf-69057110 ─"
+        let lower = String(repeating: "─", count: 78)
+        for token in ["[Pasted text #1 +40 lines]", "[Image #2]", "Try \"how does AgentCommandBuilder.swift work?\""] {
+            let screen = ControllerScreenReading.read(lines: [.plain(rule), dimmedField(token), .plain(lower)],
+                                                      cursor: (1, 2), detectViews: true)
+            XCTAssertEqual(screen.promptField?.isEmpty, true, "hasText-Sicht unverändert: \(token)")
+            XCTAssertEqual(screen.promptField?.hasText, false)
+            XCTAssertFalse(PromptSubmitCheck.fieldVisiblyEmpty(field: screen.promptField, profile: .claudeCodeChat), token)
+        }
+        // Nur „❯“: weiter leer (Fall vom 15.11.).
+        XCTAssertTrue(visiblyEmpty([.plain(rule), .dimmed("❯ "), .plain(lower)], cursor: (1, 2)))
+    }
+
+    /// Falscher Rahmen: Erkennt der Leser die Linie über dem echten Feld nicht,
+    /// gelten zwei Linien aus einer Tool-Ausgabe mit „> “ dazwischen als Feld.
+    /// Der Cursor steht im echten Feld darunter, also ist das falsche nie „leer“.
+    func testFalseFrameFromToolOutputIsNotEmpty() {
+        let rule = String(repeating: "─", count: 40)
+        let lines: [ControllerScreenLine] = [
+            .plain(rule), .plain("> "), .plain(rule),
+            .plain("  ⎿  fertig"),
+            .plain("~~~ unbekannte Linie ~~~"), .plain("❯ mein Entwurf"), .plain("  ⏵⏵ bypass permissions on"),
+        ]
+        XCTAssertFalse(visiblyEmpty(lines, cursor: (5, 15)))
+        XCTAssertFalse(visiblyEmpty(lines, cursor: nil), "ohne Cursor nie leer")
+    }
+
+    func testMultiRowOrCursorAwayIsNotEmpty() {
+        let twoRows = ControllerPromptField(rows: 2, cursorRow: 0, cursorAtStart: true, isEmpty: true, isBlank: true)
+        let cursorLater = ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: false, isEmpty: true, isBlank: true)
+        let noCursor = ControllerPromptField(rows: 1, cursorRow: nil, cursorAtStart: false, isEmpty: true, isBlank: true)
+        for field in [twoRows, cursorLater, noCursor] {
+            XCTAssertFalse(PromptSubmitCheck.fieldVisiblyEmpty(field: field, profile: .claudeCodeChat))
+        }
+    }
 }
 
 /// LR-CLI-008: Der Kontowechsel bekam dieselbe 10-s-Frist wie jede Mutation.

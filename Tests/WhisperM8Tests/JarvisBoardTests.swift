@@ -639,6 +639,30 @@ final class ChatsBoardReadContractTests: XCTestCase {
 
 // MARK: - Journal → since/watch
 
+/// WM8-64: `chats board --json` nennt den Status des Besitzers, damit eine
+/// frisch geladene Mod weiß, ob der Supervisor arbeitet oder selbst wartet.
+final class ChatsBoardOwnerStatusTests: XCTestCase {
+    func testOwnerStatusPrefersLiveThenJournal() {
+        let owner = UUID()
+        let journal = ChatsStatusJournalEntry(at: Date(), sessionID: owner, from: "working", to: "idle",
+                                              signal: "registryStatus", source: "registry")
+        let live = ChatsLiveSnapshot(entries: [owner: ChatsLiveStatus(
+            runtimeStatus: .awaitingInput, isAttachedPTY: true, canSend: false, canInterrupt: false)],
+                                     omittedAreDetached: true)
+        XCTAssertEqual(ChatsBoardReadModel.ownerStatus(owner: owner, live: live, lastTransitions: [owner: journal]),
+                       "awaitingInput")
+        XCTAssertEqual(ChatsBoardReadModel.ownerStatus(owner: owner, live: nil, lastTransitions: [owner: journal]), "idle")
+        XCTAssertNil(ChatsBoardReadModel.ownerStatus(owner: owner, live: nil, lastTransitions: [:]))
+    }
+
+    func testBoardJSONCarriesOwnerStatusOnlyWhenKnown() {
+        let owner = UUID()
+        XCTAssertNil(ChatsBoardReadModel.boardJSON(owner: owner, board: nil, rows: [])["ownerStatus"])
+        XCTAssertEqual(ChatsBoardReadModel.readJSON(owner: owner, board: nil, rows: [], cursor: nil,
+                                                    ownerStatus: "working")["ownerStatus"] as? String, "working")
+    }
+}
+
 final class ChatsBoardJournalTests: XCTestCase {
     private var directory: URL!
     private var url: URL!

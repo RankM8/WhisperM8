@@ -36,30 +36,60 @@ struct ClaudeBackgroundTaskTracker {
         })
     }
 
-    /// Liest neu angehängte Zeilen. Wurde die Datei ersetzt oder gekürzt,
-    /// beginnt der Tracker von vorn.
-    mutating func update(from url: URL, fileManager: FileManager = .default) {
+    /// Liest neu angehängte Zeilen bis zur Größe beim Nachsehen. Wurde die
+    /// Datei ersetzt oder gekürzt, beginnt der Tracker von vorn.
+    ///
+    /// - Parameter readLimit: Höchstens so viele neue Bytes (Turn-Ende auf
+    ///   dem Main Thread, WM8-105). Wären es mehr, oder müsste der Tracker
+    ///   von vorn beginnen, liest er nichts und gibt `false` zurück.
+    @discardableResult
+    mutating func update(from url: URL, readLimit: UInt64? = nil, fileManager: FileManager = .default) -> Bool {
         guard let attributes = try? fileManager.attributesOfItem(atPath: url.path),
-              let size = (attributes[.size] as? NSNumber)?.uint64Value else { return }
+              let size = (attributes[.size] as? NSNumber)?.uint64Value else { return false }
         let identity = (attributes[.systemFileNumber] as? NSNumber)?.uint64Value
-        if identity != fileIdentity || size < offset {
+        let restarts = identity != fileIdentity || size < offset
+        if let readLimit {
+            guard !restarts, size - offset <= readLimit else { return false }
+        }
+        if restarts {
             self = ClaudeBackgroundTaskTracker()
             fileIdentity = identity
         }
-        guard size > offset, let handle = try? FileHandle(forReadingFrom: url) else { return }
+        guard size > offset else { return true }
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
         defer { try? handle.close() }
         do {
             try handle.seek(toOffset: offset)
             // Blockweise statt `readToEnd`: ein 65-MB-Transcript läge sonst
-            // komplett im Speicher (Analyse 11.10.2026).
-            while let chunk = try handle.read(upToCount: Self.chunkSize), !chunk.isEmpty {
+            // komplett im Speicher (Analyse 11.10.2026). Nur bis zur Größe
+            // beim Nachsehen: Was danach dazukommt, liest das nächste Mal.
+            while offset < size,
+                  let chunk = try handle.read(upToCount: Int(min(UInt64(Self.chunkSize), size - offset))),
+                  !chunk.isEmpty {
                 offset += UInt64(chunk.count)
                 consume(chunk)
             }
         } catch {
-            return
+            return false
         }
+        return true
     }
+
+    /// Offene Läufe beim Turn-Ende (WM8-105): nur die im gerade beendeten
+    /// Turn gestarteten. Ein Dev-Server oder `tail -f` aus einem früheren
+    /// Turn endet nie und hielte sonst jedes „fertig“ des Chats auf.
+    /// `nil` ohne Prozess-Start oder Turn-Start: unbekannt, das Board weckt
+    /// wie bisher. Ohne Prozess zählten Läufe längst beendeter Prozesse ohne
+    /// Ende-Meldung für immer (`claude --bg` hat keinen Terminal-Prozess).
+    func openAtTurnEnd(processStart: Date?, turnStart: Date?) -> Int? {
+        guard let processStart, let turnStart else { return nil }
+        let since = max(processStart, turnStart.addingTimeInterval(-Self.turnStartTolerance))
+        return openTaskIDs(startedAfter: since).count
+    }
+
+    /// Der Turn-Start der App kommt etwas nach Claudes eigenem (Registry,
+    /// Hook); ein Lauf aus den ersten Sekunden des Turns zählt so noch mit.
+    static let turnStartTolerance: TimeInterval = 5
 
     static let chunkSize = 4 * 1024 * 1024
 
@@ -161,6 +191,11 @@ final class ClaudeBackgroundTaskMonitor: @unchecked Sendable {
     static let shared = ClaudeBackgroundTaskMonitor()
     private let lock = NSLock()
     private var trackers: [UUID: ClaudeBackgroundTaskTracker] = [:]
+    /// Lesen im Hintergrund nacheinander, nie parallel: Nach einem App-Start
+    /// lasen sonst bis zu 15 Chats zugleich ihre großen Transcripts.
+    private let readQueue = DispatchQueue(label: "com.whisperm8.background-tasks.read", qos: .utility)
+    /// Mehr liest das Turn-Ende auf dem Main Thread nie (WM8-105).
+    static let turnEndReadLimit: UInt64 = 2 * 1024 * 1024
 
     /// Tracker herausnehmen, außerhalb des Locks aktualisieren, zurücklegen.
     private func updatedTracker(sessionID: UUID, transcriptURL: URL) -> ClaudeBackgroundTaskTracker {
@@ -212,6 +247,56 @@ final class ClaudeBackgroundTaskMonitor: @unchecked Sendable {
         return openTaskCount(sessionID: id, transcriptURL: target.url, processID: target.pid)
     }
 
+    /// Offene Läufe des gerade beendeten Turns, fürs Board (WM8-105). Liest
+    /// auf dem Main Thread höchstens `turnEndReadLimit` neue Bytes; war der
+    /// Tracker nie angelesen, wurde die Datei ersetzt oder gekürzt, oder ist
+    /// mehr neu, heißt es `nil` (unbekannt, weckt wie bisher) und der Rest
+    /// wird im Hintergrund gelesen. Ohne Prozess ebenfalls `nil`.
+    @MainActor
+    func openTaskCountAtTurnEnd(liveSessionID id: UUID, turnStartedAt: Date?) -> Int? {
+        let target = liveTarget(sessionID: id)
+        guard let url = target.url, let pid = target.pid else { return nil }
+        return openTaskCountAtTurnEnd(
+            sessionID: id, transcriptURL: url, processStart: ProcessStartTime.of(pid: pid), turnStart: turnStartedAt)
+    }
+
+    /// Kern von `openTaskCountAtTurnEnd(liveSessionID:)`, ohne App-Zustand.
+    func openTaskCountAtTurnEnd(sessionID id: UUID, transcriptURL url: URL, processStart: Date?, turnStart: Date?,
+                                readLimit: UInt64 = turnEndReadLimit) -> Int? {
+        guard processStart != nil else { return nil }
+        lock.lock()
+        let existing = trackers[id]
+        lock.unlock()
+        guard var tracker = existing, tracker.update(from: url, readLimit: readLimit) else {
+            catchUp(sessionID: id, transcriptURL: url)
+            return nil
+        }
+        store(tracker, for: id)
+        return tracker.openAtTurnEnd(processStart: processStart, turnStart: turnStart)
+    }
+
+    /// Für Tests: wartet, bis alles Nachlesen auf der Queue durch ist.
+    func waitForReads() {
+        readQueue.sync {}
+    }
+
+    /// Legt einen weiter gelesenen Tracker zurück; ein parallel weiter
+    /// gelesener gewinnt.
+    private func store(_ tracker: ClaudeBackgroundTaskTracker, for id: UUID) {
+        lock.lock()
+        if let current = trackers[id], current.offset > tracker.offset {
+            // nichts: der andere ist weiter
+        } else {
+            trackers[id] = tracker
+        }
+        lock.unlock()
+    }
+
+    /// Liest im Hintergrund nach, nacheinander mit allen anderen Lesern.
+    func catchUp(sessionID id: UUID, transcriptURL url: URL) {
+        readQueue.async { [self] in _ = updatedTracker(sessionID: id, transcriptURL: url) }
+    }
+
     /// Erster Durchlauf im Hintergrund — vor dem Umzugs-Sheet bzw. dem
     /// CLI-Umzug, damit `decide()` synchron bleiben kann und trotzdem nur
     /// noch angehängte Bytes liest.
@@ -220,10 +305,13 @@ final class ClaudeBackgroundTaskMonitor: @unchecked Sendable {
         let targets = ids.compactMap { id -> (UUID, URL)? in
             liveTarget(sessionID: id).url.map { (id, $0) }
         }
-        guard !targets.isEmpty else { return }
-        await withTaskGroup(of: Void.self) { group in
-            for (id, url) in targets {
-                group.addTask { [self] in _ = updatedTracker(sessionID: id, transcriptURL: url) }
+        // Nacheinander auf der Lese-Queue, nie parallel.
+        for (id, url) in targets {
+            await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+                readQueue.async { [self] in
+                    _ = updatedTracker(sessionID: id, transcriptURL: url)
+                    done.resume()
+                }
             }
         }
     }

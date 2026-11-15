@@ -149,7 +149,46 @@ mehreren Boards stehen (`otherOwners`).
   Turn (`working → idle`). Daraufhin kommt ein Hinweis (bewusst ohne Ton), und je nach
   Einstellung ein Prompt `[Board] <Name> (<ref>): …` an Jarvis. Gebündelt
   über 5 s, höchstens ein Prompt je Minute, einmal je Chat und Zustand, bis
-  der Chat wieder arbeitet. Geparkte Chats wecken nicht.
+  der Chat wieder arbeitet; in einem Prompt steht je Chat nur sein jüngster
+  Zustand. Geparkte Chats wecken nicht.
+- **Kein „fertig“ bei laufendem Hintergrund-Befehl (seit WM8-105):** Endet
+  der Turn, während ein Hintergrund-Befehl des Chats läuft (Testlauf,
+  Warteschleife; Feld `backgroundTasks` im Strom, § `chats watch` in
+  `agent-chats-cli.md`), weckt die Mod nicht. Endet der Befehl, macht Claude
+  von selbst weiter, und erst das Turn-Ende ohne offenen Befehl meldet
+  „fertig – prüfen“. „Wartet auf dich“ weckt immer. Es zählen nur Befehle,
+  die im beendeten Turn gestartet wurden; ein Dev-Server aus einem früheren
+  Turn hält kein „fertig“ auf. Sicherheitsnetz für hängende Befehle: Ruht der
+  Chat danach 30 Minuten unverändert, kommt einmal „ruht, Hintergrund-Lauf
+  läuft noch – prüfen“. Die Wache steht im Atom `backgroundWatch` (mit
+  Zeitpunkt) und übersteht so einen Reload der Mod; geprüft wird per Takt
+  und nach jedem Neulesen des Boards. Fehlt das Feld (ältere App, Codex,
+  unbekannt), weckt das Turn-Ende wie vorher. Vorher kamen an einem Tag rund
+  25 solche Fehlalarme.
+- **Vortritt für die Warteschlange (seit WM8-64):** Arbeitet Jarvis gerade,
+  hält die Mod ihren Weck-Prompt zurück und schickt ihn erst, wenn Jarvis
+  seit 5 s ruht; den eigenen Status liest sie aus demselben `chats watch`.
+  So stellt die Warteschlange der App vorgemerkte Meldungen am Turn-Ende
+  zuerst zu (nach 0,6 s), in der Reihenfolge ihres Eingangs. Vorher hängte
+  Claude jeden Weck-Prompt, der während eines Turns kam, direkt an dessen
+  Ende; Jarvis ruhte dann nie, und Meldungen lagen am 15.11. bis zu
+  22 Minuten. „Wartet auf dich“ hält die Mod höchstens 1 Minute zurück,
+  alles andere höchstens 10 Minuten; solange Jarvis arbeitet, sieht sie alle
+  30 s nach (nur ein Takt, kein Prozess). Wartet Jarvis selbst auf Giuliano
+  (eigener Status `awaitingInput`), hält sie ohne Obergrenze: Ein Prompt in
+  die offene Rückfrage hülfe niemandem, und ob `$.prompt.submit` dort wartet
+  oder die Frage stört, ist nicht geprüft. Ein „wartet auf dich“ eines anderen
+  Chats zeigt sie dann sofort als Hinweis und spricht es bei eingeschalteten
+  Ansagen („Jon wartet auf dich.“), je Zeile einmal; der Prompt folgt, wenn
+  Jarvis' Frage beantwortet ist. Den eigenen Status kennt die Mod aus
+  `chats watch` und, nach einem Reload, aus `ownerStatus` in
+  `chats board --json`. Ist er trotzdem unbekannt, gilt er höchstens 1 Minute
+  wie „arbeitet“.
+  Zurückgehaltene Zeilen stehen im Atom `wakePending` und überstehen so einen
+  Reload der Mod; nach dem Reload liefert die Mod sie beim ersten Neulesen
+  des Boards zuerst aus. Als gemeldet (`woken`) gilt ein Zustand erst, wenn
+  seine Zeile wirklich raus ist. Arbeitet ein Chat wieder, fällt seine noch
+  zurückgehaltene Zeile weg.
 - **Anzeige (seit WM8-99):** Aufbau oben unter „Was es ist“. Was im Kasten
   steht, rechnet `layoutBox` rein aus Einträgen, Breite und Höhe aus
   (`waitingLines` für die Spalten, `summaryLine` für die Sammelzeile); der

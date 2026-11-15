@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { areaOf, clean, countWord, groups, HEAD_JOIN, HEAD_LEFT, HEAD_NAME, isBefore, layoutBox, nextGenerationStart, planRows, restCounts, sameBoard, shortName, summaryLine, titleParts, waitingHead, waitingLines, waitingText, withStatus } from './register'
+import { areaOf, BACKGROUND_NET_MS, clean, dueBackgroundWaits, holdWake, ownerStatusOf, WAKE_MAX_HOLD_MS, WAKE_UNKNOWN_HOLD_MS, WAKE_URGENT_MAX_HOLD_MS, WAKE_YIELD_MS, countWord, groups, HEAD_JOIN, HEAD_LEFT, HEAD_NAME, isBefore, layoutBox, nextGenerationStart, planRows, restCounts, sameBoard, shortName, summaryLine, titleParts, waitingHead, waitingLines, waitingText, wakeReason, withStatus } from './register'
 
 // Tests der Board-Mod (`claude plugin test` auf den abgelegten Plugin-Ordner
 // oder diesen Ressourcen-Ordner samt Manifest). Werden nicht ausgeliefert.
@@ -32,6 +32,8 @@ const BOARD = {
   ownerRef: '6c7dae08',
   isActive: true,
   cursor: '1:10',
+  // Jarvis selbst ruht (WM8-64: eine frisch geladene Mod kennt so den eigenen Status).
+  ownerStatus: 'idle',
   entries: [
     entry({ light: 'needsYou', needs: 'Entscheidung: Opener-Schluss A oder B' }),
     entry({ ref: '7c1e0000', sessionID: 'B7C1E000-0000-0000-0000-000000000002', title: 'Akquise Import', light: 'done', next: 'Ergebnis prüfen', updatedAt: minutesAgo(12) }),
@@ -44,6 +46,27 @@ const band = (bodyColumns: number, maxRows = 12) => ({
   component: 'AbovePrompt' as const,
   props: { hasSurvey: false, isCollapsed: false, isWorking: false, maxRows, bodyColumns, scroll: { offset: 0, bodyRows: maxRows }, view: {} },
 })
+
+/**
+ * Zustand der Mod im Test: `seed` gibt vor, was eine frühere Instanz der Mod
+ * hinterlassen hat (Reload), bis die Mod den Schlüssel selbst schreibt;
+ * `last` ist der zuletzt geschriebene Wert eines Schlüssels.
+ */
+const stateOf = (on: On, seed: Record<string, unknown> = {}) => {
+  const written: Record<string, unknown> = {}
+  const fresh = new Set(Object.keys(seed))
+  on('state.set', ($, e, next) => {
+    const { key, value } = e as { key: string; value: unknown }
+    fresh.delete(key)
+    written[key] = value
+    return next(e)
+  })
+  on('state.get', ($, e, next) => {
+    const { key } = e as { key: string }
+    return fresh.has(key) ? ({ value: { value: seed[key], version: 1 } } as never) : next(e)
+  })
+  return { last: (key: string) => written[key] }
+}
 
 type Calls = { argv: string[][]; prompts: string[]; toasts: string[]; sounds: number; spawns: number; spawnArgv: string[][] }
 
@@ -596,6 +619,318 @@ describe('Wecken', () => {
     expect(calls.sounds).toBe(0) // Wecken bewusst ohne Ton
     expect(calls.prompts.length).toBe(1)
     expect(calls.prompts[0]).toContain('[Board] „ListM8 Lead-Run“ (e45d0000): wartet auf dich')
+  })
+})
+
+// WM8-105: Ein Turn-Ende mit offenem Hintergrund-Befehl ist kein „fertig“.
+// Claude macht nach dem Ende des Befehls von selbst weiter; erst das Turn-Ende
+// ohne offenen Befehl weckt. „Wartet auf dich“ weckt immer.
+describe('Wecken bei Hintergrund-Läufen (WM8-105)', () => {
+  const LEAD = 'CE45D000-0000-0000-0000-000000000003'
+  const change = (from: string, to: string, extra: Record<string, unknown> = {}) =>
+    ({ kind: 'conversation', sessionID: LEAD, from, to, at: minutesAgo(0), schema: 'wm8.changes/1', ...extra })
+
+  test('Turn-Ende mit laufendem Hintergrund-Befehl weckt nicht, das Turn-Ende danach ohne Befehl schon', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const calls = world(on, { watch: [
+      { event: 'started', cursor: '1:10' },
+      change('working', 'idle', { backgroundTasks: 1 }),
+    ] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(6_000)
+    await clock.settle()
+    expect(calls.prompts).toEqual([])
+    expect(calls.toasts).toEqual([])
+  })
+
+  test('der Lauf endet, Claude macht weiter und ruht dann ohne Befehl: genau ein Hinweis', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const calls = world(on, { watch: [
+      { event: 'started', cursor: '1:10' },
+      change('working', 'idle', { backgroundTasks: 2 }),
+      change('idle', 'working'),
+      change('working', 'idle', { backgroundTasks: 1 }),
+      change('idle', 'working'),
+      change('working', 'idle', { backgroundTasks: 0 }),
+    ] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(6_000)
+    await clock.settle()
+    expect(calls.prompts.length).toBe(1)
+    expect(calls.prompts[0]).toContain('[Board] „ListM8 Lead-Run“ (e45d0000): fertig – prüfen')
+  })
+
+  test('wartet auf dich weckt auch bei laufendem Hintergrund-Befehl', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const calls = world(on, { watch: [
+      { event: 'started', cursor: '1:10' },
+      change('working', 'idle', { backgroundTasks: 1 }),
+      change('idle', 'awaitingInput'),
+    ] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(6_000)
+    await clock.settle()
+    expect(calls.prompts.length).toBe(1)
+    expect(calls.prompts[0]).toContain('wartet auf dich')
+  })
+
+  test('ohne Angabe (ältere App) weckt das Turn-Ende wie bisher', () => {
+    expect(wakeReason(change('working', 'idle'))).toBe('fertig – prüfen')
+    expect(wakeReason(change('working', 'idle', { backgroundTasks: 0 }))).toBe('fertig – prüfen')
+    expect(wakeReason(change('working', 'idle', { backgroundTasks: 1 }))).toBeNull()
+    expect(wakeReason(change('working', 'awaitingInput', { backgroundTasks: 1 }))).toBe('wartet auf dich')
+  })
+
+  test('hängt der Befehl, weckt die Mod nach 30 Minuten Ruhe einmal', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    // Das Neulesen nach dem Ende des Stroms liefert den echten Stand: ruht.
+    const resting = { ...BOARD, entries: BOARD.entries.map(e => (e.sessionID === LEAD ? { ...e, status: 'idle' } : e)) }
+    const calls = world(on, { board: resting, watch: [
+      { event: 'started', cursor: '1:10' },
+      change('working', 'idle', { backgroundTasks: 1 }),
+    ] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(BACKGROUND_NET_MS - 60_000)
+    await clock.settle()
+    expect(calls.prompts).toEqual([])
+    await clock.advance(60_000 + 6_000)
+    await clock.settle()
+    await clock.advance(6_000)
+    await clock.settle()
+    expect(calls.prompts.length).toBe(1)
+    expect(calls.prompts[0]).toContain('ruht, Hintergrund-Lauf läuft noch')
+    await clock.advance(BACKGROUND_NET_MS)
+    await clock.settle()
+    expect(calls.prompts.length).toBe(1)
+  })
+
+  test('die Wache übersteht einen Reload: eine frische Mod findet sie im Atom und weckt', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const since = minutesAgo(31)
+    const resting = { ...BOARD, entries: BOARD.entries.map(e => (e.sessionID === LEAD ? { ...e, status: 'idle', statusSince: since } : e)) }
+    // So hinterlässt eine frühere Instanz der Mod die Wache (31 Minuten alt).
+    const state = stateOf(on, { backgroundWatch: [{ id: LEAD, since, at: NOW - 31 * 60_000 }] })
+    const calls = world(on, { board: resting, watch: [{ event: 'started', cursor: '1:10' }] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(70_000)
+    await clock.settle()
+    expect(calls.prompts.length).toBe(1)
+    expect(calls.prompts[0]).toContain('ruht, Hintergrund-Lauf läuft noch')
+    expect(state.last('backgroundWatch')).toEqual([])
+  })
+
+  test('Wache beim Reload erst 10 Minuten alt: die frische Mod setzt einen neuen Takt für den Rest', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const since = minutesAgo(10)
+    const resting = { ...BOARD, entries: BOARD.entries.map(e => (e.sessionID === LEAD ? { ...e, status: 'idle', statusSince: since } : e)) }
+    stateOf(on, { backgroundWatch: [{ id: LEAD, since, at: NOW - 10 * 60_000 }] })
+    const calls = world(on, { board: resting, watch: [{ event: 'started', cursor: '1:10' }] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(19 * 60_000)
+    await clock.settle()
+    expect(calls.prompts).toEqual([])
+    await clock.advance(2 * 60_000)
+    await clock.settle()
+    await clock.advance(10_000)
+    await clock.settle()
+    expect(calls.prompts.length).toBe(1)
+    expect(calls.prompts[0]).toContain('ruht, Hintergrund-Lauf läuft noch')
+  })
+
+  test('dueBackgroundWaits: fällig nach 30 Minuten, nur wenn der Chat seitdem unverändert ruht', () => {
+    const at = 0
+    const since = minutesAgo(40)
+    const idle = entry({ sessionID: LEAD, status: 'idle', statusSince: since })
+    const wait = { id: LEAD, since, at }
+    expect(dueBackgroundWaits([wait], [idle], BACKGROUND_NET_MS - 1).wake).toEqual([])
+    expect(dueBackgroundWaits([wait], [idle], BACKGROUND_NET_MS - 1).next).toBe(1)
+    expect(dueBackgroundWaits([wait], [idle], BACKGROUND_NET_MS).wake).toEqual([LEAD])
+    const later = entry({ sessionID: LEAD, status: 'idle', statusSince: minutesAgo(5) })
+    expect(dueBackgroundWaits([wait], [later], BACKGROUND_NET_MS).wake).toEqual([])
+    const working = entry({ sessionID: LEAD, status: 'working', statusSince: since })
+    const done = dueBackgroundWaits([wait], [working], BACKGROUND_NET_MS)
+    expect(done.wake).toEqual([])
+    expect(done.rest).toEqual([])
+  })
+
+  test('arbeitet der Chat vor Ablauf wieder, bleibt das Sicherheitsnetz still', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const calls = world(on, { watch: [
+      { event: 'started', cursor: '1:10' },
+      change('working', 'idle', { backgroundTasks: 1 }),
+      change('idle', 'working'),
+    ] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(BACKGROUND_NET_MS + 10_000)
+    await clock.settle()
+    expect(calls.prompts).toEqual([])
+  })
+
+  test('in einem gebündelten Prompt steht je Chat nur der jüngste Zustand', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const calls = world(on, { watch: [
+      { event: 'started', cursor: '1:10' },
+      change('working', 'awaitingInput'),
+      change('awaitingInput', 'working'),
+      change('working', 'idle', { backgroundTasks: 0 }),
+    ] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(6_000)
+    await clock.settle()
+    expect(calls.prompts.length).toBe(1)
+    const lines = calls.prompts[0].split('\n').filter(line => line.startsWith('[Board]'))
+    expect(lines).toEqual(['[Board] „ListM8 Lead-Run“ (e45d0000): fertig – prüfen'])
+  })
+})
+
+// WM8-64: Das Turn-Ende des Supervisors gehört zuerst der Warteschlange der
+// App. Ein Weck-Prompt während eines Turns hängte Claude direkt an dessen
+// Ende, Jarvis ruhte nie, vorgemerkte Meldungen lagen bis zu 22 Minuten.
+describe('Wecken lässt der Warteschlange den Vortritt (WM8-64)', () => {
+  const own = (from: string, to: string) =>
+    ({ kind: 'conversation', sessionID: SID, from, to, at: minutesAgo(0), schema: 'wm8.changes/1' })
+  const LEAD = 'CE45D000-0000-0000-0000-000000000003'
+  const waits = { kind: 'conversation', sessionID: LEAD, from: 'working', to: 'awaitingInput', at: minutesAgo(0), schema: 'wm8.changes/1' }
+  const done = { kind: 'conversation', sessionID: LEAD, from: 'working', to: 'idle', backgroundTasks: 0, at: minutesAgo(0), schema: 'wm8.changes/1' }
+  const tick = async (clock: { advance: (ms: number) => Promise<void>; settle: () => Promise<void> }, ms: number, step = 30_000) => {
+    for (let t = 0; t < ms; t += step) {
+      await clock.advance(Math.min(step, ms - t))
+      await clock.settle()
+    }
+  }
+  const plain = [{ at: 0, urgent: false }]
+  const urgent = [{ at: 0, urgent: true }]
+
+  test('holdWake: unbekannt hält nicht, Arbeit hält, Ruhe erst nach der Frist, nie länger als die Obergrenze', () => {
+    expect(holdWake(null, 0, plain, 1_000)).toBeNull()
+    expect(holdWake('working', 0, plain, 1_000)).toBeGreaterThan(0)
+    expect(holdWake('idle', 1_000, plain, 2_000)).toBe(WAKE_YIELD_MS - 1_000)
+    expect(holdWake('idle', 1_000, plain, 1_000 + WAKE_YIELD_MS)).toBeNull()
+    expect(holdWake('working', 0, plain, WAKE_MAX_HOLD_MS)).toBeNull()
+  })
+
+  test('holdWake: „wartet auf dich“ höchstens eine Minute, eine eigene Rückfrage von Jarvis hält ohne Grenze', () => {
+    expect(holdWake('working', 0, urgent, WAKE_URGENT_MAX_HOLD_MS - 10_000)).toBe(10_000)
+    expect(holdWake('working', 0, urgent, WAKE_URGENT_MAX_HOLD_MS)).toBeNull()
+    expect(holdWake('working', 0, [...plain, { at: 5 * 60_000, urgent: true }], 5 * 60_000 + WAKE_URGENT_MAX_HOLD_MS)).toBeNull()
+    expect(holdWake('awaitingInput', 0, urgent, 3 * WAKE_MAX_HOLD_MS)).toBeGreaterThan(0)
+  })
+
+  test('solange Jarvis arbeitet, wartet „fertig“ bis zur Obergrenze', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const calls = world(on, { watch: [{ event: 'started', cursor: '1:10' }, own('idle', 'working'), done] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await tick(clock, 5 * 60_000)
+    expect(calls.prompts).toEqual([])
+    await tick(clock, 6 * 60_000)
+    expect(calls.prompts.length).toBe(1)
+    expect(calls.prompts[0]).toContain('fertig – prüfen')
+  })
+
+  test('„wartet auf dich“ kommt nach höchstens einer Minute, auch wenn Jarvis durcharbeitet', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const calls = world(on, { watch: [{ event: 'started', cursor: '1:10' }, own('idle', 'working'), waits] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await tick(clock, 30_000, 10_000)
+    expect(calls.prompts).toEqual([])
+    await tick(clock, 45_000, 5_000)
+    expect(calls.prompts.length).toBe(1)
+    expect(calls.prompts[0]).toContain('wartet auf dich')
+  })
+
+  test('wartet Jarvis selbst auf Giuliano: sofort ein Hinweis, nie ein Prompt in die offene Frage', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const calls = world(on, { watch: [{ event: 'started', cursor: '1:10' }, own('working', 'awaitingInput'), waits] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(500)
+    await clock.settle()
+    expect(calls.toasts).toEqual(['[Board] „ListM8 Lead-Run“ (e45d0000): wartet auf dich'])
+    expect(calls.argv.some(a => a.includes('speak'))).toBe(false) // Ansagen aus
+    await tick(clock, 3 * WAKE_MAX_HOLD_MS)
+    expect(calls.prompts).toEqual([])
+    expect(calls.toasts.length).toBe(1) // je Zeile einmal
+  })
+
+  test('mit eingeschalteten Ansagen wird „wartet auf dich“ dabei auch gesprochen', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    stateOf(on, { callout: true })
+    const calls = world(on, { watch: [{ event: 'started', cursor: '1:10' }, own('working', 'awaitingInput'), waits] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(500)
+    await clock.settle()
+    const spoken = calls.argv.find(a => a.includes('speak'))
+    expect(spoken?.[spoken.length - 1]).toBe('ListM8 Lead-Run wartet auf dich.')
+    expect(calls.prompts).toEqual([])
+  })
+
+  test('nach einem Reload gilt der unbekannte eigene Status höchstens eine Minute als „arbeitet“', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const { ownerStatus: _unknown, ...noOwner } = BOARD
+    const calls = world(on, { board: noOwner, watch: [{ event: 'started', cursor: '1:10' }, done] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await tick(clock, WAKE_UNKNOWN_HOLD_MS - 15_000, 5_000)
+    expect(calls.prompts).toEqual([])
+    await tick(clock, 30_000, 5_000)
+    expect(calls.prompts.length).toBe(1)
+  })
+
+  test('ownerStatusOf liest den Status des Besitzers aus chats board --json', () => {
+    expect(ownerStatusOf(JSON.stringify(BOARD))).toBe('idle')
+    expect(ownerStatusOf(JSON.stringify({ ...BOARD, ownerStatus: 'unknown' }))).toBeNull()
+    expect(ownerStatusOf('{}')).toBeNull()
+    expect(ownerStatusOf('kaputt')).toBeNull()
+  })
+
+  test('ruht Jarvis, kommt der Weck-Prompt erst nach der Frist für die Warteschlange', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const calls = world(on, { watch: [{ event: 'started', cursor: '1:10' }, own('idle', 'working'), waits, own('working', 'idle')] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(WAKE_YIELD_MS - 1_000)
+    await clock.settle()
+    expect(calls.prompts).toEqual([])
+    await clock.advance(2_000)
+    await clock.settle()
+    expect(calls.prompts.length).toBe(1)
+  })
+
+  test('eine zurückgehaltene Zeile steht im Atom und gilt erst beim Ausliefern als gemeldet', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const state = stateOf(on)
+    world(on, { watch: [{ event: 'started', cursor: '1:10' }, own('idle', 'working'), done] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await tick(clock, 60_000, 10_000)
+    const held = state.last('wakePending') as { key: string }[]
+    expect(held.map(item => item.key)).toEqual([`${LEAD}:idle`])
+    expect((state.last('woken') as string[] | undefined) ?? []).not.toContain(`${LEAD}:idle`)
+  })
+
+  test('nach einem Reload liefert die frische Mod die zurückgehaltene Zeile zuerst aus', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const line = '[Board] „ListM8 Lead-Run“ (e45d0000): fertig – prüfen'
+    const state = stateOf(on, { wakePending: [{ id: LEAD, key: `${LEAD}:idle`, line, at: NOW - 2 * 60_000, urgent: false }] })
+    const calls = world(on, { watch: [{ event: 'started', cursor: '1:10' }] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await tick(clock, 70_000, 5_000)
+    expect(calls.prompts.length).toBe(1)
+    expect(calls.prompts[0]).toContain(line)
+    expect(state.last('wakePending')).toEqual([])
+    expect(state.last('woken')).toContain(`${LEAD}:idle`)
   })
 })
 

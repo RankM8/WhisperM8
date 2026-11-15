@@ -448,6 +448,15 @@ ab (`ControllerScreenReading`, derselbe Leser wie für den Controller und
 WM8-75), aber nur als zweite Sicherung: Ist das Feld nicht abzulesen (Ansicht
 hochgescrollt), gilt allein die Schätzung.
 
+**Sichtbar leer schlägt die Schätzung (WM8-64, 15.11.2026):** Ist das Feld
+eines Claude-Chats am Bildschirm abzulesen und leer, gilt kein Entwurf, auch
+wenn die Schätzung einen vermutet. Getippte und wieder gelöschte Zeichen
+ließen sie sonst dauerhaft auf „Entwurf“ stehen: `send` merkte bei einem
+ruhenden Chat mit leerem Feld nur vor, und die Warteschlange stellte nie zu,
+weil das nächste Turn-Ende erst nach einem laufenden Hintergrund-Befehl
+gekommen wäre. Sichtbarer Text bleibt ein Entwurf; nicht ablesbar heißt wie
+bisher: die Schätzung entscheidet.
+
 **Grenze:** Drückt der User selbst Enter auf einen zurückgelegten Prompt,
 läuft dieser erneut — das ist eine bewusste Eingabe im Terminal, die App
 hält sie nicht auf. Wer einen Auftrag zurückzieht, nimmt deshalb
@@ -678,6 +687,23 @@ Aufrufer zu brechen.
   Ereignis mit Cursor. Für Sidecars und Skripte; ein LLM nutzt besser `since`.
   Ausdrücklich **kein zweiter Ereignisweg**: Bricht der Strom ab, holt der
   Cursor die Ereignisse nach.
+- **`backgroundTasks`** (seit WM8-105, nur bei `working → idle` eines
+  Claude-Chats): Zahl der Hintergrund-Befehle (`run_in_background`,
+  Hintergrund-Subagents), die **im gerade beendeten Turn** gestartet wurden
+  und noch laufen. Ein Dev-Server oder `tail -f` aus einem früheren Turn
+  zählt nicht, er endet nie (Preis: Schreibt jemand einem Chat mitten in
+  dessen Testlauf, meldet dieser Turn „fertig“). Quelle ist das Transcript
+  (`ClaudeBackgroundTaskTracker`), nicht der Bildschirm. Fehlt das Feld, ist
+  die Zahl unbekannt: älterer Eintrag, Codex, kein Prozess (`claude --bg`),
+  Turn-Start nicht gesehen, Transcript nie angelesen oder ersetzt, oder mehr
+  als 2 MB seit dem letzten Lesen. Bei `> 0` ist der Chat nicht fertig: Endet
+  der Befehl, beginnt Claude von selbst einen neuen Turn.
+  Gelesen wird beim Turn-Start und während des Turns alle 30 s im Hintergrund,
+  nacheinander für alle Chats; das Turn-Ende liest auf dem Main Thread nur
+  den Rest, höchstens 2 MB (`turnEndReadLimit`), sonst gilt „unbekannt“ und
+  der Rest folgt im Hintergrund. Der Turn-Start der App zählt mit 5 s
+  Spiel (`turnStartTolerance`), weil Registry und Hook etwas nach Claude
+  kommen.
 
 ### Zustandsachsen
 
@@ -803,6 +829,16 @@ dafür sicherer.
   nie den Schutz einer offenen Rückfrage; die beantwortet nur `--answer`.
 - **Terminal-Tabs** bekommen Text ohne Einfüge-Klammern, wenn das Programm sie
   nicht angefordert hat (WM8-47, siehe oben).
+- **Einzeln stornieren (WM8-64).** `chats dequeue <ref> 3f9a1c2e` nimmt
+  einzelne offene Aufträge heraus, per ID, auch gekürzt ab vier Zeichen
+  (`chats queue` zeigt die ersten acht). Das ist der sichere Weg. Eine Nummer
+  aus `chats queue` (`chats dequeue <ref> 2`) geht auch, verschiebt sich aber,
+  sobald vorn ein Auftrag zugestellt wird. Aufgelöst wird gegen die gerade
+  gelesene Liste, storniert dann nur genau diese IDs; ein inzwischen neu
+  vorgemerkter Auftrag geht nie mit. Passt eine Angabe nicht (Nummer zu groß,
+  ID unbekannt oder mehrdeutig), wird nichts storniert (Exit 3). Die Ausgabe
+  nennt je storniertem Auftrag Kurz-ID und Textanfang (JSON `items`).
+  `--all` und `--id <UUID>` bleiben.
 - **Postfach mit Alter (WM8-71).** `chats queue` nennt je Chat die älteste
   wartende Meldung, `chats board` unter dem Board das Postfach des Besitzers
   („2 Meldungen warten, älteste seit 12 min“, JSON `inbox.open`,
@@ -952,6 +988,10 @@ whisperm8 chats show <ref> --recap [--json]   # Claudes Rückblicke als Lesehilf
   Eintrag zusätzlich `ref`, `title`, `project`, Live-`status` und
   `statusSince` (aus dem Journal) sowie `otherOwners`, dazu der aktuelle
   `cursor` für `watch`. Kein Board → `isActive: false`, `entries: []`, Exit 0.
+  `ownerStatus` (seit WM8-64, nur ohne `--all` und bei Einträgen auf dem
+  Board): Laufzeitstatus des Besitzers, erst aus der laufenden App, sonst aus
+  dem letzten Journal-Wechsel; fehlt, wenn unbekannt. Die Board-Mod kennt so
+  nach einem Reload den eigenen Status.
   `--all --json` liefert `{schema, cursor, boards: […]}`.
 - **Handeln** nur über den Socket an die laufende App (einziger Schreiber)
   und nur auf dem **eigenen** Board; die App verlangt ein gültiges

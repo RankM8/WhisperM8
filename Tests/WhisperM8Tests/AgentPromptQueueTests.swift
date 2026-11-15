@@ -319,6 +319,48 @@ final class ChatsQueueSupportTests: XCTestCase {
         XCTAssertLessThan(line.count, 140)
     }
 
+    // MARK: dequeue einzeln (WM8-64)
+
+    private func open(_ count: Int) -> [QueuedPrompt] {
+        (0..<count).map { _ in make(.pending) }
+    }
+
+    func testPendingLineShowsShortID() {
+        let prompt = make(.pending)
+        XCTAssertTrue(ChatsQueueSupport.line(for: prompt, position: 1, now: now)
+            .contains("id \(ChatsQueueSupport.shortID(prompt.id))"))
+    }
+
+    func testSelectorsResolveNumbersAndIDPrefixes() {
+        let prompts = open(3)
+        XCTAssertEqual(try ChatsQueueSupport.resolveSelectors(["2"], open: prompts).get(), [prompts[1].id])
+        let prefix = String(prompts[2].id.uuidString.prefix(8)).lowercased()
+        XCTAssertEqual(try ChatsQueueSupport.resolveSelectors([prefix, "1", "1"], open: prompts).get(),
+                       [prompts[2].id, prompts[0].id], "doppelt genannt zählt einmal")
+        XCTAssertEqual(try ChatsQueueSupport.resolveSelectors([prompts[0].id.uuidString], open: prompts).get(),
+                       [prompts[0].id])
+    }
+
+    func testCancelledLinesNameShortIDAndHead() {
+        let id = UUID()
+        let lines = ChatsQueueSupport.cancelledLines([(id.uuidString, "Baue das Feature fertig")])
+        XCTAssertEqual(lines, ["   × \(ChatsQueueSupport.shortID(id))  Baue das Feature fertig"])
+        XCTAssertEqual(ChatsQueueSupport.head(of: "eins\nzwei"), "eins zwei")
+    }
+
+    func testSelectorsRefuseWhatIsNotOpen() {
+        let prompts = open(2)
+        for selector in ["0", "3", "abc", "ffffffff"] {
+            guard case .failure = ChatsQueueSupport.resolveSelectors([selector], open: prompts) else {
+                return XCTFail("\(selector) darf nichts stornieren")
+            }
+        }
+        // Ein Fehler in einer Angabe storniert gar nichts.
+        guard case .failure = ChatsQueueSupport.resolveSelectors(["1", "9"], open: prompts) else {
+            return XCTFail("teilweise gültig darf nicht teilweise stornieren")
+        }
+    }
+
     func testSummaryIsNilWhenNothingWaits() {
         XCTAssertNil(ChatsQueueSupport.summary(open: []))
     }

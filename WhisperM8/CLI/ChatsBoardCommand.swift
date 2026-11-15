@@ -186,18 +186,29 @@ enum ChatsBoardReadModel {
 
     /// Ein Board als JSON-Objekt (ohne `schema`/`cursor` — die stehen eine
     /// Ebene höher). Fehlendes Board = `isActive: false`, keine Einträge.
-    static func boardJSON(owner: UUID, board: JarvisBoard?, rows: [ChatsBoardRow]) -> [String: Any] {
-        [
+    static func boardJSON(owner: UUID, board: JarvisBoard?, rows: [ChatsBoardRow],
+                          ownerStatus: String? = nil) -> [String: Any] {
+        var json: [String: Any] = [
             "owner": owner.uuidString,
             "ownerRef": ChatsOutput.shortID(owner),
             "isActive": board?.isActive ?? false,
             "entries": rows.map(entryJSON),
         ]
+        if let ownerStatus { json["ownerStatus"] = ownerStatus }
+        return json
+    }
+
+    /// Laufzeitstatus des Board-Besitzers (WM8-64): Eine frisch geladene Mod
+    /// kennt so den eigenen Status, bevor das erste eigene Ereignis kommt. Erst
+    /// der Live-Status der App, sonst der letzte Wechsel im Journal.
+    static func ownerStatus(owner: UUID, live: ChatsLiveSnapshot?, lastTransitions: [UUID: ChatsStatusJournalEntry]) -> String? {
+        live?.entries[owner]?.runtimeStatus?.rawValue ?? lastTransitions[owner]?.to
     }
 
     /// `chats board --json`: genau ein Board.
-    static func readJSON(owner: UUID, board: JarvisBoard?, rows: [ChatsBoardRow], cursor: String?) -> [String: Any] {
-        var payload = boardJSON(owner: owner, board: board, rows: rows)
+    static func readJSON(owner: UUID, board: JarvisBoard?, rows: [ChatsBoardRow], cursor: String?,
+                         ownerStatus: String? = nil) -> [String: Any] {
+        var payload = boardJSON(owner: owner, board: board, rows: rows, ownerStatus: ownerStatus)
         payload["schema"] = schema
         payload["cursor"] = cursor ?? NSNull()
         return payload
@@ -345,8 +356,9 @@ enum ChatsBoardCommand {
             context.view.entries.filter { boardSessionIDs.contains($0.session.id) }.map { ($0.session.id, $0) },
             uniquingKeysWith: { first, _ in first })
         var runtime: [UUID: ChatsRuntimeInfo] = [:]
+        var live: ChatsLiveSnapshot?
         if !sessions.isEmpty {
-            let live = ChatsLiveMerge.fetch()
+            live = ChatsLiveMerge.fetch()
             let estimates = await ChatsStatusProbe.probeAll(entries: Array(sessions.values), now: context.now)
             for (id, estimate) in estimates {
                 runtime[id] = ChatsLiveMerge.merge(estimate: estimate, live: live?[id])
@@ -384,7 +396,9 @@ enum ChatsBoardCommand {
                 CLIIO.out(ChatsOutput.encodeJSON(ChatsBoardReadModel.allJSON(boards: boards, cursor: cursor)))
             } else {
                 let (board, boardRows) = rows(for: owners[0])
-                var payload = ChatsBoardReadModel.readJSON(owner: owners[0], board: board, rows: boardRows, cursor: cursor)
+                let ownerStatus = ChatsBoardReadModel.ownerStatus(owner: owners[0], live: live, lastTransitions: transitions)
+                var payload = ChatsBoardReadModel.readJSON(owner: owners[0], board: board, rows: boardRows, cursor: cursor,
+                                                           ownerStatus: ownerStatus)
                 let inbox = AgentPromptQueueLogic.inbox(for: owners[0], in: queue)
                 payload["inbox"] = ["open": inbox.open, "oldestAt": inbox.oldest.map(ChatsOutput.iso) ?? NSNull()]
                 CLIIO.out(ChatsOutput.encodeJSON(payload))

@@ -45,6 +45,11 @@ struct ChatsStatusJournalEntry: Codable, Equatable {
     /// Nummernfolge in dieselbe Generation; stehen markierte Zeilen in der
     /// Datei, zählen nur sie (`ChatsStatusJournal.usable`).
     var writer: String? = nil
+    /// Offene Hintergrund-Befehle des Chats beim Turn-Ende (`working → idle`,
+    /// WM8-105). `nil` = nicht ermittelt (andere Übergänge, Codex, Tracker
+    /// noch nicht gelesen). Die Board-Mod weckt bei `> 0` nicht mit „fertig“:
+    /// Endet der Befehl, beginnt Claude von selbst einen neuen Turn.
+    var backgroundTasks: Int? = nil
 
     static let boardKind = "board"
 
@@ -95,12 +100,15 @@ final class ChatsStatusJournal: @unchecked Sendable {
 
     /// Schreibt einen Übergang. No-op, wenn sich der Status nicht geändert hat —
     /// ein Journal voller identischer Zeilen verdeckt die echten Wechsel.
-    func append(sessionID: UUID, from: String?, to: String?, signal: String, source: String, at: Date = Date()) {
+    func append(sessionID: UUID, from: String?, to: String?, signal: String, source: String,
+                backgroundTasks: Int? = nil, at: Date = Date()) {
         guard from != to else { return }
         lock.lock()
         defer { lock.unlock() }
-        writeLocked(ChatsStatusJournalEntry(
-            at: at, sessionID: sessionID, from: from, to: to, signal: signal, source: source))
+        var entry = ChatsStatusJournalEntry(
+            at: at, sessionID: sessionID, from: from, to: to, signal: signal, source: source)
+        entry.backgroundTasks = backgroundTasks
+        writeLocked(entry)
     }
 
     /// Schreibt eine Board-Änderung. Läuft bewusst NICHT durch den

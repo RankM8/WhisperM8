@@ -196,4 +196,20 @@ final class ChatsChangesJSONTests: XCTestCase {
         XCTAssertEqual(json["evidence"] as? String, "inferred")
         XCTAssertNil(json["from"], "fehlende Werte werden weggelassen, nicht als null gefüllt")
     }
+
+    /// WM8-105: Die Board-Mod liest `backgroundTasks` am Turn-Ende; ohne
+    /// Wert fehlt das Feld (ältere Zeilen, andere Übergänge).
+    func testTurnEndCarriesBackgroundTasks() throws {
+        var entry = ChatsStatusJournalEntry(
+            at: Date(), seq: 3, journalId: "g", sessionID: UUID(),
+            from: "working", to: "idle", signal: "registryStatus", source: "registry")
+        XCTAssertNil(ChatsChangesCommand.changeJSON(entry)["backgroundTasks"])
+        entry.backgroundTasks = 2
+        XCTAssertEqual(ChatsChangesCommand.changeJSON(entry)["backgroundTasks"] as? Int, 2)
+
+        let data = try JSONEncoder().encode(entry)
+        XCTAssertEqual(try JSONDecoder().decode(ChatsStatusJournalEntry.self, from: data).backgroundTasks, 2)
+        let old = Data(#"{"at":0,"seq":1,"journalId":"g","signal":"x","source":"hook","to":"idle"}"#.utf8)
+        XCTAssertNil(try JSONDecoder().decode(ChatsStatusJournalEntry.self, from: old).backgroundTasks)
+    }
 }

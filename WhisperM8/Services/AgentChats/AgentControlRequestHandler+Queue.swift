@@ -28,9 +28,16 @@ extension AgentControlRequestHandler {
             await audit(request.actor, method: "queue-cancel", target: await sessionLabel(targetID),
                         outcome: "ok", prompt: nil)
             return .success(requestID: request.requestID, result: .object([
-                "ok": true,
-                "cancelled": cancelled.count,
-                "remaining": store.openPrompts(for: targetID).count,
+                "ok": .bool(true),
+                "cancelled": .number(Double(cancelled.count)),
+                // Je Auftrag ID und Textanfang: Wer storniert, sieht, was (WM8-64).
+                "items": .array(cancelled.map { prompt in
+                    .object([
+                        "id": .string(prompt.id.uuidString),
+                        "head": .string(ChatsQueueSupport.head(of: prompt.prompt)),
+                    ])
+                }),
+                "remaining": .number(Double(store.openPrompts(for: targetID).count)),
             ]))
         }
 
