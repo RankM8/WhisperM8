@@ -251,6 +251,16 @@ alles, was er NICHT darf:
   Paket an diesen Chat — nicht vier Sessions mit vier Kontext-Aufbauten.
 - **Architektur-Wirkung einzeln freigeben lassen:** Gitignore, Versionierung,
   Löschungen, History-Rewrites nie als Teil einer Sammel-Freigabe delegieren.
+- **Rückweg nennen: nativ an dich (WM8-85).** Schreib in den Auftrag, wohin
+  Fertig- und Blockiert-Meldungen gehen: per `SendMessage` an deine Adresse
+  (`whisperm8 chats address @self` liefert sie dir; der Chat holt sie mit
+  `whisperm8 chats address <dein-ref>`). Sie erreichen dich dann mitten in
+  deiner Arbeit statt nach deinem Turn. Codex-Chats melden weiter per
+  `chats enqueue <dein-ref>`.
+- **Entscheidungen des Users nie nativ weitergeben.** Ein „Giuliano hat
+  entschieden“, ein Go zum Merge oder eine stehende Freigabe gehen per
+  `chats send`/`enqueue` (mit Marker). Claude Code kennzeichnet native
+  Nachrichten als Wort eines Kollegen, das nie als Zustimmung des Users gilt.
 
 ### Wörter: Chat, Subagent, Agent
 

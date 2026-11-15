@@ -118,6 +118,10 @@ final class AgentSessionRuntimeWatcher {
     /// (`nil`) — WM8-69. Aus demselben Tail-Read, nur bei Änderung.
     var onUsageLimit: ((UUID, AgentUsageLimit?) -> Void)?
 
+    /// Meldet neue native Nachrichten anderer Claude-Sitzungen (WM8-85), aus
+    /// demselben Tail-Read; jede Nachricht genau einmal.
+    var onPeerMessages: ((UUID, [ClaudePeerMessage]) -> Void)?
+
     private var watched: [UUID: WatchedSession] = [:]
     private var pollingSessionIDs: Set<UUID> = []
     /// Trailing-Edge: kam während eines laufenden Polls ein vnode-Event,
@@ -472,6 +476,12 @@ final class AgentSessionRuntimeWatcher {
                 self.watched[sessionID] = current
                 self.onUsageLimit?(sessionID, snapshot.usageLimit)
             }
+            if let messages = snapshot.peerMessages {
+                let (fresh, seen) = ClaudePeerMessageScan.newMessages(messages, seen: current.seenPeerMessageIDs)
+                current.seenPeerMessageIDs = seen
+                self.watched[sessionID] = current
+                if !fresh.isEmpty { self.onPeerMessages?(sessionID, fresh) }
+            }
 
             guard let decision = snapshot.decision else {
                 // Keine Meinung (Datei fehlt / kein parsebares Event) → KEIN
@@ -582,7 +592,9 @@ final class AgentSessionRuntimeWatcher {
             workingCopy: workingCopy(in: tail, entry: entry),
             // Liegt die Limit-Zeile außerhalb des Tails (kein Ereignis), bleibt
             // der letzte Stand; ein neueres Ereignis hebt das Limit auf.
-            usageLimit: AgentUsageLimit.after(event: lastEvent, tail: tail, cached: entry.cachedUsageLimit)
+            usageLimit: AgentUsageLimit.after(event: lastEvent, tail: tail, cached: entry.cachedUsageLimit),
+            // Nur Zeilen mit dem Marker werden geparst.
+            peerMessages: entry.provider == .claude ? ClaudePeerMessageScan.messages(inTail: tail) : nil
         )
     }
 
@@ -680,6 +692,8 @@ struct WatchedSession {
     var cachedWorkingCopy: AgentWorkingCopy? = nil
     /// Limit laut letztem Tail-Read (WM8-69).
     var cachedUsageLimit: AgentUsageLimit? = nil
+    /// Schon gesehene native Nachrichten (`msg_id`); `nil` = noch nie gelesen.
+    var seenPeerMessageIDs: Set<String>? = nil
     /// Drosselt die Codex-URL-Resolution (rekursiver Verzeichnis-Walk).
     var resolveCooldown: Int = 0
     /// Write-back-Guard: Snapshots, die gegen eine ältere Generation
@@ -702,4 +716,6 @@ struct AgentSessionRuntimePollSnapshot {
     var workingCopy: AgentWorkingCopy? = nil
     /// Nutzungslimit (WM8-69); im Stat-first-Pfad gecacht.
     var usageLimit: AgentUsageLimit? = nil
+    /// Native Nachrichten im Tail (WM8-85); `nil` = nicht gelesen (Stat-first).
+    var peerMessages: [ClaudePeerMessage]? = nil
 }

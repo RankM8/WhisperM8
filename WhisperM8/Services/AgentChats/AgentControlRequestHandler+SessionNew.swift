@@ -99,7 +99,10 @@ extension AgentControlRequestHandler {
             resolveAccount: Self.resolveNewChatAccount(requested:),
             launch: { selection in
                 await MainActor.run {
-                    AgentChatLaunchService().openChatViaControl(
+                    // Unmittelbar vor dem Start: Hat der Client aufgegeben, keinen
+                    // Chat mehr anlegen (WM8-85).
+                    if request.isExpired() { return .failure(ControlLaunchError(message: Self.expiredMessage)) }
+                    return AgentChatLaunchService().openChatViaControl(
                         provider: provider, projectRef: projectRef, title: title, prompt: prompt,
                         claudeProfile: selection)
                 }
@@ -157,8 +160,9 @@ extension AgentControlRequestHandler {
             return .failure(requestID: request.requestID, code: .invalid,
                             message: "--account gilt nur für Claude-Chats")
         }
-        let result = await MainActor.run {
-            AgentChatLaunchService().openChatViaControl(
+        let result = await MainActor.run { () -> Result<AgentChatLaunchService.ControlLaunchResult, ControlLaunchError> in
+            if request.isExpired() { return .failure(ControlLaunchError(message: Self.expiredMessage)) } // WM8-85
+            return AgentChatLaunchService().openChatViaControl(
                 provider: .claude, projectRef: projectRef, title: title, prompt: nil,
                 claudeProfile: .explicit(nil), terminalCommand: command, asTerminal: true)
         }

@@ -296,6 +296,9 @@ final class AgentSessionStatusCoordinator {
         watcher.onUsageLimit = { [weak self] sessionID, limit in
             self?.handleUsageLimit(sessionID: sessionID, limit: limit)
         }
+        watcher.onPeerMessages = { sessionID, messages in
+            Self.auditPeerMessages(sessionID: sessionID, messages: messages)
+        }
         // Gespeicherte Limits nach einem Neustart ausdrücklich zu Ende planen.
         Task { @MainActor [weak self] in self?.scheduleStoredUsageLimitEnds() }
     }

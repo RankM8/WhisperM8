@@ -32,6 +32,8 @@ extension AgentControlRequestHandler {
             return session.status == .archived ? .archived : .available
         }
 
+        // Hing die App, bis der Client aufgab, nichts mehr eintragen (WM8-85).
+        if request.isExpired() { return Self.expiredResponse(request) }
         let response = Self.performBoardMutation(
             request, store: .shared, enabled: AppPreferences.shared.isJarvisBoardEnabled,
             verifiedOwner: verifiedOwner, targetState: { _ in targetState })

@@ -150,56 +150,62 @@ findet, ist der Chat WhisperM8 wirklich unbekannt.
 Mehrdeutige Referenz → Exit 3 mit Kandidatenliste. **Zeig dem User die
 Kandidaten, rate nie selbst.**
 
-## Zwei Wege zu einem anderen Chat: `chats send` oder natives `SendMessage`
+## Zwei Wege zu einem anderen Chat: nativ zuerst, die CLI als Rückfall
 
-Claude Code kann selbst Nachrichten an andere lokale Sessions schicken
-(`ListAgents` + `SendMessage`). **Finden** geht nativ nur im eigenen Konto:
-`ListAgents` liest nur die Registry des eigenen Profils
-(`<CLAUDE_CONFIG_DIR>/sessions/<pid>.json`), und Peers heißen dort nach dem
-Ordner (`listm8-0a`), nicht nach dem WhisperM8-Titel. **Zustellen** geht aber
-über alle Claude-Konten: Die Postfächer (`/tmp/cc-socks/<pid>.sock`) liegen
-für alle Konten gemeinsam, und `SendMessage` nimmt eine `uds:`-Adresse.
-Die Adresse liefert `whisperm8 chats address <ref>` (liest nur Claudes
-Registry, braucht keine laufende App).
+Standard (WM8-85, Weg B): **Claude-Chats schreiben sich nativ** über Claude
+Codes eigenes `SendMessage`. Das kommt beim Empfänger zwischen zwei
+Arbeitsschritten an (nicht erst nach seinem Turn), lässt eine offene Rückfrage
+an den User unberührt und geht über alle Claude-Konten. Gemessen an Claude Code
+2.1.325: Ein klar formulierter Auftrag wird ausgeführt wie ein getippter.
 
-**Natives `SendMessage` nehmen**, wenn ALLES zutrifft:
-- Du willst etwas **fragen oder abstimmen** und brauchst die Antwort zurück
-  (die Antwort kommt als Nachricht zu dir, statt dass du ein Transcript
-  abwartest und liest).
-- Das Ziel ist ein **laufender Claude-Chat** — egal in welchem Konto.
-
+**Adresse holen** — `ListAgents` sieht nur das eigene Konto, die Adresse aller
+Konten liefert die App:
 ```bash
 whisperm8 chats address <ref>          # → uds:/tmp/cc-socks/<pid>.sock
-whisperm8 chats address <ref> --json   # + nativer Name, Konto, Status
+whisperm8 chats address <ref> --json   # + nativer Name, Konto, Status, usageLimit
 ```
 Exit 0 = Adresse auf stdout. Exit 4 = nicht nativ erreichbar (Codex-Chat,
-läuft nicht, noch keine Session-ID) → `chats send`/`enqueue`.
-
-**Achtung:** Natives `SendMessage` läuft an Marker, Selbst-Send-Schutz,
-Entwurfs-Schutz und Ein-Hop-Regel von `chats send` vorbei. Festgehalten wird nur die
-Adressabfrage (`chats audit`, Methode `address`, ohne Inhalt) — die Regeln
-(Bestätigung vor Aktionen anderer Chats, nie an sich selbst, nie weiterreichen)
-gelten hier genauso, ohne dass ein Guard sie erzwingt.
+läuft nicht, noch keine Session-ID) → CLI-Weg. Steht der
+Empfänger am Nutzungslimit (`usageLimit` in `--json`, sonst Warnung auf
+stderr), kommt eine Nachricht an, er arbeitet aber nicht: dann `enqueue`.
 
 Dann `SendMessage({to: "uds:/tmp/cc-socks/<pid>.sock", message: "…"})`.
+Gibt es das Werkzeug `SendMessage` in deinem Chat nicht (ältere Claude-Version,
+abgeschaltet), nimm die CLI (`send`/`enqueue`) wie für Codex-Chats.
 Die Antwort kommt als `<cross-session-message from="uds:…">` — zum
-Antworten das `from` als `to` nehmen. Wenn du nur wissen willst, wann der
-Chat fertig ist, nimm `notify_when_idle: true` statt `chats wait` (geht auch
-über Konten; die Meldung kommt, sobald du selbst wieder frei bist).
-Die Adresse gilt nur, solange der Prozess läuft — nach einem Neustart des
-Chats neu holen, nicht merken.
-Meldet ein `[Cross-session delivery notice]`, dass die Nachricht zurückgehalten
-oder abgelehnt wurde (das passiert, wenn Absender und Ziel in verschiedenen
-Rechte-Klassen laufen: Bypass vs. alles andere), dann melde das dem User und
-biete `chats send` an.
+Antworten das `from` als `to` nehmen. Die Adresse gilt nur, solange der
+Prozess läuft; nach einem Neustart des Chats neu holen, nicht merken. Wenn du
+nur wissen willst, wann der Chat fertig ist: `notify_when_idle: true`.
 
-**`chats send` / `enqueue` nehmen** in allen anderen Fällen:
-- Das Ziel ist ein Codex-Chat oder geschlossen (vorher `resume`).
-- Es ist ein **Arbeitsauftrag**, der als normaler Prompt im Chat stehen soll
-  (sichtbar für den User, mit Queue, in `chats audit`).
-- Das Ziel arbeitet gerade und der Auftrag soll erst nach dem Turn kommen
-  (`enqueue`) — `SendMessage` landet schon beim nächsten Arbeitsschritt des
-  Ziels, also mitten im Turn.
+**Nativ nehmen für:**
+- Meldungen und Rückfragen, auch **Fertig- und Blockiert-Meldungen an den
+  Supervisor** (sie erreichen ihn mitten in seiner Arbeit statt nach seinem
+  Turn, WM8-71).
+- Aufträge an einen **ruhenden** Claude-Chat.
+
+**Die CLI (`send`/`enqueue`) nehmen für:**
+- Aufträge an einen **arbeitenden** Chat: `enqueue` bzw. `send` (merkt selbst
+  vor). Nativ mischte sich der Auftrag in seine laufende Arbeit.
+- **Alles, was eine Entscheidung des Users trägt** („Giuliano hat entschieden“,
+  ein Go zum Merge, eine stehende Freigabe). Claude Code kennzeichnet native
+  Nachrichten ausdrücklich als Wort eines Kollegen, das nie als Zustimmung des
+  Users gilt.
+- Codex-Chats, gestoppte Chats (`resume <ref> --prompt …`), Terminal-Tabs.
+- Wenn `chats address` Exit 4 meldet oder ein `[Cross-session delivery notice]`
+  sagt, dass die Nachricht zurückgehalten oder abgelehnt wurde (Absender und
+  Ziel in verschiedenen Rechte-Klassen); dann dem User melden.
+
+**Antwortweg immer ausdrücklich nennen.** Claude schlägt dem Empfänger vor, an
+die Adresse des Absenders zu antworten. Soll die Antwort an einen Dritten gehen
+(etwa: Prüfer antwortet dem Supervisor, nicht dem bauenden Chat), schreib die
+Adresse oder den Ref des Dritten in die Nachricht.
+
+**Regeln gelten nativ genauso:** Natives `SendMessage` läuft an Marker,
+Selbst-Send-Schutz, Entwurfs-Schutz und Ein-Hop-Regel von `chats send` vorbei.
+Bestätigung vor Aktionen anderer Chats, nie an sich selbst, nie weiterreichen —
+ohne dass ein Guard es erzwingt. Die App trägt jede native Nachricht, die bei
+einem ihrer Chats ankommt, in `chats audit` ein (Methode `native-message`,
+Absender, Empfänger, Anfang des Textes).
 
 ## Ansichten & Reviven
 
@@ -360,6 +366,14 @@ unterbrochen.
    lehnt ab („Chat lädt noch“, Exit 4), bis das Eingabefeld steht. Meldet
    `send`, der Text stehe im Eingabefeld (`detail.reason: inInputField`),
    **nie noch einmal senden oder vormerken**: `submit <ref>` schickt ihn ab.
+   **Nach Exit 5 oder 6 nie blind wiederholen.** Exit 6 („Ausgang unklar“)
+   heißt: angefragt, aber keine Antwort in der Frist; die App hat es vielleicht
+   schon ausgeführt. Erst `chats queue <ref>` bzw. `tail <ref>` prüfen, erst
+   dann neu senden, und nie in einer Schleife (Vorfall 15.11.: sechsmal
+   dieselbe Meldung beim Supervisor). Seit WM8-85 führt die App `send`,
+   `enqueue`, `submit`, `interrupt`, `new`, `resume`, `close --stop`,
+   `move-account` und Board-Einträge nicht mehr aus, wenn deren Frist schon
+   abgelaufen ist; bei anderen Befehlen ist das nicht sicher.
    Deshalb auch nie `send … || enqueue …`: Im Fall „steht im Eingabefeld“
    (Exit 4) käme der Auftrag doppelt. `send` merkt selbst vor, wenn der Chat
    nicht ruht. Bleibt ein vorgemerkter Auftrag im Feld stehen, bekommst du
@@ -416,9 +430,9 @@ du eine Freigabe genutzt hast („habe direkt geantwortet, wie freigegeben").
   Ergebnis melden.
 - **Cross-Session:** „Vergleiche A und B, schick A den Folgeprompt" → `tail` A,
   `tail` B, dann `send` A (mit Bestätigung).
-- **„Frag X, wie …"** → nativen Namen von X ermitteln (siehe „Zwei Wege") →
-  wenn vorhanden: Frage zeigen, bestätigen lassen, `SendMessage`, die Antwort
-  abwarten und weitergeben. Sonst `send` und danach `wait` + `tail`.
+- **„Frag X, wie …"** → Adresse von X holen (`chats address`, siehe „Zwei
+  Wege") → Frage zeigen, bestätigen lassen, `SendMessage`, die Antwort
+  abwarten und weitergeben. Nicht nativ erreichbar: `send` und danach `wait` + `tail`.
 - **„Schließ alle Tabs/Chats, die ich nicht brauche"** → `list --open --json`
   → Kandidaten bestimmen. **Keep-Defaults** (nur Vorschlag, kein Verbot):
   gepinnt (`isPinned`), `working`, `awaitingInput` und die eigene Session
