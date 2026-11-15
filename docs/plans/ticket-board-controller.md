@@ -1,5 +1,5 @@
 ---
-status: Entwurf zur Abnahme (15.11.2026); Bau nicht freigegeben
+status: abgenommen (15.11.2026), E1 bis E4 wie empfohlen; Bau nach WM8-112
 stand: 2026-11-15
 feature: Ticket-Board mit Controller und Tastatur öffnen und bedienen
 ticket: WM8-91
@@ -196,14 +196,16 @@ L2 + Touchpad, Create und die Ebenen nennt die Leiste wie heute in einem Eintrag
 | **Kreis im Board** | **A nichts** ★: schützt vor Kreis-Kreis aus der Triage. **B zurück zu den Chats** wie L2 getippt. Wider: doppelt zu L2 und ein Fehlgriff verlässt das Board | A |
 | **R2 vor dem Board-Chat** | **A geht nicht** ★: kein Diktat ohne sichtbares Ziel. **B in die Zwischenablage:** Wider: Text landet unbemerkt im Verlauf | A |
 
-## Offene Entscheidungen
+## Entscheidungen
 
-| Nr. | Frage | Empfehlung |
+Giuliano hat am 15.11.2026 alle vier wie empfohlen entschieden, festgehalten am Ticket (`tickets decide`).
+
+| Nr. | Frage | Stand |
 |---|---|---|
-| E1 | Wie kommst du zum Board? | Reiter „Tickets“ in Wohin (L2 halten), zurück mit L2 getippt, dazu ein Eintrag im Options-Menü |
-| E2 | Was tun L1/R1 im Board? | voriges/nächstes Ticket, auch später im Board-Chat |
-| E3 | Wie kommst du vom Ticket zu seinem Chat? | über die Chat-Zeile am Ticket (▶, dann Kreuz) |
-| E4 | Was tut R2 im Board, solange es den Board-Chat noch nicht gibt? | nichts, mit kurzer Rückmeldung |
+| E1 | Wie kommst du zum Board? | Reiter „Tickets“ in Wohin (L2 halten), zurück mit L2 getippt, dazu ein Eintrag im Options-Menü · **entschieden** |
+| E2 | Was tun L1/R1 im Board? | voriges/nächstes Ticket, auch später im Board-Chat · **entschieden** |
+| E3 | Wie kommst du vom Ticket zu seinem Chat? | über die Chat-Zeile am Ticket (▶, dann Kreuz) · **entschieden** |
+| E4 | Was tut R2 im Board, solange es den Board-Chat noch nicht gibt? | nichts, mit kurzer Rückmeldung · **entschieden** |
 
 Ohne eigene Frage, weil sie aus der heutigen Belegung folgen: Steuerkreuz wie Stick, Kreis im Board ohne
 Wirkung, R1-Rauten unverändert, Tastatur wie in der Tabelle.
