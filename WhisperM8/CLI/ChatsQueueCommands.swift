@@ -22,7 +22,7 @@ enum ChatsQueueSupport {
         }
         var text = "\(marker) \(head)"
         switch prompt.state {
-        case .pending: text += "  (seit \(age), von \(prompt.enqueuedBy))"
+        case .pending: text += "  (seit \(age), von \(prompt.enqueuedBy) · id \(shortID(prompt.id)))"
         case .delivering: text += "  (wird gerade zugestellt)"
         case .delivered: text += "  (zugestellt)"
         case .cancelled: text += "  (storniert)"
@@ -54,6 +54,47 @@ enum ChatsQueueSupport {
                 : "\(review.count) Aufträge mit unklarem Ausgang")
         }
         return parts.joined(separator: " · ")
+    }
+
+    /// Kurz-ID eines Auftrags, wie `chats queue` sie zeigt und `dequeue` sie nimmt.
+    static func shortID(_ id: UUID) -> String {
+        String(id.uuidString.lowercased().prefix(8))
+    }
+
+    /// `dequeue <ref> <Nr | ID>…` (WM8-64): Nummer aus `chats queue` (zählt
+    /// nur offene Aufträge) oder ID, auch gekürzt ab vier Zeichen. Aufgelöst
+    /// wird vorher gegen die gelesene Liste, storniert dann nur genau diese
+    /// IDs: Ein inzwischen neu vorgemerkter Auftrag geht so nie mit (15.11.,
+    /// `--all` nahm einen zwischen Lesen und Stornieren eingetroffenen mit).
+    static func resolveSelectors(_ selectors: [String], open: [QueuedPrompt]) -> Result<[UUID], DequeueSelectorError> {
+        var ids: [UUID] = []
+        for selector in selectors {
+            let id: UUID
+            if let number = Int(selector) {
+                guard number >= 1, number <= open.count else {
+                    return .failure(.init(message: "Nr. \(number) gibt es nicht (offen: \(open.count)). `chats queue <ref>` zeigt die Nummern."))
+                }
+                id = open[number - 1].id
+            } else {
+                let needle = selector.lowercased()
+                guard needle.count >= 4 else {
+                    return .failure(.init(message: "„\(selector)“ ist zu kurz: Nummer oder mindestens vier Zeichen der ID."))
+                }
+                let matches = open.filter { $0.id.uuidString.lowercased().hasPrefix(needle) }
+                guard matches.count == 1 else {
+                    return .failure(.init(message: matches.isEmpty
+                        ? "Kein offener Auftrag mit der ID „\(selector)“ (schon zugestellt oder storniert?)."
+                        : "„\(selector)“ passt auf \(matches.count) offene Aufträge, bitte länger angeben."))
+                }
+                id = matches[0].id
+            }
+            if !ids.contains(id) { ids.append(id) }
+        }
+        return .success(ids)
+    }
+
+    struct DequeueSelectorError: Error, Equatable {
+        var message: String
     }
 
     static func json(for prompt: QueuedPrompt, position: Int?) -> [String: Any] {
@@ -240,7 +281,7 @@ enum ChatsQueueCommand {
         return ChatsCLIExit.ok
     }
 
-    /// `dequeue <ref> [--id UUID]… [--all]` — offene Aufträge stornieren.
+    /// `dequeue <ref> [<Nr | ID>…] [--id UUID]… [--all]` — offene Aufträge stornieren.
     static func cancel(_ arguments: [String]) -> Int32 {
         var refs: [String] = []
         var ids: [String] = []
@@ -265,16 +306,17 @@ enum ChatsQueueCommand {
             }
             index += 1
         }
-        guard refs.count == 1 else {
-            CLIIO.err("Usage: whisperm8 chats dequeue <ref> [--id UUID]… | --all [--json]")
+        guard !refs.isEmpty else {
+            CLIIO.err("Usage: whisperm8 chats dequeue <ref> <Nr | ID>… | --id UUID… | --all [--json]")
             return ChatsCLIExit.usage
         }
-        guard all || !ids.isEmpty else {
-            CLIIO.err("Was soll storniert werden? --all für alle offenen oder --id <UUID> gezielt.")
+        let selectors = Array(refs.dropFirst())
+        guard all || !ids.isEmpty || !selectors.isEmpty else {
+            CLIIO.err("Was soll storniert werden? Nummer oder ID aus `chats queue <ref>`, oder --all für alle offenen.")
             return ChatsCLIExit.usage
         }
-        guard !(all && !ids.isEmpty) else {
-            CLIIO.err("--all und --id schließen sich aus.")
+        guard !(all && !(ids.isEmpty && selectors.isEmpty)) else {
+            CLIIO.err("--all und einzelne Aufträge schließen sich aus.")
             return ChatsCLIExit.usage
         }
 
@@ -282,6 +324,16 @@ enum ChatsQueueCommand {
         switch ChatsLiveSupport.resolveTarget(ref: refs[0], includeArchived: true) {
         case .resolved(let id, _): targetID = id
         case .failed(let code): return code
+        }
+        if !selectors.isEmpty {
+            let open = AgentPromptQueueLogic.openPrompts(
+                for: targetID, in: AgentPromptQueueStore.read(from: AgentPromptQueueStore.defaultFileURL()))
+            switch ChatsQueueSupport.resolveSelectors(selectors, open: open) {
+            case .success(let resolved): ids += resolved.map(\.uuidString)
+            case .failure(let error):
+                CLIIO.err(error.message)
+                return ChatsCLIExit.notFound
+            }
         }
 
         var params: [String: Any] = ["targetSessionID": targetID.uuidString]

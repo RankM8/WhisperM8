@@ -64,7 +64,7 @@ whisperm8 chats send <ref> -- "<prompt>"  [--answer] [--no-queue] [--if-status S
                                                      # In eine offene Rückfrage NUR mit --answer
 whisperm8 chats enqueue <ref> -- "<prompt>"          # Folgeauftrag vormerken (auch bei working)
 whisperm8 chats queue [<ref>]                        # was wartet? (auch bei geschlossener App)
-whisperm8 chats dequeue <ref> --all | --id <UUID>    # offene Aufträge stornieren
+whisperm8 chats dequeue <ref> <Nr|ID>… | --all   # stornieren; Nr. und Kurz-ID aus `chats queue <ref>`
 whisperm8 chats interrupt <ref> [--force] [--clear-input]
                                                      # ein ESC an eine working-Session. --clear-input
                                                      # leert danach den Composer (Ctrl+C) — nutzen, wenn

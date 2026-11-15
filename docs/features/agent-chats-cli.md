@@ -448,6 +448,15 @@ ab (`ControllerScreenReading`, derselbe Leser wie für den Controller und
 WM8-75), aber nur als zweite Sicherung: Ist das Feld nicht abzulesen (Ansicht
 hochgescrollt), gilt allein die Schätzung.
 
+**Sichtbar leer schlägt die Schätzung (WM8-64, 15.11.2026):** Ist das Feld
+eines Claude-Chats am Bildschirm abzulesen und leer, gilt kein Entwurf, auch
+wenn die Schätzung einen vermutet. Getippte und wieder gelöschte Zeichen
+ließen sie sonst dauerhaft auf „Entwurf“ stehen: `send` merkte bei einem
+ruhenden Chat mit leerem Feld nur vor, und die Warteschlange stellte nie zu,
+weil das nächste Turn-Ende erst nach einem laufenden Hintergrund-Befehl
+gekommen wäre. Sichtbarer Text bleibt ein Entwurf; nicht ablesbar heißt wie
+bisher: die Schätzung entscheidet.
+
 **Grenze:** Drückt der User selbst Enter auf einen zurückgelegten Prompt,
 läuft dieser erneut — das ist eine bewusste Eingabe im Terminal, die App
 hält sie nicht auf. Wer einen Auftrag zurückzieht, nimmt deshalb
@@ -820,6 +829,14 @@ dafür sicherer.
   nie den Schutz einer offenen Rückfrage; die beantwortet nur `--answer`.
 - **Terminal-Tabs** bekommen Text ohne Einfüge-Klammern, wenn das Programm sie
   nicht angefordert hat (WM8-47, siehe oben).
+- **Einzeln stornieren (WM8-64).** `chats dequeue <ref> 2` oder
+  `chats dequeue <ref> 3f9a1c2e` nimmt einzelne offene Aufträge heraus: die
+  Nummer aus `chats queue <ref>` oder die ID, auch gekürzt ab vier Zeichen
+  (`chats queue` zeigt die ersten acht). Aufgelöst wird gegen die gerade
+  gelesene Liste, storniert dann nur genau diese IDs; ein inzwischen neu
+  vorgemerkter Auftrag geht nie mit. Passt eine Angabe nicht (Nummer zu groß,
+  ID unbekannt oder mehrdeutig), wird nichts storniert (Exit 3). `--all` und
+  `--id <UUID>` bleiben.
 - **Postfach mit Alter (WM8-71).** `chats queue` nennt je Chat die älteste
   wartende Meldung, `chats board` unter dem Board das Postfach des Besitzers
   („2 Meldungen warten, älteste seit 12 min“, JSON `inbox.open`,
