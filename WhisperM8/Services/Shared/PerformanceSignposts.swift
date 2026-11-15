@@ -215,8 +215,12 @@ struct PerformanceBudget {
 /// Treiber: docs/archive/strategie/2026-06-10-refactor-plan.md, Paket P7.
 enum PerfBudgets {
     // Diktat-Pipeline
-    static let recordingStart = PerformanceBudget(name: "recording.start", budget: 0.400, signposter: PerfSignposts.recording)
-    static let recordingStop = PerformanceBudget(name: "recording.stop", budget: 0.300, signposter: PerfSignposts.recording)
+    // recording.start/stop laufen auf dem Main Actor über `await` hinweg (beim
+    // ersten Start bis zum Mikrofon-Dialog): Wartezeit, kein Verursacher.
+    static let recordingStart = PerformanceBudget(name: "recording.start", budget: 0.400, signposter: PerfSignposts.recording,
+                                                  measuresWaiting: true)
+    static let recordingStop = PerformanceBudget(name: "recording.stop", budget: 0.300, signposter: PerfSignposts.recording,
+                                                 measuresWaiting: true)
     static let contextCapture = PerformanceBudget(name: "recording.contextCapture", budget: 0.150, signposter: PerfSignposts.recording)
     static let chatTail = PerformanceBudget(name: "recording.chatTail", budget: 0.100, signposter: PerfSignposts.recording)
     static let engineStart = PerformanceBudget(name: "recording.engineStart", budget: 0.250, signposter: PerfSignposts.recording)
@@ -282,7 +286,8 @@ enum PerfBudgets {
     /// Ein Abruf der Ticket-Ansicht bei Linear (zwei Abfragen, bis zu fünf
     /// Seiten). Netz-Latenz, keine Main-Thread-Kosten; läuft alle 30 Sekunden,
     /// solange die Ansicht sichtbar ist. Startwert, gegen Realdaten nachziehen.
-    static let ticketsFetch = PerformanceBudget(name: "tickets.fetch", budget: 3.0, signposter: PerfSignposts.store, tier: .detail)
+    static let ticketsFetch = PerformanceBudget(name: "tickets.fetch", budget: 3.0, signposter: PerfSignposts.store, tier: .detail,
+                                                measuresWaiting: true)
     /// Liste der Chats für den Abgleich lesen: einmal je neuem Abzug, auf dem
     /// Main Thread, über alle Sitzungen des Workspace.
     static let ticketsChats = PerformanceBudget(name: "tickets.chats", budget: 0.004, signposter: PerfSignposts.store, tier: .detail)

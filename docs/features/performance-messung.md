@@ -55,7 +55,8 @@ Stelle ohne Messpunkt. Ein Token, das nie beendet wird, schließt sich in seinem
 
 Budgets mit `measuresWaiting: true` messen Wartezeit statt Arbeit und kommen nicht
 ins Register: `sidebar.statusPollLatency`, `grid.build`, `grid.focusSwitch`,
-`pill.morph`. Sie sind die Folge eines Hängers, nicht die Ursache (Messlauf
+`pill.morph`, `recording.start`, `recording.stop` (laufen über `await` hinweg, beim
+ersten Start bis zum Mikrofon-Dialog) und `tickets.fetch` (Netzabruf). Sie sind die Folge eines Hängers, nicht die Ursache (Messlauf
 15.11.2026: `statusPollLatency` stand bei 20 von 31 Hängern vorn).
 
 Hänger in den ersten 15 s nach dem Aufwachen des Macs heißen
