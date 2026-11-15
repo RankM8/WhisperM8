@@ -67,7 +67,7 @@ struct TicketDetailPanel: View {
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(AgentTheme.textSecondary)
                         if entry.agents.isEmpty {
-                            TicketAgentRow(entry: entry, source: source)
+                            TicketAgentRow(entry: entry, source: source, showsNone: true)
                         }
                         ForEach(content.agents) { line in
                             VStack(alignment: .leading, spacing: 2) {

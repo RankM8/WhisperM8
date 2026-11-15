@@ -326,7 +326,7 @@ final class TicketBoardControllerTests: XCTestCase {
         await controller.show(projectPath: projectA, projectName: "whisperm8")
         await settle { controller.phase == .ready }
         controller.viewModel.selectedKey = "WM8-1"
-        controller.viewModel.mode = .backlog
+        controller.viewModel.mode = .list
         controller.viewModel.filter.project = "Neustart"
 
         world.holdResolves()

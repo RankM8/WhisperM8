@@ -92,6 +92,8 @@ struct TicketBoardSnapshot: Equatable {
     var statuses: [TicketStatus]
     var tickets: [Ticket]
     var fetchedAt: Date
+    /// Wer den Zugang benutzt (für „wartet auf mich“). Kommt im selben Abruf mit.
+    var viewerID: String? = nil
 }
 
 /// Neues Ticket (für `tickets new`).

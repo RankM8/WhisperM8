@@ -16,8 +16,9 @@ struct TicketBoardPresentation: Equatable {
         var agentCount: Int { entries.filter(\.hasAgent).count }
     }
 
-    var columns: [TicketBoardColumn]
-    /// Backlog-Liste: alle sichtbaren Tickets nach Projekt.
+    /// Eine Spalte je Status des Teams.
+    var lanes: [TicketBoardLane]
+    /// Liste: alle sichtbaren Tickets nach Projekt.
     var groups: [Group]
     var counts: TicketFilterCounts
     /// Projekte zur Auswahl, alphabetisch; `""` (ohne Projekt) steht am Ende.
@@ -25,6 +26,8 @@ struct TicketBoardPresentation: Equatable {
     var looseChats: [TicketLooseChat]
     var supervisors: [TicketChat]
     var visibleCount: Int
+    /// Regel des Teams; die Karten heben ihre Labels für „wartet auf mich“ hervor.
+    var rule: TicketTeamRule
 
     /// Ohne Abzug: drei leere Spalten, keine Gruppen.
     static let empty = make(model: TicketBoardModel(entries: [], looseChats: [], supervisors: []), filter: .all)
@@ -37,13 +40,14 @@ struct TicketBoardPresentation: Equatable {
         for entry in visible { byProject[entry.ticket.project ?? "", default: []].append(entry) }
         let names = Set(open.map { $0.ticket.project ?? "" })
         return TicketBoardPresentation(
-            columns: TicketBoardLayout.columns(visible),
+            lanes: TicketBoardLanes.make(statuses: model.statuses, open: open, visible: visible, rule: model.rule),
             groups: sorted(Array(byProject.keys)).map { Group(project: $0, entries: byProject[$0, default: []].sorted(by: TicketBoardLayout.order)) },
             counts: TicketFilterCounts.make(entries: open, filter: filter),
             projects: sorted(Array(names)),
             looseChats: model.looseChats,
             supervisors: model.supervisors,
-            visibleCount: visible.count)
+            visibleCount: visible.count,
+            rule: model.rule)
     }
 
     func entry(key: String?) -> TicketBoardEntry? {
@@ -68,10 +72,12 @@ struct TicketBoardPresentation: Equatable {
 final class TicketBoardViewModel {
     enum Mode: Equatable {
         case board
-        case backlog
+        case list
     }
 
     var mode: Mode = .board
+    /// Spalten, die alle Karten zeigen statt der ersten `TicketBoardLanes.cardLimit`.
+    var expandedLanes: Set<String> = []
     var filter = TicketBoardFilter() {
         didSet { if filter != oldValue { rebuild() } }
     }
@@ -126,6 +132,7 @@ final class TicketBoardViewModel {
     func reset() {
         selectedKey = nil
         mode = .board
+        expandedLanes = []
         model = TicketBoardModel(entries: [], looseChats: [], supervisors: [])
         if filter != TicketBoardFilter() { filter = TicketBoardFilter() } else { rebuild() }
     }

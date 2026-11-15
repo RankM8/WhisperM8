@@ -91,10 +91,10 @@ struct TicketBoardView: View {
     private func content(_ presentation: TicketBoardPresentation) -> some View {
         switch model.mode {
         case .board:
-            TicketBoardColumnsView(columns: presentation.columns, selectedKey: model.selectedKey, source: source) {
-                model.toggle($0)
-            }
-        case .backlog:
+            TicketBoardLanesView(lanes: presentation.lanes, rule: presentation.rule, selectedKey: model.selectedKey,
+                                 expanded: model.expandedLanes, source: source,
+                                 select: { model.toggle($0) }, expand: { model.expandedLanes.insert($0) })
+        case .list:
             TicketBacklogListView(groups: presentation.groups, selectedKey: model.selectedKey, source: source) {
                 model.toggle($0)
             }
@@ -124,9 +124,9 @@ private struct TicketBoardHeader: View {
                 .lineLimit(1)
             Picker(selection: $mode) {
                 Text("Board").tag(TicketBoardViewModel.Mode.board)
-                Text("Backlog").tag(TicketBoardViewModel.Mode.backlog)
+                Text("List").tag(TicketBoardViewModel.Mode.list)
             } label: {
-                Text("Board or backlog")
+                Text("Board or list")
             }
             .pickerStyle(.segmented)
             .labelsHidden()
@@ -216,6 +216,16 @@ private struct TicketBoardFilterBar: View {
             HStack(spacing: 6) {
                 // Die Auswahl des Projekts zuerst: Sie bleibt sichtbar, auch
                 // wenn viele Personen die Zeile füllen.
+                // Zuerst, was auf den Nutzer wartet: die Frage, mit der er das Board öffnet.
+                TicketFilterChip(isOn: filter.waitingForMe, count: counts.waitingForMe,
+                                 tone: AgentTheme.statusAwaiting, tint: AgentTheme.statusAwaiting.opacity(0.14)) {
+                    filter.waitingForMe.toggle()
+                } label: {
+                    Text("Waiting for me")
+                }
+
+                Rectangle().fill(AgentTheme.border).frame(width: 1, height: 16).padding(.horizontal, 4)
+
                 Picker(selection: $filter.project) {
                     Text("All projects").tag(String?.none)
                     ForEach(projects, id: \.self) { project in
@@ -271,6 +281,9 @@ private struct TicketFilterGroupLabel: View {
 private struct TicketFilterChip<Label: View>: View {
     let isOn: Bool
     let count: Int?
+    /// Farbe des Rahmens; Bernstein für „wartet auf mich“.
+    var tone: Color = AgentTheme.accent
+    var tint: Color = AgentTheme.accentTint
     let action: () -> Void
     @ViewBuilder let label: Label
 
@@ -288,8 +301,8 @@ private struct TicketFilterChip<Label: View>: View {
             .foregroundStyle(AgentTheme.textPrimary)
             .padding(.horizontal, 9)
             .padding(.vertical, 4)
-            .background(isOn ? AgentTheme.accentTint : AgentTheme.control, in: Capsule())
-            .overlay { Capsule().strokeBorder(isOn ? AgentTheme.accent : AgentTheme.border, lineWidth: 1) }
+            .background(isOn ? tint : AgentTheme.control, in: Capsule())
+            .overlay { Capsule().strokeBorder(isOn ? tone : AgentTheme.border, lineWidth: 1) }
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isOn ? [.isSelected] : [])

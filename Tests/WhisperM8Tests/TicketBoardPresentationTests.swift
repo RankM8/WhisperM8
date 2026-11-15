@@ -28,7 +28,8 @@ final class TicketBoardPresentationTests: XCTestCase {
 
     func testColumnsGroupsAndProjects() {
         let presentation = TicketBoardPresentation.make(model: model(), filter: .all)
-        XCTAssertEqual(presentation.columns.map { $0.entries.map(\.ticket.key) }, [["WM8-1"], ["WM8-2", "WM8-4"], ["WM8-3"]])
+        XCTAssertEqual(presentation.lanes.map(\.status.name), ["In Progress", "Todo", "Backlog"], "nur Status mit offenen Tickets")
+        XCTAssertEqual(presentation.lanes.map { $0.entries.map(\.ticket.key) }, [["WM8-1"], ["WM8-2", "WM8-4"], ["WM8-3"]])
         XCTAssertEqual(presentation.groups.map(\.project), ["Agent Chats", "Tickets", ""], "alphabetisch, ohne Projekt am Ende")
         XCTAssertEqual(presentation.groups[1].entries.map(\.ticket.key), ["WM8-1", "WM8-4"])
         XCTAssertEqual(presentation.groups[1].agentCount, 1)
@@ -130,7 +131,7 @@ final class TicketBoardPresentationTests: XCTestCase {
         let viewModel = TicketBoardViewModel(model: model())
         viewModel.filter.person = .person(id: "u1")
         viewModel.selectedKey = "WM8-1"
-        viewModel.mode = .backlog
+        viewModel.mode = .list
         // Neuer Abzug ohne Tickets dieser Person: Der Filter blendete sonst alles aus.
         viewModel.update(TicketBoardModel(entries: model().entries.filter { $0.ticket.assignee == nil }, looseChats: [], supervisors: []))
         XCTAssertEqual(viewModel.filter.person, .all)

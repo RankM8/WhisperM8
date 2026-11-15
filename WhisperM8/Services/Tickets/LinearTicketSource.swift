@@ -47,6 +47,7 @@ struct LinearTicketSource: TicketSource {
     func board(team: String) async throws -> TicketBoardSnapshot {
         let head = try await client.run("""
         query($team: String!, $closed: [String!]!, $prefix: String!) {
+          viewer { id }
           teams(first: 1, filter: { key: { eq: $team } }) { nodes { id key states(first: 50) { nodes { id name type position } } } }
           closed: issues(first: 100, orderBy: updatedAt, filter: {
             team: { key: { eq: $team } }, state: { type: { in: $closed } },
@@ -76,7 +77,9 @@ struct LinearTicketSource: TicketSource {
             guard info["hasNextPage"] as? Bool == true, let next = info["endCursor"] as? String else { break }
             cursor = next
         }
-        return TicketBoardSnapshot(team: team, statuses: Self.statuses(teamNode["states"]), tickets: tickets, fetchedAt: now())
+        let viewerID = (head["viewer"] as? [String: Any])?["id"] as? String
+        return TicketBoardSnapshot(team: team, statuses: Self.statuses(teamNode["states"]), tickets: tickets, fetchedAt: now(),
+                                   viewerID: viewerID)
     }
 
     func ticket(key: String) async throws -> TicketContext {

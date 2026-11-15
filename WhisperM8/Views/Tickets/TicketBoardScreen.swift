@@ -8,7 +8,8 @@ enum TicketBoardResolution: Equatable {
     /// Der Ordner gehört zu keinem Team, oder das Team zu keinem Workspace.
     case notMapped
     case noKey(workspace: String)
-    case ready(team: String, workspace: String, projectPath: String)
+    /// `rule`: was die Status des Teams bedeuten (aus `tickets.json`).
+    case ready(team: String, workspace: String, projectPath: String, rule: TicketTeamRule = TicketTeamRule())
 }
 
 /// Alles von außen als Closures: Tests und Snapshots ersetzen Datei,
@@ -34,7 +35,9 @@ struct TicketBoardEnvironment {
                       let root = config.projectPath(forDirectory: projectPath),
                       let workspace = config.workspace(forTeam: team) else { return .notMapped }
                 let hasKey = TicketCredentialCache.shared.value(for: workspace) { TicketCredentialStore.live.read(workspace) } != nil
-                return hasKey ? .ready(team: team, workspace: workspace, projectPath: root) : .noKey(workspace: workspace)
+                return hasKey
+                    ? .ready(team: team, workspace: workspace, projectPath: root, rule: config.rule(forTeam: team))
+                    : .noKey(workspace: workspace)
             }
         },
         makeStore: { workspace in TicketBoardStore(source: LinearTicketSource(client: .live(workspace: workspace))) },
@@ -94,7 +97,7 @@ final class TicketBoardController {
 
     @ObservationIgnored private let environment: TicketBoardEnvironment
     @ObservationIgnored private var stores: [String: TicketBoardStore] = [:]
-    @ObservationIgnored private var active: (store: TicketBoardStore, team: String, projectPath: String)?
+    @ObservationIgnored private var active: (store: TicketBoardStore, team: String, projectPath: String, rule: TicketTeamRule)?
     @ObservationIgnored private var shownProject: String?
     /// Zählt Wechsel von Projekt und Sichtbarkeit; eine überholte Auflösung
     /// der Zuordnung trägt nichts ein.
@@ -143,7 +146,7 @@ final class TicketBoardController {
         case .noKey(let workspace):
             leaveProject()
             phase = .noKey(workspace: workspace)
-        case .ready(let team, let workspace, let root):
+        case .ready(let team, let workspace, let root, let rule):
             let store = stores[workspace] ?? environment.makeStore(workspace)
             stores[workspace] = store
             if let active, active.store !== store || active.team != team || active.projectPath != root {
@@ -151,7 +154,11 @@ final class TicketBoardController {
                 leaveProject()
                 phase = .loading
             }
-            active = (store, team, root)
+            if let active, active.rule != rule {
+                // Neue Regel (etwa nach `tickets setup --status`): neu abgleichen.
+                builtFor = nil
+            }
+            active = (store, team, root, rule)
             store.onChange = { [weak self, weak store] in
                 guard let self, let store else { return }
                 self.storeChanged(store)
@@ -198,12 +205,12 @@ final class TicketBoardController {
         }
         if load.fetchedAt != snapshot.fetchedAt { load.fetchedAt = snapshot.fetchedAt }
         if hasModel, phase != .ready { phase = .ready }
-        match(snapshot, projectPath: active.projectPath)
+        match(snapshot, projectPath: active.projectPath, rule: active.rule)
     }
 
     /// Gleicht den Abzug mit den Chats ab, wenn einer von beiden neu ist. Den
     /// Zustand der Chats liefern die Status-Punkte selbst, ohne Abgleich.
-    private func match(_ snapshot: TicketBoardSnapshot, projectPath: String) {
+    private func match(_ snapshot: TicketBoardSnapshot, projectPath: String, rule: TicketTeamRule) {
         let chats = PerfBudgets.ticketsChats.withInterval { environment.chats() }
         guard builtFor != snapshot.fetchedAt || builtWith != chats else { return }
         builtFor = snapshot.fetchedAt
@@ -214,7 +221,7 @@ final class TicketBoardController {
             // Abgleich abseits des Main Threads: bis zu 500 Tickets gegen alle Chats.
             let model = await Task.detached(priority: .userInitiated) {
                 PerfBudgets.ticketsBuild.withInterval {
-                    TicketBoardBuilder.build(snapshot: snapshot, chats: chats, projectPath: projectPath)
+                    TicketBoardBuilder.build(snapshot: snapshot, chats: chats, projectPath: projectPath, rule: rule)
                 }
             }.value
             guard let self, sequence == self.buildSequence else { return }
@@ -247,7 +254,7 @@ final class TicketBoardController {
             // Erst wieder anmelden, dann lesen: Was dazwischen geschieht, geht nicht verloren.
             self.watchChats()
             guard let active = self.active, let snapshot = active.store.snapshot else { return }
-            self.match(snapshot, projectPath: active.projectPath)
+            self.match(snapshot, projectPath: active.projectPath, rule: active.rule)
         }
     }
 }

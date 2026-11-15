@@ -861,16 +861,6 @@
         }
       }
     },
-    "%lld with agent": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld mit Agent"
-          }
-        }
-      }
-    },
     "%lld with an error": {
       "localizations": {
         "de": {
@@ -3157,16 +3147,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Board"
-          }
-        }
-      }
-    },
-    "Board or backlog": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Board oder Backlog"
           }
         }
       }
@@ -11481,16 +11461,6 @@
         }
       }
     },
-    "No agent": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kein Agent"
-          }
-        }
-      }
-    },
     "No agent chat": {
       "localizations": {
         "de": {
@@ -12157,16 +12127,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nicht zurückgenommen — läuft gerade (%lld)"
-          }
-        }
-      }
-    },
-    "Not scheduled yet": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Noch nicht eingeplant"
           }
         }
       }
@@ -15860,16 +15820,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Laufende Chats arbeiten weiter, während WhisperM8 neu startet."
-          }
-        }
-      }
-    },
-    "Running chats without a ticket (%lld)": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Laufende Chats ohne Ticket (%lld)"
           }
         }
       }
@@ -24040,6 +23990,66 @@
           "stringUnit": {
             "state": "translated",
             "value": "＋ Hier ablegen — „%1$@“ erweitert auf %2$@"
+          }
+        }
+      }
+    },
+    "%lld for you": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld für dich"
+          }
+        }
+      }
+    },
+    "%lld more · show all": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld weitere · alle zeigen"
+          }
+        }
+      }
+    },
+    "Board or list": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Board oder Liste"
+          }
+        }
+      }
+    },
+    "No chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Chat"
+          }
+        }
+      }
+    },
+    "Running chats without a ticket: %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laufende Chats ohne Ticket: %lld"
+          }
+        }
+      }
+    },
+    "Waiting for me": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wartet auf mich"
           }
         }
       }
