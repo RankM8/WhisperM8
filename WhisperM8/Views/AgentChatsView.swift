@@ -2498,12 +2498,12 @@ struct AgentChatsView: View {
                 Text("·")
                     .font(.system(size: 11))
                     .foregroundStyle(AgentTheme.textTertiary)
-                Text(selectedSession?.workingCopy?.path ?? project.path)
+                Text(selectedSession?.workingCopy?.displayPath ?? project.path)
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(AgentTheme.textTertiary)
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .help(selectedSession?.workingCopy?.path ?? project.path)
+                    .help(selectedSession?.workingCopy?.displayPath ?? project.path)
                 if let selectedSession {
                     accountBadge(for: selectedSession)
                 }

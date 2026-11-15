@@ -189,6 +189,7 @@ enum ChatsOutput {
             "branch": copy.branch ?? NSNull(),
             "defaultBranch": copy.defaultBranch ?? NSNull(),
             "isDefaultBranch": copy.branch == nil ? NSNull() : copy.isOnDefaultBranch as Any,
+            "detached": copy.detachedHead == true,
         ]
     }
 
@@ -200,19 +201,20 @@ enum ChatsOutput {
         }
     }
 
-    /// Knapp für Tabellen: `main` (Hauptordner, Standard-Branch),
-    /// `main@<branch>` (Hauptordner, anderer Branch), `wt:<name>@<branch>`,
-    /// `other:<name>`; `-` wenn unbekannt. Ein Branch, den der Name schon
-    /// nennt, steht nur einmal da.
+    /// Knapp für Tabellen: `main@<branch>` (Hauptordner), `wt:<name>@<branch>`,
+    /// `other:<name>`; `main` ohne bekannten Branch, `-` wenn unbekannt. Ein
+    /// Branch, den der Name schon nennt, steht nur einmal da. Losgelöst:
+    /// `@detached`. Kein Urteil über den Standard-Branch mehr (WM8-73).
     static func workingCopyShort(_ copy: AgentWorkingCopy?) -> String {
         guard let copy else { return "-" }
+        let shownBranch = copy.branch ?? (copy.detachedHead == true ? "detached" : nil)
         switch copy.kind {
         case .mainFolder:
-            guard let branch = copy.branch, !copy.isOnDefaultBranch else { return "main" }
+            guard let branch = shownBranch else { return "main" }
             return "main@" + branch
         case .worktree, .otherFolder:
             let place = (copy.kind == .worktree ? "wt:" : "other:") + (copy.name ?? "?")
-            guard let branch = copy.branch, !copy.nameRepeatsBranch else { return place }
+            guard let branch = shownBranch, !copy.nameRepeatsBranch else { return place }
             return place + "@" + branch
         }
     }
@@ -233,9 +235,10 @@ enum ChatsOutput {
         case .worktree: place = "Arbeitskopie \(copy.name ?? "?")"
         case .otherFolder: place = "Ordner außerhalb des Projekts: \(copy.name ?? "?")"
         }
-        var branch = copy.branch.map { " · Branch \($0)" } ?? ""
-        if copy.branch != nil, !copy.isOnDefaultBranch, copy.kind == .mainFolder { branch += " (nicht der Standard-Branch)" }
-        return "\(place)\(branch)  (\(copy.path))"
+        let branch = copy.branch.map { " · Branch \($0)" }
+            ?? (copy.detachedHead == true ? " · losgelöst (kein Branch)" : "")
+        // Pfad gesäubert: ein Ordnername mit Steuerzeichen darf nicht ins Terminal (WM8-73).
+        return "\(place)\(branch)  (\(copy.displayPath))"
     }
 
     /// Claude-Konto eines Chats, wie es die CLI zeigt.
