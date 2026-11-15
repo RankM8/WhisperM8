@@ -37,6 +37,7 @@ extension AgentChatsView {
         guard panel.runModal() == .OK, let url = panel.url else { return nil }
         do {
             let project = try store.upsertProject(path: url.path, createdManually: true)
+            try? store.linkWorktreeProject(path: project.path)  // WM8-102
             selectedProjectID = project.id
             expandedProjectIDs.insert(project.id)
             AppPreferences.shared.agentDefaultProjectPath = project.path

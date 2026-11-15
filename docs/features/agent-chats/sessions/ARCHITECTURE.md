@@ -229,6 +229,34 @@ Tool-Ergebnissen) und wenige `stat` plus ein, zwei kleine Lesezugriffe für
 HEAD; ein Workspace-Save nur bei echtem Ortswechsel. Der Indexer verwirft
 Sitzungen mit Arbeitskopie-Pfad als cwd weiterhin (`isClaudeWorktreePath`).
 
+Arbeitsordner neben dem Projekt (WM8-102): Ein Ordner wie `~/repos/akquise-ai-kurse`,
+angelegt mit `git worktree add` neben `~/repos/akquise-ai`, ist für die App ein
+eigenes Projekt. Dort startet der Chat, dort liegt sein Verlauf, daran hängt die
+Bindung. Angezeigt wird er aber unter dem Haupt-Projekt: Das Projekt des
+Arbeitsordners trägt `parentProjectID`, und Seitenleiste, Tab-Gruppen, Projekt-Ansicht
+(⊞), `chats list`/`chats order --tabs`, Ticket-Board und Team-Zuordnung rechnen über
+`AgentProjectDisplay.parentByProjectID` mit dem Haupt-Projekt. Die Regel
+(`AgentProjectPath.siblingWorktreeMainRepo`, Entscheidung Giuliano 15.11.2026): Die Datei
+`.git` des Ordners zeigt auf `<Haupt-Repo>/.git/worktrees/…`, das Haupt-Repo existiert,
+und der Ordnername beginnt mit dem Namen des Haupt-Repos. Arbeitsordner mit eigenem
+Namen (etwa `kunden-webseiten/podomedica` aus `sindy-deluxe`) bleiben eigene Projekte.
+Gelesen wird nie im View-Body und nie unter dem Store-Lock: Der Scan liest vorab und
+setzt die Verweise nach dem Merge (`applyWorktreeProjectLinks`), neue Chats und von
+Hand hinzugefügte Ordner setzen ihren Verweis beim Anlegen (`linkWorktreeProject`);
+das Ergebnis je Pfad wird gemerkt. Ein gültiger Verweis braucht ein vorhandenes,
+selbst eigenständiges und manuell angelegtes Haupt-Projekt, sonst steht der
+Arbeitsordner wie bisher allein. Bewusst kein Umzug der Chats ins Haupt-Projekt: Start,
+Fortsetzen, Bindung und Verlaufssuche nutzen den Projektpfad als Ordner des Chats, und
+der Scan hängt Chats ohnehin wieder an den Ordner ihres Verlaufs. Ziehen innerhalb der
+Gruppe verschiebt einen solchen Chat deshalb nicht ins Haupt-Projekt. „Neuer Chat“ (Auswahlmenü, ⌘N, Controller „Create“) führt
+die Arbeitsordner eingerückt unter ihrem Haupt-Projekt; das Plus am Gruppenkopf fragt
+per Menü, ob der Chat im Hauptordner oder in einem Arbeitsordner starten soll, sobald
+die Gruppe Arbeitsordner hat. Tab-Gruppen, `chats order --tabs` und der Tab-Umschalter
+leiten die Gruppe über eine einzige Funktion ab (`AgentTabOrder.groupingEntry`,
+`TabSwitcherScope.tabs`). Die Zuordnung bildet `AgentWorkspaceUIModel.projectParents`
+einmal je Änderung der Projekte, nicht je Tab oder Zeile. Die
+Arbeitskopie-Marke misst am Haupt-Repo und zeigt „Arbeitskopie akquise-ai-kurse“.
+
 Fremde Repos: Was in `.git` steht, bestimmt das Repo, und das kann fremd sein.
 `GitHeadReader.readSmallFile` liest deshalb nur reguläre Dateien bis 4 KB
 (keine Pipe, keine Riesendatei), und Branch- wie Ordnernamen werden auf

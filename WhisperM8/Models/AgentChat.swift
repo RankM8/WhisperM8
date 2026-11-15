@@ -171,6 +171,10 @@ struct AgentProject: Identifiable, Codable, Equatable, Hashable {
     /// fortlaufende `sortIndex`-Werte (0, 1, 2, …) und das Feld ist nicht
     /// mehr `nil`.
     var sortIndex: Int?
+    /// Arbeitsordner neben einem Haupt-Projekt (WM8-102): Die Anzeige führt
+    /// seine Chats unter diesem Projekt. Gestartet, gebunden und gesucht wird
+    /// weiter im eigenen Ordner (`path`). `nil` für eigenständige Projekte.
+    var parentProjectID: UUID?
 
     init(
         id: UUID = UUID(),

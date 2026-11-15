@@ -83,4 +83,37 @@ enum AgentTabOrder {
         }
         return selectedIDs
     }
+
+    // MARK: - Herkunft eines Tabs
+
+    /// Eintrag für die Gruppierung: Ein Chat aus einem Arbeitsordner neben dem
+    /// Projekt zählt zum Haupt-Projekt (WM8-102). Einzige Ableitung für
+    /// Tab-Leiste, Ziehen und `chats order --tabs`.
+    static func groupingEntry(sessionID: UUID, projectID: UUID, projectParents: [UUID: UUID]) -> AgentTabGroupingEntry {
+        AgentTabGroupingEntry(
+            sessionID: sessionID,
+            projectID: AgentProjectDisplay.displayProjectID(projectID, parents: projectParents)
+        )
+    }
+
+    /// Raster-Workspace je Tab: der erste Raster-Workspace in gespeicherter
+    /// Reihenfolge gewinnt; Projekt-Ansichten zählen nicht, sonst trüge jeder
+    /// aktive Chat eine Workspace-Färbung.
+    static func workspaceBySession(gridWorkspaces: [AgentGridWorkspace]) -> [UUID: UUID] {
+        var result: [UUID: UUID] = [:]
+        for entity in gridWorkspaces where entity.sourceProjectID == nil {
+            for sessionID in entity.occupiedSessionIDs where result[sessionID] == nil {
+                result[sessionID] = entity.id
+            }
+        }
+        return result
+    }
+
+    /// Gemeinsame Herkunft der gezogenen Tabs, sonst `nil`: Gemischte Herkunft
+    /// (nur bei ausgeschalteter Gruppierung möglich) hat keinen Zielcluster,
+    /// dann gilt beim Einrasten allein die Grundregel.
+    static func movingOrigin(_ moving: [UUID], keyOf: (UUID) -> AgentTabGroupingKey?) -> AgentTabGroupingKey? {
+        let origins = Set(moving.compactMap(keyOf))
+        return origins.count == 1 ? origins.first : nil
+    }
 }

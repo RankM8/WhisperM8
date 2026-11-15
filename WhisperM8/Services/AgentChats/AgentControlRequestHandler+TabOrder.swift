@@ -44,8 +44,14 @@ extension AgentControlRequestHandler {
         if let unknown = named.first(where: { byID[$0] == nil }) {
             return .failure(.init(.notFound, "Chat \(unknown.uuidString) nicht im Workspace."))
         }
+        // Arbeitsordner neben dem Projekt gehören zur Gruppe ihres Haupt-Projekts (WM8-102).
+        let projectParents = AgentProjectDisplay.parentByProjectID(projects: workspace.projects)
         func groupKey(_ id: UUID) -> AgentTabGroupingKey? {
-            byID[id].map { AgentTabGrouping.key(for: .init(sessionID: id, projectID: $0.projectID), workspaceBySession: workspaceBySession) }
+            byID[id].map {
+                AgentTabGrouping.key(
+                    for: AgentTabOrder.groupingEntry(sessionID: id, projectID: $0.projectID, projectParents: projectParents),
+                    workspaceBySession: workspaceBySession)
+            }
         }
         let keys = Set(named.compactMap(groupKey))
         guard keys.count == 1, let key = keys.first else {

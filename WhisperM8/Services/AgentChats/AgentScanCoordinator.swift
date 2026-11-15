@@ -215,6 +215,11 @@ final class AgentScanCoordinator {
             let codex = CodexSessionIndexer().indexedSessionResult(cache: &cache)
             let claude = ClaudeSessionIndexer().indexedSessionResult(cache: &cache)
             cacheStore.save(&cache)
+            // Arbeitsordner neben dem Projekt (WM8-102): Dateien hier lesen,
+            // nicht unter dem Lock des Stores. Gemerkt je Pfad.
+            let linkPaths = Set(AgentSessionStore().loadWorkspace().projects.map(\.path))
+                .union((codex.sessions + claude.sessions).map { AgentSessionStore.canonicalProjectPath($0.cwd) })
+            let mainRepoByPath = AgentSessionStore.siblingMainRepos(for: linkPaths)
             PerfBudgets.indexScan.end(scanToken)
 
             await MainActor.run {
@@ -226,6 +231,7 @@ final class AgentScanCoordinator {
                         codex.sessions + claude.sessions,
                         activeSessionIDs: activeSessionIDs
                     )
+                    try store.applyWorktreeProjectLinks(mainRepoByPath: mainRepoByPath, checkedPaths: linkPaths)
                 } catch {
                     Logger.agentPerformance.error("agent_scan_merge_failed reason=\(reason.rawValue, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
                 }

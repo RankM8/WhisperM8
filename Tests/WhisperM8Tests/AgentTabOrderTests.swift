@@ -107,3 +107,67 @@ final class AgentTabOrderTests: XCTestCase {
         XCTAssertEqual(result, [a, b])
     }
 }
+
+/// Herkunft eines Tabs (Vic zu WM8-80/WM8-102): Gruppe, Workspace-Vorrang,
+/// Einrasten bei gemischter Herkunft, Umschalter-Umfang.
+final class AgentTabOriginTests: XCTestCase {
+    private let main = UUID(), kurse = UUID(), other = UUID()
+    private let mainTab = UUID(), kurseTab = UUID(), otherTab = UUID()
+    private var parents: [UUID: UUID] { [kurse: main] }
+
+    func testWorktreeTabJoinsMainProjectGroup() {
+        let entries = [
+            AgentTabOrder.groupingEntry(sessionID: mainTab, projectID: main, projectParents: parents),
+            AgentTabOrder.groupingEntry(sessionID: kurseTab, projectID: kurse, projectParents: parents),
+            AgentTabOrder.groupingEntry(sessionID: otherTab, projectID: other, projectParents: parents),
+        ]
+        let items = AgentTabGrouping.items(entries: entries, workspaceBySession: [:], enabled: true)
+        XCTAssertEqual(items, [.group(key: .project(main), sessionIDs: [mainTab, kurseTab]), .single(otherTab)])
+    }
+
+    func testWorkspaceStillWinsOverProject() {
+        let ws = UUID()
+        let entry = AgentTabOrder.groupingEntry(sessionID: kurseTab, projectID: kurse, projectParents: parents)
+        XCTAssertEqual(AgentTabGrouping.key(for: entry, workspaceBySession: [kurseTab: ws]), .workspace(ws))
+        XCTAssertEqual(AgentTabGrouping.key(for: entry, workspaceBySession: [:]), .project(main))
+    }
+
+    func testFirstCuratedWorkspaceWinsAndProjectViewsDoNotCount() {
+        let projectView = AgentGridWorkspace(name: "P", slots: [mainTab, kurseTab], sourceProjectID: main)
+        let first = AgentGridWorkspace(name: "A", slots: [kurseTab, nil])
+        let second = AgentGridWorkspace(name: "B", slots: [kurseTab, otherTab])
+        let map = AgentTabOrder.workspaceBySession(gridWorkspaces: [projectView, first, second])
+        XCTAssertEqual(map[kurseTab], first.id, "erster Raster-Workspace in gespeicherter Reihenfolge")
+        XCTAssertEqual(map[otherTab], second.id)
+        XCTAssertNil(map[mainTab], "Projekt-Ansicht zählt nicht")
+    }
+
+    func testMixedOriginHasNoTargetCluster() {
+        let keys: [UUID: AgentTabGroupingKey] = [mainTab: .project(main), kurseTab: .project(main), otherTab: .project(other)]
+        XCTAssertEqual(AgentTabOrder.movingOrigin([mainTab, kurseTab], keyOf: { keys[$0] }), .project(main))
+        XCTAssertNil(AgentTabOrder.movingOrigin([mainTab, otherTab], keyOf: { keys[$0] }))
+        XCTAssertNil(AgentTabOrder.movingOrigin([UUID()], keyOf: { keys[$0] }), "ohne Herkunft kein Cluster")
+    }
+
+    func testSwitcherProjectScopeSpansWorktrees() {
+        let sessions = [
+            AgentChatSession(id: mainTab, provider: .claude, projectID: main, title: "a"),
+            AgentChatSession(id: kurseTab, provider: .claude, projectID: kurse, title: "b"),
+            AgentChatSession(id: otherTab, provider: .claude, projectID: other, title: "c"),
+        ]
+        let scope = TabSwitcherScope.resolve(
+            showsGrid: false, activeWorkspace: nil, selectedSessionID: kurseTab,
+            openTabs: TabSwitcherScope.tabs(from: sessions, projectParents: parents))
+        XCTAssertEqual(scope, .project(order: [mainTab, kurseTab]))
+    }
+
+    func testPickerListsWorktreesUnderTheirMainProject() {
+        let a = AgentProject(id: main, name: "akquise-ai", path: "/r/akquise-ai", createdManually: true)
+        let tim = AgentProject(name: "akquise-ai-tim", path: "/r/akquise-ai-tim", createdManually: true)
+        let k = AgentProject(id: kurse, name: "akquise-ai-kurse", path: "/r/akquise-ai-kurse", createdManually: true)
+        let b = AgentProject(id: other, name: "buchhaltung", path: "/r/buchhaltung", createdManually: true)
+        let order = AgentProjectDisplay.pickerOrder(
+            mainProjects: [a, b], allProjects: [tim, a, b, k], parents: [kurse: main, tim.id: main])
+        XCTAssertEqual(order.map(\.name), ["akquise-ai", "akquise-ai-kurse", "akquise-ai-tim", "buchhaltung"])
+    }
+}

@@ -606,7 +606,11 @@ extension AgentChatsView {
         let sessionsByID = Dictionary(
             workspace.sessions.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }
         )
-        let hasForeign = members.contains { sessionsByID[$0]?.projectID != sourceProjectID }
+        // Arbeitsordner neben dem Projekt gehören dazu (WM8-102).
+        let parents = projectParents
+        let hasForeign = members.contains {
+            sessionsByID[$0].map { AgentProjectDisplay.displayProjectID($0.projectID, parents: parents) } != sourceProjectID
+        }
         guard hasForeign else { return true }
         errorMessage = String(localized: "“\(entity.name)” live-shows the active chats of the project — chats from other projects cannot be added here.")
         return false

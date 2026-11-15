@@ -21,6 +21,7 @@ struct AgentChatLaunchService {
         projectPath: String = AppPreferences.shared.agentDefaultProjectPath
     ) throws -> AgentChatLaunchResult {
         let project = try store.upsertProject(path: projectPath)
+        try? store.linkWorktreeProject(path: project.path)  // WM8-102
         let session = try store.createSession(
             provider: .codex,
             projectPath: project.path,
@@ -90,6 +91,7 @@ struct AgentChatLaunchService {
         let effectiveTitle = (trimmedTitle?.isEmpty == false ? trimmedTitle! : (asTerminal ? "Terminal" : "Neue Session"))
         do {
             let project = try store.upsertProject(path: projectPath)
+            try? store.linkWorktreeProject(path: project.path)  // WM8-102
             let session: AgentChatSession
             switch provider {
             case _ where asTerminal:
