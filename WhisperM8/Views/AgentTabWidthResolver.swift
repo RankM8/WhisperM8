@@ -22,6 +22,18 @@ enum AgentTabWidthResolver {
     /// Abstand zwischen Elementen (Einzeltab oder Gruppe) und Rand innen.
     static let itemSpacing: CGFloat = 6
     static let horizontalPadding: CGFloat = 16
+    /// Abstand im Bereich aus Streifen, Knöpfen und Griff-Fläche
+    /// (`TabStripArea`) und die Mindestbreite der Griff-Fläche dahinter.
+    static let areaSpacing: CGFloat = 5
+    static let dragAreaMinWidth: CGFloat = 8
+
+    /// Platz, den der Streifen haben darf: Bereich minus Knöpfe, die zwei
+    /// Abstände (Streifen–Knöpfe, Knöpfe–Griff-Fläche) und die Mindestbreite
+    /// der Griff-Fläche. Hält der Streifen sich daran, ist der Inhalt des
+    /// Bereichs nie breiter als der Bereich selbst.
+    static func stripViewportWidth(areaWidth: CGFloat, trailingWidth: CGFloat) -> CGFloat {
+        max(0, areaWidth - trailingWidth - 2 * areaSpacing - dragAreaMinWidth)
+    }
 
     struct Layout: Equatable {
         var widthByID: [UUID: CGFloat] = [:]
@@ -43,11 +55,13 @@ enum AgentTabWidthResolver {
         /// Mehrfach ausgewählte Tabs: Ihre Gruppe klappt nicht von selbst zu,
         /// sonst träfen Sammelaktionen Tabs, die man nicht mehr sieht.
         protectedIDs: Set<UUID> = [],
-        chipWidth: (AgentTabGroupingKey) -> CGFloat
+        /// Breite je Gruppen-Chip, einmal vorab bestimmt (gemessen, sonst
+        /// geschätzt). Fehlt ein Eintrag, zählt der Chip mit 0.
+        chipWidths: [AgentTabGroupingKey: CGFloat]
     ) -> Layout {
         var autoCollapsed = Set<AgentTabGroupingKey>()
         var share = share(items: items, viewport: viewportWidth, selectedID: selectedID,
-                          collapsed: manuallyCollapsed, chipWidth: chipWidth)
+                          collapsed: manuallyCollapsed, chipWidths: chipWidths)
         let candidates: [(key: AgentTabGroupingKey, count: Int)] = items.compactMap { item in
             guard case .group(let key, let ids) = item,
                   !manuallyCollapsed.contains(key), !manuallyOpened.contains(key),
@@ -62,7 +76,7 @@ enum AgentTabWidthResolver {
         while share.other < minWidth, !queue.isEmpty {
             autoCollapsed.insert(queue.removeFirst())
             share = Self.share(items: items, viewport: viewportWidth, selectedID: selectedID,
-                               collapsed: manuallyCollapsed.union(autoCollapsed), chipWidth: chipWidth)
+                               collapsed: manuallyCollapsed.union(autoCollapsed), chipWidths: chipWidths)
         }
         let other = max(narrowMinWidth, share.other)
         var widths: [UUID: CGFloat] = [:]
@@ -84,7 +98,7 @@ enum AgentTabWidthResolver {
         viewport: CGFloat,
         selectedID: UUID?,
         collapsed: Set<AgentTabGroupingKey>,
-        chipWidth: (AgentTabGroupingKey) -> CGFloat
+        chipWidths: [AgentTabGroupingKey: CGFloat]
     ) -> (visible: [UUID], fixed: CGFloat, active: CGFloat, other: CGFloat) {
         var visible: [UUID] = []
         var fixed = horizontalPadding + itemSpacing * CGFloat(max(0, items.count - 1))
@@ -93,7 +107,7 @@ enum AgentTabWidthResolver {
             case .single(let id):
                 visible.append(id)
             case .group(let key, let ids):
-                fixed += chipWidth(key)
+                fixed += chipWidths[key] ?? 0
                 visible += AgentTabOrder.visibleMemberIDs(ids, collapsed: collapsed.contains(key), selectedID: selectedID)
             }
         }
@@ -109,18 +123,32 @@ enum AgentTabWidthResolver {
     }
 
     /// Kurztitel für schmale Tabs: der Teil vor dem ersten „ · “ ohne
-    /// Ticket-Nummer („WM8-69 Gus · Limit …“ → „Gus“), sonst das erste Wort.
+    /// Ticket-Nummer („WM8-69 Gus · Limit …“ → „Gus“) oder führende Zahl
+    /// („2 Pia · …“ → „Pia“), sonst das erste Wort. Ohne regulären Ausdruck,
+    /// weil schmale Tabs ihn bei jedem Zeichnen bilden.
     static func shortTitle(_ title: String) -> String {
-        if let range = title.range(of: " · ") {
-            var head = String(title[..<range.lowerBound])
-            if let match = head.range(of: #"^[A-Za-z]+[0-9]*-\d+\s+"#, options: .regularExpression) {
-                head.removeSubrange(match)
-            } else if let match = head.range(of: #"^\d+\s+"#, options: .regularExpression) {
-                head.removeSubrange(match)
-            }
-            return head.isEmpty ? title : head
+        guard let range = title.range(of: " · ") else {
+            let first = title.split(whereSeparator: { $0 == " " || $0 == ":" }).first.map(String.init)
+            return first ?? title
         }
-        let first = title.split(whereSeparator: { $0 == " " || $0 == ":" }).first.map(String.init)
-        return first ?? title
+        let head = title[..<range.lowerBound]
+        let words = head.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+        guard words.count == 2, isTicketKeyOrNumber(words[0]) else {
+            return head.isEmpty ? title : String(head)
+        }
+        return String(words[1])
+    }
+
+    /// „WM8-69“, „ABC-12“ oder „2“: Buchstaben und Ziffern, ein Bindestrich,
+    /// Ziffern — oder nur Ziffern.
+    private static func isTicketKeyOrNumber(_ word: Substring) -> Bool {
+        if word.allSatisfy(\.isNumber) { return true }
+        let parts = word.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 2, let prefix = parts.first, let number = parts.last,
+              !prefix.isEmpty, !number.isEmpty,
+              prefix.first?.isLetter == true,
+              prefix.allSatisfy({ $0.isLetter || $0.isNumber }),
+              number.allSatisfy(\.isNumber) else { return false }
+        return true
     }
 }

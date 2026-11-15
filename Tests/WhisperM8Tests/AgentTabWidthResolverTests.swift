@@ -20,9 +20,11 @@ final class AgentTabWidthResolverTests: XCTestCase {
         opened: Set<AgentTabGroupingKey> = [],
         protected: Set<UUID> = []
     ) -> R.Layout {
-        R.layout(items: items, viewportWidth: width, selectedID: selected,
-                 manuallyCollapsed: collapsed, manuallyOpened: opened,
-                 protectedIDs: protected, chipWidth: { _ in self.chip })
+        var chips: [AgentTabGroupingKey: CGFloat] = [:]
+        for case .group(let key, _) in items { chips[key] = chip }
+        return R.layout(items: items, viewportWidth: width, selectedID: selected,
+                        manuallyCollapsed: collapsed, manuallyOpened: opened,
+                        protectedIDs: protected, chipWidths: chips)
     }
 
     func testPlentyOfRoomGivesEveryTabTheMaximum() {
@@ -112,5 +114,33 @@ final class AgentTabWidthResolverTests: XCTestCase {
         XCTAssertEqual(R.shortTitle("Claude Chat"), "Claude")
         XCTAssertEqual(R.shortTitle("Ole · Terminal-Tab"), "Ole")
         XCTAssertEqual(R.shortTitle(""), "")
+        XCTAssertEqual(R.shortTitle("ABC-12 Ida · Notiz"), "Ida")
+        XCTAssertEqual(R.shortTitle("Kurse · Modul 3"), "Kurse", "ohne Nummer bleibt der Kopf")
+        XCTAssertEqual(R.shortTitle("WM8 Jon · Lernen"), "WM8 Jon", "WM8 ohne Nummer ist kein Ticket")
+    }
+
+    // MARK: - Platz des Streifens (Auflage Uli)
+
+    func testViewportSubtractsButtonsBothSpacingsAndDragArea() {
+        // Bereich 800, Knöpfe 54: 800 − 54 − 5 − 5 − 8 = 728.
+        XCTAssertEqual(R.stripViewportWidth(areaWidth: 800, trailingWidth: 54), 728)
+        XCTAssertEqual(R.stripViewportWidth(areaWidth: 10, trailingWidth: 54), 0)
+    }
+
+    /// Hält der Streifen den Platz ein, ist der Inhalt des Bereichs nie
+    /// breiter als der Bereich: Streifen + Abstand + Knöpfe + Abstand +
+    /// Mindest-Griff-Fläche ≤ Bereich. Damit kann der Bereich nicht an seinem
+    /// Inhalt wachsen.
+    func testStripNeverPushesTheAreaWiderThanItIs() {
+        let tabs = ids(30)
+        for area in stride(from: CGFloat(200), through: 2_400, by: 37) {
+            let trailing: CGFloat = 54
+            let viewport = R.stripViewportWidth(areaWidth: area, trailingWidth: trailing)
+            let result = layout(tabs.map { .single($0) }, width: viewport, selected: tabs[0])
+            let strip = min(result.contentWidth, viewport)
+            let content = strip + R.areaSpacing + trailing + R.areaSpacing + R.dragAreaMinWidth
+            XCTAssertLessThanOrEqual(content, max(area, trailing + 2 * R.areaSpacing + R.dragAreaMinWidth) + 0.001,
+                                     "Bereich \(area)")
+        }
     }
 }

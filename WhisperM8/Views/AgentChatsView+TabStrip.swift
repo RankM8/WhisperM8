@@ -62,6 +62,10 @@ extension AgentChatsView {
                     toggleTabGroup(key, sessionIDs: sessionIDs, isCollapsed: isCollapsed)
                 }
             )
+            // Echte Chip-Breite für die Breitenregel (statt der Schätzung).
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { width in
+                updateTabStripWidth(chips: [key: width])
+            }
             // Das Label gehört geometrisch zum ersten Tab. Der Preference-Key
             // vereinigt beide Frames, sodass „vor erstem Gruppenmitglied" die
             // Einfügelinie links VOR dem Label zeichnet.
@@ -211,9 +215,12 @@ extension AgentChatsView {
                 }
                 TicketsModeButton(windowStore: windowStore, windowID: windowID)
 
-                // Streifen und die Knöpfe direkt dahinter. Dieser Bereich nimmt
-                // allen freien Platz; seine Breite ist die Grundlage der Tab-Breiten.
-                HStack(spacing: 5) {
+                // Streifen und die Knöpfe direkt dahinter. Der Rahmen misst nur,
+                // was das Fenster ihm gibt (Begründung an `TabStripArea`).
+                TabStripArea(
+                    stripWidth: stripWidth,
+                    onMeasure: { updateTabStripWidth(available: $0, trailing: $1) }
+                ) {
                 if !headerTabs.isEmpty {
                     ScrollViewReader { proxy in
                         ScrollView(.horizontal, showsIndicators: false) {
@@ -332,9 +339,6 @@ extension AgentChatsView {
                                 }
                             )
                         }
-                        // So breit wie der Inhalt, höchstens der verfügbare Platz:
-                        // Knöpfe und Plus stehen direkt hinter dem letzten Tab.
-                        .frame(width: stripWidth)
                         .background {
                             // Unsichtbare Shortcut-Anker: ⌘1–⌘9 springen auf
                             // Tab 1–9 der globalen Tab-Bar.
@@ -385,6 +389,7 @@ extension AgentChatsView {
                     }
                 }
 
+                } trailing: {
                 HStack(spacing: 5) {
                 TitlebarIconButton(
                     systemImage: "rectangle.stack",
@@ -438,20 +443,7 @@ extension AgentChatsView {
                 .disabled(selectedProject == nil)
                 .help("Create new chat")
                 }
-                .fixedSize()
-                .background(GeometryReader { geo in
-                    Color.clear.preference(key: TabStripTrailingWidthKey.self, value: geo.size.width)
-                })
-
-                Spacer(minLength: 8)
-                    .windowDragArea(depth: TabStripBand.height)
                 }
-                .frame(maxWidth: .infinity)
-                .background(GeometryReader { geo in
-                    Color.clear.preference(key: TabStripAvailableWidthKey.self, value: geo.size.width)
-                })
-                .onPreferenceChange(TabStripAvailableWidthKey.self) { updateTabStripWidth(available: $0) }
-                .onPreferenceChange(TabStripTrailingWidthKey.self) { updateTabStripWidth(trailing: $0) }
 
                 // Branch-Badge entfernt — die Branch steht ohnehin schon in
                 // der Sidebar-Projekt-Zeile und im Project-Inspector, und

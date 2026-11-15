@@ -13,6 +13,9 @@ struct TabStripWidthState: Equatable {
     /// Gruppen, die nach dem Zuklappen wegen Platzmangel von Hand geöffnet
     /// wurden; die Regel fasst sie nicht mehr an.
     var openedGroups: Set<AgentTabGroupingKey> = []
+    /// Gemessene Breite je Gruppen-Chip. Sie hängt nur an Titel und Zahl,
+    /// nicht an den Tab-Breiten; bis zur ersten Messung gilt die Schätzung.
+    var chipWidths: [AgentTabGroupingKey: CGFloat] = [:]
 }
 
 /// Gesamtbreite des Tab-Strip-Inhalts (HStack aller Tabs).
@@ -21,20 +24,11 @@ struct TabStripContentWidthKey: PreferenceKey {
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
-struct TabStripAvailableWidthKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
-}
-
-struct TabStripTrailingWidthKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
-}
-
 extension AgentChatsView {
     /// Platz, den der Streifen selbst haben darf.
     var tabStripViewportWidth: CGFloat {
-        max(0, tabStripWidth.availableWidth - tabStripWidth.trailingWidth - 5)
+        AgentTabWidthResolver.stripViewportWidth(
+            areaWidth: tabStripWidth.availableWidth, trailingWidth: tabStripWidth.trailingWidth)
     }
 
     /// Breiten aller sichtbaren Tabs. Vor der ersten Messung leer: Dann
@@ -45,8 +39,12 @@ extension AgentChatsView {
 
     func tabWidthLayout(items: [AgentTabGroupingItem]) -> AgentTabWidthResolver.Layout {
         guard tabStripWidth.availableWidth > 0 else { return AgentTabWidthResolver.Layout() }
-        var countByKey: [AgentTabGroupingKey: Int] = [:]
-        for case .group(let key, let ids) in items { countByKey[key] = ids.count }
+        // Chip-Breiten einmal je Lauf: gemessen, sonst geschätzt.
+        var chipWidths: [AgentTabGroupingKey: CGFloat] = [:]
+        for case .group(let key, let ids) in items {
+            chipWidths[key] = tabStripWidth.chipWidths[key]
+                ?? Self.tabGroupChipWidth(title: tabGroupMetadata(for: key).title, count: ids.count)
+        }
         return AgentTabWidthResolver.layout(
             items: items,
             viewportWidth: tabStripViewportWidth,
@@ -54,9 +52,7 @@ extension AgentChatsView {
             manuallyCollapsed: collapsedTabGroups,
             manuallyOpened: tabStripWidth.openedGroups,
             protectedIDs: multiSelection,
-            chipWidth: { key in
-                Self.tabGroupChipWidth(title: tabGroupMetadata(for: key).title, count: countByKey[key] ?? 0)
-            }
+            chipWidths: chipWidths
         )
     }
 
@@ -95,12 +91,22 @@ extension AgentChatsView {
         return 2 + 5 + 14 + 6 + 8 + min(110, ceil(titleWidth)) + ceil(countWidth)
     }
 
-    /// Misst den Bereich aus Streifen und Knöpfen; beide Werte hängen nur am
-    /// Fenster und an den Knöpfen, nicht an den Tabs.
-    func updateTabStripWidth(available: CGFloat? = nil, trailing: CGFloat? = nil) {
+    /// Nimmt die Messungen von `TabStripArea` und den Chips entgegen. Alle
+    /// drei hängen nur an Fenster, Knöpfen bzw. Chip-Titeln, nicht an den
+    /// Tab-Breiten (Begründung an `TabStripArea`).
+    func updateTabStripWidth(
+        available: CGFloat? = nil,
+        trailing: CGFloat? = nil,
+        chips: [AgentTabGroupingKey: CGFloat]? = nil
+    ) {
         var next = tabStripWidth
         if let available, abs(available - next.availableWidth) > 0.5 { next.availableWidth = available }
         if let trailing, abs(trailing - next.trailingWidth) > 0.5 { next.trailingWidth = trailing }
+        if let chips {
+            for (key, width) in chips where abs(width - (next.chipWidths[key] ?? -1)) > 0.5 {
+                next.chipWidths[key] = width
+            }
+        }
         if next != tabStripWidth { tabStripWidth = next }
     }
 }

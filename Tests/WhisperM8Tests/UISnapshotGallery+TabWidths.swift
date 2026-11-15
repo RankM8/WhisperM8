@@ -41,9 +41,10 @@ extension UISnapshotGallery {
             let layout = AgentTabWidthResolver.layout(
                 items: items, viewportWidth: width, selectedID: selected,
                 manuallyCollapsed: [], manuallyOpened: [],
-                chipWidth: { key in
-                    AgentChatsView.tabGroupChipWidth(title: meta[key]?.0 ?? "", count: key == wsActive ? 4 : 5)
-                })
+                chipWidths: [
+                    wsActive: AgentChatsView.tabGroupChipWidth(title: "WM8 Aktiv", count: 4),
+                    wsDeal: AgentChatsView.tabGroupChipWidth(title: "DealSupply", count: 5),
+                ])
             func tab(_ id: UUID, color: Color?) -> some View {
                 ChatTabButton(
                     session: byID[id]!, project: byID[id]!.projectID == wm8.id ? wm8 : lm8,
@@ -82,9 +83,20 @@ extension UISnapshotGallery {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(AgentTheme.header))
         }
+        // Mit echtem Rahmen (`TabStripArea`, Messung wie in der App): 18 Tabs
+        // in einem schmalen Fenster. Liefe die Messung im Kreis, stünde die
+        // Leiste hier über den Rand hinaus und Plus/Kontext-Knopf fehlten.
+        func framed(width: CGFloat) -> AnyView {
+            AnyView(TabStripHarness.sample(probe: TabStripProbe())
+                .frame(width: width, height: 34)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .background(AgentTheme.header))
+        }
         return [
             Fixture(name: "tabs-schrumpfen-breit", size: CGSize(width: 1_400, height: 80)) { strip(width: 1_360) },
             Fixture(name: "tabs-schrumpfen-schmal", size: CGSize(width: 1_000, height: 80)) { strip(width: 960) },
+            Fixture(name: "tabs-schrumpfen-rahmen-schmal", size: CGSize(width: 640, height: 34)) { framed(width: 640) },
+            Fixture(name: "tabs-schrumpfen-rahmen-mittel", size: CGSize(width: 1_000, height: 34)) { framed(width: 1_000) },
         ]
     }
 }
