@@ -104,7 +104,7 @@ extension AgentChatsView {
             },
             shouldCancel: { accountMoveCancelRequested }
         )
-        AccountMenuData.invalidateAll()
+        AccountProfileStore.shared.refresh()
         guard !outcome.wasCancelled, !decision.switchNow.isEmpty || !decision.waitForTurn.isEmpty else {
             accountMovePhase = .finished(outcome)
             return
@@ -119,7 +119,7 @@ extension AgentChatsView {
             combined.merge(await AccountSwitchCoordinator.shared.execute(
                 running, targetName: pending.targetDisplayName, batchID: batchID))
             accountMovePhase = .finished(combined)
-            AccountMenuData.invalidateAll()
+            AccountProfileStore.shared.refresh()
         }
     }
 
@@ -148,19 +148,15 @@ extension AgentChatsView {
             errorMessage = String(localized: "There is no account switch that could be reverted.")
         }
         accountMovePhase = .finished(outcome)
-        AccountMenuData.invalidateAll()
+        AccountProfileStore.shared.refresh()
     }
 
-    /// `true`, sobald ein zuruecknehmbarer Batch im Journal liegt.
-    /// Bewusst die stempel-gecachte Abfrage: dieser Getter haengt im
-    /// `.contextMenu`-Builder und laeuft damit bei jedem Body-Rebuild
-    /// (CPU-Befund 2026-08-23) — ein voller Journal-Read pro Render waere
-    /// genau die Sorte Menue-I/O, die die App dauerhaft beschaeftigt hat.
-    ///
-    /// Seit 30.09.2026 zusaetzlich ueber `AccountMenuData` (TTL-Cache): auch
-    /// der eine `stat` pro Zeile und Render summierte sich im Scope „Alle".
+    /// `true`, sobald ein zuruecknehmbarer Batch im Journal liegt. Dieser
+    /// Getter haengt im `.contextMenu`-Builder und laeuft bei jedem
+    /// Body-Rebuild (CPU-Befund 2026-08-23); er liest deshalb nur den
+    /// `AccountProfileStore`, nie die Platte (WM8-101).
     var hasUndoableAccountMove: Bool {
-        AccountMenuData.hasUndoableAccountMove.value
+        AccountProfileStore.shared.hasUndoableAccountMove
     }
 
     // MARK: - Menue
@@ -183,7 +179,7 @@ extension AgentChatsView {
                 ? String(localized: "Move to account")
                 : String(localized: "Move \(sessions.count) chats to account")
             Menu(label, systemImage: "person.crop.circle.badge.checkmark") {
-                ForEach(AccountMenuData.claudeProfiles.value) { profile in
+                ForEach(AccountProfileStore.shared.claudeProfiles) { profile in
                     // Ziel ausblenden, wenn ALLE ausgewaehlten Chats schon dort
                     // sind — bei gemischter Auswahl bleibt es sichtbar.
                     if currentProfiles != [profile.name] {

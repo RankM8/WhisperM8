@@ -22,8 +22,8 @@ extension AgentChatsView {
         let menuPinned = pinnedSessionIDs
         let menuWorkspaces = windowStore.gridWorkspaces
         let menuVisibleGrid = isGridActive ? activeGridWorkspaceEntity : nil
-        let menuClaudeProfiles = AccountMenuData.claudeProfiles.value
-        let menuGPTProfiles = AccountMenuData.gptProfiles.value
+        let menuClaudeProfiles = AccountProfileStore.shared.claudeProfiles
+        let menuGPTProfiles = AccountProfileStore.shared.gptProfiles
         let menuBulkMove = AppPreferences.shared.isAccountBulkMoveEnabled
         let menuGPTAccounts = AppPreferences.shared.claudeGPTBackendEnabled
             && AppPreferences.shared.isGPTAccountProfilesEnabled

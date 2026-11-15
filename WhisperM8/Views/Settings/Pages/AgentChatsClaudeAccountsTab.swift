@@ -446,6 +446,8 @@ struct AgentChatsClaudeAccountsTab: View {
     /// passiv — Tokens erneuert nur der manuelle Update-Button (CLI-Ping).
     private func reload() {
         profiles = profileService.profiles()
+        // Login, Logout, neues oder gelöschtes Profil: Menüs sofort angleichen.
+        AccountProfileStore.shared.refresh()
         activeProfileName = profileService.activeProfileName()
         // Statusline-Marker nachziehen (heilt auch aeltere Profile ohne Datei)
         for profile in profiles where !profile.isMain {

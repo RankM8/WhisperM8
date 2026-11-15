@@ -30,7 +30,7 @@ extension AgentChatsView {
                 ? String(localized: "GPT account")
                 : String(localized: "\(sessions.count) chats: GPT account")
             Menu(label, systemImage: "person.crop.circle") {
-                ForEach(AccountMenuData.gptProfiles.value) { profile in
+                ForEach(AccountProfileStore.shared.gptProfiles) { profile in
                     // Aktuelles Konto ausblenden (wie beim Claude-Menue) — bei
                     // gemischter Auswahl bleibt es sichtbar.
                     if currentProfiles != [profile.name] {
