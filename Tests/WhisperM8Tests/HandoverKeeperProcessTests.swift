@@ -62,8 +62,10 @@ final class HandoverKeeperProcessTests: XCTestCase {
         return client
     }
 
-    private func spawnChild() throws -> HandoverPTYChild {
-        let child = try HandoverPTYChild.ticking(in: directory)
+    private func spawnChild(countingCtrlC: Bool = false) throws -> HandoverPTYChild {
+        let child = countingCtrlC
+            ? try HandoverPTYChild.ctrlCCounting(in: directory)
+            : try HandoverPTYChild.ticking(in: directory)
         children.append(child)
         return child
     }
@@ -160,7 +162,7 @@ final class HandoverKeeperProcessTests: XCTestCase {
     // MARK: Unverträgliches Protokoll
 
     func testIncompatibleProtocolLeadsToRelease() throws {
-        let tui = try spawnChild()
+        let tui = try spawnChild(countingCtrlC: true)
         let attach = try spawnChild()
         let keeper = try launchKeeper(run: "incompatible")
         let deposit = try connect()
@@ -183,7 +185,7 @@ final class HandoverKeeperProcessTests: XCTestCase {
         XCTAssertTrue(HandoverTestSupport.waitForExit(keeper, timeout: 15), "Aufbewahrer endet nach RELEASE")
         XCTAssertNotNil(tui.waitForExit(timeout: 10))
         XCTAssertNotNil(attach.waitForExit(timeout: 10))
-        XCTAssertEqual(tui.marker.components(separatedBy: "INT").count - 1, 2, "geordnet: zweimal Ctrl+C")
+        XCTAssertEqual(tui.ctrlCBytes, 2, "geordnet: zweimal Ctrl+C")
         XCTAssertTrue(tui.marker.contains("HUP"))
         XCTAssertFalse(attach.marker.contains("INT"))
         XCTAssertTrue(attach.marker.contains("HUP"))
