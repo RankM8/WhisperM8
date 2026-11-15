@@ -363,6 +363,7 @@ final class UISnapshotGallery: XCTestCase {
             + Self.controllerFixtures() + Self.controllerXboxFixtures() + Self.controllerMenuCardFixtures() + Self.gridFixtures() + Self.dictationPillFixtures()
             + Self.unifiedPillFixtures() + Self.pillMorphFixtures() + Self.noticeBannerFixtures() + Self.workingCopyFixtures()
             + Self.usageLimitFixtures() + Self.ticketSettingsFixtures() + Self.ticketBoardFixtures() + Self.restartSettingsFixtures()
+            + Self.sidebarSortedFixtures()
     }
 
     // MARK: - Lauf

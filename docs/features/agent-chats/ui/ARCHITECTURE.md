@@ -85,6 +85,22 @@ den Hauptlisten, wendet `SidebarScopeFilter` an, gruppiert nach Projekt oder
 sortiert flach nach Recency und hält Subagent-Kinder aus der normalen Liste,
 wenn sie einem sichtbaren Parent zugeordnet werden können.
 
+In der gruppierten Ansicht ordnet er nach Seitenleiste A (WM8-80, Regeln pur in
+`AgentSidebarSorting`): In jedem Projekt stehen laufende Chats vor gestoppten,
+innerhalb beider Blöcke gilt die Handreihenfolge (`sortIndex`). „Läuft“ heißt,
+der Prozess lebt (`runningSessionIDs`, laufende Subagent-Kinder machen ihren
+Parent laufend), nicht der Status-Punkt; Zeilen springen also nur bei Start und
+Stopp. Chats, die in einem kuratierten Workspace stehen, fallen aus der
+Projektgruppe heraus und erscheinen dort als `SidebarWorkspaceHint` (ein Chat in
+mehreren Workspaces zählt zum ersten, wie bei der Tab-Herkunft). Projekte mit
+laufenden Chats stehen zuerst; `firstCalmProjectIndex` markiert den Trenner
+„Ohne laufende Chats“. Die gestoppten liegen unter der Faltzeile „N gestoppt“,
+die unter „Aktiv“ zu und sonst offen ist; Suche und Auswahl öffnen sie. Ziehen
+ändert weiter nur die Handreihenfolge, ein laufender Chat bleibt beim Ablegen
+zwischen gestoppten im oberen Block. `chats order` setzt dieselbe
+Handreihenfolge, gibt aber die Blöcke nicht wieder. Die flache Ansicht bleibt
+nach Recency sortiert und ohne diese Regeln (Entscheidung 15.11.2026).
+
 `subagentChildren(workspaceSessions:)` matcht `.subagentJob`-Sessions über
 `subagentParentSessionID` gegen `externalSessionID` der Parent-Sessions.
 Nicht auflösbare Kinder bleiben Orphans und werden als normale Rows im
