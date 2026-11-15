@@ -184,6 +184,17 @@ final class NativeMessagingTests: XCTestCase {
         XCTAssertFalse(ControllerScreenReading.isRule("───" + " " + String(repeating: "x", count: 60) + " ─"), "zu langer Text")
     }
 
+    /// Mit weniger als drei Linienzeichen links endet jede gemessene Form
+    /// rechts mit genau einem „─“. Gewöhnliche Zeilen mit längerem Strich am
+    /// Ende oder Kastenköpfe sind keine Feld-Linie.
+    func testShortLeftRuleNeedsExactlyOneTrailingDash() {
+        XCTAssertFalse(ControllerScreenReading.isRule("  Zusammenfassung ─────"))
+        XCTAssertFalse(ControllerScreenReading.isRule(" Permissions: ──────"))
+        XCTAssertFalse(ControllerScreenReading.isRule("╭─ Titel ─╮"))
+        XCTAssertFalse(ControllerScreenReading.isRule(" wm8-100-gus-nachrichten-f0d79f2c ╮"), "rechts ein anderes Linienzeichen")
+        XCTAssertTrue(ControllerScreenReading.isRule(" wm8-100-gus-nachrichten-f0d79f2c ─"))
+    }
+
     // MARK: Vics Befunde zu Paket 2b
 
     /// `claude --name` schreibt den Namen als `custom-title` in den Verlauf.

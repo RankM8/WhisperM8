@@ -334,8 +334,10 @@ enum ControllerScreenReading {
     /// - darunter gekürzt: „ wm8-100-gus-nachrichten-f0… ─“
     /// Erlaubt ist genau ein kurzer Text mit Leerzeichen davor und danach,
     /// rechts mindestens ein Linienzeichen. Links weniger als drei nur, wenn
-    /// der Text kein Leerzeichen enthält (Namen der App haben keines); links
-    /// keines nur, wenn die Zeile mit einem Leerzeichen beginnt.
+    /// der Text kein Leerzeichen enthält (Namen der App haben keines) und
+    /// rechts genau ein „─“ steht (so in allen gemessenen Formen); links
+    /// keines nur, wenn die Zeile mit einem Leerzeichen beginnt. Sonst hielte
+    /// die Regel auch „  Zusammenfassung ─────“ oder „╭─ Titel ─╮“ für eine Linie.
     static func isNamedRule(_ line: String) -> Bool {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
         let characters = Array(trimmed)
@@ -348,7 +350,7 @@ enum ControllerScreenReading {
         guard !label.isEmpty, label.count <= maxRuleLabel,
               !label.contains(where: { ruleCharacters.contains($0) }) else { return false }
         if leading >= 3 { return true }
-        guard !label.contains(" ") else { return false }
+        guard trailing == 1, characters.last == "─", !label.contains(" ") else { return false }
         return leading > 0 || line.first == " "
     }
 
