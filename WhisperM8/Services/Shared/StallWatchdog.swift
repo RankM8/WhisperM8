@@ -40,6 +40,13 @@ final class StallWatchdog: @unchecked Sendable {
     /// bleibt der letzte bekannte Zustand gültig (LR-SH-014).
     private var throttled = false
     private var timer: DispatchSourceTimer?
+    /// Bis hierhin (Uhr `now`) wird nicht gemeldet: Schonfrist nach dem
+    /// Aufwachen des Macs (WM8-101).
+    private var suppressedUntil: TimeInterval = 0
+
+    /// Liefert die gerade offenen Messintervalle des Main Threads für die
+    /// Meldung (`MainThreadIntervalLedger`). Läuft auf der Queue des Watchdogs.
+    var context: (@Sendable () -> String)?
 
     /// Test-Hook: ersetzt das Logging. Parameter: bisherige Dauer in Sekunden.
     var onBlock: ((TimeInterval) -> Void)?
@@ -78,6 +85,13 @@ final class StallWatchdog: @unchecked Sendable {
         lock.unlock()
     }
 
+    /// Meldungen bis `time` unterdrücken (Schonfrist nach dem Aufwachen).
+    func suppress(until time: TimeInterval) {
+        lock.lock()
+        suppressedUntil = max(suppressedUntil, time)
+        lock.unlock()
+    }
+
     func start() {
         guard timer == nil else { return }
         beat()
@@ -103,7 +117,8 @@ final class StallWatchdog: @unchecked Sendable {
         lock.lock()
         let elapsed = current - lastBeat
         let previous = lastReported
-        let report = Self.shouldReport(elapsed: elapsed, lastReported: previous)
+        let report = current >= suppressedUntil
+            && Self.shouldReport(elapsed: elapsed, lastReported: previous)
         if report { lastReported = elapsed }
         let severity = Self.severity(appThrottled: throttled)
         lock.unlock()
@@ -125,8 +140,11 @@ final class StallWatchdog: @unchecked Sendable {
             // `error`-Level, weil genau diese Zeile im Nachhinein die Frage
             // beantwortet „ab wann stand die App?" — sie muss im Log stehen,
             // auch wenn niemand vorher Debug-Logging eingeschaltet hat.
+            // `open` nennt, welches gemessene Intervall gerade läuft — die
+            // einzige Stelle, an der das WÄHREND der Blockade sichtbar ist.
+            let open = context?() ?? "-"
             Logger.agentPerformance.error(
-                "main_thread_blocked_ongoing durationMs=\(Int(elapsed * 1000), privacy: .public)"
+                "main_thread_blocked_ongoing durationMs=\(Int(elapsed * 1000), privacy: .public) open=\(open, privacy: .public)"
             )
         }
     }

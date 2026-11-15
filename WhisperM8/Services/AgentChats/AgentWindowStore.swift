@@ -1414,6 +1414,9 @@ final class AgentWindowStore {
         guard updated != state else { return }
         let before = state
         state = updated
+        if ChatSwitchMeasurement.selectionDiffers(before, updated) {
+            ChatSwitchMeasurement.selectionChanged()
+        }
         dirtyRevision += 1
         scheduleSave()
         clearDismissalsOfReopenedTabs()

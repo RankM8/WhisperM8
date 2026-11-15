@@ -14,6 +14,7 @@ enum PerfSignposts {
     static let grid = OSSignposter(subsystem: subsystem, category: "perf.grid")
     static let statistics = OSSignposter(subsystem: subsystem, category: "perf.statistics")
     static let controller = OSSignposter(subsystem: subsystem, category: "perf.controller")
+    static let chats = OSSignposter(subsystem: subsystem, category: "perf.chats")
 }
 
 /// Wie dicht ein Messpunkt sitzt — und damit, ob er im Normalbetrieb mitläuft.
@@ -71,11 +72,15 @@ struct PerformanceBudget {
     final class Token {
         fileprivate let state: OSSignpostIntervalState?
         fileprivate let startedAt: TimeInterval?
+        /// Auf dem Main Thread begonnen: dann führt `MainThreadIntervalLedger`
+        /// Buch, damit Hänger-Meldungen ihren Verursacher nennen (WM8-101).
+        fileprivate let onMain: Bool
         fileprivate var ended = false
 
-        fileprivate init(state: OSSignpostIntervalState?, startedAt: TimeInterval?) {
+        fileprivate init(state: OSSignpostIntervalState?, startedAt: TimeInterval?, onMain: Bool = false) {
             self.state = state
             self.startedAt = startedAt
+            self.onMain = onMain
         }
 
         /// EIN geteiltes Token für alle abgeschalteten Detail-Messpunkte.
@@ -132,7 +137,9 @@ struct PerformanceBudget {
     func begin() -> Token {
         guard isActive else { return .inactive }
         let state = signposter.beginInterval(name, id: signposter.makeSignpostID())
-        return Token(state: state, startedAt: now())
+        let onMain = Thread.isMainThread
+        if onMain { MainThreadIntervalLedger.shared.didBegin(name) }
+        return Token(state: state, startedAt: now(), onMain: onMain)
     }
 
     func end(_ token: Token) {
@@ -145,7 +152,11 @@ struct PerformanceBudget {
         token.ended = true
         signposter.endInterval(name, state)
 
-        let duration = now() - startedAt
+        let endedAt = now()
+        if token.onMain {
+            MainThreadIntervalLedger.shared.didEnd(name, start: startedAt, end: endedAt)
+        }
+        let duration = endedAt - startedAt
         guard duration > budget else { return }
         if let onViolation {
             onViolation("\(name)", duration)
@@ -166,6 +177,9 @@ struct PerformanceBudget {
         guard !token.ended else { return }
         token.ended = true
         signposter.endInterval(name, state)
+        if token.onMain {
+            MainThreadIntervalLedger.shared.didEnd(name, start: nil, end: nil)
+        }
     }
 
     func withInterval<T>(_ body: () throws -> T) rethrows -> T {
@@ -298,6 +312,23 @@ enum PerfBudgets {
     static let gridDividerTick = PerformanceBudget(name: "grid.dividerTick", budget: 0.016, signposter: PerfSignposts.grid)
     /// Ein Streaming-Flush einer Pane (Parser + Render-Scheduling, keine GPU-Zeit).
     static let gridStreamingFrame = PerformanceBudget(name: "grid.streamingFrame", budget: 0.0167, signposter: PerfSignposts.grid)
+
+    // Chatwechsel und Start (WM8-101). Der Chatwechsel ist der größte Posten
+    // der Hängerzeit (15.11.2026: 54 %), war aber ohne Messpunkt.
+
+    /// Auswahlwechsel im Fenster-Store bis nach dem nächsten Core-Animation-
+    /// Commit: Body-Auswertung, Layout und Zeichnen des ganzen Fensters samt
+    /// Seitenleiste. Ein Klick ist selten, deshalb immer an.
+    static let chatSwitch = PerformanceBudget(name: "chat.switch", budget: 0.100, signposter: PerfSignposts.chats)
+    /// Umhängen einer Terminal-Ansicht in ihren Container bis nach dem
+    /// nächsten Commit. Im Raster mehrere je Wechsel, deshalb Detail-Stufe.
+    static let paneAttach = PerformanceBudget(name: "pane.attach", budget: 0.050, signposter: PerfSignposts.chats, tier: .detail)
+    /// Größenänderung einer Terminal-Ansicht samt Umbruch des Puffers. Läuft
+    /// beim Ziehen des Fensterrands in jedem Bild, deshalb Detail-Stufe.
+    static let terminalResize = PerformanceBudget(name: "terminal.resize", budget: 0.016, signposter: PerfSignposts.chats, tier: .detail)
+    /// Ende von `applicationDidFinishLaunching` bis nach dem ersten Commit
+    /// des Agent-Chats-Fensters. Einmal je Start.
+    static let launchFirstWindow = PerformanceBudget(name: "launch.firstWindow", budget: 0.500, signposter: PerfSignposts.chats)
 
     // Statistik
     /// Ein inkrementeller Lauf des Protokoll-Lesers (`StatisticsLogScanner`):
