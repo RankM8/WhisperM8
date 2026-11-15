@@ -119,6 +119,9 @@ struct SidebarGroupMenuState: Equatable {
     var claudeProfiles: [ClaudeAccountProfile]
     var gptProfiles: [GPTAccountProfile]
     var accountBulkMoveEnabled: Bool
+    /// GPT-Konto-Menü sichtbar: GPT-Backend an und GPT-Konto-Profile an
+    /// (`canSwitchGPTAccount`). Nachtrag aus der Prüfung (Uli).
+    var gptAccountMenuEnabled: Bool
     /// Vorgemerkter Kontowechsel der Chats dieser Gruppe (Ziel-Name).
     var pendingAccountSwitches: [UUID: String]
     var hasUndoableAccountMove: Bool
@@ -137,6 +140,7 @@ struct SidebarGroupMenuState: Equatable {
         claudeProfiles: [ClaudeAccountProfile],
         gptProfiles: [GPTAccountProfile],
         accountBulkMoveEnabled: Bool,
+        gptAccountMenuEnabled: Bool,
         pendingAccountSwitches: [UUID: String],
         hasUndoableAccountMove: Bool,
         pendingLifecycle: Set<UUID>,
@@ -154,6 +158,7 @@ struct SidebarGroupMenuState: Equatable {
             claudeProfiles: claudeProfiles,
             gptProfiles: gptProfiles,
             accountBulkMoveEnabled: accountBulkMoveEnabled,
+            gptAccountMenuEnabled: gptAccountMenuEnabled,
             pendingAccountSwitches: pendingAccountSwitches.filter { ids.contains($0.key) },
             hasUndoableAccountMove: hasUndoableAccountMove,
             pendingLifecycle: pendingLifecycle.intersection(ids),

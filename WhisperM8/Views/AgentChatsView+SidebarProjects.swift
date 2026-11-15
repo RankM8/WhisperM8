@@ -25,6 +25,8 @@ extension AgentChatsView {
         let menuClaudeProfiles = AccountMenuData.claudeProfiles.value
         let menuGPTProfiles = AccountMenuData.gptProfiles.value
         let menuBulkMove = AppPreferences.shared.isAccountBulkMoveEnabled
+        let menuGPTAccounts = AppPreferences.shared.claudeGPTBackendEnabled
+            && AppPreferences.shared.isGPTAccountProfilesEnabled
         let menuPendingSwitches = AccountSwitchCoordinator.shared.pending.mapValues(\.targetName)
         let menuUndoable = hasUndoableAccountMove
         let menuStoppableJobs = Set(jobRuntimeModel.snapshotsBySessionID.compactMap { id, state in
@@ -62,7 +64,8 @@ extension AgentChatsView {
                 groupSessionIDs: groupIDs, multiSelection: menuMultiSelection, pinnedSessionIDs: menuPinned,
                 gridWorkspaces: menuWorkspaces, visibleGrid: menuVisibleGrid,
                 claudeProfiles: menuClaudeProfiles, gptProfiles: menuGPTProfiles,
-                accountBulkMoveEnabled: menuBulkMove, pendingAccountSwitches: menuPendingSwitches,
+                accountBulkMoveEnabled: menuBulkMove, gptAccountMenuEnabled: menuGPTAccounts,
+                pendingAccountSwitches: menuPendingSwitches,
                 hasUndoableAccountMove: menuUndoable, pendingLifecycle: pendingLifecycleSessions,
                 takenOverJobs: Set(groupIDs.filter { jobRuntimeModel.isTakenOver($0) }),
                 stoppableJobs: menuStoppableJobs

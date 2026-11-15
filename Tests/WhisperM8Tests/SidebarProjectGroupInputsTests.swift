@@ -87,6 +87,7 @@ final class SidebarProjectGroupInputsTests: XCTestCase {
         claude: [ClaudeAccountProfile] = [],
         gpt: [GPTAccountProfile] = [],
         bulkMove: Bool = true,
+        gptMenu: Bool = true,
         pendingSwitches: [UUID: String] = [:],
         undoable: Bool = false,
         pendingLifecycle: Set<UUID> = [],
@@ -96,7 +97,7 @@ final class SidebarProjectGroupInputsTests: XCTestCase {
         SidebarGroupMenuState.make(
             groupSessionIDs: [groupSession], multiSelection: multiSelection, pinnedSessionIDs: pinned,
             gridWorkspaces: workspaces, visibleGrid: visibleGrid, claudeProfiles: claude, gptProfiles: gpt,
-            accountBulkMoveEnabled: bulkMove, pendingAccountSwitches: pendingSwitches,
+            accountBulkMoveEnabled: bulkMove, gptAccountMenuEnabled: gptMenu, pendingAccountSwitches: pendingSwitches,
             hasUndoableAccountMove: undoable, pendingLifecycle: pendingLifecycle,
             takenOverJobs: takenOver, stoppableJobs: stoppable)
     }
@@ -141,6 +142,7 @@ final class SidebarProjectGroupInputsTests: XCTestCase {
         assertChanges(Self.menu(claude: [ClaudeAccountProfile(name: "zweit", configDir: dir)]), "Claude-Konto")
         assertChanges(Self.menu(gpt: [GPTAccountProfile(name: "zweit", configDir: dir)]), "GPT-Konto")
         assertChanges(Self.menu(bulkMove: false), "Sammel-Umzug")
+        assertChanges(Self.menu(gptMenu: false), "GPT-Backend oder GPT-Konto-Profile aus")
         assertChanges(Self.menu(pendingSwitches: [Self.groupSession: "zweit"]), "vorgemerkter Kontowechsel")
         assertChanges(Self.menu(undoable: true), "Rückgängig")
     }
