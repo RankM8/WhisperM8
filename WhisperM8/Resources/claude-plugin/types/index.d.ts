@@ -80,7 +80,7 @@ declare module 'claude-code' {
        * Schlüssel kommt erst beim Ausliefern nach `woken`. Im Atom, damit sie
        * einen Reload der Mod übersteht.
        */
-      wakePending: { id: string; key: string; line: string; at: number; urgent: boolean }[]
+      wakePending: { id: string; key: string; line: string; at: number; urgent: boolean; name?: string; announced?: boolean }[]
       /** Callout-Modus der Session: Claude darf am Turn-Ende sprechen. */
       callout: boolean
       /** Tasks der laufenden Session, nach ID sortiert. */

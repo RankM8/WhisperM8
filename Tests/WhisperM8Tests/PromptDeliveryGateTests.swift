@@ -37,7 +37,7 @@ final class PromptDeliveryGateTests: XCTestCase {
     }
 
     func testFieldVisiblyEmptyOnlyForReadableClaudeField() {
-        let empty = ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: true, isEmpty: true)
+        let empty = ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: true, isEmpty: true, isBlank: true)
         let text = ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: false, isEmpty: false)
         XCTAssertTrue(PromptSubmitCheck.fieldVisiblyEmpty(field: empty, profile: .claudeCodeChat))
         XCTAssertFalse(PromptSubmitCheck.fieldVisiblyEmpty(field: text, profile: .claudeCodeChat))
@@ -100,6 +100,23 @@ final class PromptDeliveryGateTests: XCTestCase {
         XCTAssertTrue(visiblyEmpty([.plain(rule), .dimmed("❯ "), .plain(lower), .plain("  · 1 shell")], cursor: (1, 2)))
     }
 
+    /// Uli: Ein abgeblendeter Platzhalter, auf dessen Anfang der Nutzer den
+    /// Cursor gesetzt hat (Pos1, Ctrl-A, Klick), ist nicht leer. Ebenso ein
+    /// grauer Vorschlag: Dort entscheidet die Schätzung.
+    func testDimmedContentWithCursorAtStartIsNotEmpty() {
+        let rule = String(repeating: "─", count: 60) + " wegwerf-69057110 ─"
+        let lower = String(repeating: "─", count: 78)
+        for token in ["[Pasted text #1 +40 lines]", "[Image #2]", "Try \"how does AgentCommandBuilder.swift work?\""] {
+            let screen = ControllerScreenReading.read(lines: [.plain(rule), dimmedField(token), .plain(lower)],
+                                                      cursor: (1, 2), detectViews: true)
+            XCTAssertEqual(screen.promptField?.isEmpty, true, "hasText-Sicht unverändert: \(token)")
+            XCTAssertEqual(screen.promptField?.hasText, false)
+            XCTAssertFalse(PromptSubmitCheck.fieldVisiblyEmpty(field: screen.promptField, profile: .claudeCodeChat), token)
+        }
+        // Nur „❯“: weiter leer (Fall vom 15.11.).
+        XCTAssertTrue(visiblyEmpty([.plain(rule), .dimmed("❯ "), .plain(lower)], cursor: (1, 2)))
+    }
+
     /// Falscher Rahmen: Erkennt der Leser die Linie über dem echten Feld nicht,
     /// gelten zwei Linien aus einer Tool-Ausgabe mit „> “ dazwischen als Feld.
     /// Der Cursor steht im echten Feld darunter, also ist das falsche nie „leer“.
@@ -115,9 +132,9 @@ final class PromptDeliveryGateTests: XCTestCase {
     }
 
     func testMultiRowOrCursorAwayIsNotEmpty() {
-        let twoRows = ControllerPromptField(rows: 2, cursorRow: 0, cursorAtStart: true, isEmpty: true)
-        let cursorLater = ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: false, isEmpty: true)
-        let noCursor = ControllerPromptField(rows: 1, cursorRow: nil, cursorAtStart: false, isEmpty: true)
+        let twoRows = ControllerPromptField(rows: 2, cursorRow: 0, cursorAtStart: true, isEmpty: true, isBlank: true)
+        let cursorLater = ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: false, isEmpty: true, isBlank: true)
+        let noCursor = ControllerPromptField(rows: 1, cursorRow: nil, cursorAtStart: false, isEmpty: true, isBlank: true)
         for field in [twoRows, cursorLater, noCursor] {
             XCTAssertFalse(PromptSubmitCheck.fieldVisiblyEmpty(field: field, profile: .claudeCodeChat))
         }

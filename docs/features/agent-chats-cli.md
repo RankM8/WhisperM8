@@ -988,6 +988,10 @@ whisperm8 chats show <ref> --recap [--json]   # Claudes Rückblicke als Lesehilf
   Eintrag zusätzlich `ref`, `title`, `project`, Live-`status` und
   `statusSince` (aus dem Journal) sowie `otherOwners`, dazu der aktuelle
   `cursor` für `watch`. Kein Board → `isActive: false`, `entries: []`, Exit 0.
+  `ownerStatus` (seit WM8-64, nur ohne `--all` und bei Einträgen auf dem
+  Board): Laufzeitstatus des Besitzers, erst aus der laufenden App, sonst aus
+  dem letzten Journal-Wechsel; fehlt, wenn unbekannt. Die Board-Mod kennt so
+  nach einem Reload den eigenen Status.
   `--all --json` liefert `{schema, cursor, boards: […]}`.
 - **Handeln** nur über den Socket an die laufende App (einziger Schreiber)
   und nur auf dem **eigenen** Board; die App verlangt ein gültiges

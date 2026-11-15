@@ -78,14 +78,16 @@ enum PromptSubmitCheck {
     /// dann gilt die Schätzung wie bisher.
     ///
     /// Streng, weil es den Sendeweg lockert (Uli zu WM8-64): Eine Fehl-Ablesung
-    /// Richtung „leer“ würde zu einem Senden mit Enter. Leer heißt deshalb
-    /// zusätzlich: eine Zeile, und der Cursor steht in ihr ganz am Anfang. Der
-    /// Cursor bestätigt, dass es das echte Feld ist und nicht zwei Linien aus
-    /// einer Tool-Ausgabe weiter oben; ein abgeblendeter Platzhalter für
-    /// eingefügten Text oder ein Bild setzt den Cursor dahinter.
+    /// Richtung „leer“ würde zu einem Senden mit Enter. Leer heißt deshalb:
+    /// hinter dem „❯“ steht gar nichts, auch nichts Abgeblendetes (ein grauer
+    /// Vorschlag oder ein abgeblendeter Platzhalter für eingefügten Text, auf
+    /// dessen Anfang der Nutzer den Cursor gesetzt hat), das Feld hat eine
+    /// Zeile, und der Cursor steht in ihr ganz am Anfang. Der Cursor bestätigt,
+    /// dass es das echte Feld ist und nicht zwei Linien aus einer Tool-Ausgabe
+    /// weiter oben. Steht ein grauer Vorschlag da, entscheidet die Schätzung.
     static func fieldVisiblyEmpty(field: ControllerPromptField?, profile: TerminalKeyboardProfile) -> Bool {
         guard profile == .claudeCodeChat, let field else { return false }
-        return field.isEmpty && field.rows == 1 && field.cursorRow == 0 && field.cursorAtStart
+        return field.isBlank && field.isEmpty && field.rows == 1 && field.cursorRow == 0 && field.cursorAtStart
     }
 
     static let stuckMessage = "Der Text steht im Eingabefeld des Chats, wurde aber nicht abgeschickt. "

@@ -66,6 +66,10 @@ struct ControllerPromptField: Equatable, Sendable {
     var cursorAtStart: Bool
     /// Im Feld steht kein (nicht abgeblendeter) Text.
     var isEmpty: Bool
+    /// Hinter dem Prompt-Zeichen steht gar nichts, auch nichts Abgeblendetes
+    /// (kein grauer Vorschlag, kein abgeblendeter Platzhalter). Nur das zählt
+    /// für „sichtbar leer“, das den Sendeweg lockert (WM8-64).
+    var isBlank: Bool = false
 
     /// Sicher Text im Feld: Text steht da, und der Cursor steht nicht am
     /// Anfang eines einzeiligen Felds. Ein grauer Platzhalter, der nicht als
@@ -375,12 +379,18 @@ enum ControllerScreenReading {
         for row in (firstRow + 1)..<box.lower { content += " " + lines[row].plain }
         let isEmpty = content.replacingOccurrences(of: "│", with: " ")
             .trimmingCharacters(in: .whitespaces).isEmpty
+        // Dieselbe Prüfung über die volle Fassung: auch Abgeblendetes zählt.
+        var full = String(Array(lines[firstRow].full).dropFirst(start))
+        for row in (firstRow + 1)..<box.lower { full += " " + lines[row].full }
+        let isBlank = full.replacingOccurrences(of: "│", with: " ")
+            .trimmingCharacters(in: .whitespaces).isEmpty
         var cursorRow: Int?
         var cursorAtStart = false
         if let cursor, cursor.row >= firstRow, cursor.row < box.lower {
             cursorRow = cursor.row - firstRow
             cursorAtStart = cursorRow == 0 && cursor.col <= start
         }
-        return ControllerPromptField(rows: rows, cursorRow: cursorRow, cursorAtStart: cursorAtStart, isEmpty: isEmpty)
+        return ControllerPromptField(rows: rows, cursorRow: cursorRow, cursorAtStart: cursorAtStart, isEmpty: isEmpty,
+                                     isBlank: isBlank)
     }
 }

@@ -177,8 +177,13 @@ mehreren Boards stehen (`otherOwners`).
   30 s nach (nur ein Takt, kein Prozess). Wartet Jarvis selbst auf Giuliano
   (eigener Status `awaitingInput`), hält sie ohne Obergrenze: Ein Prompt in
   die offene Rückfrage hülfe niemandem, und ob `$.prompt.submit` dort wartet
-  oder die Frage stört, ist nicht geprüft. Ist der eigene Status unbekannt,
-  weckt sie wie vorher.
+  oder die Frage stört, ist nicht geprüft. Ein „wartet auf dich“ eines anderen
+  Chats zeigt sie dann sofort als Hinweis und spricht es bei eingeschalteten
+  Ansagen („Jon wartet auf dich.“), je Zeile einmal; der Prompt folgt, wenn
+  Jarvis' Frage beantwortet ist. Den eigenen Status kennt die Mod aus
+  `chats watch` und, nach einem Reload, aus `ownerStatus` in
+  `chats board --json`. Ist er trotzdem unbekannt, gilt er höchstens 1 Minute
+  wie „arbeitet“.
   Zurückgehaltene Zeilen stehen im Atom `wakePending` und überstehen so einen
   Reload der Mod; nach dem Reload liefert die Mod sie beim ersten Neulesen
   des Boards zuerst aus. Als gemeldet (`woken`) gilt ein Zustand erst, wenn
