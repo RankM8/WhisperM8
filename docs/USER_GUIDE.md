@@ -144,6 +144,11 @@ tools you would run in Terminal, with their own sign-in, models and commands.
   you turn on *Advanced agent features* in Settings → Agent Chats.
 - **Workspaces:** place several chats of a project side by side in a grid and switch between them with
   `Ctrl+Tab`.
+- **Switch anywhere with ⌥Tab:** tap `⌥Tab` to go back to the previous chat or workspace. Hold `⌥` and
+  press `Tab` to open the Dynamic Island at the top of the screen with all chats, workspaces and
+  projects: `Tab`/`⇧Tab` or the arrow keys move, `←`/`→` switch between the two lists, releasing `⌥`
+  switches, `Esc` cancels, `Space` switches and starts dictation there. Turn it off in Settings → Agent
+  Chats (*Dynamic Island with the keyboard*).
 - **Tickets (Labs):** with *Show tickets in Agent Chats* turned on in Settings → Tickets, a ticket button
   appears next to the sidebar button. It switches the window between your chats and the tickets of the
   selected project: a board and a backlog from Linear, with the chat that works on each ticket and its

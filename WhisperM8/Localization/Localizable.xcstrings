@@ -6431,6 +6431,16 @@
         }
       }
     },
+    "Dynamic Island with the keyboard (⌥Tab)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dynamic Island per Tastatur (⌥Tab)"
+          }
+        }
+      }
+    },
     "ERROR": {
       "localizations": {
         "de": {
@@ -8167,6 +8177,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Halten zum Sprechen oder tippen, um die Aufnahme ein-/auszuschalten. Kurze Tipper unter 0,3 s werden ignoriert, um versehentliches Stoppen zu verhindern."
+          }
+        }
+      }
+    },
+    "Hold ⌥ and press Tab to switch chats, workspaces and projects, like L2 on a controller. Tap ⌥Tab to go back to the previous place. Ctrl+Tab stays the tab switcher. Works while an Agent Chats window is in front.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⌥ halten und Tab drücken wechselt zwischen Chats, Workspaces und Projekten, wie L2 am Controller. ⌥Tab kurz getippt führt zurück zum vorigen Ort. ⌃Tab bleibt der Tab-Umschalter. Wirkt, solange ein Agent-Chats-Fenster vorne ist."
           }
         }
       }
@@ -12770,6 +12790,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Opt-in über Codex-Subscription/OAuth (1M-Rollout des Codex-Backends): 900k Rohprofil, erwartetes Auto-Compact um %lldk. Gilt für die 1M-Klasse laut Codex-Katalog (derzeit: %@); Direktmessungen 2026-08-18 und 2026-09-06: 903k–913k angenommen, ~924k abgewiesen. Andere Modelle fallen in diesem Profil aus dem Picker, frische Starts damit auf das neueste Modell zurück. Kann ChatGPT-Credits schneller verbrauchen — bei Upstream-Overflow auf Standard zurückstellen."
+          }
+        }
+      }
+    },
+    "Option-Tab": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wahltaste-Tab"
           }
         }
       }
@@ -22064,6 +22094,16 @@
         }
       }
     },
+    "close island only, recording continues": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nur Insel zu, Aufnahme läuft"
+          }
+        }
+      }
+    },
     "contains secrets — set it up manually in %@ (never passed on the command line)": {
       "localizations": {
         "de": {
@@ -22564,12 +22604,32 @@
         }
       }
     },
+    "next": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "weiter"
+          }
+        }
+      }
+    },
     "next waiting": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "nächster wartender"
+          }
+        }
+      }
+    },
+    "next/back": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "weiter/zurück"
           }
         }
       }
@@ -22844,6 +22904,16 @@
         }
       }
     },
+    "reopen": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "wieder öffnen"
+          }
+        }
+      }
+    },
     "reopen %@": {
       "localizations": {
         "de": {
@@ -22950,6 +23020,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Stick: scrollen"
+          }
+        }
+      }
+    },
+    "stop": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "stopp"
           }
         }
       }

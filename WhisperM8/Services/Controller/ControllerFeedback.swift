@@ -213,6 +213,9 @@ final class ControllerFeedback {
         inputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown]) { event in
             MainActor.assumeIsolated {
                 guard ui.area == .list || ui.menu != nil || dispatcher.islandState != nil else { return }
+                // Die Insel per Tastatur (⌥Tab) bedient ihr eigener Monitor,
+                // auch den Klick, der sie schließt.
+                if dispatcher.isKeyboardIslandOpen { return }
                 if event.type == .keyDown, ControllerKeyboardBridge.isBridgeEvent(event) { return }
                 ui.leaveList()
                 ui.menu = nil

@@ -19,6 +19,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
 
     /// Rückmeldung am Controller (Vibration). Gesetzt vom Aufbau der Live-Kette.
     var playHaptic: (ControllerHapticPattern) -> Void = { _ in }
+    /// „Geht nicht“ per Tastatur (Insel per ⌥Tab): der macOS-Warnton.
+    var keyboardRejected: () -> Void = {}
     var togglePause: () -> Void = {}
     /// Angaben des Debug-Kanals (Test-Instanz ohne aktives Fenster).
     var debugOverride: () -> ControllerDebugOverride? = { nil }
@@ -242,6 +244,16 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         if action.isIslandEnd, islandState == nil {
             spentLayer = nil
             return
+        }
+        // Der Controller greift ein, während die Insel per Tastatur offen ist:
+        // Sie schließt ohne Wechsel (wie Maus oder Tastatur die Controller-Insel
+        // schließen). Das Ende einer Ebene hat dann nichts mehr zu tun.
+        if isKeyboardIslandOpen {
+            closeIsland()
+            if action.isIslandEnd {
+                spentLayer = nil
+                return
+            }
         }
         closeKeyboardSwitcherIfNeeded()
         clearMultiSelectionIfNeeded(before: action)

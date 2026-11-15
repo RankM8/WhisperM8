@@ -303,7 +303,8 @@ dieselbe wie die Diktat-Pille; die Dynamic Island hat dort Vorrang vor allem and
 Rand, Schatten der Diktat-Pille) blieb gleich.
 
 Die Dynamic Island ersetzt am Controller den Ctrl+Tab-Umschalter (der Tastatur bleibt er) und die frühere
-Workspace-Auswahl unten im Fenster. Die Legende schaltet beim Halten nicht um; sie nennt die Ebenen in
+Workspace-Auswahl unten im Fenster. Mit der Tastatur geht „Wohin“ über ⌥Tab, mit Tastenkappen statt
+Controller-Zeichen ([insel-tastatur.md](insel-tastatur.md)). Die Legende schaltet beim Halten nicht um; sie nennt die Ebenen in
 einem Eintrag („L1 R1 L2 Halten: Ebenen“).
 
 **Während der Aufnahme:** R2 beendet (Text ins Eingabefeld), Kreuz beendet und sendet (nur bei einem

@@ -700,6 +700,13 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.controllerLightEnabled) }
     }
 
+    /// Dynamic Island per Tastatur (⌥Tab, WM8-104): unabhängig von der
+    /// Controller-Steuerung. Standard: an. Aus: ⌥Tab verhält sich wie vorher.
+    var isKeyboardIslandEnabled: Bool {
+        get { boolWithDefault(true, forKey: Keys.keyboardIslandEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.keyboardIslandEnabled) }
+    }
+
     /// Legende am unteren Rand des Agent-Chats-Fensters. Standard: an.
     var isControllerLegendEnabled: Bool {
         get { boolWithDefault(true, forKey: Keys.controllerLegendEnabled) }
@@ -1199,6 +1206,7 @@ enum PreferenceKeys {
     static let speechCalloutsMuted = "speechCalloutsMuted"
     static let speechCalloutVoiceIdentifier = "speechCalloutVoiceIdentifier"
     static let controllerFeatureEnabled = "controllerFeatureEnabled"
+    static let keyboardIslandEnabled = "keyboardIslandEnabled"
     static let controllerEnabled = "controllerEnabled"
     static let controllerBackgroundEnabled = "controllerBackgroundEnabled"
     static let controllerWakeOnInputEnabled = "controllerWakeOnInputEnabled"
