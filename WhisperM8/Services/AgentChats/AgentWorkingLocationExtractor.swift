@@ -43,6 +43,8 @@ struct GitLocation: Equatable {
     var branch: String?
     /// Standard-Branch des Repos (`origin/HEAD`), `nil` wenn unbekannt.
     var defaultBranch: String? = nil
+    /// HEAD zeigt auf einen Commit, nicht auf einen Branch.
+    var isDetached = false
 }
 
 /// Liest `.git/HEAD`, ohne `git`-Subprozess. Folgt bei Arbeitskopien der
@@ -72,7 +74,8 @@ enum GitHeadReader {
                 }
                 let head = readSmallFile(gitDir.appendingPathComponent("HEAD"))
                 return GitLocation(root: url.path, gitDir: gitDir.path, branch: head.flatMap(branch(fromHead:)),
-                                   defaultBranch: defaultBranch(gitDir: gitDir))
+                                   defaultBranch: defaultBranch(gitDir: gitDir),
+                                   isDetached: head.map(isDetached(head:)) ?? false)
             }
             let parent = url.deletingLastPathComponent()
             if parent.path == url.path { return nil }
@@ -114,6 +117,12 @@ enum GitHeadReader {
     }
 
     /// Pur: `ref: refs/heads/<branch>` → Branch; losgelöster HEAD → `nil`.
+    /// HEAD mit Commit-Hash statt `ref:` (losgelöst, etwa mitten im Rebase).
+    static func isDetached(head: String) -> Bool {
+        let trimmed = head.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.count >= 40 && trimmed.allSatisfy(\.isHexDigit)
+    }
+
     static func branch(fromHead head: String) -> String? {
         let trimmed = head.trimmingCharacters(in: .whitespacesAndNewlines)
         let prefix = "ref: refs/heads/"

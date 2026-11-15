@@ -214,14 +214,20 @@ Tagen) ändern nichts und schreiben nichts. Nur ein geänderter Ort geht über
 `AgentChatSession.workingCopy` im Workspace, ohne den Aktivitäts-Bump von
 `updateSession`. Anzeige: Marke im Kachelkopf neben dem Konto und in der
 Kopfzeile der Einzelansicht (dort mit dem Pfad des Orts), per `ViewThatFits`
-von „Ort · Branch“ bis zum bloßen Symbol. Im Hauptordner auf dem
-Standard-Branch (`origin/HEAD`, sonst `main`/`master`) steht nur der graue
-Chip „Main folder“ ohne Branch, damit „main“ als Branch nicht neben dem Konto
-„main“ steht; auf einem anderen Branch wird der Chip farbig und zeigt den
-Branch, bei Platzmangel den Branch statt des Worts. Nennt der Name einer
-Arbeitskopie den Branch schon, steht er nur einmal da. Kleines Zeichen in Tab
-und Seitenleiste nur außerhalb des Hauptordners oder auf einem
-Nicht-Standard-Branch (`AgentWorkingCopyMarker`). Lila
+von „Ort · Branch“ bis zum bloßen Symbol. Seit WM8-73 nach dem Vorbild Orca: Die
+Marke unterscheidet nur den Ordner. Der Hauptordner steht grau mit seinem Branch da
+(„Main folder · develop“), Arbeitskopie und fremder Ordner lila mit Name und Branch.
+Über den Branch wird nicht geurteilt: Die frühere Regel „Standard-Branch laut
+`origin/HEAD`, sonst main/master“ färbte Repos dauerhaft lila, deren GitHub-Standard
+nicht der Arbeits-Branch ist (buchhaltung: `arbeitsstand-april-2026` auf GitHub,
+gearbeitet auf `main`). `defaultBranch` steht nur noch als Auskunft in
+`chats show --json`. Losgelöster HEAD (Commit statt `ref:`) zeigt „detached“.
+Nennt der Name einer Arbeitskopie den Branch schon, steht er nur einmal da. Kleines
+Zeichen in Tab und Seitenleiste nur außerhalb des Hauptordners
+(`AgentWorkingCopyMarker`). Alle Chats im selben Ordner teilen sich den Branch-Stand:
+Liest einer ihn neu, ziehen die anderen mit (`applyWorkingCopy`), auch wenn sie
+ruhen. Den Pfad zeigen Tooltip, Kopfzeile und `chats show` nur mit druckbaren Zeichen
+(`displayPath`). Lila
 wie der Branch-Tag, weil Grün „arbeitet“ und der Akzent „ausgewählt“ heißt. Die
 Seitenleiste liest den Workspace, nie den Activity-Store. Kosten je Chat und
 Tail-Read: der Parse der letzten Zeile mit `cwd` (0,1–0,5 ms bei großen
@@ -274,9 +280,11 @@ hinter einem Symlink das Zeichen „außerhalb“.
   einer Arbeitskopie arbeitet, steht als „Hauptordner“ da. Das ist die
   wichtigste Grenze: Die Anzeige beweist nicht, dass ein Chat den Hauptordner
   in Ruhe lässt.
-- Der Branch stimmt nur zum Zeitpunkt des letzten Schreibens des Verlaufs;
-  wechselt ein anderer Chat oder der Nutzer danach den Branch im selben
-  Ordner, zeigt die Marke den alten Stand bis zum nächsten Schreiben.
+- Der Branch stimmt nur zum Zeitpunkt, an dem zuletzt ein Chat in diesem Ordner
+  geschrieben hat; wechselt der Nutzer danach von Hand den Branch, zeigt die Marke
+  den alten Stand, bis wieder ein Chat dort schreibt.
+- Ein Hauptordner auf einem Feature-Branch fällt nicht mehr farbig auf; der
+  Branch-Name steht aber in der Marke.
 - Ein `cwd` in einem Git-Submodul zeigt den Branch des Submoduls.
 - Liegt die letzte `turn_context`-Zeile eines Codex-Chats weiter als 64 KB
   zurück, bleibt bis zum nächsten Turn der gespeicherte Ort stehen.

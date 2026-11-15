@@ -6051,6 +6051,26 @@
         }
       }
     },
+    "detached": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "losgelöst"
+          }
+        }
+      }
+    },
+    "detached HEAD": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "losgelöster HEAD (kein Branch)"
+          }
+        }
+      }
+    },
     "Detailed performance measurement": {
       "localizations": {
         "de": {

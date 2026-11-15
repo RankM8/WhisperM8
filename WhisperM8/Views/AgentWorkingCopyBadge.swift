@@ -1,12 +1,13 @@
 import SwiftUI
 
-/// Marke „Wo arbeitet der Chat?“ (WM8-60). Hauptordner auf dem
-/// Standard-Branch: leiser grauer Chip „Main folder“ OHNE Branch — „main“
-/// stünde sonst als Branch direkt neben dem Konto „main“ und ließe sich
-/// verwechseln. Hauptordner auf einem anderen Branch: auffällig mit Branch
-/// (der Fall, den man sehen will). Arbeitskopie und fremder Ordner: farbig mit
-/// Name und Branch; nennt der Name den Branch schon, nur einmal. Immer
-/// sichtbar (kein Hover-only), Schrift 11 pt, Erklärung und Pfad im Tooltip.
+/// Marke „Wo arbeitet der Chat?“ (WM8-60, seit WM8-73 nach dem Vorbild
+/// Orca). Sie unterscheidet nur den Ordner: Hauptordner grau mit seinem
+/// Branch („Main folder · develop“), Arbeitskopie und fremder Ordner lila
+/// mit Name und Branch; nennt der Name den Branch schon, nur einmal. Über den
+/// Branch wird nicht geurteilt (kein „Standard-Branch“ mehr): Bei Repos, deren
+/// GitHub-Standard nicht der Arbeits-Branch ist, war die Marke sonst dauerhaft
+/// lila. Losgelöster HEAD steht als „detached“ da. Immer sichtbar (kein
+/// Hover-only), Schrift 11 pt, Erklärung und Pfad im Tooltip.
 struct AgentWorkingCopyBadge: View {
     let copy: AgentWorkingCopy
 
@@ -15,20 +16,29 @@ struct AgentWorkingCopyBadge: View {
     static let elsewhereColor = Color(red: 0.62, green: 0.45, blue: 0.95)
 
     private var isElsewhere: Bool { copy.kind != .mainFolder }
-    /// Auffällig: woanders, oder im Hauptordner auf einem Nicht-Standard-Branch.
+
+    /// Auffällig ist nur ein anderer Ordner als der Hauptordner.
     static func isConspicuous(_ copy: AgentWorkingCopy) -> Bool {
-        copy.kind != .mainFolder || !copy.isOnDefaultBranch
+        copy.kind != .mainFolder
     }
+
     private var color: Color { Self.isConspicuous(copy) ? Self.elsewhereColor : AgentTheme.textTertiary }
+
     /// Hauptordner: „Main folder“; woanders: der Name.
     private var placeText: String {
         isElsewhere ? (copy.name ?? "") : String(localized: "Main folder")
     }
-    /// Branch nur, wenn er etwas sagt: im Hauptordner nur abseits des
-    /// Standard-Branchs, woanders nur, wenn der Name ihn nicht schon nennt.
+
+    /// Branch oder „detached“; `nil`, wenn nichts bekannt ist.
+    static func branchText(_ copy: AgentWorkingCopy) -> String? {
+        if let branch = copy.branch { return branch }
+        return copy.detachedHead == true ? String(localized: "detached") : nil
+    }
+
+    /// Branch immer, außer der Name einer Arbeitskopie nennt ihn schon.
     private var showsBranch: Bool {
-        guard copy.branch != nil else { return false }
-        return isElsewhere ? !copy.nameRepeatsBranch : !copy.isOnDefaultBranch
+        guard Self.branchText(copy) != nil else { return false }
+        return isElsewhere ? !copy.nameRepeatsBranch : true
     }
 
     /// Je nach Platz im Kopf: Ort und Branch, nur der Ort, der Ort gekürzt,
@@ -40,8 +50,8 @@ struct AgentWorkingCopyBadge: View {
                 chip(place: .full, branch: .full)
                 chip(place: .full, branch: .truncated(110))
                 if !isElsewhere {
-                    // Hauptordner auf fremdem Branch: der Branch ist die
-                    // Nachricht, das Ordner-Symbol sagt „Hauptordner“.
+                    // Wenig Platz im Hauptordner: der Branch bleibt, das
+                    // Ordner-Symbol sagt „Hauptordner“.
                     chip(place: .hidden, branch: .full)
                     chip(place: .hidden, branch: .truncated(90))
                 }
@@ -55,7 +65,7 @@ struct AgentWorkingCopyBadge: View {
         // dem Spacer, sonst teilt der HStack den Rest mit ihm und der Branch
         // fällt trotz Platz weg.
         .layoutPriority(0.5)
-        .help(Self.accessibilityText(copy) + "\n" + copy.path)
+        .help(Self.accessibilityText(copy) + "\n" + copy.displayPath)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Self.accessibilityText(copy))
     }
@@ -73,7 +83,7 @@ struct AgentWorkingCopyBadge: View {
             case .hidden:
                 EmptyView()
             }
-            if let name = copy.branch {
+            if let name = Self.branchText(copy) {
                 let separator = { if case .hidden = place { return false } else { return true } }()
                 switch branch {
                 case .full:
@@ -111,23 +121,23 @@ struct AgentWorkingCopyBadge: View {
         switch copy.kind {
         case .mainFolder: place = String(localized: "Works in the main folder")
         case .worktree: place = String(localized: "Works in the worktree \(copy.name ?? "")")
-        case .otherFolder: place = String(localized: "Works outside the project in \(copy.path)")
+        case .otherFolder: place = String(localized: "Works outside the project in \(copy.displayPath)")
         }
-        guard let branch = copy.branch else { return place }
-        return place + ", " + String(localized: "branch \(branch)")
+        if let branch = copy.branch { return place + ", " + String(localized: "branch \(branch)") }
+        if copy.detachedHead == true { return place + ", " + String(localized: "detached HEAD") }
+        return place
     }
 }
 
 /// Kleines Zeichen für Tab und Seitenleiste: nur, wenn der Chat außerhalb
-/// des Hauptordners oder dort auf einem Nicht-Standard-Branch arbeitet (sonst
-/// wäre jede Zeile voll davon). Name und Branch stehen sichtbar in Kachelkopf
-/// und Kopfzeile.
+/// des Hauptordners arbeitet (sonst wäre jede Zeile voll davon). Name und
+/// Branch stehen sichtbar in Kachelkopf und Kopfzeile.
 struct AgentWorkingCopyMarker: View {
     let copy: AgentWorkingCopy?
 
     var body: some View {
         if let copy, AgentWorkingCopyBadge.isConspicuous(copy) {
-            Image(systemName: copy.kind == .mainFolder ? "arrow.triangle.branch" : AgentWorkingCopyBadge.iconName(copy.kind))
+            Image(systemName: AgentWorkingCopyBadge.iconName(copy.kind))
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(AgentWorkingCopyBadge.elsewhereColor)
                 .help(AgentWorkingCopyBadge.accessibilityText(copy))

@@ -22,8 +22,25 @@ struct AgentWorkingCopy: Codable, Equatable, Hashable {
     var name: String?
     /// `nil`, wenn unbekannt (kein Git, losgelöster HEAD).
     var branch: String?
-    /// Standard-Branch des Repos (`origin/HEAD`), `nil` wenn unbekannt.
+    /// Standard-Branch des Repos (`origin/HEAD`), `nil` wenn unbekannt. Nur
+    /// noch Auskunft für `chats show --json`: Die Marke urteilt seit WM8-73
+    /// nicht mehr über den Branch.
     var defaultBranch: String? = nil
+    /// HEAD zeigt auf einen Commit statt auf einen Branch (WM8-73).
+    var detachedHead: Bool? = nil
+    /// Der Branch stammt aus einem inneren Repo unterhalb von `path`
+    /// (Submodul, `.build/checkouts/…`). Dann gilt er nur für diesen Chat und
+    /// wird nicht an andere Chats im selben Ordner weitergegeben (Vic, WM8-73).
+    var branchFromNestedRepo: Bool? = nil
+
+    /// Der Pfad für Anzeige und Terminal: nur druckbare Zeichen (WM8-73).
+    /// Vergleiche nutzen `path`.
+    var displayPath: String {
+        let printable = path.unicodeScalars.filter {
+            !CharacterSet.controlCharacters.contains($0) && !CharacterSet.illegalCharacters.contains($0)
+        }
+        return String(String(String.UnicodeScalarView(printable)).prefix(1024))
+    }
 
     /// Steht der Ort auf dem Standard-Branch? Ohne bekannten Standard
     /// gelten `main` und `master` als Standard. Ohne Branch: ja (nichts
@@ -59,17 +76,34 @@ enum AgentWorkingCopyClassifier {
         git: GitLocation?,
         transcriptBranch: String? = nil
     ) -> AgentWorkingCopy {
+        var copy = classifyPlace(cwd: cwd, projectPath: projectPath, git: git, transcriptBranch: transcriptBranch)
+        // Inneres Repo: Wurzel und Git-Verzeichnis gehören nicht zum Ort
+        // (ein Projekt hinter einem Symlink erkennt `isProjectRepo` am Git-Verzeichnis).
+        if let git, normalized(git.root) != copy.path, normalized(git.gitDir) != copy.path + "/.git" {
+            copy.branchFromNestedRepo = true
+        }
+        return copy
+    }
+
+    private static func classifyPlace(
+        cwd: String,
+        projectPath: String,
+        git: GitLocation?,
+        transcriptBranch: String?
+    ) -> AgentWorkingCopy {
         let cwd = normalized(cwd)
         let project = normalized(projectPath)
         let rawBranch = git != nil ? git?.branch : transcriptBranch
         let branch = rawBranch.flatMap(displayName).flatMap { $0 == "HEAD" ? nil : $0 }
+        let detached: Bool? = git?.isDetached == true ? true : nil
         let worktreesOfProject = project + claudeWorktreeMarker
         // 1. Arbeitskopie von Claude Code unter <Projekt>/.claude/worktrees/<name>.
         if cwd.hasPrefix(worktreesOfProject),
            let name = cwd.dropFirst(worktreesOfProject.count).split(separator: "/").first.map(String.init),
            !name.isEmpty {
             return AgentWorkingCopy(kind: .worktree, path: worktreesOfProject + name, name: displayName(name),
-                                    branch: branch, defaultBranch: git?.defaultBranch.flatMap(displayName))
+                                    branch: branch, defaultBranch: git?.defaultBranch.flatMap(displayName),
+                                    detachedHead: detached)
         }
         // 2. Andere Arbeitskopie desselben Repos (etwa ein Ordner neben dem
         //    Projekt): ihr Git-Verzeichnis liegt unter <Projekt>/.git/worktrees/.
@@ -77,20 +111,20 @@ enum AgentWorkingCopyClassifier {
             let root = normalized(git.root)
             return AgentWorkingCopy(kind: .worktree, path: root,
                                     name: displayName((root as NSString).lastPathComponent), branch: branch,
-                                    defaultBranch: git.defaultBranch.flatMap(displayName))
+                                    defaultBranch: git.defaultBranch.flatMap(displayName), detachedHead: detached)
         }
         // 3. Hauptordner samt Unterordnern — auch erkannt am Git-Verzeichnis
         //    des Projekts, falls ein Pfad trotz Auflösung abweicht.
         let isProjectRepo = git.map { normalized($0.gitDir) == project + "/.git" } ?? false
         if cwd == project || cwd.hasPrefix(project + "/") || isProjectRepo {
             return AgentWorkingCopy(kind: .mainFolder, path: project, name: nil, branch: branch,
-                                    defaultBranch: git?.defaultBranch.flatMap(displayName))
+                                    defaultBranch: git?.defaultBranch.flatMap(displayName), detachedHead: detached)
         }
         // 4. Alles andere, auch Arbeitskopien fremder Projekte.
         let root = git.map { normalized($0.root) } ?? cwd
         return AgentWorkingCopy(kind: .otherFolder, path: root,
                                 name: displayName((root as NSString).lastPathComponent), branch: branch,
-                                defaultBranch: git?.defaultBranch.flatMap(displayName))
+                                defaultBranch: git?.defaultBranch.flatMap(displayName), detachedHead: detached)
     }
 
     /// Branch- und Ordnernamen kommen aus fremden Dateien und landen im

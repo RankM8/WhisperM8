@@ -149,11 +149,16 @@ Weicht der gespeicherte Stempel davon ab, steht er zusätzlich unter
 Chat zuletzt gearbeitet hat, mit `kind` (`main` = Hauptordner des Projekts,
 `worktree` = Arbeitskopie, `other` = Ordner außerhalb des Projekts), `name`
 (Name der Arbeitskopie bzw. des Ordners, im Hauptordner `null`), `path`,
-`branch`, `defaultBranch` (aus `origin/HEAD`) und `isDefaultBranch`. Ohne
+`branch`, `detached` (`true`, wenn HEAD auf einen Commit statt auf einen Branch
+zeigt), `defaultBranch` (aus `origin/HEAD`) und `isDefaultBranch`. Die beiden
+letzten tragen weiter das alte Urteil über den Standard-Branch, färben aber seit
+WM8-73 nichts mehr: Die Marke unterscheidet nur noch den Ordner. Ohne
 bisherige Beobachtung ist das ganze Feld `null`. `chats list` zeigt es knapp
-in der Spalte `ORT`: `main` (Hauptordner auf dem Standard-Branch),
-`main@<branch>` (Hauptordner auf einem anderen Branch), `wt:<name>@<branch>`,
-`other:<name>`; nennt der Name den Branch schon, steht er nur einmal da.
+in der Spalte `ORT`: `main@<branch>` (Hauptordner, Branch immer genannt),
+`main` (Hauptordner ohne bekannten Branch), `main@detached` (losgelöster HEAD),
+`wt:<name>@<branch>`, `other:<name>`; nennt der Name den Branch schon, steht er
+nur einmal da. Chats im selben Ordner teilen sich den Branch-Stand, solange er
+an der Wurzel des Ordners gelesen wurde (nicht aus einem Submodul).
 `show` zeigt eine Zeile `Ort`. Die App leitet den Wert aus dem Verlaufsende
 ab, nicht aus dem Startordner; ruhende Chats behalten den letzten Stand.
 

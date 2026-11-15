@@ -353,12 +353,13 @@ final class AgentWorkingCopyTests: XCTestCase {
         let tree = AgentWorkingCopy(kind: .worktree, path: "/a/.claude/worktrees/w", name: "w", branch: "feat/x")
         let other = AgentWorkingCopy(kind: .otherFolder, path: "/tmp/s", name: "s", branch: nil)
         XCTAssertEqual(ChatsOutput.workingCopyShort(nil), "-")
-        XCTAssertEqual(ChatsOutput.workingCopyShort(main), "main", "Standard-Branch im Hauptordner nicht nennen")
+        XCTAssertEqual(ChatsOutput.workingCopyShort(main), "main@main", "Branch im Hauptordner immer nennen (WM8-73)")
+        XCTAssertEqual(ChatsOutput.workingCopyShort(AgentWorkingCopy(kind: .mainFolder, path: "/a", name: nil, branch: nil)), "main")
         var feature = main
         feature.branch = "feat/insel"
         XCTAssertEqual(ChatsOutput.workingCopyShort(feature), "main@feat/insel")
         XCTAssertEqual(ChatsOutput.workingCopyLine(feature),
-                       "Hauptordner · Branch feat/insel (nicht der Standard-Branch)  (/a)")
+                       "Hauptordner · Branch feat/insel  (/a)")
         XCTAssertEqual(ChatsOutput.workingCopyShort(tree), "wt:w@feat/x")
         let repeated = AgentWorkingCopy(kind: .worktree, path: "/a/.claude/worktrees/WM8-37-board", name: "WM8-37-board",
                                         branch: "feat/WM8-37-board")
@@ -386,5 +387,82 @@ final class AgentWorkingCopyTests: XCTestCase {
         let withCopy = ChatsSessionEntry(session: session, projectName: "p", projectPath: "/a")
         let dict = ChatsOutput.sessionJSON(entry: withCopy, runtime: runtime, selfID: nil, live: false)["workingCopy"]
         XCTAssertEqual((dict as? [String: Any])?["kind"] as? String, "main")
+    }
+
+    // MARK: - WM8-73: Marke nach Ordner, losgelöst, gemeinsamer Stand, Pfad
+
+    func testOnlyOtherFoldersAreConspicuous() {
+        var main = AgentWorkingCopy(kind: .mainFolder, path: "/a", name: nil, branch: "feat/x", defaultBranch: "main")
+        XCTAssertFalse(AgentWorkingCopyBadge.isConspicuous(main), "Hauptordner auf fremdem Branch bleibt grau")
+        main.branch = "main"
+        main.defaultBranch = "arbeitsstand-april-2026"
+        XCTAssertFalse(AgentWorkingCopyBadge.isConspicuous(main), "buchhaltung: GitHub-Standard spielt keine Rolle")
+        XCTAssertTrue(AgentWorkingCopyBadge.isConspicuous(
+            AgentWorkingCopy(kind: .worktree, path: "/a/.claude/worktrees/w", name: "w", branch: "main")))
+        XCTAssertTrue(AgentWorkingCopyBadge.isConspicuous(
+            AgentWorkingCopy(kind: .otherFolder, path: "/x", name: "x", branch: nil)))
+    }
+
+    func testDetachedHeadIsRecognizedAndShown() throws {
+        XCTAssertTrue(GitHeadReader.isDetached(head: String(repeating: "a1", count: 20) + "\n"))
+        XCTAssertFalse(GitHeadReader.isDetached(head: "ref: refs/heads/main\n"))
+        let root = try tempDir()
+        try FileManager.default.createDirectory(at: root.appendingPathComponent(".git"), withIntermediateDirectories: true)
+        try (String(repeating: "f", count: 40) + "\n").write(
+            to: root.appendingPathComponent(".git/HEAD"), atomically: true, encoding: .utf8)
+        let git = try XCTUnwrap(GitHeadReader.location(at: root.path))
+        XCTAssertTrue(git.isDetached)
+        XCTAssertNil(git.branch)
+        let copy = AgentWorkingCopyClassifier.classify(cwd: root.path, projectPath: root.path, git: git)
+        XCTAssertEqual(copy.detachedHead, true)
+        XCTAssertEqual(ChatsOutput.workingCopyShort(copy), "main@detached")
+        XCTAssertTrue(ChatsOutput.workingCopyLine(copy).contains("losgelöst"))
+        XCTAssertEqual(ChatsOutput.workingCopyJSON(copy)["detached"] as? Bool, true)
+    }
+
+    func testPathIsSanitizedForTerminal() {
+        let copy = AgentWorkingCopy(kind: .otherFolder, path: "/tmp/a\u{1B}[31mb\u{07}", name: "b", branch: nil)
+        XCTAssertEqual(copy.displayPath, "/tmp/a[31mb")
+        XCTAssertFalse(ChatsOutput.workingCopyLine(copy).contains("\u{1B}"))
+    }
+
+    func testChatsInSameFolderShareBranch() {
+        let project = AgentProject(name: "p", path: "/p")
+        var a = AgentChatSession(provider: .claude, projectID: project.id, title: "a")
+        var b = AgentChatSession(provider: .claude, projectID: project.id, title: "b")
+        var c = AgentChatSession(provider: .claude, projectID: project.id, title: "c")
+        a.workingCopy = AgentWorkingCopy(kind: .mainFolder, path: "/p", name: nil, branch: "main")
+        b.workingCopy = AgentWorkingCopy(kind: .mainFolder, path: "/p", name: nil, branch: "main")
+        c.workingCopy = AgentWorkingCopy(kind: .worktree, path: "/p/.claude/worktrees/w", name: "w", branch: "w")
+        var workspace = AgentWorkspace(projects: [project], sessions: [a, b, c])
+
+        let fresh = AgentWorkingCopy(kind: .mainFolder, path: "/p", name: nil, branch: "feat/x")
+        XCTAssertTrue(AgentSessionStore.applyWorkingCopy(fresh, for: a.id, to: &workspace))
+        XCTAssertEqual(workspace.sessions[0].workingCopy?.branch, "feat/x")
+        XCTAssertEqual(workspace.sessions[1].workingCopy?.branch, "feat/x", "ruhender Chat im selben Ordner zieht mit")
+        XCTAssertEqual(workspace.sessions[2].workingCopy?.branch, "w", "anderer Ordner bleibt")
+        XCTAssertFalse(AgentSessionStore.applyWorkingCopy(fresh, for: a.id, to: &workspace), "nichts Neues")
+    }
+
+    func testBranchOfNestedRepoIsNotSharedWithFolder() {
+        let nested = GitLocation(root: "/p/.build/checkouts/SwiftTerm", gitDir: "/p/.build/checkouts/SwiftTerm/.git",
+                                 branch: nil, isDetached: true)
+        let copy = AgentWorkingCopyClassifier.classify(cwd: "/p/.build/checkouts/SwiftTerm", projectPath: "/p", git: nested)
+        XCTAssertEqual(copy.kind, .mainFolder)
+        XCTAssertEqual(copy.branchFromNestedRepo, true)
+        let atRoot = AgentWorkingCopyClassifier.classify(
+            cwd: "/p/src", projectPath: "/p", git: GitLocation(root: "/p", gitDir: "/p/.git", branch: "main"))
+        XCTAssertNil(atRoot.branchFromNestedRepo)
+
+        let project = AgentProject(name: "p", path: "/p")
+        var a = AgentChatSession(provider: .claude, projectID: project.id, title: "a")
+        var b = AgentChatSession(provider: .claude, projectID: project.id, title: "b")
+        a.workingCopy = atRoot
+        b.workingCopy = atRoot
+        var workspace = AgentWorkspace(projects: [project], sessions: [a, b])
+        XCTAssertTrue(AgentSessionStore.applyWorkingCopy(copy, for: a.id, to: &workspace))
+        XCTAssertEqual(workspace.sessions[0].workingCopy?.detachedHead, true, "eigener Chat merkt sich das")
+        XCTAssertEqual(workspace.sessions[1].workingCopy?.branch, "main", "ruhender Chat bleibt beim Branch der Wurzel")
+        XCTAssertNil(workspace.sessions[1].workingCopy?.detachedHead)
     }
 }
