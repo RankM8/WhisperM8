@@ -110,7 +110,7 @@ enum ControllerBindingResolver {
             return ControllerLayer(key: button) == nil
         case let .tap(button):
             return ControllerLayer(key: button) != nil
-        case .move(_, _, isRepeat: false), .scroll:
+        case .move(_, _, isRepeat: false), .scroll, .scrollPage:
             return true
         default:
             return false
@@ -169,6 +169,9 @@ enum ControllerBindingResolver {
     ) -> ControllerAction? {
         // Scrollen geht in jeder Phase: Man liest im Chat weiter, während man spricht.
         if case let .scroll(lines) = gesture { return .scroll(lines: lines) }
+        // R1 + rechter Stick blättert (WM8-116); kommt hier an, wenn das
+        // Diktat nicht an einen Chat gebunden ist.
+        if case let .scrollPage(step) = gesture { return .scrollPage(step: step) }
         // Runde 5, Punkt 9: Ist das Diktat an einen Chat gebunden, navigieren
         // linker Stick und L1/R1 wie sonst (in jeder Phase); der Text geht
         // trotzdem in den Chat, in dem das Diktat begann.

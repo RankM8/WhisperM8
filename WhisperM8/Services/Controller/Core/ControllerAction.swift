@@ -86,6 +86,12 @@ enum ControllerAction: Equatable, Sendable {
     case newChat
     case toggleMaximize
     case scroll(lines: Int)
+    /// Um einen Bildschirm blättern, mit Überlappung (R1 + rechter Stick,
+    /// WM8-116); negativ heißt nach oben.
+    case scrollPage(step: Int)
+    /// Hochgescrollter Chat: ganz ans Ende (Kreis, WM8-116). Schickt nichts
+    /// ans Terminal.
+    case scrollToBottom
 
     // Liste links
     /// Liste betreten, Markierung auf dem aktuellen Chat, dann `step`

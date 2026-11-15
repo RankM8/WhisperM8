@@ -185,7 +185,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             openView: terminal.screen?.openView,
             promptField: terminal.screen?.promptField,
             onlyRecalledPrompt: terminal.onlyRecalledPrompt,
-            questionAcceptsText: terminal.questionAcceptsText
+            questionAcceptsText: terminal.questionAcceptsText,
+            scrolledBack: terminal.scrolledBack
         )
     }
 
@@ -295,7 +296,13 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case let .adjacentChat(step): moveToAdjacentChat(step)
         case .newChat: newChat()
         case .toggleMaximize: command(.toggleMaximize, orReject: true)
-        case let .scroll(lines): withSelectedSession { terminals.scroll(lines: lines, in: $0) }
+        case let .scroll(lines): scrollSelected(in: context) { terminals.scroll(lines: lines, in: $0) }
+        case let .scrollPage(step):
+            // Wie ein Schnellbefehl: Die R1-Insel geht zu und kommt in diesem
+            // Halten nicht wieder (sie läge sonst über dem Blättern).
+            spendIsland(.quickDraw)
+            scrollSelected(in: context) { terminals.scrollPage(step, in: $0) }
+        case .scrollToBottom: scrollSelected(in: context) { terminals.scrollToBottom(in: $0) }
 
         // Liste links
         case let .enterList(step): enterList(step: step)
@@ -388,6 +395,18 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     private func withSelectedSession(_ body: (UUID) -> Void) {
         guard let sessionID = selectedSessionID else { return }
         body(sessionID)
+    }
+
+    /// Scrollen im ausgewählten Chat. Kippt dabei „hochgescrollt“, liest die
+    /// Legende gleich neu (Kreis: „Ans Ende“ oder wieder „Zurück“) — sonst
+    /// stünde dort bis zur nächsten Eingabe der Stand von vor dem Scrollen.
+    /// Nur dann: Ein voller Schnappschuss je Scroll-Geste wäre bei hohem Tempo
+    /// zu teuer.
+    private func scrollSelected(in context: ControllerContext, _ body: (UUID) -> Void) {
+        guard let sessionID = selectedSessionID else { return }
+        body(sessionID)
+        guard case let .chat(state) = context else { return }
+        if terminals.isScrolledBack(sessionID) != state.scrolledBack { refreshContext() }
     }
 
     private func sendKey(_ key: TerminalControlKey) {

@@ -72,6 +72,8 @@ extension ControllerLegendLabel {
         case .alertLevel: return String(localized: "Alerts")
         case .stayAwake: return String(localized: "Stay awake")
         case .clipboardWithR1: return String(localized: "Clipboard")
+        case .jumpToEnd: return String(localized: "Jump to end")
+        case .pageScroll: return String(localized: "Page up / down")
         }
     }
 
@@ -93,7 +95,7 @@ extension ControllerLegendLabel {
         case .clearInputHold: return String(localized: "Hold: clear the whole input (Claude and Codex, not while the agent asks a question)")
         case .previousNextChat: return String(localized: "Tap: previous / next chat in the order of the list; in the list: Active / Recent / All. Hold: layer, see below")
         case .arrows: return String(localized: "D-pad: arrow keys in every running chat, also in subagent and workflow views; in the app you move with the left stick")
-        case .scroll: return String(localized: "Scroll the conversation")
+        case .scroll: return String(localized: "Scroll the conversation; held all the way, it gets faster")
         case .acceptSuggestion: return String(localized: "Take Claude's grey suggestion into the input; \(cross) sends it")
         case .backspace: return String(localized: "Delete (hold: characters, after a second whole words; in a shell only characters)")
         case .closeHold: return String(localized: "In the list, hold: close the chat (like its − or ×)")
@@ -126,6 +128,8 @@ extension ControllerLegendLabel {
         case .alertLevel: return String(localized: "Hold \(r1), then ◀: sound and notifications one step further, like the bell")
         case .stayAwake: return String(localized: "Hold \(r1), then ▶: stay awake one step further, like the stay-awake button")
         case .clipboardWithR1: return String(localized: "Hold \(r1), then ▼: open and close the clipboard history")
+        case .jumpToEnd: return String(localized: "In a chat that is scrolled up, \(circle) jumps to the end instead of sending Escape")
+        case .pageScroll: return String(localized: "Hold \(r1), then right stick up or down: one screen per push, repeats while held")
         default: return title
         }
     }

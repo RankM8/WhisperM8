@@ -47,6 +47,9 @@ struct ControllerTerminalState: Equatable {
     /// Claudes Frage-Dialog mit freiem Textfeld ist offen, doppelt erkannt
     /// (`ClaudeQuestionTextGate`): L1 + Kreuz darf Text hinein (WM8-66).
     var questionAcceptsText: Bool = false
+    /// Ansicht hochgescrollt (`AgentTerminalController.isScrolledBack`, dieselbe
+    /// Quelle wie der Sendeschutz): Kreis springt ans Ende (WM8-116).
+    var scrolledBack: Bool = false
 }
 
 /// Zugriff auf den Zwischenablage-Verlauf für L1 + Kreuz (Runde 5). Closures
@@ -77,6 +80,13 @@ protocol ControllerTerminalControlling: AnyObject {
     func state(of sessionID: UUID) -> ControllerTerminalState?
     @discardableResult func sendKey(_ key: TerminalControlKey, to sessionID: UUID) -> Bool
     func scroll(lines: Int, in sessionID: UUID)
+    /// Um `step` Bildschirme blättern (`ControllerScrollPaging`, WM8-116).
+    func scrollPage(_ step: Int, in sessionID: UUID)
+    /// Ganz ans Ende des Verlaufs; schickt nichts ans Terminal.
+    func scrollToBottom(in sessionID: UUID)
+    /// Hochgescrollt? Billig (nur Zahlen der Ansicht), für das Nachführen der
+    /// Legende nach dem Scrollen.
+    func isScrolledBack(_ sessionID: UUID) -> Bool
     /// Ganze Eingabe leeren (R3 halten); `false` bei offener Rückfrage oder
     /// ohne laufenden Prozess.
     @discardableResult func clearInput(in sessionID: UUID) -> Bool

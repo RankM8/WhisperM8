@@ -16,8 +16,7 @@ extension AgentTerminalController {
         // ob die Ansicht unten steht (`controllerBottomLines`).
         terminal.flushPendingOutput()
         let swiftTerm = terminal.getTerminal()
-        let atBottom = swiftTerm.isCurrentBufferAlternate || !terminal.canScroll || terminal.scrollPosition >= 1
-        guard atBottom else {
+        guard !isScrolledBack else {
             // Hochgescrollt zeigt `getLine` den Ausschnitt, nicht den lebendigen
             // Bildschirm. Bei Codex dort trotzdem die Freigabe lesen (WM8-107):
             // Gerade bei offener Freigabe scrollt man hoch, um zu lesen, was Codex
@@ -34,6 +33,29 @@ extension AgentTerminalController {
         return ControllerScreenReading.read(
             lines: capture.lines, cursor: capture.cursor, detectViews: profile == .claudeCodeChat,
             detectCodexApproval: profile == .codexChat)
+    }
+
+    /// Die Ansicht ist hochgescrollt: normaler Puffer mit Verlauf, und der
+    /// Ausschnitt steht nicht ganz unten. Im Alternate-Puffer nie (dort gibt
+    /// es keinen Verlauf). Einzige Quelle für „hochgescrollt“: Sendeschutz und
+    /// Bildschirm-Lesen (WM8-107) ebenso wie Kreis „Ans Ende“ (WM8-116). Liest
+    /// nur Zahlen der Ansicht, kein Zeilen-Text.
+    var isScrolledBack: Bool {
+        !(terminal.getTerminal().isCurrentBufferAlternate || !terminal.canScroll || terminal.scrollPosition >= 1)
+    }
+
+    /// Um `step` Bildschirme blättern (R1 + rechter Stick, WM8-116), mit
+    /// Überlappung (`ControllerScrollPaging`). Im Alternate-Puffer wie das
+    /// Scrollen als Mausrad an die TUI (höchstens 30 Schritte je Aufruf).
+    func scrollHistoryPage(_ step: Int) {
+        scrollHistory(lines: ControllerScrollPaging.lines(step: step, rows: terminal.getTerminal().rows))
+    }
+
+    /// Ganz ans Ende (Kreis im hochgescrollten Chat, WM8-116). Schickt nichts
+    /// an das Programm; im Alternate-Puffer ohne Wirkung.
+    func scrollHistoryToBottom() {
+        guard isScrolledBack else { return }
+        terminal.scroll(toPosition: 1)
     }
 
     /// Steht unten ein Freigabe-Dialog von Codex (WM8-67)? Nur Codex, nur ganz

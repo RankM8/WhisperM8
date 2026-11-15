@@ -60,7 +60,12 @@ extension ControllerBindingResolver {
             // Gestoppter Chat: Kreuz startet ihn wieder (wie „Starten“ im Kopf).
             guard state.acceptsKeys else { return .chatResume }
             return confirmAllowed(state) ? .chatKey(.enter) : nil
+        // Kreis getippt im hochgescrollten Chat: ans Ende, kein Escape
+        // (WM8-116). Das Eingabefeld ist dann nicht zu sehen; erst am Ende
+        // ist Kreis wieder Escape mit allen Schutzregeln. Kreis halten
+        // (unterbrechen) bleibt unberührt.
         case .tap(.circle):
+            if state.scrolledBack { return .scrollToBottom }
             return escapeAllowed(state) ? .chatKey(.escape) : nil
         case .holdBegan(.circle):
             return interruptAllowed(state) ? .chatInterrupt : nil

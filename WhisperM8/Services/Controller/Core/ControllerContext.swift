@@ -77,6 +77,10 @@ struct ControllerChatState: Equatable, Sendable {
     /// Claudes Frage-Dialog mit freiem Textfeld ist offen (WM8-66): Einfügen
     /// geht trotz offener Rückfrage.
     var questionAcceptsText: Bool = false
+    /// Die Ansicht ist hochgescrollt (normaler Puffer, nicht ganz unten).
+    /// Dieselbe Quelle wie der Sendeschutz (`AgentTerminalController.isScrolledBack`,
+    /// WM8-107); im Alternate-Puffer nie. Dann springt Kreis ans Ende (WM8-116).
+    var scrolledBack: Bool = false
 
     /// Tasten, die ins Terminal schreiben, wirken nur bei lebendem Chat.
     var acceptsKeys: Bool { status != .ended && hasTerminal }

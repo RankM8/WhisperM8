@@ -56,6 +56,13 @@ extension UISnapshotGallery {
                 state.status = .working
                 return legend(.chat(state), title: "1 Moe · Doku: auf den neuesten Stand", hold: .circle)
             },
+            // WM8-116: hochgescrollt zeigt Kreis „Ans Ende“.
+            Fixture(name: "controller-legende-hochgescrollt", size: legendSize) {
+                var state = chat
+                state.status = .working
+                state.scrolledBack = true
+                return legend(.chat(state), title: "1 Moe · Doku: auf den neuesten Stand")
+            },
             Fixture(name: "controller-legende-gestoppt", size: legendSize) {
                 var state = chat
                 state.status = .ended

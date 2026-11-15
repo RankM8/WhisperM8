@@ -38,7 +38,8 @@ final class LiveControllerTerminals: ControllerTerminalControlling {
             queuedOwnPrompts: profile == .claude ? coordinator.queuedOwnPrompts(sessionID: sessionID) : 0,
             onlyRecalledPrompt: controller.composerDraft.holdsOnlyRecalledPrompt,
             bracketedPaste: controller.terminal.getTerminal().bracketedPasteMode,
-            questionAcceptsText: profile == .claude && controller.questionAcceptsText(screen: screen)
+            questionAcceptsText: profile == .claude && controller.questionAcceptsText(screen: screen),
+            scrolledBack: controller.isScrolledBack
         )
     }
 
@@ -52,6 +53,18 @@ final class LiveControllerTerminals: ControllerTerminalControlling {
 
     func scroll(lines: Int, in sessionID: UUID) {
         controller(for: sessionID)?.scrollHistory(lines: lines)
+    }
+
+    func scrollPage(_ step: Int, in sessionID: UUID) {
+        controller(for: sessionID)?.scrollHistoryPage(step)
+    }
+
+    func scrollToBottom(in sessionID: UUID) {
+        controller(for: sessionID)?.scrollHistoryToBottom()
+    }
+
+    func isScrolledBack(_ sessionID: UUID) -> Bool {
+        controller(for: sessionID)?.isScrolledBack ?? false
     }
 
     func sendText(_ text: String, submit: Bool, to sessionID: UUID) -> Bool {

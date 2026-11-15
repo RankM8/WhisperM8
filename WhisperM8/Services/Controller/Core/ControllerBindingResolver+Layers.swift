@@ -28,7 +28,9 @@ extension ControllerBindingResolver {
         switch gesture {
         case let .layerBegan(layer): return .islandShow(layer)
         case let .inLayer(layer, inner):
-            // Scrollen läuft nie über eine Ebene (der rechte Stick ist frei).
+            // Fließendes Scrollen läuft nie über eine Ebene. Unter R1 blättert
+            // der rechte Stick bildschirmweise (WM8-116, `.scrollPage`); das
+            // erzeugt der Erkenner nur dort.
             switch layer {
             case .writing: return writingLayer(inner, state: state)
             case .quickDraw: return quickDrawLayer(inner, state: state)
@@ -58,6 +60,8 @@ extension ControllerBindingResolver {
             case .writing: return plain(inner)
             case .whereTo: return whereToLayer(inner)
             case .quickDraw:
+                // Blättern geht in jeder Phase, wie das Scrollen.
+                if case let .scrollPage(step) = inner { return .scrollPage(step: step) }
                 if case .press(let button) = inner, ControllerQuickDrawSlots.item(for: button) != nil || button == .l3 {
                     return .rejected
                 }
@@ -158,8 +162,12 @@ extension ControllerBindingResolver {
 
     /// R1 gehalten: die Raute. Ob ein Eintrag geht, entscheidet der Ausführer
     /// mit denselben Regeln wie das Options-Menü (`ControllerMenuModel.isEnabled`).
+    /// Der rechte Stick blättert (WM8-116).
     private static func quickDrawLayer(_ gesture: ControllerGesture, state: ControllerChatState) -> ControllerAction? {
         if gesture == .press(.r2) { return .dictationToggle }
+        // R1 + rechter Stick: bildschirmweise blättern im selben Chat
+        // (WM8-116), kein Chatwechsel und kein Schnellbefehl.
+        if case let .scrollPage(step) = gesture { return .scrollPage(step: step) }
         if let app = appDiamond(gesture) { return app }
         if gesture == .press(.l3) {
             return transcriptToggleAllowed(state) ? .chatKey(.toggleTranscript) : layerWritingRejected(state)

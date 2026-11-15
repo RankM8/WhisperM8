@@ -22,6 +22,9 @@ final class ControllerBindingMatrixTests: XCTestCase {
         .cross, .circle, .square, .triangle, .r2, .r3, .l3, .create, .options, .touchpad, .l1, .r1, .l2,
     ]
 
+    /// R1 + rechter Stick (WM8-116); der Erkenner bildet sie nur in einer Ebene.
+    private static let pages: [ControllerGesture] = [.scrollPage(step: 1), .scrollPage(step: -1)]
+
     static let allGestures: [ControllerGesture] = {
         var gestures: [ControllerGesture] = immediateButtons.map { .press($0) }
         for (button, duration) in holdButtons {
@@ -41,7 +44,7 @@ final class ControllerBindingMatrixTests: XCTestCase {
             }
         }
         gestures += moves
-        gestures += [.scroll(lines: 3), .scroll(lines: -3)]
+        gestures += [.scroll(lines: 3), .scroll(lines: -3)] + pages
         // Runde 4: Ebenen-Tasten und was in einer Ebene ankommt.
         for key in [ControllerButton.l1, .r1, .l2] {
             gestures += [.tap(key), .holdPending(key, duration: 0.3)]
@@ -49,6 +52,7 @@ final class ControllerBindingMatrixTests: XCTestCase {
         for layer in ControllerLayer.allCases {
             gestures += [.layerBegan(layer), .layerEnded(layer), .layerCancelled(layer)]
             let inner = layerPressButtons.map { ControllerGesture.press($0) } + [.holdRepeat(.square)] + moves
+                + pages
             gestures += inner.map { .inLayer(layer, $0) }
         }
         return gestures
@@ -114,6 +118,7 @@ final class ControllerBindingMatrixTests: XCTestCase {
         }
         table[.scroll(lines: 3)] = .bringAppToFront
         table[.scroll(lines: -3)] = .bringAppToFront
+        for page in pages { table[page] = .bringAppToFront }
         return table
     }()
 
@@ -178,6 +183,8 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .inLayer(.quickDraw, .press(.square)): .quickDraw(.commands),
             .inLayer(.quickDraw, .press(.circle)): .quickDraw(.switchAccount),
             .inLayer(.quickDraw, .press(.r2)): .dictationToggle,
+            .inLayer(.quickDraw, .scrollPage(step: 1)): .scrollPage(step: 1),
+            .inLayer(.quickDraw, .scrollPage(step: -1)): .scrollPage(step: -1),
             .inLayer(.whereTo, .press(.cross)): .islandCommit,
             .inLayer(.whereTo, .press(.circle)): .islandCancel,
             .inLayer(.whereTo, .press(.triangle)): .islandNextWaiting,
@@ -283,6 +290,9 @@ final class ControllerBindingMatrixTests: XCTestCase {
         for button in [ControllerButton.cross, .triangle, .square, .circle, .l3] {
             table[.inLayer(.quickDraw, .press(button))] = .rejected
         }
+        // Blättern geht in jeder Phase, wie das Scrollen (WM8-116).
+        table[.inLayer(.quickDraw, .scrollPage(step: 1))] = .scrollPage(step: 1)
+        table[.inLayer(.quickDraw, .scrollPage(step: -1))] = .scrollPage(step: -1)
         table.merge(appDiamond) { old, _ in old }
         if recording {
             table[.inLayer(.whereTo, .press(.r2))] = .dictationToggle
@@ -345,6 +355,8 @@ final class ControllerBindingMatrixTests: XCTestCase {
     private static let scrollWhileRecording: Table = [
         .scroll(lines: 3): .scroll(lines: 3),
         .scroll(lines: -3): .scroll(lines: -3),
+        .scrollPage(step: 1): .scrollPage(step: 1),
+        .scrollPage(step: -1): .scrollPage(step: -1),
     ]
 
     private static let chatArrows = dpad { .chatKey(ControllerChatKey($0)) }
@@ -534,6 +546,20 @@ final class ControllerBindingMatrixTests: XCTestCase {
          ])),
         ("Codex arbeitet", .chat(ControllerChatState(status: .working, profile: .codex)),
          merge(chatNavigation, chatArrows, backspace, clearInput, [
+             .holdBegan(.circle): .chatInterrupt,
+             .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
+             .holdCancelled(.circle): .holdProgressCancelled(.circle),
+         ])),
+        // WM8-116: Hochgescrollt springt Kreis ans Ende und schickt kein
+        // Escape; Halten (unterbrechen) bleibt.
+        ("Chat ruht, hochgescrollt", chatState(.idle) { $0.draftSuspected = true; $0.scrolledBack = true },
+         merge(chatNavigation, chatArrows, backspace, clearInput, [
+             .press(.cross): .chatKey(.enter),
+             .tap(.circle): .scrollToBottom,
+         ])),
+        ("Codex arbeitet, hochgescrollt", .chat(ControllerChatState(status: .working, profile: .codex, scrolledBack: true)),
+         merge(chatNavigation, chatArrows, backspace, clearInput, [
+             .tap(.circle): .scrollToBottom,
              .holdBegan(.circle): .chatInterrupt,
              .holdPending(.circle, duration: 0.4): .holdProgress(.circle, duration: 0.4),
              .holdCancelled(.circle): .holdProgressCancelled(.circle),
