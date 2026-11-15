@@ -234,7 +234,7 @@
 <header class="page">
   <div>
     <h1>Offene Fragen der Chats an einer Stelle</h1>
-    <p>Entwurf zu WM8-89 · Plan: docs/plans/offene-fragen.md · Stand 15.11.2026 · zur Abnahme, nichts gebaut</p>
+    <p>Entwurf zu WM8-89 · Plan: docs/plans/offene-fragen.md · Stand 15.11.2026 · abgenommen, nichts gebaut</p>
   </div>
   <div class="sp seg" id="themeSeg">
     <button data-theme="light">Hell</button><button data-theme="dark">Dunkel</button><button data-theme="system" class="on">System</button>
@@ -246,7 +246,7 @@
     Der Entwurf zeigt Text und Optionen dort, wo du ohnehin hinsiehst, in derselben Liste wie die Tickets, die auf dich warten (WM8-115).
     <ul>
       <li><b>Drei Arten des Wartens</b>, immer mit Zeichen und Wort: <span class="kind q"><i>?</i>Entscheidung</span> (Fragetool), <span class="kind p"><i>!</i>Erlaubnis</span> (ein Befehl will laufen), <span class="kind o"><i>↗</i>Bei dir</span> (etwas außerhalb: Schlüssel, Login, Handprobe).</li>
-      <li><b>Stufe 1 liest nur:</b> Du siehst die ganze Frage samt aller Reiter und springst mit einem Klick in den Chat. Antworten im Board ist eine eigene, spätere Stufe (unten zum Umschalten).</li>
+      <li><b>Stufe 1 liest nur:</b> Du siehst die ganze Frage samt aller Reiter und springst mit einem Klick in den Chat. Antworten im Board war eine eigene Stufe; Giuliano hat am 15.11. entschieden: nie, geantwortet wird im Chat (unten noch zum Ansehen).</li>
       <li><b>Woher die Angaben kommen</b> steht an jeder Frage: <span class="src">aus dem Verlauf</span> ist verlässlich, <span class="src weak">vom Bildschirm abgelesen</span> nicht, <span class="src">von Jarvis eingetragen</span> ist Handarbeit.</li>
       <li><b>Stern ★</b> = Empfehlung. Alles ist ohne Überfahren mit der Maus sichtbar, Texte mindestens 11 pt. Chats, Tickets und Themen aus WM8; die Fragen von Vic, Fin und Kai sind nachgestellt.</li>
     </ul>
@@ -264,7 +264,7 @@
       </div></div>
     <div class="ctl"><span class="lab">Stufe</span>
       <div class="seg" id="stageSeg">
-        <button data-v="read" class="on">Nur lesen, Sprung in den Chat<span class="star">★</span></button><button data-v="answer">Im Board antworten (später)</button>
+        <button data-v="read" class="on">Nur lesen, Sprung in den Chat<span class="star">★</span></button><button data-v="answer">Im Board antworten (nicht gewählt)</button>
       </div></div>
   </div>
 
@@ -539,7 +539,7 @@ function render() {
   const html = S.place==='inbox'?inboxHTML():S.place==='band'?bandHTML():S.place==='tile'?tileHTML():S.place==='island'?islandHTML():todayHTML();
   $('#body').innerHTML = html;
   let cap = CAPS[S.place];
-  if (S.stage==='answer') cap += S.place==='inbox' ? ' <b>Stufe „Im Board antworten“ (später, eigene Freigabe):</b> Nur bei einer Claude-Frage mit einem Reiter wählbar; vor dem Senden laufen fünf Prüfungen. Erlaubnisse, Codex und Dialoge mit mehreren Reitern bleiben beim Sprung in den Chat.' : ' <b>Antworten im Board</b> zeigt der Entwurf nur am Ort A.';
+  if (S.stage==='answer') cap += S.place==='inbox' ? ' <b>Stufe „Im Board antworten“, am 15.11. nicht gewählt (geantwortet wird immer im Chat):</b> Nur bei einer Claude-Frage mit einem Reiter wählbar; vor dem Senden laufen fünf Prüfungen. Erlaubnisse, Codex und Dialoge mit mehreren Reitern bleiben beim Sprung in den Chat.' : ' <b>Antworten im Board</b> zeigt der Entwurf nur am Ort A.';
   $('#cap').innerHTML = cap;
   $('#pc').innerHTML = PC[S.place].map(p=>`<div><h5>${p[0]}</h5><ul>${p[1].map(l=>`<li>${l}</li>`).join('')}</ul></div>`).join('');
   wire();

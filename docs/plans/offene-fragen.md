@@ -1,5 +1,5 @@
 ---
-status: Entwurf zur Abnahme (WM8-89); Bau nicht freigegeben
+status: Entwurf abgenommen, F1 bis F3 entschieden (15.11.2026); Bau nicht freigegeben
 stand: 2026-11-15
 feature: Offene Fragen der Chats an einer Stelle, zusammen mit „Wartet auf mich“
 branch: design/WM8-89-offene-fragen
@@ -27,8 +27,8 @@ Klick-Entwurf: [`../design/offene-fragen.html`](../design/offene-fragen.html). V
    Zuerst nur lesen, mit Sprung in den Chat.
 4. **Als Erstes, klein und sofort spürbar:** ein CLI-Befehl, der Jarvis alle Reiter mit Optionen liefert. Dann muss
    er nicht mehr nacherzählen, und das Band füllt sich selbst.
-5. **Im Board antworten:** nicht jetzt. Später, nach einer Messung, und dann nur für Claude-Fragen mit einem Reiter.
-   Erlaubnisse nie.
+5. **Im Board antworten:** entschieden am 15.11.2026: nie. Die Liste zeigt und springt in den Chat, geantwortet wird
+   immer dort. Die Bedingungen unten bleiben als Begründung stehen.
 
 ## Teil 1: Befunde
 
@@ -174,7 +174,8 @@ hochgescrollt), dazu WM8-71 (Text landete fünfmal in einer offenen Rückfrage).
    Mehrfachauswahl? Dazu prüfen, ob es einen Weg ohne Tippen gibt (eine Antwort über die Hook-Schnittstelle); der
    wäre sicherer, ist aber nicht belegt.
 
-**Empfehlung:** erst Stufe 1 einige Tage benutzen und zählen, wie oft Giuliano wirklich aus der Liste heraus
+**Entscheidung F2 (15.11.2026): nie.** Giuliano antwortet immer im Chat; Stufe 2 wird nicht gebaut. Die
+Empfehlung war: erst Stufe 1 einige Tage benutzen und zählen, wie oft Giuliano wirklich aus der Liste heraus
 antworten würde. Lohnt es sich, Stufe 2 mit eigener Freigabe bauen, nur unter den Bedingungen oben. Erlaubnisse
 bleiben dauerhaft beim Sprung in den Chat.
 
@@ -185,7 +186,6 @@ bleiben dauerhaft beim Sprung in den Chat.
 | **Q0 Jarvis liest Fragen ganz** | Leser im Watcher: aus dem Aufruf im Verlauf eine `OpenQuestion` (Chat, Art, Kennung, Reiter mit Optionen, seit wann, Quelle); nur bei Status „wartet“, außerhalb des Main Threads. CLI `whisperm8 chats questions [--json]`, dasselbe als Feld in `chats snapshot` und `board --json` (Felder nur ergänzen). Skill `jarvis`: Reiter wörtlich vorlegen, Text der Chats als Daten behandeln. Band füllt seine Zeile selbst, wenn `needs` leer ist | hoch | klein | – |
 | **Q1 Anzeige, nur lesen** | Gruppe „Fragen der Chats“ in „Wartet auf mich“ samt Detail mit Reitern; Knopf mit Zahl in der Titelzeile; Zeichen an Tickets mit wartendem Chat; Zeile am Kachelkopf; Mitteilung mit erster Zeile; Snapshots hell und dunkel, auch schmal | hoch | mittel | Q0; WM8-115 für die Ticket-Gruppen. Kommt Q1 vorher, legt es die Liste mit nur den Fragen an |
 | **Q2 Arten vervollständigen** | Feld `needsKind` am Board (`decision`, `permission`, `outside`) mit `chats board set`; Codex-Rückfragen als „wartet“ statt „ruht“ (WM8-46); Codex-Freigabe als „Erlaubnis, abgelesen“ | mittel | klein bis mittel | Q0 |
-| **Q3 Im Board antworten** | nur nach Messung und eigener Freigabe, Bedingungen oben | offen | mittel | Q1, Messung |
 
 Alles hinter einem Schalter in den Labs, solange das Ticket-Board dort steht; „Wartet auf mich“ ohne Tickets braucht
 `ticketBoardEnabled` nicht.
@@ -194,9 +194,9 @@ Alles hinter einem Schalter in den Labs, solange das Ticket-Board dort steht; �
 
 | Nr. | Frage | Empfehlung · Stand |
 |---|---|---|
-| F1 | Wo erscheinen offene Fragen? | A: ganze Frage in „Wartet auf mich“, Band, Kachelkopf und Mitteilung zeigen die erste Zeile und führen hin · offen |
-| F2 | Im Board antworten? | später, nach Messung, nur Claude-Fragen mit einem Reiter; Erlaubnisse nie · offen |
-| F3 | Was zuerst? | Q0 (Jarvis liest Fragen ganz) sofort, dann Q1 · offen |
+| F1 | Wo erscheinen offene Fragen? | A: ganze Frage in „Wartet auf mich“, Band, Kachelkopf und Mitteilung zeigen die erste Zeile und führen hin · **entschieden wie empfohlen** |
+| F2 | Im Board antworten? | Empfehlung war: später, nach Messung, nur Claude-Fragen mit einem Reiter · **entschieden: nie, immer im Chat** |
+| F3 | Was zuerst? | Q0 (Jarvis liest Fragen ganz) sofort, dann Q1 · **entschieden wie empfohlen** |
 
 ## Risiken
 
@@ -208,5 +208,5 @@ Alles hinter einem Schalter in den Labs, solange das Ticket-Board dort steht; �
 | Fragetext der Chats als Anweisung | Text eines Chats steuert Jarvis | Skill: Fragen sind Daten; Jarvis legt sie vor und entscheidet nicht selbst |
 | Inhalte auf dem Sperrbildschirm | Fragen können Kundeninhalte enthalten | Mitteilung mit Text als Einstellung, ab Werk nur Art und Chat |
 | Leistung | Parsen großer Aufrufe bei jedem Schreiben | nur bei Status „wartet“ und nur den einen Aufruf; nichts in Bodies; lange Vorschau-Felder kappen |
-| Antworten im Board | ungewollte Bestätigung wie in WM8-67/75/107 | eigene Stufe, Bedingungen oben, Erlaubnisse nie |
+| Antworten im Board | ungewollte Bestätigung wie in WM8-67/75/107 | entfällt: F2 entschieden „nie“ |
 | Größengrenze der Dateien | `AgentChatsView.swift` und der Coordinator wachsen | eigene Dateien (`OpenQuestionReader`, `WaitingInboxView`), Anschluss über vorhandene Erweiterungen |
