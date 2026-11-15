@@ -149,17 +149,24 @@ final class TicketTriageTests: XCTestCase {
         XCTAssertEqual(viewModel.triage?.current, "WM8-2")
     }
 
-    func testMiddleShowsOnlyTheTextOfTheShownTicket() async {
+    func testSwitchingShowsTheNewTitleAtOnceAndNeverTheOldText() async {
         let viewModel = TicketBoardViewModel(model: model(), documents: .background)
         viewModel.openFromLane("WM8-1")
-        for _ in 0..<400 where viewModel.document(for: "WM8-1") == nil { try? await Task.sleep(for: .milliseconds(5)) }
-        XCTAssertNotNil(viewModel.document(for: "WM8-1"))
+        XCTAssertTrue(viewModel.document(for: "WM8-1")?.text.string.hasPrefix("Ticket 1") == true, "Titel sofort, ohne Leerbild")
+        for _ in 0..<400 where viewModel.document(for: "WM8-1")?.text.string.contains("Activity") != true {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
         viewModel.nextInTriage()
-        XCTAssertEqual(viewModel.triage?.current, "WM8-2")
-        XCTAssertNil(viewModel.document(for: "WM8-2"), "der neue Text ist noch im Bau")
-        for _ in 0..<400 where viewModel.document(for: "WM8-2") == nil { try? await Task.sleep(for: .milliseconds(5)) }
-        XCTAssertEqual(viewModel.document(for: "WM8-2")?.ticketKey, "WM8-2")
-        XCTAssertNil(viewModel.document(for: "WM8-1"), "der alte Text steht nicht unter der neuen Nummer")
+        let placeholder = viewModel.document(for: "WM8-2")
+        XCTAssertNotNil(placeholder, "nach dem Wechsel sofort da")
+        XCTAssertTrue(placeholder?.text.string.hasPrefix("Ticket 2") == true, placeholder?.text.string ?? "")
+        XCTAssertNil(viewModel.document(for: "WM8-1"), "für das alte Ticket wird nichts mehr gezeigt")
+        for _ in 0..<400 where viewModel.document(for: "WM8-2")?.revision == placeholder?.revision {
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+        let full = viewModel.document(for: "WM8-2")
+        XCTAssertGreaterThan(full?.revision ?? 0, placeholder?.revision ?? 0, "der volle Text ersetzt den Platzhalter")
+        XCTAssertTrue(full?.text.string.contains("Activity") == true || full?.text.string.contains("Verlauf") == true)
     }
 
     func testTextIsCappedAgainstGiantParagraphs() {
@@ -175,6 +182,9 @@ final class TicketTriageTests: XCTestCase {
                                   hasMore: true)
         let head = TicketTextDocument.make(.init(title: "T", description: "", comments: .loaded(many))).string
         XCTAssertTrue(head.contains("40") && head.contains("60+"), "gezeigt 40 von 60+: \(head.prefix(200))")
+        let one = TicketComments(items: [TicketComment(id: "x", author: "", createdAt: nil, body: giant, isReply: false)], hasMore: false)
+        let single = TicketTextDocument.make(.init(title: "T", description: "", comments: .loaded(one)))
+        XCTAssertLessThan(single.length, TicketTextDocument.maxCommentCharacters + 2_000, "ein einzelner Kommentar ist gekappt")
     }
 
     // MARK: Kommentare aus Linear

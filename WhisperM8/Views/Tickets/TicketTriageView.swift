@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Triage wie in Linear: links die Liste, aus der das Ticket kommt, in der
@@ -220,15 +221,17 @@ private struct TicketTriageText: View {
     let model: TicketBoardViewModel
     let ticketKey: String
 
+    /// Die Textansicht steht immer: Ein Wechsel zu einer anderen Ansicht baute
+    /// NSTextView und Scroll-Ansicht bei jedem J/K neu auf (und schlösse ⌘F).
+    /// Beim Ticketwechsel liegt sofort ein Titel-Dokument bereit; nur der Text
+    /// dieses Tickets wird gezeigt, nie der vorige unter der neuen Nummer.
     var body: some View {
-        // Nur der Text dieses Tickets: Beim Blättern ist der neue Text kurz noch
-        // im Bau, und der alte darf nicht unter der neuen Nummer stehen.
-        if let document = model.document(for: ticketKey) {
-            TicketTextView(document: document.text, revision: document.revision, ticketKey: document.ticketKey)
-        } else {
-            Color.clear
-        }
+        let document = model.document(for: ticketKey)
+        TicketTextView(document: document?.text ?? Self.empty, revision: document?.revision ?? -1,
+                       ticketKey: document?.ticketKey ?? ticketKey)
     }
+
+    private static let empty = NSAttributedString()
 }
 
 // MARK: - Eigenschaften rechts

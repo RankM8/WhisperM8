@@ -241,6 +241,15 @@ final class TicketBoardViewModel {
         documentRevision += 1
         let revision = documentRevision, key = ticket.key
         documentTask?.cancel()
+        if document?.ticketKey != key, documentBuilding == .background {
+            // Anderes Ticket: sofort ein kleines Dokument mit dem Titel, synchron
+            // und billig. So springt der Titel mit der Nummer, die Mitte bleibt
+            // nie leer, und die Textansicht wird nicht neu aufgebaut. Der volle
+            // Text ersetzt es, sobald er fertig ist (eigene, höhere Revision).
+            document = TicketDocument(ticketKey: key, revision: revision, text: TicketTextDocument.placeholder(title: ticket.title))
+            documentRevision += 1
+        }
+        let fullRevision = documentRevision
         switch documentBuilding {
         case .immediate:
             document = TicketDocument(ticketKey: key, revision: revision, text: TicketTextDocument.make(input))
@@ -250,8 +259,8 @@ final class TicketBoardViewModel {
                     TicketBuiltText(text: PerfBudgets.ticketsDocument.withInterval { TicketTextDocument.make(input) })
                 }.value
                 let text = built.text
-                guard let self, !Task.isCancelled, revision == self.documentRevision else { return }
-                self.document = TicketDocument(ticketKey: key, revision: revision, text: text)
+                guard let self, !Task.isCancelled, fullRevision == self.documentRevision else { return }
+                self.document = TicketDocument(ticketKey: key, revision: fullRevision, text: text)
             }
         }
     }

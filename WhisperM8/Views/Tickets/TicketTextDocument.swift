@@ -41,6 +41,17 @@ enum TicketTextDocument {
     /// `maxCharacters` erreicht.
     static let maxCharacters = 100_000
     static let maxDescriptionCharacters = 60_000
+    /// Ein einzelner Kommentar; die Grenze für das Ganze greift nur zwischen zwei Kommentaren.
+    static let maxCommentCharacters = 20_000
+
+    /// Platzhalter beim Ticketwechsel: nur der Titel und „Kommentare werden
+    /// geladen“. Kurz genug, um ihn auf dem Main Thread zu bauen.
+    nonisolated static func placeholder(title: String) -> NSAttributedString {
+        let styles = Styles()
+        let result = NSMutableAttributedString(string: title + "\n", attributes: styles.title)
+        result.append(NSAttributedString(string: String(localized: "Loading comments…") + "\n", attributes: styles.muted))
+        return result
+    }
 
     nonisolated static func make(_ input: Input) -> NSAttributedString {
         let result = NSMutableAttributedString()
@@ -112,7 +123,8 @@ enum TicketTextDocument {
         let marker = highlighted ? "◆ " : ""
         result.append(NSAttributedString(string: marker + parts.joined(separator: " · ") + "\n",
                                          attributes: highlighted ? styles.highlightHead : styles.commentHead))
-        var blocks = TicketDescriptionBlocks.make(comment.body)
+        var blocks = TicketDescriptionBlocks.make(String(comment.body.prefix(maxCommentCharacters)))
+        if comment.body.count > maxCommentCharacters, blocks.last != .truncated { blocks.append(.truncated) }
         if blocks.count > maxCommentBlocks {
             blocks = Array(blocks.prefix(maxCommentBlocks)) + [.truncated]
         }
