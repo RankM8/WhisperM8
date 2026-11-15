@@ -122,6 +122,8 @@ final class TicketBoardViewModel {
     private(set) var comments: TicketCommentsLoad = .loading
     /// Fertiger Text für die Mitte der Triage.
     private(set) var document: TicketDocument?
+    /// Zuletzt kopiert; die Knöpfe zeigen kurz „Kopiert“.
+    private(set) var copied: TicketCopyFeedback?
 
     var selected: TicketBoardEntry? { detail?.entry }
     @ObservationIgnored private var model = TicketBoardModel(entries: [], looseChats: [], supervisors: [])
@@ -132,6 +134,9 @@ final class TicketBoardViewModel {
     @ObservationIgnored var onShowTicket: ((Ticket?) -> Void)?
     /// „Aktualisieren“ in der Triage: Kommentare des gezeigten Tickets neu holen.
     @ObservationIgnored var onReloadComments: ((Ticket) -> Void)?
+    /// Schreibt in die Zwischenablage; Tests ersetzen das.
+    @ObservationIgnored var copyToClipboard: (String) -> Void = { TicketClipboard.copy($0) }
+    @ObservationIgnored private var copiedReset: Task<Void, Never>?
     @ObservationIgnored private let documentBuilding: TicketDocumentBuilding
     @ObservationIgnored private var documentInput: TicketTextDocument.Input?
     @ObservationIgnored private var documentTask: Task<Void, Never>?
@@ -196,6 +201,16 @@ final class TicketBoardViewModel {
         triage = fresh
         if let fresh { selectedKey = fresh.current }
         refreshTriageTicket()
+    }
+
+    func noteCopied(_ kind: TicketCopyFeedback) {
+        copied = kind
+        copiedReset?.cancel()
+        copiedReset = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            self?.copied = nil
+        }
     }
 
     /// Kommentare für ein Ticket; zählen nur, solange es noch gezeigt wird.
@@ -273,6 +288,12 @@ final class TicketBoardViewModel {
         guard entry != detail?.entry else { return }
         detail = TicketDetailContent.make(entry)
     }
+}
+
+/// Was zuletzt kopiert wurde, für die kurze Rückmeldung am Knopf.
+enum TicketCopyFeedback: Equatable {
+    case link
+    case list
 }
 
 /// Fertiger Text aus dem Hintergrund. Nach dem Bau wird er nicht mehr

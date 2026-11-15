@@ -168,11 +168,17 @@ enum TicketBoardKey: Equatable {
     case next
     case previous
     case close
+    /// ⌘C: Link des gewählten Tickets (Entscheidung Giuliano, 15.11.2026;
+    /// ⌘⇧C bleibt der Zwischenablage-Verlauf). Markierter Text geht vor; das
+    /// prüft der Aufrufer.
+    case copyLink
 
     /// J/↓ nächstes, K/↑ voriges, Esc zurück zum Board. Ohne Modifier;
     /// Pfeiltasten tragen `.function`/`.numericPad`, deshalb nur die vier
     /// echten Modifier vergleichen (Muster `TabNavShortcut`).
     static func resolve(keyCode: UInt16, characters: String?, modifiers: ModifierSet) -> TicketBoardKey? {
+        // Über das Zeichen, nicht die Taste: Auf anderen Tastaturbelegungen liegt C woanders.
+        if modifiers == .command, characters?.lowercased() == "c" { return .copyLink }
         guard modifiers.isEmpty else { return nil }
         switch keyCode {
         case 125: return .next       // ↓

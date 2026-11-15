@@ -142,6 +142,15 @@ enum TicketTeamRuleChange {
         return (changed, describe(rule, team: request.team))
     }
 
+    /// Namen der Regel, die das Team nicht als offenen Status kennt. Ein
+    /// Tippfehler machte den Status sonst still zu einer gewöhnlichen Spalte;
+    /// `tickets doctor` meldet ihn.
+    static func unknownStatuses(in rule: TicketTeamRule, statuses: [TicketStatus]) -> [String] {
+        let known = Set(statuses.filter { !$0.kind.isClosed }.map { TicketTeamRule.key($0.name) })
+        return rule.statusMeanings.keys.filter { !known.contains(TicketTeamRule.key($0)) }
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
     static func describe(_ rule: TicketTeamRule, team: String) -> String {
         var lines = ["Regel für \(team):"]
         if rule.statusMeanings.isEmpty {

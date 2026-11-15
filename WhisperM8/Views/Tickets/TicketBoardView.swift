@@ -57,7 +57,10 @@ struct TicketBoardView: View {
                 TicketTriageView(model: model, triage: triage, load: load, source: source, actions: actions)
             } else {
                 TicketBoardHeader(title: title, mode: $model.mode, load: load, refresh: actions.refresh)
-                TicketBoardFilterBar(filter: $model.filter, counts: presentation.counts, projects: presentation.projects)
+                HStack(alignment: .center, spacing: 8) {
+                    TicketBoardFilterBar(filter: $model.filter, counts: presentation.counts, projects: presentation.projects)
+                    TicketCopyButton(kind: .list, copied: model.copied) { model.copyList(title: listTitle) }
+                }
                 TicketBoardProblemLine(load: load)
                 content(presentation)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -70,6 +73,11 @@ struct TicketBoardView: View {
         .background(AgentTheme.background)
     }
 
+    /// Überschrift der kopierten Liste: Board, Ansicht und Filter.
+    private var listTitle: String {
+        model.filter.waitingForMe ? title + " · " + String(localized: "Waiting for me") : title
+    }
+
     @ViewBuilder
     private func content(_ presentation: TicketBoardPresentation) -> some View {
         switch model.mode {
@@ -80,6 +88,48 @@ struct TicketBoardView: View {
             TicketBacklogListView(groups: presentation.groups, selectedKey: model.selectedKey, source: source) {
                 model.openFromList($0)
             }
+        }
+    }
+}
+
+// MARK: - Kopieren
+
+/// „Link kopieren“ oder „Liste kopieren“, mit kurzer Rückmeldung „Kopiert“.
+struct TicketCopyButton: View {
+    let kind: TicketCopyFeedback
+    let copied: TicketCopyFeedback?
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: copied == kind ? "checkmark" : "doc.on.doc")
+                    .font(.system(size: 11, weight: .medium))
+                label
+            }
+            .font(.system(size: 12, weight: .medium))
+        }
+        .buttonStyle(SettingsButtonStyle.standard)
+        .fixedSize()
+        .help(help)
+    }
+
+    @ViewBuilder
+    private var label: some View {
+        if copied == kind {
+            Text("Copied")
+        } else {
+            switch kind {
+            case .link: Text("Copy link")
+            case .list: Text("Copy list")
+            }
+        }
+    }
+
+    private var help: Text {
+        switch kind {
+        case .link: return Text("Copy key, title and address of the ticket (⌘C)")
+        case .list: return Text("Copy the tickets shown, with their addresses")
         }
     }
 }

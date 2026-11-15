@@ -82,13 +82,51 @@ extension TicketBoardViewModel {
     /// der Triage, das Fenster reicht sie weiter.
     @discardableResult
     func handle(_ key: TicketBoardKey) -> Bool {
+        if key == .copyLink { return copyLink() }
         guard triage != nil else { return false }
         switch key {
         case .next: nextInTriage()
         case .previous: previousInTriage()
         case .close: closeTriage()
+        case .copyLink: break
         }
         return true
+    }
+
+    // MARK: Kopieren
+
+    /// Link des gewählten Tickets (in der Triage das gezeigte, auf dem Board
+    /// die gewählte Karte). `false` ohne gewähltes Ticket: Dann gehört ⌘C
+    /// wieder dem Fenster.
+    @discardableResult
+    func copyLink() -> Bool {
+        guard let ticket = detail?.entry.ticket else { return false }
+        copyToClipboard(TicketCopyText.link(ticket))
+        noteCopied(.link)
+        return true
+    }
+
+    /// Die gezeigten Tickets: in der Triage ihre Liste, auf dem Board alle
+    /// Spalten nach Filter (auch, was unter „N weitere“ steht), in der Liste
+    /// die Gruppen.
+    func copyList(title: String) {
+        copyToClipboard(listText(title: title))
+        noteCopied(.list)
+    }
+
+    func listText(title: String) -> String {
+        let sections: [TicketCopyText.Section]
+        if let triage {
+            sections = [TicketCopyText.Section(title: triage.title,
+                                               tickets: triage.keys.compactMap { presentation.entry(key: $0)?.ticket })]
+        } else if mode == .board {
+            sections = presentation.lanes.map { TicketCopyText.Section(title: $0.status.name, tickets: $0.entries.map(\.ticket)) }
+        } else {
+            sections = presentation.groups.map {
+                TicketCopyText.Section(title: TicketBoardText.project($0.project), tickets: $0.entries.map(\.ticket))
+            }
+        }
+        return TicketCopyText.list(title: title, sections: sections)
     }
 
     /// Liste der Tickets in der Reihenfolge der Liste (nach Projekt).

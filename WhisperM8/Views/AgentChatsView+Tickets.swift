@@ -40,6 +40,8 @@ extension AgentChatsView {
         if flags.contains(.shift) { modifiers.insert(.shift) }
         guard let key = TicketBoardKey.resolve(keyCode: event.keyCode, characters: event.charactersIgnoringModifiers,
                                                modifiers: modifiers) else { return event }
+        // ⌘C mit markiertem Text (etwa in der Beschreibung) kopiert den Text.
+        if key == .copyLink, let text = responder as? NSTextView, text.selectedRange().length > 0 { return event }
         let handled = TicketBoardControllers.shared.controller(for: windowID).viewModel.handle(key)
         return handled ? nil : event
     }

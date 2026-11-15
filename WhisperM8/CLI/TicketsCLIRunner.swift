@@ -915,6 +915,10 @@ enum TicketsCLIRunner {
                 if let cost = LinearCostMeter.describe(from: costBefore, to: LinearCostMeter.shared.snapshot) {
                     checks.append(Check(name: "Budget \(team)", ok: true, detail: cost))
                 }
+                for name in TicketTeamRuleChange.unknownStatuses(in: config.rule(forTeam: team), statuses: snapshot.statuses) {
+                    checks.append(Check(name: "Regel \(team)", ok: true, warning: true,
+                                        detail: "Status „\(name)“ der Regel gibt es im Team nicht (offen). Korrigieren: whisperm8 tickets setup --team \(team) --status \"\(name)=\""))
+                }
                 checks += hygiene(team: team, tickets: snapshot.tickets, now: env.now())
                 checks += await areas(team: team, workspace: workspace, config: config, env)
             } catch TicketSourceError.notFound {

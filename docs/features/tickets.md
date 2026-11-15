@@ -8,10 +8,12 @@ updated: 2026-11-14
 WhisperM8 verbindet die Tickets im Ticket-Werkzeug mit den Chats der App. Ein Chat hängt sich an sein
 Ticket; daraus ergibt sich, wer woran sitzt, welche Chats laufen und welche Tickets niemanden haben.
 
-Stand 14.11.2026: Es gibt den Kern, die Kommandozeile `whisperm8 tickets`, den Skill `tickets` im Plugin, die
-Seite „Tickets“ in den Einstellungen (Labs) und die Ansicht im Agent-Chats-Fenster (Board und Liste, nur
-lesend, Stufe 1). Knöpfe, die Tickets ändern (Stufe 2), gibt es nicht. Plan:
-[`../plans/ticket-board.md`](../plans/ticket-board.md), Entwurf
+Stand 15.11.2026: Es gibt den Kern, die Kommandozeile `whisperm8 tickets`, den Skill `tickets` im Plugin, die
+Seite „Tickets“ in den Einstellungen (Labs) und die Ansicht im Agent-Chats-Fenster: Board mit Spalten nach echtem
+Status, Liste, Triage mit Kommentaren, Link und Liste kopieren (WM8-112, Paket 1 aus
+[`../plans/ticket-board-alltag.md`](../plans/ticket-board-alltag.md), Entwurf
+[`../design/ticket-board-alltag.html`](../design/ticket-board-alltag.html)). Die Ansicht liest nur; Knöpfe, die
+Tickets ändern, gibt es nicht. Stufe 1: [`../plans/ticket-board.md`](../plans/ticket-board.md), Entwurf
 [`../design/ticket-board.html`](../design/ticket-board.html).
 
 ## Wer mit dem Ticket-System spricht
@@ -302,6 +304,7 @@ Views/Tickets/TicketTriageView.swift         Triage: Liste links, Ticket in der 
 Views/Tickets/TicketBoardSelection.swift     Auswahl und Tasten der Triage, pur (gewählt, nächstes, voriges, schließen, Abgleich)
 Views/Tickets/TicketBoardViewModel+Triage.swift  Triage auf den Zustand der Ansicht angewendet
 Views/Tickets/TicketTextDocument.swift       Titel, Beschreibung und Kommentare als ein Text, dazu die Textansicht
+Views/Tickets/TicketCopyText.swift           Text für „Link kopieren“ und „Liste kopieren“, Schreiben in die Zwischenablage
 Views/Tickets/TicketDescriptionBlocks.swift  Beschreibung zerlegen (Überschriften, Kästchen, Listen), sichere Links, Bilder als Verweis
 Models/Tickets/TicketComment.swift           Kommentar am Ticket, Art (Entscheidung, Abschluss)
 Views/Tickets/TicketBoardText.swift          Texte und kleine Bausteine (Status-Punkt, Priorität, Person)
@@ -433,7 +436,8 @@ whisperm8 tickets setup --team WM8 --show-rule                    # zeigen
 whisperm8 tickets setup --team WM8 --clear-rule                   # löschen
 ```
 
-Die Regel ändert nur die Einrichtung, nie Linear. Die Ansicht liest sie beim nächsten Aktivieren des Fensters
+`tickets doctor` meldet Statusnamen der Regel, die das Team nicht als offenen Status kennt (Tippfehler machten den
+Status sonst still zu einer gewöhnlichen Spalte). Die Regel ändert nur die Einrichtung, nie Linear. Die Ansicht liest sie beim nächsten Aktivieren des Fensters
 neu. Später nutzen „Wartet auf mich“ über alle Teams (WM8-115) und der Controller (WM8-91) dieselbe Regel.
 
 ### Was die Ansicht statt des Boards zeigt
@@ -481,6 +485,14 @@ gezeigten Stands.
   (überspringt eingeklappte und leere Spalten), in der Triage `open`, `next`, `previous`, `select`, `close` und
   `reconcile` nach einem neuen Abruf. Das ViewModel wendet sie an (`moveOnBoard`, `openSelected`, `openFromLane`,
   `nextInTriage`, `previousInTriage`, `closeTriage`, `handle(TicketBoardKey)`).
+- **Link und Liste kopieren:** „Link kopieren“ in der Triage und ⌘C am gewählten Ticket (Karte auf dem Board oder
+  Ticket in der Triage) legen zwei Zeilen in die Zwischenablage: `WM8-104 Titel` und darunter die Adresse.
+  Markierter Text geht vor: Ist in der Beschreibung etwas markiert oder liegt der Fokus in einem Textfeld oder
+  Terminal, kopiert ⌘C wie gewohnt. ⌘⇧C bleibt der Zwischenablage-Verlauf (Entscheidung Giuliano, 15.11.2026).
+  „Liste kopieren“ (Knopf neben den Filtern, in der Triage über der Liste) kopiert die gezeigten Tickets in ihrer
+  Reihenfolge, je Ticket eine Zeile mit Adresse: auf dem Board Spalte für Spalte samt dem, was unter „N weitere“
+  steht, in der Liste nach Projekt, in der Triage ihre Liste. Nur Nummer, Titel und Adresse, nie Ticket-Text. Die
+  Schreibvorgänge sind beansprucht (`ClipboardInternalWrites.claim`) und landen nicht im Zwischenablage-Verlauf.
 - **Verlauf:** die Kommentare, neueste zuerst. Entscheidungen und Abschlüsse (`tickets decide`, `tickets done`)
   stehen mit einer Kopfzeile in Akzent und ◆. Höchstens die neuesten 40 Kommentare, 200 Zeilen je Kommentar,
   60.000 Zeichen Beschreibung und 100.000 Zeichen insgesamt (ein Riesen-Absatz ließe das Layout auf dem Main Thread
@@ -567,6 +579,8 @@ So bleibt die Triage schnell:
   liest die vollen Listen.
 - **Die Auswahl-Abfrage beim Wiederverbinden eines Chats** kann über den Tickets erscheinen, wenn der Tab
   dahinter gewählt ist.
+- **⌘C auf dem Board kopiert den Link nur mit gewählter Karte.** Gewählt ist eine Karte, nachdem ihre Triage
+  geschlossen wurde oder (mit WM8-91) per Pfeiltasten; ein Klick öffnet immer die Triage.
 - **Kein Tastenkürzel für den Umschalter,** und der Umschalter für Chats mit Ctrl+Tab ist über den Tickets
   nicht zu sehen (er wechselt trotzdem).
 - **„Zum Chat“ liest die Workspace-Datei auf dem Main Thread.** Das ist der vorhandene Weg der App
@@ -579,7 +593,8 @@ So bleibt die Triage schnell:
 Kommandozeile gegen eine Quelle aus Closures. Kein Test braucht Netz, Schlüsselbund oder die App.
 
 Für die Ansicht: `TicketBoardPresentationTests` (Spalten, Filter, Zählungen, Detail), `TicketTriageTests`
-(Auswahl, Tasten, Triage im ViewModel, Kommentare aus Linear, sicherer Text, Kosten), `TicketTeamRuleTests`
+(Auswahl, Tasten, Triage im ViewModel, Kommentare aus Linear, sicherer Text, Kosten), `TicketCopyTests` (Link und
+Liste, ⌘C, Prüfung der Regel), `TicketTeamRuleTests`
 (Regel je Team, Spalten nach Status, „Wartet auf mich“, Befehl `setup --status`),
 `TicketBoardControllerTests` (Zuordnung, Abruf nur bei sichtbarer Ansicht, Leerzustände, Projektwechsel, überholte
 Antworten) und `AgentWindowStoreTicketsModeTests` (Umschalter je Fenster, Rückkehr zu den Chats, Schnappschuss für

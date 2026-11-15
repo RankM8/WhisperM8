@@ -64,6 +64,16 @@ private struct TicketTriageList: View {
                     .font(.system(size: 11, weight: .medium).monospacedDigit())
                     .foregroundStyle(AgentTheme.textSecondary)
                 Spacer(minLength: 4)
+                Button { model.copyList(title: triage.title) } label: {
+                    Image(systemName: model.copied == .list ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(AgentTheme.textSecondary)
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(Text("Copy the tickets shown, with their addresses"))
+                .accessibilityLabel(Text("Copy list"))
                 Button { model.closeTriage() } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 11, weight: .semibold))
@@ -190,10 +200,13 @@ private struct TicketTriageBar: View {
                 TicketPriorityBars(priority: content.entry.ticket.priority)
             }
             Spacer(minLength: 8)
-            Text("J/K or ↑↓ next · Esc board")
+            Text("J/K or ↑↓ next · ⌘C link · Esc board")
                 .font(.system(size: 11))
                 .foregroundStyle(AgentTheme.textSecondary)
                 .lineLimit(1)
+            if model.detail != nil {
+                TicketCopyButton(kind: .link, copied: model.copied) { model.copyLink() }
+            }
             if let content = model.detail {
                 if let url = content.url {
                     Button("Open in Linear") { actions.openURL(url) }

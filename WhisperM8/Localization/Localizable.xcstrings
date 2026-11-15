@@ -24124,16 +24124,6 @@
         }
       }
     },
-    "J/K or ↑↓ next · Esc board": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "J/K oder ↑↓ blättern · Esc Board"
-          }
-        }
-      }
-    },
     "waits for you": {
       "localizations": {
         "de": {
@@ -24290,6 +24280,56 @@
           "stringUnit": {
             "state": "translated",
             "value": "Verlauf · neueste %lld von %@"
+          }
+        }
+      }
+    },
+    "Copy link": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Link kopieren"
+          }
+        }
+      }
+    },
+    "Copy list": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liste kopieren"
+          }
+        }
+      }
+    },
+    "Copy key, title and address of the ticket (⌘C)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nummer, Titel und Adresse des Tickets kopieren (⌘C)"
+          }
+        }
+      }
+    },
+    "Copy the tickets shown, with their addresses": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die gezeigten Tickets mit ihren Adressen kopieren"
+          }
+        }
+      }
+    },
+    "J/K or ↑↓ next · ⌘C link · Esc board": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "J/K oder ↑↓ blättern · ⌘C Link · Esc Board"
           }
         }
       }
