@@ -46,6 +46,7 @@ extension AgentChatsView {
         if sidebarLayout == .flat {
             input.flatChats = snapshot.visibleFlatSessions.map { .init(id: $0.id, projectID: $0.projectID) }
         } else {
+            let foldOverrides = windowStore.stoppedFoldOverrides
             input.projects = snapshot.visibleProjects.map { project in
                 // Seitenleiste A (WM8-80): laufende, dann gestoppte, so weit
                 // die Faltzeile „N gestoppt“ sie ohne Klick zeigt.
@@ -53,7 +54,8 @@ extension AgentChatsView {
                     blocks: snapshot.projectBlocks[project.id] ?? SidebarProjectBlocks(),
                     scope: effectiveScope,
                     isSearching: isSearching,
-                    selectedSessionID: selectedSessionID
+                    selectedSessionID: selectedSessionID,
+                    stoppedFoldOverride: foldOverrides[project.id]
                 )
                 return AgentChatsListRowsBuilder.Project(
                     id: project.id,

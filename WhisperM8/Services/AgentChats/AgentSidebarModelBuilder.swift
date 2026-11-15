@@ -303,7 +303,11 @@ struct AgentSidebarModelBuilder {
             // Seitenleiste A (WM8-80): laufende vor gestoppten, Workspace-
             // Chats nur als Hinweis, Projekte mit Laufendem zuerst.
             let sortedByProject = grouped.mapValues { AgentSessionStore.sortedSessions($0) }
-            let workspaceBySession = AgentTabOrder.workspaceBySession(gridWorkspaces: gridWorkspaces)
+            // Während einer Suche stehen Workspace-Chats wieder in ihrem
+            // Projekt: Der Abschnitt oben filtert nicht mit und kann zu sein,
+            // ein Treffer muss trotzdem eine eigene Zeile haben.
+            let workspaceBySession = trimmedQuery.isEmpty
+                ? AgentTabOrder.workspaceBySession(gridWorkspaces: gridWorkspaces) : [:]
             for (projectID, sessions) in sortedByProject {
                 let blocks = AgentSidebarSorting.blocks(
                     sortedSessions: sessions,
@@ -313,6 +317,13 @@ struct AgentSidebarModelBuilder {
                 )
                 projectBlocks[projectID] = blocks
                 sessionsByProject[projectID] = blocks.rows
+            }
+            // Ein angepinnter laufender Chat steht oben bei Gepinnt, zählt
+            // aber für sein Projekt: Es gehört nicht unter „Ohne laufende Chats“.
+            for pinnedID in pinnedSessionIDs where effectiveScope.runningSessionIDs.contains(pinnedID) {
+                guard let session = sessionByID[pinnedID], session.status != .archived else { continue }
+                let projectID = AgentProjectDisplay.displayProjectID(session.projectID, parents: projectParents)
+                projectBlocks[projectID]?.hasRunning = true
             }
             let candidates = Self.visibleProjects(
                 manualProjects: manualProjects,

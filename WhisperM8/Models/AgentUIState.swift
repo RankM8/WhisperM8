@@ -154,6 +154,13 @@ struct AgentUIState: Codable, Equatable {
     /// sichtbar). Global wie die Pins; `decodeIfPresent` mit Default `[]`,
     /// kein Schema-Bump — ältere Builds ignorieren das Feld.
     var collapsedGridWorkspaceIDs: [UUID]
+    /// Faltzeile „N gestoppt“ je Projektgruppe der Seitenleiste (WM8-80),
+    /// von Hand geöffnet bzw. geschlossen. Ohne Eintrag gilt die Vorgabe des
+    /// Scopes (unter „Aktiv“ zu). Global wie `collapsedGridWorkspaceIDs`,
+    /// übersteht Scope-Wechsel und Neustart; `decodeIfPresent`, kein
+    /// Schema-Bump.
+    var openedStoppedFoldProjectIDs: [UUID]
+    var closedStoppedFoldProjectIDs: [UUID]
 
     /// v1-Altbestand — wird nur noch dekodiert (Input für die Migration),
     /// nie mehr encodiert. Nach `migrateToV2IfNeeded` immer leer.
@@ -184,6 +191,8 @@ struct AgentUIState: Codable, Equatable {
         case gridWorkspaces
         case layouts
         case collapsedGridWorkspaceIDs
+        case openedStoppedFoldProjectIDs
+        case closedStoppedFoldProjectIDs
         // v1-Keys, nur fürs Decoding
         case openTabIDsByProject
         case selectedSessionIDByProject
@@ -202,6 +211,8 @@ struct AgentUIState: Codable, Equatable {
         gridWorkspaces: [AgentGridWorkspace] = [],
         layouts: [WorkspaceLayout] = [],
         collapsedGridWorkspaceIDs: [UUID] = [],
+        openedStoppedFoldProjectIDs: [UUID] = [],
+        closedStoppedFoldProjectIDs: [UUID] = [],
         legacyOpenTabIDsByProject: [UUID: [UUID]] = [:],
         legacySelectedSessionIDByProject: [UUID: UUID] = [:]
     ) {
@@ -217,6 +228,8 @@ struct AgentUIState: Codable, Equatable {
         self.gridWorkspaces = Self.normalizedGridWorkspaces(gridWorkspaces)
         self.layouts = layouts.map(LayoutNormalizer.normalize)
         self.collapsedGridWorkspaceIDs = collapsedGridWorkspaceIDs
+        self.openedStoppedFoldProjectIDs = openedStoppedFoldProjectIDs
+        self.closedStoppedFoldProjectIDs = closedStoppedFoldProjectIDs
         if windows.isEmpty {
             self.windows = [
                 AgentChatWindowState(
@@ -254,6 +267,8 @@ struct AgentUIState: Codable, Equatable {
         gridWorkspaces = try c.decodeIfPresent([AgentGridWorkspace].self, forKey: .gridWorkspaces) ?? []
         layouts = try c.decodeIfPresent([WorkspaceLayout].self, forKey: .layouts) ?? []
         collapsedGridWorkspaceIDs = try c.decodeIfPresent([UUID].self, forKey: .collapsedGridWorkspaceIDs) ?? []
+        openedStoppedFoldProjectIDs = try c.decodeIfPresent([UUID].self, forKey: .openedStoppedFoldProjectIDs) ?? []
+        closedStoppedFoldProjectIDs = try c.decodeIfPresent([UUID].self, forKey: .closedStoppedFoldProjectIDs) ?? []
         legacyOpenTabIDsByProject = try c.decodeIfPresent([UUID: [UUID]].self, forKey: .openTabIDsByProject) ?? [:]
         legacySelectedSessionIDByProject = try c.decodeIfPresent([UUID: UUID].self, forKey: .selectedSessionIDByProject) ?? [:]
     }
@@ -272,6 +287,8 @@ struct AgentUIState: Codable, Equatable {
         try c.encode(gridWorkspaces, forKey: .gridWorkspaces)
         try c.encode(layouts, forKey: .layouts)
         try c.encode(collapsedGridWorkspaceIDs, forKey: .collapsedGridWorkspaceIDs)
+        try c.encode(openedStoppedFoldProjectIDs, forKey: .openedStoppedFoldProjectIDs)
+        try c.encode(closedStoppedFoldProjectIDs, forKey: .closedStoppedFoldProjectIDs)
         // v1-Felder werden bewusst nicht mehr geschrieben.
     }
 
@@ -639,6 +656,8 @@ struct AgentUIState: Codable, Equatable {
             selectedProjectID = nil
         }
         expandedProjectIDs = expandedProjectIDs.filter { liveProjectIDs.contains($0) }
+        openedStoppedFoldProjectIDs = Self.deduplicated(openedStoppedFoldProjectIDs.filter { liveProjectIDs.contains($0) })
+        closedStoppedFoldProjectIDs = Self.deduplicated(closedStoppedFoldProjectIDs.filter { liveProjectIDs.contains($0) })
         syncLegacyWindowMirror()
     }
 

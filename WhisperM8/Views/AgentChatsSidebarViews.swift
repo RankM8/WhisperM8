@@ -86,13 +86,14 @@ struct ProjectChatGroup: View {
     /// Eine Suche öffnet die Faltzeile „N gestoppt“, sonst wären Treffer
     /// unsichtbar.
     var isSearching = false
+    /// Faltzeile von Hand geöffnet/geschlossen (UI-Zustand), `nil` = Vorgabe.
+    var stoppedFoldOverride: Bool? = nil
+    var onSetStoppedFold: (Bool) -> Void = { _ in }
 
     /// Zeilen der Gruppe in Anzeige-Reihenfolge (laufend vor gestoppt).
     private var sessions: [AgentChatSession] { blocks.rows }
 
     @State private var isHeaderHovered = false
-    /// Klick auf „N gestoppt“; `nil` = Vorgabe des Scopes.
-    @State private var stoppedFoldOverride: Bool?
     @State private var isSessionDragOver = false
     @State private var isProjectDragOver = false
     /// Sidebar-Drop-Indikator: Session-Row, über der die Einfügelinie steht
@@ -142,7 +143,11 @@ struct ProjectChatGroup: View {
             if isExpanded && (!sessions.isEmpty || !blocks.workspaceHints.isEmpty) {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(blocks.workspaceHints) { hint in
-                        SidebarWorkspaceHintRow(hint: hint, statusStore: statusStore) {
+                        SidebarWorkspaceHintRow(
+                            hint: hint,
+                            statusStore: statusStore,
+                            containsSelection: selectedSessionID.map(hint.sessionIDs.contains) ?? false
+                        ) {
                             onJumpToWorkspace(hint.workspaceID)
                         }
                     }
@@ -152,17 +157,15 @@ struct ProjectChatGroup: View {
                     if !blocks.stopped.isEmpty {
                         let foldOpen = isStoppedFoldOpen
                         SidebarStoppedFoldRow(count: blocks.stopped.count, isOpen: foldOpen) {
-                            stoppedFoldOverride = !foldOpen
+                            onSetStoppedFold(!foldOpen)
                         }
-                        if foldOpen {
-                            let slice = Self.visibleSlice(
-                                of: blocks.stopped, limit: visibleSessionLimit, mustIncludeID: revealTargetID)
-                            ForEach(slice.visible) { session in
-                                sessionRowWithChildren(session)
-                            }
-                            if slice.hiddenCount > 0 {
-                                showMoreRow(hiddenCount: slice.hiddenCount)
-                            }
+                        let slice = AgentSidebarSorting.visibleStopped(
+                            blocks.stopped, foldOpen: foldOpen, limit: visibleSessionLimit, revealID: revealTargetID)
+                        ForEach(slice.visible) { session in
+                            sessionRowWithChildren(session)
+                        }
+                        if slice.hiddenCount > 0 {
+                            showMoreRow(hiddenCount: slice.hiddenCount)
                         }
                     }
                     Color.clear
@@ -189,10 +192,7 @@ struct ProjectChatGroup: View {
         }
         // Wie `flatVisibleSessionLimit`: ein Scope-Wechsel startet wieder beim
         // Startwert des neuen Scopes.
-        .onChange(of: sidebarScope) { _, _ in
-            expandedVisibleSessionLimit = nil
-            stoppedFoldOverride = nil
-        }
+        .onChange(of: sidebarScope) { _, _ in expandedVisibleSessionLimit = nil }
     }
 
     /// Eine Chat-Zeile samt ihren Subagent-Kindern.
@@ -244,32 +244,24 @@ struct ProjectChatGroup: View {
 
     private var isStoppedFoldOpen: Bool {
         AgentSidebarSorting.isStoppedFoldOpen(
-            scope: sidebarScope,
-            override: stoppedFoldOverride,
-            isSearching: isSearching,
-            containsSelection: revealTargetID.map { id in blocks.stopped.contains { $0.id == id } } ?? false
-        )
+            scope: sidebarScope, override: stoppedFoldOverride, isSearching: isSearching)
     }
 
-    /// Zeilen, die die Gruppe ohne Klicks zeigt (Faltzeile und „N weitere“ in
-    /// ihrer Vorgabe) — für die Navigation ohne Maus, die den lokalen Zustand
-    /// der Gruppe nicht kennt.
+    /// Zeilen, die die Gruppe zeigt (Faltzeile nach gespeichertem Zustand,
+    /// „N weitere“ in der Vorgabe) — für die Navigation ohne Maus.
     static func defaultVisibleRowIDs(
         blocks: SidebarProjectBlocks,
         scope: SidebarScope,
         isSearching: Bool,
-        selectedSessionID: UUID?
+        selectedSessionID: UUID?,
+        stoppedFoldOverride: Bool? = nil
     ) -> [UUID] {
-        let selectionIsStopped = selectedSessionID.map { id in blocks.stopped.contains { $0.id == id } } ?? false
         let foldOpen = AgentSidebarSorting.isStoppedFoldOpen(
-            scope: scope, override: nil, isSearching: isSearching, containsSelection: selectionIsStopped)
-        let stopped = foldOpen
-            ? Array(visibleSlice(
-                of: blocks.stopped,
-                limit: initialVisibleSessionLimit(for: scope),
-                mustIncludeID: selectedSessionID
-            ).visible)
-            : []
+            scope: scope, override: stoppedFoldOverride, isSearching: isSearching)
+        let stopped = AgentSidebarSorting.visibleStopped(
+            blocks.stopped, foldOpen: foldOpen, limit: initialVisibleSessionLimit(for: scope),
+            revealID: selectedSessionID
+        ).visible
         return (blocks.running + stopped).map(\.id)
     }
 

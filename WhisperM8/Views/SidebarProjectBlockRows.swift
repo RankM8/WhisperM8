@@ -8,6 +8,11 @@ struct SidebarWorkspaceHintRow: View {
     /// Stabile Store-Referenz wie bei `SessionListButton`: Jeder Punkt hört
     /// nur auf den Status seines Chats, die Zeile selbst beobachtet nichts.
     let statusStore: AgentSessionRuntimeStatusStore
+    /// Der ausgewählte Chat steht in diesem Workspace. Die Zeile trägt dann
+    /// die Auswahl, denn ist der Workspace oben eingeklappt, gibt es sonst
+    /// keine sichtbare Zeile für ihn (z. B. nach dem Sprung aus einer
+    /// Mitteilung).
+    var containsSelection = false
     var onJump: () -> Void
 
     var body: some View {
@@ -28,14 +33,22 @@ struct SidebarWorkspaceHintRow: View {
                 .fixedSize()
                 Spacer(minLength: 0)
             }
-            .foregroundStyle(AgentTheme.textTertiary)
-            .padding(.leading, 35)
+            .foregroundStyle(containsSelection ? AgentTheme.textPrimary : AgentTheme.textTertiary)
+            .padding(.leading, 27)
             .padding(.trailing, 8)
             .frame(minHeight: 24, maxHeight: 24)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(containsSelection ? AgentTheme.accentTint : Color.clear)
+            )
+            .padding(.leading, 8)
+            .padding(.trailing, 8)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help("These chats are shown above in the workspace")
+        .help(containsSelection
+            ? String(localized: "The selected chat is in this workspace – click to show it")
+            : String(localized: "These chats are shown above in the workspace"))
     }
 }
 
