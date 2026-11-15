@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Geplante Aufgaben – Entwurf</title>
+<style>
+  /* Farben aus AppTheme.swift, wie in controller-insel.html. Grün heißt nur „arbeitet“. */
+  :root {
+    --bg:#f2f2f4; --panel:#ffffff; --ink:#1c1c1e; --ink2:#5f6064; --ink3:#7d7e83; --line:rgba(0,0,0,.09);
+    --win:#ffffff; --sidebar:#eeeef0; --header:#f2f2f4; --term:#fbfbfc; --border:rgba(0,0,0,.08);
+    --field:#ffffff; --field-line:rgba(0,0,0,.14); --sel:rgba(127,127,127,.14); --hl:rgba(94,106,210,.10);
+    --accent:#5e6ad2; --accent-ink:#ffffff; --working:#3fa873; --awaiting:#b9861c; --error:#d6473d;
+    --error-bg:rgba(214,71,61,.08); --warn-bg:rgba(201,150,42,.10); --shadow:0 14px 40px rgba(0,0,0,.18);
+  }
+  [data-theme="dark"] {
+    --bg:#17181b; --panel:#1f2023; --ink:#f1f1f3; --ink2:#a4a5ab; --ink3:#86878d; --line:rgba(255,255,255,.09);
+    --win:#0f0f10; --sidebar:#131415; --header:#121213; --term:#0f0f10; --border:rgba(255,255,255,.08);
+    --field:#1c1c1f; --field-line:rgba(255,255,255,.14); --sel:rgba(255,255,255,.08); --hl:rgba(124,132,232,.14);
+    --accent:#7c84e8; --accent-ink:#ffffff; --working:#4cc38a; --awaiting:#e9b949; --error:#e5594f;
+    --error-bg:rgba(229,89,79,.10); --warn-bg:rgba(233,185,73,.10); --shadow:0 14px 40px rgba(0,0,0,.5);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.45 -apple-system,"SF Pro Text",system-ui,sans-serif; background:var(--bg); color:var(--ink); }
+  header.page { display:flex; align-items:center; gap:16px; padding:18px 28px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header.page h1 { font-size:16px; margin:0; font-weight:600; }
+  header.page p { margin:0; color:var(--ink2); }
+  header.page .sp { margin-left:auto; }
+  button { font:inherit; color:inherit; }
+  .btn { border:1px solid var(--field-line); background:var(--field); color:var(--ink); border-radius:7px; padding:4px 11px; cursor:pointer; font-size:12px; white-space:nowrap; }
+  .btn.primary { background:var(--accent); border-color:var(--accent); color:var(--accent-ink); font-weight:600; }
+  .btn.danger { color:var(--error); }
+  .btn.small { padding:2px 8px; font-size:11.5px; }
+  .btn:disabled { opacity:.45; cursor:default; }
+  main { padding:22px 28px 70px; max-width:1560px; }
+  h2 { margin:28px 0 10px; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink3); font-weight:600; }
+  .rules { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 18px; color:var(--ink2); }
+  .rules b { color:var(--ink); }
+  .rules ul { margin:6px 0 0; padding-left:18px; } .rules li { margin:3px 0; }
+  .cap { color:var(--ink2); max-width:96ch; margin:8px 2px 0; }
+  .cap b { color:var(--ink); }
+
+  /* Steuerleiste über der Attrappe */
+  .controls { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; margin:0 0 12px; }
+  .controls .lab { font-size:11px; color:var(--ink3); text-transform:uppercase; letter-spacing:.05em; font-weight:600; }
+  .seg { display:inline-flex; gap:2px; padding:2px; background:var(--sel); border-radius:8px; }
+  .seg button { border:0; background:transparent; padding:4px 11px; border-radius:6px; font-size:12px; color:var(--ink2); cursor:pointer; font-weight:500; }
+  .seg button.on { background:var(--panel); color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.12); font-weight:600; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+
+  /* Fenster-Attrappe */
+  .stage { position:relative; }
+  .win { position:relative; height:640px; background:var(--win); border:1px solid var(--border); border-radius:11px; box-shadow:var(--shadow); display:grid; grid-template-columns:250px 1fr; overflow:hidden; }
+  .side { background:var(--sidebar); border-right:1px solid var(--border); display:flex; flex-direction:column; min-height:0; }
+  .lights { display:flex; gap:7px; padding:12px 12px 6px; }
+  .lights i { width:12px; height:12px; border-radius:50%; background:#ff5f57; } .lights i:nth-child(2){background:#febc2e;} .lights i:nth-child(3){background:#28c840;}
+  .newchat { margin:4px 10px 8px; border:1px solid var(--border); background:var(--panel); border-radius:8px; padding:6px 10px; font-size:12.5px; font-weight:600; display:flex; justify-content:space-between; }
+  .newchat small { color:var(--ink3); font-weight:500; font-size:11px; }
+  .sidelist { flex:1; overflow:auto; padding:2px 8px 8px; font-size:12px; }
+  .sec { display:flex; align-items:center; gap:6px; margin:10px 6px 4px; font-size:11px; font-weight:700; letter-spacing:.06em; color:var(--ink3); }
+  .sec .add { margin-left:auto; border:0; background:transparent; color:var(--ink2); font-size:14px; line-height:1; cursor:pointer; padding:0 4px; }
+  .grp { display:flex; align-items:center; gap:7px; padding:5px 8px 3px; font-weight:700; color:var(--ink); font-size:12.5px; }
+  .grp .n { margin-left:auto; color:var(--ink3); font-weight:500; font-size:11px; }
+  .row { display:flex; align-items:center; gap:7px; height:26px; padding:0 8px; border-radius:6px; color:var(--ink); white-space:nowrap; cursor:pointer; }
+  .row .t { overflow:hidden; text-overflow:ellipsis; flex:1; }
+  .row .w { color:var(--ink3); font-size:11px; font-variant-numeric:tabular-nums; }
+  .row.sel { background:var(--sel); font-weight:600; }
+  .row .ico { width:14px; text-align:center; color:var(--ink3); font-size:11px; flex:none; }
+  .foot { border-top:1px solid var(--border); display:flex; gap:14px; padding:8px 12px; font-size:11px; color:var(--ink2); }
+
+  .content { display:flex; flex-direction:column; min-width:0; min-height:0; }
+  .titlezone { height:38px; background:var(--header); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:6px; padding:0 10px; font-size:11.5px; color:var(--ink2); }
+  .tzbtn { position:relative; width:28px; height:24px; border-radius:6px; border:1px solid transparent; background:transparent; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--ink2); font-size:14px; }
+  .tzbtn.on { background:var(--panel); border-color:var(--border); color:var(--ink); }
+  .tzbtn .ring { position:absolute; top:1px; right:1px; width:9px; height:9px; border-radius:50%; border:2px solid var(--error); background:var(--header); }
+  .tabs { display:flex; gap:4px; margin-left:8px; overflow:hidden; }
+  .tab { padding:3px 9px; border-radius:6px; white-space:nowrap; display:flex; align-items:center; gap:6px; }
+  .tab.on { background:var(--win); color:var(--ink); border:1px solid var(--border); }
+  .body { flex:1; min-height:0; display:flex; }
+
+  .dot { width:8px; height:8px; border-radius:50%; display:inline-block; flex:none; background:var(--ink3); opacity:.75; }
+  .dot.working { background:var(--working); opacity:1; }
+  .dot.awaiting { background:var(--awaiting); border-radius:2px; transform:rotate(45deg) scale(.82); opacity:1; }
+  .dot.error { background:transparent; border:1.5px solid var(--error); opacity:1; }
+  .dot.done { background:var(--accent); opacity:1; }
+  .dot.paused { background:transparent; border:1.5px solid var(--ink3); opacity:.9; }
+
+  /* Übersicht */
+  .ov { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .ovhead { display:flex; align-items:center; gap:10px; padding:14px 18px 10px; }
+  .ovhead h3 { margin:0; font-size:15px; }
+  .ovhead .sub { color:var(--ink3); font-size:11.5px; }
+  .ovhead .sp { margin-left:auto; display:flex; gap:8px; }
+  .tbl { padding:0 12px 12px; overflow:auto; }
+  .th, .tr { display:grid; grid-template-columns:14px minmax(150px,1.2fr) 150px minmax(180px,1.5fr) 176px; gap:12px; align-items:center; padding:0 8px; }
+  .th { font-size:11px; color:var(--ink3); font-weight:600; height:26px; border-bottom:1px solid var(--border); }
+  .tr { min-height:58px; border-bottom:1px solid var(--border); cursor:pointer; border-radius:6px; }
+  .tr:hover { background:var(--hl); }
+  .tr.sel { background:var(--sel); }
+  .tr .nm { font-weight:600; font-size:12.5px; }
+  .tr .nm small { display:flex; align-items:center; gap:6px; margin-top:2px; font-weight:400; color:var(--ink3); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .tr .c { font-size:12px; color:var(--ink2); }
+  .tr .c small { display:block; color:var(--ink3); font-size:11px; }
+  .tr .acts { display:flex; gap:6px; justify-content:flex-end; }
+  .res { font-size:12px; display:flex; flex-direction:column; min-width:0; }
+  .res .l1 { display:flex; align-items:center; gap:6px; font-weight:600; white-space:nowrap; }
+  .res .l2 { color:var(--ink3); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .res.ok .l1 { color:var(--ink); } .res.fail .l1 { color:var(--error); } .res.run .l1 { color:var(--working); } .res.warn .l1 { color:var(--awaiting); }
+  .res.paused .l1 { color:var(--ink2); }
+  .flag { display:inline-flex; align-items:center; gap:5px; font-size:11px; color:var(--awaiting); background:var(--warn-bg); border-radius:5px; padding:1px 6px; margin-top:3px; width:max-content; max-width:100%; white-space:normal; }
+  .acc { display:inline-flex; align-items:center; gap:5px; }
+  .acc i { width:14px; height:14px; border-radius:4px; color:#fff; font-size:9.5px; font-weight:800; font-style:normal; display:inline-flex; align-items:center; justify-content:center; }
+  .ovfoot { margin-top:auto; border-top:1px solid var(--border); padding:8px 18px; font-size:11px; color:var(--ink3); display:flex; gap:16px; }
+
+  /* Detail */
+  .det { width:340px; flex:none; border-left:1px solid var(--border); background:var(--panel); overflow:auto; padding:14px 16px 18px; }
+  .det.wide { width:auto; flex:1; border-left:0; padding:18px 26px; }
+  .det h3 { margin:0 0 4px; font-size:15px; display:flex; align-items:center; gap:8px; }
+  .det .close { margin-left:auto; border:0; background:transparent; color:var(--ink3); cursor:pointer; font-size:15px; }
+  .det .meta { display:grid; grid-template-columns:110px 1fr; gap:5px 10px; font-size:12px; margin:10px 0 12px; }
+  .det .meta span:nth-child(odd) { color:var(--ink3); }
+  .det .acts { display:flex; flex-wrap:wrap; gap:6px; margin:4px 0 14px; }
+  .box { border-radius:8px; padding:9px 11px; font-size:12px; margin:0 0 12px; }
+  .box.fail { background:var(--error-bg); color:var(--ink); border:1px solid color-mix(in srgb, var(--error) 35%, transparent); }
+  .box.fail b { color:var(--error); }
+  .box.warn { background:var(--warn-bg); border:1px solid color-mix(in srgb, var(--awaiting) 35%, transparent); }
+  .box.warn b { color:var(--awaiting); }
+  .box.run { background:var(--hl); border:1px solid var(--border); }
+  .box .bacts { display:flex; gap:6px; margin-top:7px; }
+  .det h4 { margin:12px 0 6px; font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink3); }
+  .prompt { font:11.5px/1.5 "SF Mono",ui-monospace,monospace; background:var(--term); border:1px solid var(--border); border-radius:7px; padding:8px 10px; color:var(--ink); white-space:pre-wrap; }
+  .runs { display:flex; flex-direction:column; }
+  .lauf { display:grid; grid-template-columns:14px 1fr auto; gap:8px; align-items:center; padding:7px 2px; border-bottom:1px solid var(--border); font-size:12px; }
+  .lauf small { display:block; color:var(--ink3); font-size:11px; }
+  .lauf .g { font-size:12px; text-align:center; }
+  .lauf .g.ok { color:var(--ink2); } .lauf .g.fail { color:var(--error); } .lauf .g.warn { color:var(--awaiting); }
+
+  /* Chat-Ansicht (Ziel von „Zum Chat“) */
+  .chat { flex:1; display:flex; flex-direction:column; min-width:0; }
+  .banner { margin:10px 14px 0; border-radius:8px; padding:8px 11px; font-size:12px; display:flex; align-items:center; gap:10px; }
+  .banner.run { background:var(--hl); border:1px solid var(--border); }
+  .banner.info { background:var(--sel); }
+  .banner .sp { margin-left:auto; display:flex; gap:6px; }
+  .term { flex:1; padding:12px 16px; font:11.5px/1.6 "SF Mono",ui-monospace,monospace; color:var(--ink2); overflow:auto; background:var(--term); white-space:pre-wrap; }
+  .term b { color:var(--ink); font-weight:600; }
+  .term .ok { color:var(--working); }
+  .term .err { color:var(--error); }
+  .input { margin:0 14px 10px; border:1px solid var(--border); border-radius:8px; padding:8px 10px; font:11.5px "SF Mono",ui-monospace,monospace; color:var(--ink3); background:var(--term); }
+  .input.live { color:var(--ink); }
+  .input.live::before { content:"> "; color:var(--accent); }
+
+  /* Einstellungsfenster (Variante C) */
+  .settings { position:relative; height:640px; background:var(--win); border:1px solid var(--border); border-radius:11px; box-shadow:var(--shadow); display:grid; grid-template-columns:210px 1fr; overflow:hidden; }
+  .snav { background:var(--sidebar); border-right:1px solid var(--border); padding:8px; font-size:12.5px; }
+  .snav .it { display:flex; align-items:center; gap:8px; padding:5px 8px; border-radius:6px; color:var(--ink); }
+  .snav .it i { width:18px; height:18px; border-radius:5px; display:inline-flex; align-items:center; justify-content:center; font-style:normal; font-size:11px; color:#fff; }
+  .snav .it.sel { background:var(--accent); color:#fff; }
+  .snav .hd { font-size:11px; color:var(--ink3); font-weight:600; margin:10px 8px 3px; }
+  .spage { overflow:auto; padding:18px 24px; }
+  .spage h3 { margin:0 0 2px; font-size:17px; }
+  .spage .lead { color:var(--ink2); margin:0 0 14px; max-width:70ch; }
+  .group { background:var(--panel); border:1px solid var(--border); border-radius:9px; margin-bottom:14px; }
+  .group .gr { display:grid; grid-template-columns:16px 1fr auto; gap:10px; align-items:center; padding:9px 12px; border-bottom:1px solid var(--border); cursor:pointer; }
+  .group .gr:last-child { border-bottom:0; }
+  .group .gr.sel { background:var(--sel); }
+  .group .gr .nm { font-weight:600; font-size:12.5px; }
+  .group .gr .nm small { display:block; font-weight:400; color:var(--ink3); font-size:11px; }
+
+  /* Blatt (Anlegen und Ändern) */
+  .veil { position:absolute; inset:0; background:rgba(0,0,0,.28); display:flex; align-items:flex-start; justify-content:center; padding-top:34px; z-index:5; border-radius:11px; }
+  .sheet { width:620px; background:var(--panel); border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); padding:16px 20px 14px; font-size:12.5px; max-height:590px; overflow:auto; }
+  .sheet h3 { margin:0 0 12px; font-size:15px; }
+  .f { display:grid; grid-template-columns:120px 1fr; gap:8px 12px; align-items:start; margin-bottom:10px; }
+  .f > label { color:var(--ink2); padding-top:5px; }
+  .in { border:1px solid var(--field-line); background:var(--field); border-radius:6px; padding:5px 8px; width:100%; color:var(--ink); font:inherit; }
+  textarea.in { font:11.5px/1.5 "SF Mono",ui-monospace,monospace; min-height:58px; resize:vertical; }
+  select.in { appearance:auto; }
+  .hint { color:var(--ink3); font-size:11px; margin-top:4px; }
+  .inline { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .chk { display:flex; gap:7px; align-items:flex-start; margin:3px 0; }
+  .sheetfoot { display:flex; align-items:center; gap:8px; border-top:1px solid var(--border); padding-top:12px; margin-top:6px; }
+  .sheetfoot .sum { color:var(--ink2); font-size:11.5px; }
+  .sheetfoot .sp { margin-left:auto; display:flex; gap:8px; }
+
+  /* Mitteilung */
+  .notif { position:absolute; top:12px; right:12px; width:340px; background:var(--panel); border:1px solid var(--border); border-radius:12px; box-shadow:var(--shadow); padding:10px 12px; z-index:6; font-size:12px; display:grid; grid-template-columns:30px 1fr; gap:4px 10px; }
+  .notif .ic { grid-row:span 3; width:30px; height:30px; border-radius:7px; background:linear-gradient(135deg,#5e6ad2,#8a62d6); color:#fff; display:flex; align-items:center; justify-content:center; font-weight:800; }
+  .notif .tt { font-weight:700; } .notif .tt small { float:right; font-weight:400; color:var(--ink3); font-size:11px; }
+  .notif .bb { display:flex; gap:6px; margin-top:4px; }
+
+  /* Vergleich */
+  table.cmp { width:100%; border-collapse:collapse; background:var(--panel); border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:12.5px; }
+  table.cmp th, table.cmp td { text-align:left; vertical-align:top; padding:9px 12px; border-bottom:1px solid var(--line); }
+  table.cmp th { color:var(--ink3); font-size:11px; text-transform:uppercase; letter-spacing:.05em; font-weight:600; background:var(--header); }
+  table.cmp td:first-child { font-weight:600; width:200px; }
+  table.cmp tr.rec td { background:var(--hl); }
+  .pill { display:inline-block; font-size:11px; font-weight:700; color:var(--accent); border:1px solid var(--accent); border-radius:10px; padding:0 7px; margin-left:6px; }
+</style>
+</head>
+<body>
+<header class="page">
+  <h1>Geplante Aufgaben</h1>
+  <p>Entwurf zu WM8-110: wiederkehrende Claude-Läufe anlegen, sehen, von Hand starten, pausieren und ihren Chat öffnen</p>
+  <span class="sp"></span>
+  <button class="btn" id="theme">Hell / Dunkel</button>
+</header>
+<main>
+
+  <div class="rules">
+    <b>Was gilt, egal wo die Ansicht wohnt</b>
+    <ul>
+      <li><b>Ein Lauf ist ein normaler Claude-Chat</b>, gestartet mit <code>claude -p</code> im Projektordner und Konto der Aufgabe. Er steht in der Seitenleiste unter seinem Projekt, mit Uhr-Symbol statt Claude-Symbol und dem Namen „Aufgabe · Datum“.</li>
+      <li><b>Grün heißt nur „arbeitet“.</b> Ein geklappter Lauf ist ein Häkchen in normaler Schrift, ein fehlgeschlagener ein roter Ring wie bei einem Chat mit Fehler, ein Hinweis (etwa Login läuft ab) eine gelbe Zeile.</li>
+      <li><b>Alle Knöpfe stehen sichtbar da</b>, an der Zeile oder im Detail. Nichts erscheint nur beim Überfahren, es gibt kein Kontextmenü.</li>
+      <li><b>Solange ein Lauf arbeitet, gibt es nur „Mitlesen“.</b> Fortsetzen öffnet einen Tab mit <code>claude --resume</code> im Konto des Laufs und geht erst nach dem Ende, sonst schrieben zwei Prozesse in dieselbe Sitzung.</li>
+      <li><b>Ein Fehlschlag meldet sich dreifach:</b> Mitteilung, roter Ring am Knopf der Ansicht, Fehler-Punkt am Chat des Laufs.</li>
+    </ul>
+  </div>
+
+  <h2>Zum Anklicken</h2>
+  <div class="controls">
+    <span class="lab">Wo es wohnt</span>
+    <div class="seg" id="variant">
+      <button data-v="B" class="on">B · Eigene Ansicht wie Tickets</button>
+      <button data-v="A">A · Abschnitt in der Seitenleiste</button>
+      <button data-v="C">C · Seite in den Einstellungen</button>
+    </div>
+    <span class="lab">Zustand zeigen</span>
+    <div class="chips">
+      <button class="btn small" data-demo="notif">Mitteilung bei Fehlschlag</button>
+      <button class="btn small" data-demo="login">Login abgelaufen</button>
+      <button class="btn small" data-demo="new">Neue Aufgabe</button>
+      <button class="btn small" data-demo="reset">Zurücksetzen</button>
+    </div>
+  </div>
+  <div class="stage" id="stage"></div>
+  <p class="cap" id="caption"></p>
+
+  <h2>Die drei Orte im Vergleich</h2>
+  <table class="cmp">
+    <tr><th>Variante</th><th>Für</th><th>Wider</th></tr>
+    <tr class="rec"><td>B · Eigene Ansicht wie Tickets <span class="pill">Empfehlung</span></td>
+      <td>Bedienung ist schon bekannt: Knopf in der Titelzone, ⌘W zurück, Liste links, Detail rechts mit „Zum Chat“. Die Seitenleiste bleibt, wie sie ist. Genug Platz für Läufe, Ergebnisse und Fehlertext.</td>
+      <td>Ein Knopf mehr in der Titelzone. Nicht dauernd im Blick; dafür meldet sich ein Fehlschlag per Mitteilung, Ring am Knopf und Fehler-Punkt am Chat.</td></tr>
+    <tr><td>A · Abschnitt in der Seitenleiste</td>
+      <td>Immer zu sehen, ein Fehlschlag steht sofort links. Dieselbe Zeile wie ein Chat, nichts Neues zu lernen.</td>
+      <td>Die Seitenleiste ist für Chats und wird länger. Termine wie „in 3 Std“ müssen sich ändern und rechnen bei jedem Aufbau der Seitenleiste mit, die schon heute ein Zeitbudget hat. Für das Detail bleibt nur der Inhaltsbereich.</td></tr>
+    <tr><td>C · Seite in den Einstellungen</td>
+      <td>Passt zum Anlegen und Ändern, kein neuer Platz im Hauptfenster.</td>
+      <td>Einstellungen sind zum Einrichten, nicht zum Nachsehen. „Zum Chat“ springt aus dem Einstellungsfenster ins Hauptfenster. Ein Fehlschlag fällt dort niemandem auf.</td></tr>
+    <tr><td>Verworfen: Teil des Ticket-Boards</td>
+      <td>Ein Ort für „Arbeit“.</td>
+      <td>Das Board gehört zu einem Projekt, liest nur Linear und hängt am Ticket-Schalter. Aufgaben laufen über Projekte und Konten hinweg und sind keine Tickets.</td></tr>
+  </table>
+
+  <h2>Grundfrage a: läuft der Plan bei beendeter App?</h2>
+  <table class="cmp">
+    <tr><th>Weg</th><th>Was passiert</th><th>Preis</th></tr>
+    <tr class="rec"><td>A · Die App startet die Läufe <span class="pill">Empfehlung</span></td>
+      <td>Läuft, solange die App läuft, auch ohne offenes Fenster. Schläft der Mac zur Startzeit, holt die App beim Aufwachen nach, war sie beendet, beim nächsten Start. Ein App-Neustart mitten im Lauf schadet nicht, der Lauf startet losgelöst.</td>
+      <td>Bei beendeter App kein Lauf. Kein Schreibzugriff außerhalb der eigenen Daten, beim Deinstallieren bleibt nichts.</td></tr>
+    <tr><td>B · Je Lauf ein LaunchAgent</td>
+      <td>Läuft immer. launchd holt einen im Schlaf verpassten Termin beim Aufwachen einmal nach, bei ausgeschaltetem Mac entfällt er.</td>
+      <td>Neuer Schreibzugriff unter <code>~/Library/LaunchAgents</code> (Eintrag in der CLAUDE.md-Liste). Zwei Orte für denselben Plan. Beim Deinstallieren feuern die Einträge weiter ins Leere.</td></tr>
+    <tr><td>C · Ein Dienst im App-Paket (später)</td>
+      <td>Wie B, aber eine einzige feste plist im App-Paket, angemeldet über <code>SMAppService</code>. Sie stößt alle 5 Minuten die Kommandozeile an, die fällige Läufe startet.</td>
+      <td>Geht mit der App weg, kein Schreiben unter <code>~/Library/LaunchAgents</code>. Offen, ob macOS das mit unserer lokalen Signatur annimmt: erst ein Spike.</td></tr>
+  </table>
+  <p class="cap">Keiner der drei Wege weckt den Mac zum Termin. Der Wach-Knopf hält ihn wach, solange ein Lauf arbeitet (der Lauf zählt als „arbeitet“), bringt ihn aber nicht aus dem Schlaf. Belege und Messungen: <code>docs/plans/geplante-aufgaben.md</code>.</p>
+
+</main>
+<script>
+const ACC = { main:"#5e6ad2", PowerUser:"#3fa873", RankM8:"#c9962a" };
+const START = () => ([
+  { id:"pm", name:"PM-Tagesbericht", kind:"Skill", prompt:"/pm-analyse", project:"pm-analyse", path:"~/Archiv/pm-analyse", account:"main", loginEnds:"02.12.",
+    schedule:"täglich 07:00", next:"morgen, 07:00", state:"ok", rights:"Nur lesen, Bericht in ~/Archiv/pm-analyse schreiben",
+    last:{ head:"geklappt", when:"heute 07:00", text:"2 Min. 51 Sek. · Der Tagesbericht steht im Linear-Dokument „PM-Tagesbericht“." },
+    runs:[ {g:"ok", t:"So 15.11., 07:00", s:"geklappt · 2 Min. 51 Sek."},
+           {g:"ok", t:"Sa 14.11., 08:12", s:"07:00 verpasst, Mac schlief · beim Aufwachen nachgeholt"},
+           {g:"ok", t:"Fr 13.11., 07:00", s:"geklappt · 3 Min. 04 Sek."} ] },
+  { id:"calls", name:"Live-Calls auswerten", kind:"Skill", prompt:"/dealsupply-live-calls neue Calls benennen und auswerten", project:"ListM8", path:"~/repos/ListM8", account:"PowerUser", loginEnds:"30.11.",
+    schedule:"werktags 17:30", next:"Mo 16.11., 17:30", state:"fail", rights:"Nur lesen, Transkripte in ~/Archiv/live-calls schreiben",
+    last:{ head:"fehlgeschlagen", when:"Fr 13.11., 17:31", text:"Fireflies antwortet nicht" },
+    error:"Der MCP-Server „fireflies“ war beim Start nicht verbunden. Der Lauf hat nach 42 Sek. ohne Transkripte aufgehört. Im Chat steht, wie weit er kam.",
+    runs:[ {g:"fail", t:"Fr 13.11., 17:30", s:"fehlgeschlagen · Fireflies antwortet nicht"},
+           {g:"ok", t:"Do 12.11., 17:30", s:"geklappt · 2 Calls ausgewertet"},
+           {g:"warn", t:"Mi 11.11., 17:30", s:"geklappt mit Hinweis · 1 Werkzeug verweigert (Write)"} ] },
+  { id:"deps", name:"Abhängigkeiten prüfen", kind:"Text", prompt:"Prüfe, ob es neue Versionen von SwiftTerm, KeyboardShortcuts und Defaults gibt. Schreib eine kurze Notiz an WM8-31, wenn ja. Ändere nichts am Code.", project:"whisperm8", path:"~/repos/whisperm8", account:"PowerUser", loginEnds:"30.11.",
+    schedule:"sonntags 15:45", next:"So 22.11., 15:45", state:"run", rights:"Nur lesen, Notiz per whisperm8 tickets note",
+    last:{ head:"arbeitet", when:"seit 15:45", text:"liest Package.resolved" },
+    runs:[ {g:"run", t:"So 15.11., 15:45", s:"arbeitet seit 4 Min."},
+           {g:"ok", t:"So 08.11., 15:45", s:"geklappt · keine neuen Versionen"} ] },
+  { id:"rank", name:"Ranking-Bericht", kind:"Skill", prompt:"/rankm8-wochenbericht", project:"RankM8", path:"~/repos/RankM8", account:"RankM8", loginEnds:"heute",
+    schedule:"montags 08:00", next:"Mo 16.11., 08:00", state:"ok", warn:"Login von RankM8 endet heute, vor dem nächsten Lauf.", rights:"Nur lesen, Bericht in docs/berichte schreiben",
+    last:{ head:"geklappt", when:"Mo 09.11., 08:00", text:"4 Min. 10 Sek. · Bericht für KW 45 liegt in docs/berichte." },
+    runs:[ {g:"ok", t:"Mo 09.11., 08:00", s:"geklappt · 4 Min. 10 Sek."},
+           {g:"ok", t:"Mo 02.11., 08:00", s:"geklappt · 3 Min. 48 Sek."} ] },
+  { id:"week", name:"Wochenrückblick Board", kind:"Text", prompt:"Fass zusammen, welche WM8-Tickets diese Woche fertig wurden und welche hängen. Schreib es als Kommentar an WM8-1.", project:"whisperm8", path:"~/repos/whisperm8", account:"main", loginEnds:"02.12.",
+    schedule:"freitags 18:00", next:"pausiert", state:"paused", rights:"Nur lesen, Kommentar per whisperm8 tickets comment",
+    last:{ head:"pausiert", when:"seit Do 12.11.", text:"Letzter Lauf Fr 06.11. geklappt" },
+    runs:[ {g:"ok", t:"Fr 06.11., 18:00", s:"geklappt · 1 Min. 58 Sek."} ] },
+]);
+
+let S = { variant:"B", tasks:START(), sel:"calls", view:"tasks", chat:null, sheet:null, notif:false, timers:[] };
+const $ = (s, r=document) => r.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const task = id => S.tasks.find(t => t.id === id);
+const anyFail = () => S.tasks.some(t => t.state === "fail");
+
+function dotFor(t) { return {ok:"", fail:"error", run:"working", paused:"paused", warn:""}[t.state] ?? ""; }
+function acc(a) { return `<span class="acc"><i style="background:${ACC[a]}">${a[0]}</i>${esc(a)}</span>`; }
+function resultCell(t) {
+  const cls = {ok:"ok", fail:"fail", run:"run", paused:"paused"}[t.state];
+  const glyph = {ok:"✓", fail:"✕", run:'<i class="dot working"></i>', paused:"Ⅱ"}[t.state];
+  return `<div class="res ${cls}"><span class="l1">${glyph} ${esc(t.last.head)}</span><span class="l2">${esc(t.last.when)} · ${esc(t.last.text)}</span>${t.warn ? `<span class="flag">◆ ${esc(t.warn)}</span>` : ""}</div>`;
+}
+function rowActs(t) {
+  const run = t.state === "run";
+  return `<button class="btn small" data-act="now" data-id="${t.id}" ${run || t.state==="paused" ? "disabled" : ""}>Jetzt starten</button>` +
+         `<button class="btn small" data-act="pause" data-id="${t.id}">${t.state==="paused" ? "Fortsetzen" : "Pausieren"}</button>`;
+}
+
+/* Seitenleiste mit Chats; die Läufe stehen als Chats unter ihrem Projekt */
+function sidebar(withSection) {
+  const st = id => task(id).state;
+  const runChat = (id, label) => {
+    const t = task(id); const d = t.state === "run" ? "working" : t.state === "fail" ? "error" : "done";
+    const sel = S.view === "chat" && S.chat === id ? " sel" : "";
+    return `<div class="row${sel}" data-chat="${id}"><span class="ico">⏱</span><span class="t">${esc(label)}</span><i class="dot ${d}"></i></div>`;
+  };
+  let sec = "";
+  if (withSection) {
+    sec = `<div class="sec">GEPLANT<button class="add" data-demo="new" title="Neue Aufgabe">+</button></div>` +
+      S.tasks.map(t => {
+        const w = t.state === "run" ? "läuft" : t.state === "fail" ? "Fehler" : t.state === "paused" ? "pausiert" : t.next.replace("morgen, ", "morgen ");
+        const sel = S.view === "tasks" && S.sel === t.id ? " sel" : "";
+        return `<div class="row${sel}" data-task="${t.id}"><i class="dot ${dotFor(t)}"></i><span class="t">${esc(t.name)}</span><span class="w" style="${t.state==="fail"?"color:var(--error)":""}">${esc(w)}</span></div>`;
+      }).join("");
+  }
+  return `<div class="lights"><i></i><i></i><i></i></div>
+    <div class="newchat">Neuer Chat <small>⌘N</small></div>
+    <div class="sidelist">
+      <div class="sec">WORKSPACES</div>
+      <div class="row"><span class="ico">▦</span><span class="t">WM8 Aktiv</span><span class="w">4/4</span></div>
+      ${sec}
+      <div class="sec">CHATS</div>
+      <div class="grp">whisperm8<span class="n">4</span></div>
+      <div class="row"><span class="ico">✳</span><span class="t">WM8-110 Sam · Geplante Aufgaben: Entwurf</span><i class="dot working"></i></div>
+      <div class="row"><span class="ico">✳</span><span class="t">Jarvis: Supervisor WhisperM8</span><i class="dot awaiting"></i></div>
+      ${runChat("deps", "Abhängigkeiten prüfen · 15.11.")}
+      <div class="row"><span class="ico">✳</span><span class="t">WM8-81 Jon · Ticket-Board Stufe 2</span><i class="dot"></i></div>
+      <div class="grp">ListM8<span class="n">2</span></div>
+      ${runChat("calls", "Live-Calls auswerten · 13.11.")}
+      <div class="row"><span class="ico">✳</span><span class="t">2 Pia · Linear: Feedback umsetzen</span><i class="dot"></i></div>
+      <div class="grp">pm-analyse<span class="n">1</span></div>
+      ${runChat("pm", "PM-Tagesbericht · 15.11.")}
+      <div class="grp">RankM8<span class="n">1</span></div>
+      ${runChat("rank", "Ranking-Bericht · 09.11.")}
+    </div>
+    <div class="foot"><span>Archiv</span><span>Wach</span><span>Glocke</span><span>Limits</span></div>`;
+}
+
+function overview(withDetail) {
+  const rows = S.tasks.map(t => `
+    <div class="tr${S.sel===t.id?" sel":""}" data-task="${t.id}">
+      <i class="dot ${dotFor(t)}"></i>
+      <div class="nm">${esc(t.name)}<small>${acc(t.account)} · ${esc(t.project)}</small></div>
+      <div class="c">${esc(t.schedule)}<small>${t.state === "paused" ? "pausiert" : "nächster: " + esc(t.next)}</small></div>
+      ${resultCell(t)}
+      <div class="acts">${rowActs(t)}</div>
+    </div>`).join("");
+  const fails = S.tasks.filter(t => t.state === "fail").length;
+  return `<div class="ov">
+    <div class="ovhead"><h3>Geplante Aufgaben</h3><span class="sub">${S.tasks.length} Aufgaben · ${fails ? `<span style="color:var(--error)">${fails} fehlgeschlagen</span>` : "alle zuletzt geklappt"}</span>
+      <span class="sp"><button class="btn primary" data-demo="new">Neue Aufgabe…</button></span></div>
+    <div class="tbl"><div class="th"><span></span><span>Name · Konto · Projekt</span><span>Zeitplan · nächster Termin</span><span>Letzter Lauf</span><span></span></div>${rows}</div>
+    <div class="ovfoot"><span>Läufe startet die App, auch bei geschlossenem Fenster.</span><span>Verpasste Termine holt sie beim Aufwachen nach.</span></div>
+  </div>${withDetail ? detail(false) : ""}`;
+}
+
+function detail(wide) {
+  const t = task(S.sel); if (!t) return "";
+  let box = "";
+  if (t.state === "fail") box = `<div class="box fail"><b>Fehlgeschlagen · ${esc(t.last.when)}</b><br>${esc(t.error)}
+      <div class="bacts">${t.loginFail ? `<button class="btn small primary" data-act="renew" data-id="${t.id}">Login erneuern…</button>` : `<button class="btn small primary" data-act="chat" data-id="${t.id}">Zum Chat des Laufs</button>`}${t.loginFail ? "" : `<button class="btn small" data-act="now" data-id="${t.id}">Erneut starten</button>`}</div></div>`;
+  else if (t.state === "run") box = `<div class="box run"><span style="display:flex;align-items:center;gap:7px"><i class="dot working"></i><b>Arbeitet ${esc(t.last.when)}</b></span>Fortsetzen geht nach dem Ende. Bis dahin kannst du mitlesen.
+      <div class="bacts"><button class="btn small primary" data-act="chat" data-id="${t.id}">Mitlesen</button><button class="btn small" data-act="stop" data-id="${t.id}">Lauf abbrechen</button></div></div>`;
+  else if (t.state === "paused") box = `<div class="box" style="background:var(--sel)"><b>Pausiert seit Do 12.11.</b> Es startet nichts, bis du fortsetzt. „Jetzt starten“ geht trotzdem nicht, damit Pausieren wirklich Ruhe heißt.</div>`;
+  if (t.warn) box += `<div class="box warn"><b>◆ ${esc(t.warn)}</b><br>Ohne neuen Login startet der Lauf am ${esc(t.next)} nicht und meldet sich als fehlgeschlagen.
+      <div class="bacts"><button class="btn small" data-act="renew" data-id="${t.id}">Login erneuern…</button></div></div>`;
+  const runs = t.runs.map((r, i) => `<div class="lauf"><span class="g ${r.g}">${r.g==="run" ? '<i class="dot working"></i>' : r.g==="fail" ? "✕" : r.g==="warn" ? "◆" : "✓"}</span>
+      <span>${esc(r.t)}<small>${esc(r.s)}</small></span>
+      ${r.nochat ? '<span class="hint" style="margin:0">kein Chat</span>' : `<button class="btn small" data-act="chat" data-id="${t.id}">${r.g==="run" ? "Mitlesen" : "Zum Chat"}</button>`}</div>`).join("");
+  return `<div class="det${wide ? " wide" : ""}">
+    <h3><i class="dot ${dotFor(t)}"></i>${esc(t.name)}${wide ? "" : `<button class="close" data-act="closedet" title="Schließen">✕</button>`}</h3>
+    <div class="acts"><button class="btn small" data-act="now" data-id="${t.id}" ${t.state==="run"||t.state==="paused"?"disabled":""}>Jetzt starten</button>
+      <button class="btn small" data-act="pause" data-id="${t.id}">${t.state==="paused"?"Fortsetzen":"Pausieren"}</button>
+      <button class="btn small" data-act="edit" data-id="${t.id}">Ändern…</button></div>
+    ${box}
+    <div class="meta"><span>Zeitplan</span><span>${esc(t.schedule)}</span><span>Nächster Termin</span><span>${esc(t.next)}</span>
+      <span>Konto</span><span>${acc(t.account)} · Login bis ${esc(t.loginEnds)}</span><span>Projekt</span><span>${esc(t.project)} · ${esc(t.path)}</span>
+      <span>Darf</span><span>${esc(t.rights)}</span><span>Verpasst</span><span>nachholen, bis 12 Std. später</span></div>
+    <h4>Auftrag</h4><div class="prompt">${esc(t.prompt)}</div>
+    <h4>Läufe</h4><div class="runs">${runs}</div>
+    <p class="hint">Ältere Läufe gehen nach 14 Tagen ins Archiv. In der Seitenleiste steht nur der neueste.</p>
+  </div>`;
+}
+
+function chatView() {
+  const t = task(S.chat);
+  const running = t.state === "run";
+  const title = { pm:"PM-Tagesbericht · 15.11.", calls:"Live-Calls auswerten · 13.11.", deps:"Abhängigkeiten prüfen · 15.11.", rank:"Ranking-Bericht · 09.11.", week:"Wochenrückblick Board · 06.11." }[t.id];
+  const banner = running
+    ? `<div class="banner run"><i class="dot working"></i><span><b>Geplanter Lauf arbeitet noch.</b> Du liest mit, schreiben geht erst nach dem Ende.</span><span class="sp"><button class="btn small" data-act="back">Zur Aufgabe</button></span></div>`
+    : `<div class="banner info"><span>⏱ Lauf von <b>${esc(t.name)}</b> · Konto ${esc(t.account)} · fortgesetzt mit <code>claude --resume</code> im Konto des Laufs, egal welches Konto gerade aktiv ist.</span><span class="sp"><button class="btn small" data-act="back">Zur Aufgabe</button></span></div>`;
+  const body = {
+    calls: `<b>&gt; /dealsupply-live-calls neue Calls benennen und auswerten</b>\n\n⏺ Ich hole die Calls der Reihe „DealSupply BETA“ von heute.\n⏺ fireflies - fireflies_get_transcripts (MCP)\n  ⎿ <span class="err">Error: MCP server "fireflies" is not connected</span>\n\n⏺ Ohne Fireflies komme ich nicht an die Transkripte. Ich höre hier auf und lege nichts an.\n  Sobald der Server wieder verbunden ist, reicht ein neuer Lauf.`,
+    pm: `<b>&gt; /pm-analyse Daten-Datei: ~/Archiv/pm-analyse/daten/2026-11-15.json</b>\n\n⏺ Read(daten/2026-11-15.json)\n  ⎿ 214 Tickets in DS und AKQ\n⏺ Bash(~/.claude/skills/pm-analyse/bericht.sh)\n  ⎿ <span class="ok">Dokument „PM-Tagesbericht“ aktualisiert</span>\n\n⏺ Der Tagesbericht steht im Linear-Dokument „PM-Tagesbericht“.\n  Xeno hat noch 3 umsetzbare Tickets in DS, Richi 1 in AKQ.`,
+    deps: `<b>&gt; Prüfe, ob es neue Versionen von SwiftTerm, KeyboardShortcuts und Defaults gibt …</b>\n\n⏺ Read(Package.resolved)\n  ⎿ 9 Pakete\n⏺ Bash(git ls-remote --tags https://github.com/sindresorhus/Defaults)\n  ⎿ …\n\n✻ arbeitet seit 4 Min.`,
+    rank: `<b>&gt; /rankm8-wochenbericht</b>\n\n⏺ Bericht für KW 45 liegt in docs/berichte/2026-kw45.md.`,
+    week: `<b>&gt; Fass zusammen, welche WM8-Tickets diese Woche fertig wurden …</b>\n\n⏺ Kommentar an WM8-1 geschrieben.`,
+  }[t.id];
+  return `<div class="chat">${banner}<div class="term">${body}</div>
+    <div class="input${running ? "" : " live"}">${running ? "Mitlesen: Eingabe gesperrt, bis der Lauf fertig ist" : "Was soll ich als Nächstes tun?"}</div></div>`;
+}
+
+function sheet() {
+  const t = S.sheet === "new" ? null : task(S.sheet);
+  const v = (k, d) => esc(t ? t[k] : d);
+  const first = t ? t.schedule.split(" ")[0] : "werktags";
+  const kind = first === "täglich" ? "Täglich" : first === "werktags" ? "Werktags" : "Wöchentlich";
+  return `<div class="veil"><div class="sheet">
+    <h3>${t ? "Aufgabe ändern" : "Neue geplante Aufgabe"}</h3>
+    <div class="f"><label>Name</label><div><input class="in" value="${v("name", "Kampagnen-Stand am Morgen")}"></div></div>
+    <div class="f"><label>Auftrag</label><div>
+      <div class="seg" style="margin-bottom:6px"><button class="${!t || t.kind==="Skill" ? "on" : ""}">Skill</button><button class="${t && t.kind==="Text" ? "on" : ""}">Text</button></div>
+      <textarea class="in">${v("prompt", "/outreach-pipeline Stand aller laufenden Kampagnen")}</textarea>
+      <div class="hint">Läuft ohne Rückfragen. Was der Lauf nicht darf (unten), bricht er nicht ab, sondern lässt er aus und meldet es.</div></div></div>
+    <div class="f"><label>Projektordner</label><div><select class="in"><option>${t ? esc(t.project + " · " + t.path) : "akquise-ai · ~/repos/akquise-ai"}</option><option>whisperm8 · ~/repos/whisperm8</option><option>Anderer Ordner…</option></select>
+      <div class="hint">Hier startet der Lauf, und unter diesem Projekt steht sein Chat.</div></div></div>
+    <div class="f"><label>Konto</label><div><select class="in"><option>${t ? esc(t.account) : "PowerUser"} · Login bis ${t ? esc(t.loginEnds) : "30.11."}</option><option>main · Login bis 02.12.</option><option>RankM8 · Login endet heute</option></select></div></div>
+    <div class="f"><label>Zeitplan</label><div class="inline">
+      <div class="seg">${["Täglich","Werktags","Wöchentlich","Stündlich"].map(x => `<button class="${x === kind ? "on" : ""}">${x}</button>`).join("")}</div>
+      <span>um</span><input class="in" style="width:70px" value="${t ? esc((t.schedule.match(/\d\d:\d\d/)||["07:00"])[0]) : "08:30"}"></div></div>
+    <div class="f"><label>Darf</label><div>
+      <label class="chk"><input type="radio" name="r" checked> <span>Lesen und im Projektordner schreiben</span></label>
+      <label class="chk"><input type="radio" name="r"> <span>Nur lesen</span></label>
+      <label class="chk"><input type="radio" name="r"> <span>Eigene Liste erlaubter Werkzeuge…</span></label></div></div>
+    <div class="f"><label>Verpasste Termine</label><div><label class="chk"><input type="checkbox" checked> <span>Nachholen, wenn der Mac schlief oder die App zu war (bis 12 Std. später)</span></label></div></div>
+    <div class="f"><label>Alte Läufe</label><div><select class="in" style="width:auto"><option>nach 14 Tagen ins Archiv</option><option>nach 7 Tagen ins Archiv</option><option>behalten</option></select></div></div>
+    <div class="sheetfoot"><span class="sum">Nächster Lauf: ${t ? esc(t.next) : "Mo 16.11., 08:30"}, im Konto ${t ? esc(t.account) : "PowerUser"}</span>
+      ${t ? `<button class="btn small danger" data-act="sheetclose">Löschen…</button>` : ""}
+      <span class="sp"><button class="btn" data-act="sheetclose">Abbrechen</button><button class="btn primary" data-act="sheetsave">${t ? "Sichern" : "Anlegen"}</button></span></div>
+  </div></div>`;
+}
+
+function notif() {
+  return `<div class="notif"><div class="ic">W</div>
+    <div class="tt">Geplante Aufgabe fehlgeschlagen<small>17:31</small></div>
+    <div>Live-Calls auswerten: Fireflies antwortet nicht.</div>
+    <div class="bb"><button class="btn small primary" data-act="chat" data-id="calls">Zum Chat</button><button class="btn small" data-act="opentask" data-id="calls">Aufgabe öffnen</button></div></div>`;
+}
+
+function titlezone() {
+  const tabs = `<div class="tabs"><span class="tab${S.view==="chat"?" on":""}">${S.view==="chat" ? "⏱ " + esc(task(S.chat).name) : "WM8-110 Sam · Geplante Aufgaben"}</span><span class="tab">Jarvis: Supervisor</span></div>`;
+  const clock = S.variant === "B" ? `<button class="tzbtn${S.view==="tasks"?" on":""}" data-act="toggletasks" title="Geplante Aufgaben">⏱${anyFail() ? '<span class="ring"></span>' : ""}</button>` : "";
+  return `<div class="titlezone"><button class="tzbtn" title="Seitenleiste">▤</button><button class="tzbtn" title="Tickets">☰</button>${clock}${tabs}</div>`;
+}
+
+function render() {
+  const stage = $("#stage");
+  let html;
+  if (S.variant === "C") {
+    const groups = S.tasks.map(t => `<div class="gr${S.sel===t.id?" sel":""}" data-task="${t.id}"><i class="dot ${dotFor(t)}"></i>
+      <div class="nm">${esc(t.name)}<small>${esc(t.schedule)} · ${esc(t.account)} · ${t.state === "paused" ? "pausiert" : "nächster Termin " + esc(t.next)}</small></div>${resultCell(t).replace('class="res', 'style="max-width:280px" class="res')}</div>`).join("");
+    html = `<div class="settings">
+      <div class="snav"><div class="lights" style="padding:4px 4px 10px"><i></i><i></i><i></i></div>
+        <div class="it"><i style="background:#8d8e93">⚙</i>Allgemein</div><div class="it"><i style="background:#d6473d">●</i>Diktat</div>
+        <div class="it"><i style="background:#c9962a">✎</i>Ausgabemodi</div><div class="hd">Agent Chats</div>
+        <div class="it"><i style="background:#5e6ad2">✳</i>Chats</div><div class="it"><i style="background:#3fa873">◉</i>Konten</div>
+        <div class="it sel"><i style="background:#ffffff33">⏱</i>Geplante Aufgaben</div><div class="hd">Weiteres</div><div class="it"><i style="background:#8a62d6">⚗</i>Labs</div></div>
+      <div class="spage"><h3>Geplante Aufgaben</h3><p class="lead">Claude-Läufe, die WhisperM8 zu festen Zeiten startet. Jeder Lauf wird ein Chat unter seinem Projekt.</p>
+        <div style="display:flex;justify-content:flex-end;margin:-6px 0 8px"><button class="btn primary" data-demo="new">Neue Aufgabe…</button></div>
+        <div class="group">${groups}</div>${detail(true).replace('class="det wide"', 'class="det wide" style="padding:0;background:transparent"')}</div>
+      ${S.sheet ? sheet() : ""}${S.notif ? notif() : ""}</div>`;
+  } else {
+    let main;
+    if (S.view === "chat") main = chatView();
+    else if (S.variant === "B" && S.view === "tasks") main = overview(!!S.sel);
+    else if (S.variant === "A" && S.view === "tasks") main = detail(true);
+    else main = `<div class="chat"><div class="term"><b>&gt; Entwurf geplante Aufgaben</b>\n\n⏺ Write(docs/design/geplante-aufgaben.html)\n  ⎿ Wrote 412 lines</div><div class="input live">und dann die Abnahme vorbereiten</div></div>`;
+    html = `<div class="win"><div class="side">${sidebar(S.variant === "A")}</div>
+      <div class="content">${titlezone()}<div class="body">${main}</div></div>
+      ${S.sheet ? sheet() : ""}${S.notif ? notif() : ""}</div>`;
+  }
+  stage.innerHTML = html;
+  $("#caption").innerHTML = caption();
+  document.querySelectorAll("#variant button").forEach(b => b.classList.toggle("on", b.dataset.v === S.variant));
+}
+
+function caption() {
+  if (S.sheet) return `<b>Anlegen und Ändern im Blatt.</b> Alles auf einer Seite, kein Assistent mit Schritten. Konto mit Login-Ende daneben, damit man kein Konto wählt, das vor dem ersten Lauf abläuft. Kein Modell-Feld: Das Modell wählt Claude Code, wie bei jedem Chat. Unten steht in Worten, wann der nächste Lauf startet.`;
+  if (S.notif) return `<b>Mitteilung bei Fehlschlag.</b> Kommt wie die Fertig-Mitteilung eines Chats, mit zwei Knöpfen: direkt in den Chat des Laufs oder zur Aufgabe. In Variante B trägt der Uhr-Knopf zusätzlich einen roten Ring, bis der Fehlschlag angesehen wurde.`;
+  if (S.view === "chat") {
+    const t = task(S.chat);
+    return t.state === "run"
+      ? `<b>Mitlesen, solange der Lauf arbeitet.</b> Der Verlauf füllt sich live, das Eingabefeld ist gesperrt und sagt warum. Nach dem Ende wird daraus ein normaler Chat, den man fortsetzen kann.`
+      : `<b>Der Weg zum Chat.</b> Der Chat des Laufs ist in der Seitenleiste unter seinem Projekt ausgewählt und als Tab geöffnet. Die Zeile oben sagt, in welchem Konto er läuft, unabhängig vom gerade aktiven Konto. „Zur Aufgabe“ führt zurück.`;
+  }
+  if (S.variant === "B") return S.view === "tasks"
+    ? `<b>Variante B (Empfehlung).</b> Der Uhr-Knopf neben dem Ticket-Knopf schaltet den Bereich unter der Tab-Leiste um, wie bei den Tickets. Links die Übersicht, rechts das Detail der gewählten Aufgabe. „Jetzt starten“ und „Pausieren“ stehen an jeder Zeile. Probier: eine Zeile anklicken, „Jetzt starten“, „Zum Chat“, „Mitlesen“.`
+    : `<b>Variante B, zurück bei den Chats.</b> Der rote Ring am Uhr-Knopf bleibt, solange eine Aufgabe fehlgeschlagen ist. Klick auf den Uhr-Knopf öffnet die Übersicht wieder.`;
+  if (S.variant === "A") return `<b>Variante A.</b> Ein Abschnitt „Geplant“ zwischen Workspaces und Chats, je Aufgabe eine Zeile wie ein Chat; rechts der nächste Termin oder der Zustand. Ein Klick zeigt das Detail im Inhaltsbereich, eine Übersicht als Tabelle gibt es nicht.`;
+  return `<b>Variante C.</b> Eine eigene Seite in den Einstellungen unter Agent Chats. Zum Einrichten gut, zum Nachsehen weit weg: „Zum Chat“ muss das Hauptfenster nach vorn holen.`;
+}
+
+/* Bedienung */
+document.addEventListener("click", e => {
+  const sb = e.target.closest(".sheet .seg button");
+  if (sb) { sb.parentElement.querySelectorAll("button").forEach(b => b.classList.toggle("on", b === sb)); return; }
+  const v = e.target.closest("#variant button");
+  if (v) { S.variant = v.dataset.v; S.view = v.dataset.v === "C" ? "settings" : "tasks"; S.sel = S.sel || "calls"; render(); return; }
+  const demo = e.target.closest("[data-demo]");
+  if (demo) {
+    const d = demo.dataset.demo;
+    if (d === "notif") { S.notif = true; S.sheet = null; }
+    if (d === "new") { S.sheet = "new"; S.notif = false; }
+    if (d === "login") { const r = task("rank"); r.state = "fail"; r.loginFail = true; r.warn = null; r.last = { head:"nicht gestartet", when:"Mo 16.11., 08:00", text:"Login von RankM8 abgelaufen" };
+      r.error = "Vor dem Start war das Konto RankM8 nicht mehr angemeldet (Login am 15.11. abgelaufen). Der Lauf ist gar nicht erst gestartet, es gibt keinen Chat dazu.";
+      r.next = "Mo 23.11., 08:00"; r.runs.unshift({ g:"fail", t:"Mo 16.11., 08:00", s:"nicht gestartet · Login abgelaufen", nochat:true }); r.loginEnds = "abgelaufen am 15.11."; S.sel = "rank"; S.view = S.variant === "C" ? "settings" : "tasks"; }
+    if (d === "reset") { S.timers.forEach(clearTimeout); S = { variant:S.variant, tasks:START(), sel:"calls", view:S.variant==="C"?"settings":"tasks", chat:null, sheet:null, notif:false, timers:[] }; }
+    render(); return;
+  }
+  const a = e.target.closest("[data-act]");
+  if (a) {
+    e.stopPropagation();
+    const t = a.dataset.id && task(a.dataset.id);
+    switch (a.dataset.act) {
+      case "toggletasks": S.view = S.view === "tasks" ? "chats" : "tasks"; break;
+      case "closedet": S.sel = null; break;
+      case "pause": t.state = t.state === "paused" ? "ok" : "paused";
+        if (t.state === "paused") { t.prev = { last:t.last, next:t.next }; t.last = { head:"pausiert", when:"seit eben", text:"Es startet nichts, bis du fortsetzt." }; t.next = "pausiert"; }
+        else { Object.assign(t, t.prev || { last:{ head:"geklappt", when:"Fr 06.11., 18:00", text:"Letzter Lauf geklappt" }, next:"Fr 20.11., 18:00" }); if (t.id === "week") t.next = "Fr 20.11., 18:00"; }
+        S.sel = t.id; break;
+      case "now": t.state = "run"; t.loginFail = false; t.last = { head:"arbeitet", when:"seit eben", text:"von Hand gestartet" };
+        t.runs.unshift({ g:"run", t:"So 15.11., jetzt", s:"von Hand gestartet · arbeitet" }); S.sel = t.id;
+        S.timers.push(setTimeout(() => { t.state = "ok"; t.last = { head:"geklappt", when:"eben", text:"von Hand gestartet · 6 Sek. (verkürzt für den Entwurf)" };
+          t.runs[0] = { g:"ok", t:"So 15.11., eben", s:"von Hand gestartet · geklappt" }; render(); }, 6000)); break;
+      case "stop": t.state = "fail"; t.last = { head:"abgebrochen", when:"eben", text:"von Hand abgebrochen" }; t.error = "Du hast den Lauf abgebrochen. Der Chat enthält alles bis dahin.";
+        t.runs[0] = { g:"fail", t:"So 15.11., 15:45", s:"von Hand abgebrochen" }; break;
+      case "chat": S.chat = t.id; S.view = "chat"; S.notif = false; if (S.variant === "C") S.variant = "B"; break;
+      case "opentask": S.sel = t.id; S.view = S.variant === "C" ? "settings" : "tasks"; S.notif = false; break;
+      case "back": S.sel = S.chat; S.view = "tasks"; break;
+      case "edit": S.sheet = t.id; break;
+      case "renew": a.textContent = "Browser offen, warte auf Login…"; a.disabled = true; return;
+      case "sheetclose": S.sheet = null; break;
+      case "sheetsave": S.sheet = null; break;
+    }
+    render(); return;
+  }
+  const tr = e.target.closest("[data-task]");
+  if (tr) { S.sel = tr.dataset.task; if (S.variant !== "C") S.view = "tasks"; render(); return; }
+  const ch = e.target.closest("[data-chat]");
+  if (ch) { S.chat = ch.dataset.chat; S.view = "chat"; render(); return; }
+});
+
+const root = document.documentElement;
+let saved = null; try { saved = localStorage.getItem("geplante-aufgaben-theme"); } catch (_) {}
+if (saved) root.dataset.theme = saved;
+else if (matchMedia("(prefers-color-scheme: dark)").matches) root.dataset.theme = "dark";
+$("#theme").addEventListener("click", () => {
+  root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+  try { localStorage.setItem("geplante-aufgaben-theme", root.dataset.theme); } catch (_) {}
+});
+render();
+</script>
+</body>
+</html>
