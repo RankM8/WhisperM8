@@ -121,7 +121,8 @@ extension RecordingCoordinator {
     static func clipboardOnlyPillHint(for reason: DictationClipboardReason) -> String {
         switch reason {
         // Am Limit kein ⌘V-Tipp: auch eingefügter Text würde verbraucht.
-        case .decisionPending, .chatUsageLimited: return String(localized: "On the clipboard")
+        // Offene Ansicht: ⌘V landete im Filter der Ansicht.
+        case .decisionPending, .chatUsageLimited, .viewOpen: return String(localized: "On the clipboard")
         case .chatStarting, .chatNotRunning, .writeFailed, .boardChatHidden: return String(localized: "On the clipboard · ⌘V to paste")
         }
     }
@@ -139,6 +140,8 @@ extension RecordingCoordinator {
             return String(localized: "The chat's account has reached its usage limit, so the dictation wasn't added. Your text is on the clipboard.")
         case .chatNotRunning:
             return String(localized: "The chat isn't running anymore, so the dictation wasn't added. Your text is on the clipboard.")
+        case .viewOpen:
+            return String(localized: "A Claude view is open in the chat (transcript, /tasks, agent list, /config …), so the dictation wasn't added. Close it first. Your text is on the clipboard.")
         case .writeFailed:
             return String(localized: "The dictation couldn't be written to the chat. Your text is on the clipboard.")
         case .boardChatHidden:

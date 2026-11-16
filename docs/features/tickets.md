@@ -442,8 +442,8 @@ Idee 3.
   ein ausdrückliches Ziel (Controller, Insel) bleibt. Das Ziel ist ein eigenes, `.boardChat`: Es geht nie mit
   Senden hinaus (auch nicht bei einem Stopp mit Kreuz; die Legende bietet kein Senden an, Kreuz tut nichts), und es
   prüft wie „→ Jarvis“ (`BoardChatInputRules`): offene Frage, auch mit Textfeld, Freigabe laut Sendeweg der CLI,
-  Hochfahren oder Limit heißt nur Zwischenablage, ebenso wenn der Board-Chat beim Ausliefern in keiner
-  Spalte mehr steht. Pille und Insel nennen den Board-Chat. Der Board-Chat ist im Ticket-Modus auch Kontext des
+  Hochfahren, Limit oder eine offene Ansicht von Claude (WM8-123) heißt nur Zwischenablage, ebenso wenn der
+  Board-Chat beim Ausliefern in keiner Spalte mehr steht. Pille und Insel nennen den Board-Chat. Der Board-Chat ist im Ticket-Modus auch Kontext des
   Diktats. Tastatur geht nur bei Fokus im Terminal an ihn; J/K, ⌘C und Esc im Board bleiben beim Board.
 - **Bezug:** Unter dem Terminal steht „Bezug: WM8-81 ✕“ für das Ticket der Triage. Das nächste Diktat an den
   Board-Chat beginnt mit einer Zeile „Bezug: WM8-81 „Titel“ <Adresse>“, danach gilt der Bezug für dieses Ticket als
@@ -454,8 +454,9 @@ Idee 3.
   Umbruch davor.
 - **„→ Jarvis“** in der Triage legt `WM8-81 „Titel“ <Adresse>` ins Eingabefeld des Board-Chats; abgeschickt
   wird mit Giulianos Return nach einem Klick ins Terminal (den Fokus gibt nur dieser Klick). Bei offener Frage oder Freigabe (Status, Codex-Dialog,
-  `DelayedEnterGuard.approvalPending` wie bei `chats send`), beim Hochfahren oder am Limit kommt nichts hinein: Warnton
-  und ein Satz unter dem Terminal. Aufträge nennen nur Nummer, Titel und Adresse (`BoardChatText`, Titel ohne
+  `DelayedEnterGuard.approvalPending` wie bei `chats send`), beim Hochfahren, am Limit oder bei offener Ansicht von
+  Claude (Transkript, `/tasks`, Agent-Liste, `/config`, Verlaufssuche; WM8-123) kommt nichts hinein: Warnton und ein
+  Satz unter dem Terminal. Dasselbe gilt für die Triage-Knöpfe und das Dreieck am Controller. Aufträge nennen nur Nummer, Titel und Adresse (`BoardChatText`, Titel ohne
   Steuerzeichen wie beim Kopieren, höchstens 200 Zeichen), nie die Beschreibung.
 - **Triage sammeln (Teil d):** Mit sichtbarem Board-Chat steht unter der Leiste der Triage „Triage, gesammelt für
   Jarvis:“ mit Annehmen, Zurückfragen, Zuweisen…, Später, Doppelt, Ablehnen. Ein Klick legt eine Zeile
