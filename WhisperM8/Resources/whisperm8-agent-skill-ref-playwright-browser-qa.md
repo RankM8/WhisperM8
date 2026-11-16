@@ -143,7 +143,7 @@ Beobachtete Fehlurteile und ihre Muster:
 
 ## Bewährter Batch-Ablauf (Kopiervorlage)
 
-1. Ticket-Dossiers als Dateien ablegen (`.qa/tickets/AKQ-NNN.md`) — Agent
+1. Ticket-Dossiers als Dateien ablegen (`.qa/tickets/XYZ-NNN.md`) — Agent
    liest sie selbst; nur ECHTE Akzeptanzkriterien hineinschreiben.
 2. Fehlende Testdaten selbst anlegen (headless, passende Rolle).
 3. State frisch capturen (`capture-state.mjs <rolle>`).

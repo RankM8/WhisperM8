@@ -260,8 +260,8 @@ body.grouped .sw::after{left:16px;}
     <div class="sb-scroll">
       <div class="sect">▾ ⊞ WORKSPACES <span class="plus">+</span></div>
 
-      <div class="row head"><span class="avatar" style="background:#3f3f46">A</span><span class="title">AKQ · ListM8 · Heartbeat</span><span class="meta">4/4 ⊞</span></div>
-      <div class="row indent"><span class="avatar" style="background:#1d1d1f">a</span><span class="title">AKQ Kunden-Weg…</span><span class="meta">› 22</span><span class="slot">S1</span><span class="dot idle"></span></div>
+      <div class="row head"><span class="avatar" style="background:#3f3f46">A</span><span class="title">XYZ · ListM8 · Heartbeat</span><span class="meta">4/4 ⊞</span></div>
+      <div class="row indent"><span class="avatar" style="background:#1d1d1f">a</span><span class="title">XYZ Kunden-Weg…</span><span class="meta">› 22</span><span class="slot">S1</span><span class="dot idle"></span></div>
       <div class="row indent"><span class="avatar" style="background:#0ea5e9">L</span><span class="title">ListM8 Review-Q…</span><span class="meta">› 12</span><span class="slot">S2</span><span class="dot idle"></span></div>
       <div class="row indent"><span class="avatar" style="background:#e8590c">H</span><span class="title">Heartbeat Slack-Tagesbe…</span><span class="slot">S3</span><span class="dot busy"></span></div>
       <div class="row indent"><span class="avatar" style="background:#3b82f6">W</span><span class="title">Jarvis – Projektsteuerun…</span><span class="slot">S4</span><span class="dot ok"></span></div>
@@ -354,7 +354,7 @@ body.grouped .sw::after{left:16px;}
    und optional Workspace-Mitgliedschaft.
    ============================================================ */
 const WORKSPACES = {
-  'ws-akq': { name:'AKQ · ListM8 · Heartbeat', initial:'A', color:'#3f3f46' },
+  'ws-xyz': { name:'XYZ · ListM8 · Heartbeat', initial:'A', color:'#3f3f46' },
   'ws-w8':  { name:'WhisperM8 – GPT, Skills',  initial:'W', color:'#3b82f6' },
 };
 const PROJECTS = {
@@ -368,8 +368,8 @@ const TABS = [
   { id:'t1', title:'WhisperM8 GPT-Fast-M…',      project:'whisperm8', workspace:'ws-w8',  status:'ok'   },
   { id:'t2', title:'Podologie-Scraping DAC…',    project:'listm8',    workspace:null,     status:'idle' },
   { id:'t3', title:'WhisperM8 Agent-Chats…',     project:'whisperm8', workspace:'ws-w8',  status:'ok'   },
-  { id:'t4', title:'Heartbeat Slack-Tagesbe…',   project:'heartbeat', workspace:'ws-akq', status:'busy' },
-  { id:'t5', title:'AKQ Kunden-Weg…',            project:'akquise',   workspace:'ws-akq', status:'ok'   },
+  { id:'t4', title:'Heartbeat Slack-Tagesbe…',   project:'heartbeat', workspace:'ws-xyz', status:'busy' },
+  { id:'t5', title:'XYZ Kunden-Weg…',            project:'akquise',   workspace:'ws-xyz', status:'ok'   },
   { id:'t6', title:'WhisperM8 GPT-Workflo…',     project:'whisperm8', workspace:'ws-w8',  status:'ok'   },
   { id:'t7', title:'Jarvis – Projektsteuerun…',  project:'whisperm8', workspace:'ws-w8',  status:'ok'   },
   { id:'t8', title:'Claude Chat',                project:'whisperm8', workspace:null,     status:'ok'   },

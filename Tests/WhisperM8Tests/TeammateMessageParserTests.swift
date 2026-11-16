@@ -6,9 +6,9 @@ final class TeammateMessageParserTests: XCTestCase {
     /// Realistische Injektion (Struktur aus einer echten Claude-Code-Session).
     private let realPayload = """
     Another Claude session sent a message:
-    <teammate-message teammate_id="akq93" color="pink">
-    {"type":"idle_notification","from":"akq93","timestamp":"2026-07-04T20:24:42.828Z",\
-    "idleReason":"available","summary":"[to main] AKQ-93 Abschlussbericht: nicht prüfbar wegen 502"}
+    <teammate-message teammate_id="xyz93" color="pink">
+    {"type":"idle_notification","from":"xyz93","timestamp":"2026-07-04T20:24:42.828Z",\
+    "idleReason":"available","summary":"[to main] XYZ-93 Abschlussbericht: nicht prüfbar wegen 502"}
     </teammate-message>
 
     This came from another Claude session — not typed by your user.
@@ -16,11 +16,11 @@ final class TeammateMessageParserTests: XCTestCase {
 
     func testParsesRealTeammateMessage() throws {
         let parsed = try XCTUnwrap(TeammateMessageParser.parse(realPayload))
-        XCTAssertEqual(parsed.teammateID, "akq93")
+        XCTAssertEqual(parsed.teammateID, "xyz93")
         XCTAssertEqual(parsed.kind, "idle_notification")
-        XCTAssertEqual(parsed.summary, "[to main] AKQ-93 Abschlussbericht: nicht prüfbar wegen 502")
+        XCTAssertEqual(parsed.summary, "[to main] XYZ-93 Abschlussbericht: nicht prüfbar wegen 502")
         XCTAssertEqual(parsed.raw, realPayload)
-        XCTAssertTrue(parsed.gist.contains("akq93"))
+        XCTAssertTrue(parsed.gist.contains("xyz93"))
         XCTAssertTrue(parsed.gist.contains("idle_notification"))
     }
 
@@ -47,6 +47,6 @@ final class TeammateMessageParserTests: XCTestCase {
             from: AgentChatTranscript(messages: [message], isLiveSourcePossible: false)
         )
         XCTAssertNotNil(timeline.rounds.first?.prompt?.teammate)
-        XCTAssertEqual(timeline.rounds.first?.prompt?.teammate?.teammateID, "akq93")
+        XCTAssertEqual(timeline.rounds.first?.prompt?.teammate?.teammateID, "xyz93")
     }
 }

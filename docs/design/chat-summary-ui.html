@@ -648,12 +648,12 @@ body[data-view="chat"] #rowChat { background: var(--selection); }
       <div class="searchbox">Filter…</div>
 
       <div class="proj">
-        <div class="proj-head"><span class="picon" style="background:#8e5fd3">A</span> akquise-ai <span class="branch">⎇ main</span><span class="count">2</span></div>
+        <div class="proj-head"><span class="picon" style="background:#8e5fd3">A</span> beispiel-projekt <span class="branch">⎇ main</span><span class="count">2</span></div>
         <div class="row">
           <span class="ricon">✳</span>
           <div class="rbody">
-            <div class="rtitle"><span class="t">AKQ-Tickets umsetzen und Status rekonstruieren</span></div>
-            <div class="rsummary">Keycloak-SMTP fehlt im Realm — 9 Tickets geprüft, Abrechnung E2E verifiziert.</div>
+            <div class="rtitle"><span class="t">XYZ-Tickets umsetzen und Status rekonstruieren</span></div>
+            <div class="rsummary">Mailserver der Testumgebung fehlt — 9 Tickets geprüft, Export E2E verifiziert.</div>
           </div>
           <div class="rmeta"><span class="dot idle"></span><span class="rtime">16h</span></div>
           <span class="close">✕</span>
@@ -661,7 +661,7 @@ body[data-view="chat"] #rowChat { background: var(--selection); }
         <div class="row">
           <span class="ricon">✳</span>
           <div class="rbody">
-            <div class="rtitle"><span class="t">AKQ-Tickets umsetzen (Fork)</span></div>
+            <div class="rtitle"><span class="t">XYZ-Tickets umsetzen (Fork)</span></div>
           </div>
           <div class="rmeta"><span class="dot working"></span></div>
           <span class="close">✕</span>
@@ -804,9 +804,9 @@ body[data-view="chat"] #rowChat { background: var(--selection); }
           <article class="e-round e-dim">
             <div class="e-user">
               <div class="e-bubble">
-                <p>Prüfe bitte alle Admin-Tickets aus Welle 2 durch und rekonstruiere den Status.
+                <p>Prüfe bitte alle Beispiel-Tickets aus Welle 2 durch und rekonstruiere den Status.
                 Wichtig: nichts auf „Erledigt" stellen, bevor ich es freigebe.</p>
-                <p>Nutze die Testumgebung unter <code>admin.akquise.test</code> und dokumentiere jeden
+                <p>Nutze die Testumgebung unter <code>test.example.com</code> und dokumentiere jeden
                 Befund mit Ticket-Nummer.</p>
               </div>
               <span class="e-time">20:12</span>
@@ -814,22 +814,21 @@ body[data-view="chat"] #rowChat { background: var(--selection); }
             <div class="e-act"><span class="e-chev">▶</span><span>13 Tool-Aufrufe · 59 s</span></div>
             <div class="e-assistant"><div class="md">
               <h4>Abschlussbericht Welle 2 — fertig, alle Wellen gestoppt</h4>
-              <p><b>Endstand der geprüften Admin-Tickets:</b></p>
+              <p><b>Endstand der geprüften Beispiel-Tickets:</b></p>
               <table>
                 <tr><th>Ticket</th><th>Ergebnis</th></tr>
-                <tr><td>AKQ-84, 86, 87, 88, 89</td><td><span class="ok">✓</span> Bestanden</td></tr>
-                <tr><td>AKQ-93 Neuer Kunde → „Eingeladen"</td><td><span class="ok">✓</span> Bestanden — vom Agent zunächst als „nicht prüfbar" gemeldet</td></tr>
-                <tr><td>AKQ-115 Passwort-Reset</td><td><span class="warn">⚠</span> Mängel — Umgebung, nicht Code</td></tr>
+                <tr><td>XYZ-84, 86, 87, 88, 89</td><td><span class="ok">✓</span> Bestanden</td></tr>
+                <tr><td>XYZ-93 Neuer Eintrag → „Gespeichert"</td><td><span class="ok">✓</span> Bestanden — vom Agent zunächst als „nicht prüfbar" gemeldet</td></tr>
+                <tr><td>XYZ-115 Bericht per Mail</td><td><span class="warn">⚠</span> Mängel — Umgebung, nicht Code</td></tr>
               </table>
-              <p><b>Der eine echte Befund:</b> Die laufende Keycloak-Instanz hat <b>keinen SMTP-Server
-              im Realm</b> („No sender address configured"). Folgen:</p>
+              <p><b>Der eine echte Befund:</b> Die Testumgebung hat <b>keinen Mailserver
+              eingerichtet</b> („No sender address configured"). Folgen:</p>
               <ol>
-                <li>Passwort-Reset für Teammitglieder → 502 statt Mail (AKQ-115)</li>
-                <li>Kunde anlegen → Kunde wird <b>persistiert</b>, aber der Einladungs-Mailversand
-                    wirft 502 — so sind 3 identische „QA Statustest"-Kunden entstanden (IDs 32–34).</li>
+                <li>Bericht per Mail → 502 statt Mail (XYZ-115)</li>
+                <li>Eintrag anlegen → Eintrag wird <b>gespeichert</b>, aber die Bestätigungs-Mail
+                    wirft 502 — so sind 3 identische Test-Einträge entstanden (IDs 32–34).</li>
               </ol>
-              <p><b>Fix:</b> SMTP einmalig in der Keycloak-Admin-Console nachtragen (oder Realm neu
-              importieren). Danach wäre AKQ-115 vermutlich sofort grün.</p>
+              <p><b>Fix:</b> Mailserver einmalig in der Testumgebung eintragen. Danach wäre XYZ-115 vermutlich sofort grün.</p>
             </div></div>
           </article>
 
@@ -838,21 +837,21 @@ body[data-view="chat"] #rowChat { background: var(--selection); }
             <div class="teammate" onclick="this.classList.toggle('open')">
               <div class="tm-head">
                 <span class="tm-badge">TEAMMATE</span>
-                <span class="tm-gist">akq93 · idle_notification — „AKQ-93 Abschlussbericht: nicht prüfbar wegen 502"</span>
+                <span class="tm-gist">xyz93 · idle_notification — „XYZ-93 Abschlussbericht: nicht prüfbar wegen 502"</span>
                 <span class="tm-time">22:27</span>
                 <span class="tm-chev">▶</span>
               </div>
               <div class="tm-body">
-                <pre>&lt;teammate-message teammate_id="akq93" color="pink"&gt;
-{"type":"idle_notification","from":"akq93","timestamp":"2026-07-04T20:24:42.828Z",
- "idleReason":"available","summary":"[to main] AKQ-93 Abschlussbericht: nicht prüfbar wegen 502"}
+                <pre>&lt;teammate-message teammate_id="xyz93" color="pink"&gt;
+{"type":"idle_notification","from":"xyz93","timestamp":"2026-07-04T20:24:42.828Z",
+ "idleReason":"available","summary":"[to main] XYZ-93 Abschlussbericht: nicht prüfbar wegen 502"}
 &lt;/teammate-message&gt;</pre>
               </div>
             </div>
             <div class="e-assistant"><div class="md">
-              <p>Nur die Idle-Bestätigung von akq93 — dessen Bericht ist verbucht und durch meine
-              eigene Live-Nachprüfung sogar auf <b>BESTANDEN</b> korrigiert (die drei Testkunden
-              zeigen „Eingeladen", die Liste war beim Agent nur stale gecacht).</p>
+              <p>Nur die Idle-Bestätigung von xyz93 — dessen Bericht ist verbucht und durch meine
+              eigene Live-Nachprüfung sogar auf <b>BESTANDEN</b> korrigiert (die drei Test-Einträge
+              zeigen „Gespeichert", die Liste war beim Agent nur stale gecacht).</p>
             </div></div>
           </article>
 

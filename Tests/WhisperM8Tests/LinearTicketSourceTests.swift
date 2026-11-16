@@ -408,14 +408,14 @@ final class LinearTicketSourceTests: XCTestCase {
         let stub = Stub()
         stub.replies = [
             ("organization", 200, #"{"data":{"viewer":{"name":"Giuliano Costa","admin":true},"organization":{"name":"DealSupply","urlKey":"dealsupply"}}}"#),
-            ("teams(first: 100)", 200, #"{"data":{"teams":{"nodes":[{"key":"PRB"},{"key":"DS"},{"key":"dea"}]}}}"#),
+            ("teams(first: 100)", 200, #"{"data":{"teams":{"nodes":[{"key":"PQR"},{"key":"ABC"},{"key":"aba"}]}}}"#),
         ]
         let source = LinearTicketSource(client: stub.client())
         let account = try await source.account()
         XCTAssertEqual(account.workspaceKey, "dealsupply")
         XCTAssertEqual(account.workspace, "DealSupply (linear.app/dealsupply)")
         let teams = try await source.teams()
-        XCTAssertEqual(teams, ["DEA", "DS", "PRB"])
+        XCTAssertEqual(teams, ["ABA", "ABC", "PQR"])
     }
 
     func testErrorMessagesNeverContainTheKey() {

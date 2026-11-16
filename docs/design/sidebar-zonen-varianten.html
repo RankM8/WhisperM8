@@ -289,7 +289,7 @@ body{
    DATENMODELL (identisch zu sidebar-redesign-varianten.html)
    ============================================================ */
 const WORKSPACES = [
-  { id:'ws-akq', name:'AKQ · ListM8 · Heartbeat', initial:'A', color:'#3f3f46', cap:4 },
+  { id:'ws-xyz', name:'XYZ · ListM8 · Heartbeat', initial:'A', color:'#3f3f46', cap:4 },
   { id:'ws-w8',  name:'WhisperM8 – GPT, Skills',  initial:'W', color:'#3b82f6', cap:4 },
 ];
 const PROJECTS = {
@@ -300,10 +300,10 @@ const PROJECTS = {
   copy:      { name:'Copy',             initial:'C', color:'#15aabf', branch:'main' },
 };
 const SESSIONS = [
-  { id:'s1', title:'AKQ Kunden-Weg – Sprint-QA',   project:'akquise',   ws:'ws-akq', slot:1, sub:22, status:'idle', time:'16m' },
-  { id:'s2', title:'ListM8 Review-Queue',          project:'listm8',    ws:'ws-akq', slot:2, sub:12, status:'wait', time:'jetzt' },
-  { id:'s3', title:'Heartbeat Slack-Tagesbericht', project:'heartbeat', ws:'ws-akq', slot:3, sub:0,  status:'busy', time:'jetzt' },
-  { id:'s4', title:'Jarvis – Projektsteuerung A',  project:'whisperm8', ws:'ws-akq', slot:4, sub:0,  status:'busy', time:'jetzt' },
+  { id:'s1', title:'XYZ Kunden-Weg – Sprint-QA',   project:'akquise',   ws:'ws-xyz', slot:1, sub:22, status:'idle', time:'16m' },
+  { id:'s2', title:'ListM8 Review-Queue',          project:'listm8',    ws:'ws-xyz', slot:2, sub:12, status:'wait', time:'jetzt' },
+  { id:'s3', title:'Heartbeat Slack-Tagesbericht', project:'heartbeat', ws:'ws-xyz', slot:3, sub:0,  status:'busy', time:'jetzt' },
+  { id:'s4', title:'Jarvis – Projektsteuerung A',  project:'whisperm8', ws:'ws-xyz', slot:4, sub:0,  status:'busy', time:'jetzt' },
   { id:'s5', title:'WhisperM8 GPT-Fast-Modelle',   project:'whisperm8', ws:'ws-w8',  slot:1, sub:18, status:'idle', time:'30m' },
   { id:'s6', title:'WhisperM8 Agent-Chats-Audit',  project:'whisperm8', ws:'ws-w8',  slot:2, sub:0,  status:'busy', time:'jetzt' },
   { id:'s7', title:'WhisperM8 GPT-Workflows',      project:'whisperm8', ws:'ws-w8',  slot:3, sub:0,  status:'busy', time:'jetzt' },
@@ -322,7 +322,7 @@ const PINNED = [
 const OPEN_TABS = ['s5','s6','s7','s9','s10','s3','s8'];
 
 const S = { variant:'a1', mode:'struct', cols:false, activeTab:'s10',
-            collapsedGroups:new Set(), a4open:new Set(['ws-akq']),
+            collapsedGroups:new Set(), a4open:new Set(['ws-xyz']),
             wsCollapsed:new Set() };
 
 const ws = id => WORKSPACES.find(w => w.id === id);

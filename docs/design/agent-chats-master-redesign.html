@@ -640,10 +640,10 @@
     {id:'s2', title:'GPT-Workflow Skill', project:'whisper', workspace:'ws-whisper', status:'waiting', time:'2m', kind:'sub', sub:2, summary:'Workflow-Skill und Backend-Einstellungen prüfen'},
     {id:'s3', title:'Statusline & Metrics', project:'whisper', workspace:'ws-whisper', status:'ready', time:'11m', kind:'term', summary:'Sidebar-Performance und Statusline stabilisieren'},
     {id:'s4', title:'Agent Chats Freeze', project:'whisper', workspace:'ws-whisper', status:'idle', time:'1h', summary:'Indexer- und Render-Pfade analysieren'},
-    {id:'s5', title:'Reporting-Pipeline', project:'heart', workspace:'ws-akq', status:'working', time:'jetzt', kind:'bg', sub:4, summary:'Reporting-Automation und Datenabgleich'},
-    {id:'s6', title:'Listen-Qualität', project:'list', workspace:'ws-akq', status:'ready', time:'8m', summary:'Leads bereinigen und Dubletten prüfen'},
-    {id:'s7', title:'Akquise-Dashboard', project:'akq', workspace:'ws-akq', status:'waiting', time:'19m', kind:'view', sub:1, summary:'Dashboard-Interaktionen und Status prüfen'},
-    {id:'s8', title:'Heartbeat QA', project:'heart', workspace:'ws-akq', status:'idle', time:'3h', summary:'Regressionen im Kampagnenlauf testen'},
+    {id:'s5', title:'Reporting-Pipeline', project:'heart', workspace:'ws-xyz', status:'working', time:'jetzt', kind:'bg', sub:4, summary:'Reporting-Automation und Datenabgleich'},
+    {id:'s6', title:'Listen-Qualität', project:'list', workspace:'ws-xyz', status:'ready', time:'8m', summary:'Leads bereinigen und Dubletten prüfen'},
+    {id:'s7', title:'Akquise-Dashboard', project:'akq', workspace:'ws-xyz', status:'waiting', time:'19m', kind:'view', sub:1, summary:'Dashboard-Interaktionen und Status prüfen'},
+    {id:'s8', title:'Heartbeat QA', project:'heart', workspace:'ws-xyz', status:'idle', time:'3h', summary:'Regressionen im Kampagnenlauf testen'},
     {id:'s9', title:'Steuer 2025', project:'heart', status:'ready', time:'30m', summary:'Belege und Jahresabschluss vorbereiten'},
     {id:'s10', title:'CLI Skills Export', project:'whisper', status:'idle', time:'45m', kind:'sub', sub:2, summary:'Skill-Sync und Exporter-Tests'},
     {id:'s11', title:'Import-Validierung', project:'list', status:'idle', time:'2h', summary:'CSV-Import und Feldzuordnung'},
@@ -652,14 +652,14 @@
 
   const workspaces = [
     {id:'ws-whisper', name:'WhisperM8 · GPT, Skills', color:'#5576c7', initial:'W', capacity:4, members:['s1','s2','s3','s4']},
-    {id:'ws-akq', name:'AKQ · ListM8 · Heartbeat', color:'#c77e45', initial:'A', capacity:4, members:['s5','s6','s7','s8']}
+    {id:'ws-xyz', name:'XYZ · ListM8 · Heartbeat', color:'#c77e45', initial:'A', capacity:4, members:['s5','s6','s7','s8']}
   ];
 
   const pinnedIDs = ['s12','s9','s5'];
 
   const state = {
     tabs:['s1','s5','s2','s9','s6','s3','s10','s7'], active:'s1', grouped:true, tabStyle:'flat', dark:false,
-    collapsedGroups:new Set(), collapsedSections:new Set(), collapsedWorkspaces:new Set(['ws-akq']),
+    collapsedGroups:new Set(), collapsedSections:new Set(), collapsedWorkspaces:new Set(['ws-xyz']),
     sidebarMode:'structure', scope:'active', filter:'', subOpen:new Set(['s1']), finishedOpen:new Set(),
     multi:new Set(), lastSidebarIndex:null, view:'chat', gridWorkspace:'ws-whisper', gridCapacity:4, gridFocus:'s1', returnWorkspace:null,
     drag:null, dropTarget:null,

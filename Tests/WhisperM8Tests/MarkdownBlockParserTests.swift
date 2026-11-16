@@ -113,9 +113,9 @@ final class MarkdownBlockParserTests: XCTestCase {
 final class MarkdownTableTests: XCTestCase {
 
     func testParsesHeaderAndRows() {
-        let table = MarkdownTable.parse("| Ticket | Ergebnis |\n|---|---|\n| AKQ-84 | ✓ Bestanden |\n| AKQ-115 | ⚠ Mängel |")
+        let table = MarkdownTable.parse("| Ticket | Ergebnis |\n|---|---|\n| XYZ-84 | ✓ Bestanden |\n| XYZ-115 | ⚠ Mängel |")
         XCTAssertEqual(table?.headers, ["Ticket", "Ergebnis"])
-        XCTAssertEqual(table?.rows, [["AKQ-84", "✓ Bestanden"], ["AKQ-115", "⚠ Mängel"]])
+        XCTAssertEqual(table?.rows, [["XYZ-84", "✓ Bestanden"], ["XYZ-115", "⚠ Mängel"]])
     }
 
     func testTableWithoutSeparatorHasNoHeaders() {

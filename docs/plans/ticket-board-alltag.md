@@ -33,7 +33,7 @@ Klick-Entwurf: [`../design/ticket-board-alltag.html`](../design/ticket-board-all
 ### a) Was das Board heute kann und wo es stumpf ist
 
 Gelesen: Feature-Doku, Plan und Entwurf von Stufe 1, `WhisperM8/Views/Tickets/`, `whisperm8 tickets --help`,
-`tickets board` für AKQ, DS und WM8 am 15.11.2026, die Snapshots unter `docs/design/ticket-board/`.
+`tickets board` für XYZ, ABC und WM8 am 15.11.2026, die Snapshots unter `docs/design/ticket-board/`.
 
 **Kann:** drei Spalten nach Art des Status (in Arbeit, als Nächstes, Backlog), Liste nach Projekt, Filter nach
 Chat und Person, je Karte der verknüpfte Chat mit Live-Status, Detail mit „Zum Chat“ und „In Linear öffnen“,
@@ -53,19 +53,19 @@ Leiste „Chats ohne Ticket“. Alle 120 Sekunden ein Abruf, nur bei sichtbarer 
 | Vorrat je Entwickler, PR und Prüfer | nicht im Board; steht nur im PM-Tagesbericht |
 | Mit Jarvis am Board arbeiten | Diktat und Controller treffen hinter den Tickets bewusst keinen Chat |
 
-**Wo es an DS und AKQ vorbeigeht** (Abzug 15.11.2026; die vollständige Fassung mit Zahlen liegt außerhalb des Repos):
+**Wo es an ABC und XYZ vorbeigeht** (Abzug 15.11.2026; die vollständige Fassung mit Zahlen liegt außerhalb des Repos):
 
-- In DS sammelt „In Arbeit“ Tickets aus mehreren Stationen (in Arbeit, im Review, auf Staging) in einer Spalte.
+- In ABC sammelt „In Arbeit“ Tickets aus mehreren Stationen (in Arbeit, im Review, auf Staging) in einer Spalte.
   Nur ein kleiner Teil davon hat einen Chat; der Rest wartet auf Prüfung oder Test. Der Stau in der Prüfung, den der
   PM-Tagesbericht als größten Engpass nennt, ist im Board nicht zu sehen.
-- In AKQ stehen Tickets mit offener Produktentscheidung, die alle bei Giuliano liegen, in „Als Nächstes“ zwischen
+- In XYZ stehen Tickets mit offener Produktentscheidung, die alle bei Giuliano liegen, in „Als Nächstes“ zwischen
   vielen eingeplanten Tickets und fallen nicht auf.
 - Die zwei Entwickler arbeiten ohne WhisperM8-Chats. „Kein Agent“ steht deshalb auf fast jeder Karte und sagt dort
   nichts.
 
 ### b) Wie in DealSupply und Akquise AI gearbeitet wird
 
-Quellen, nur gelesen: die Linear-Teams DS und AKQ (Verlauf seit dem Umzug nach Linear am 14.11.), die Spielregeln
+Quellen, nur gelesen: die Linear-Teams ABC und XYZ (Verlauf seit dem Umzug nach Linear am 14.11.), die Spielregeln
 „So arbeiten wir mit Linear“ des Teams, die Skills `pm`, `pm-analyse` und `tickets`, der PM-Tagesbericht, die
 Verläufe der Supervisor- und Produkt-Chats beider Projekte (nur Giulianos eigene Nachrichten seit 01.11.).
 
@@ -206,7 +206,7 @@ in der Triage zeigen, damit er als Mensch denselben Kontext hat.
 
 ### Eigene Vorschläge
 
-1. **„Wartet auf mich“ über alle Teams.** Eine Liste für den Morgen über AKQ, DS und WM8, getrennt nach Grund:
+1. **„Wartet auf mich“ über alle Teams.** Eine Liste für den Morgen über XYZ, ABC und WM8, getrennt nach Grund:
    Prüfung ohne Prüfer, Produktentscheidung offen, Abnahme (In Review bei ihm), Staging-Test, Handtest. Mit
    denselben Regeln wie der PM-Tagesbericht. „Durchgehen“ öffnet die Triage mit genau dieser Liste. Nutzen hoch,
    Aufwand mittel (drei Teams im Takt statt eines, dazu je Team eine Regel, welcher Status was bedeutet).
@@ -224,7 +224,7 @@ in der Triage zeigen, damit er als Mensch denselben Kontext hat.
      „Wartet auf mich“ löst das, ohne die Projektbindung aufzugeben.
 5. **Nebenbefund, nicht Teil des Baus:** Die Skills `pm` und `linear` verlangen „keine Hinweise auf Chats in
    Tickets“, die Verknüpfung schreibt aber Anhänge „Chat: <Titel des Chats>“ (am 14.11. so entschieden). Das sollte
-   Jarvis einmal glattziehen, bevor der Board-Chat noch mehr Spuren in DS und AKQ hinterlässt.
+   Jarvis einmal glattziehen, bevor der Board-Chat noch mehr Spuren in ABC und XYZ hinterlässt.
 
 ### Reihenfolge nach Nutzen und Paketschnitt
 
