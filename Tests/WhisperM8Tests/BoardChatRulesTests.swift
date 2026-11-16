@@ -225,37 +225,6 @@ final class BoardChatPreferencesStoreTests: XCTestCase {
     }
 }
 
-/// Nachschlagen nach ID ohne Durchlauf je Auswertung.
-@MainActor
-final class BoardChatSessionLookupTests: XCTestCase {
-    private func sessions(_ count: Int) -> [AgentChatSession] {
-        let project = UUID()
-        return (0..<count).map { AgentChatSession(provider: .claude, projectID: project, title: "Chat \($0)") }
-    }
-
-    func testFindsAndFollowsReordering() {
-        let lookup = BoardChatSessionLookup()
-        var list = sessions(50)
-        let target = list[10].id
-        XCTAssertEqual(lookup.session(target, in: list)?.id, target)
-        list.swapAt(10, 40)
-        XCTAssertEqual(lookup.session(target, in: list)?.id, target)
-        list.remove(at: 40)
-        XCTAssertNil(lookup.session(target, in: list))
-    }
-
-    func testUnknownIDDoesNotRecountUnchangedWorkspace() {
-        let lookup = BoardChatSessionLookup()
-        let list = sessions(20)
-        XCTAssertNil(lookup.session(UUID(), in: list))
-        XCTAssertNil(lookup.session(UUID(), in: list))
-        XCTAssertEqual(lookup.session(list[3].id, in: list)?.title, "Chat 3")
-        var grown = list
-        grown.append(AgentChatSession(provider: .claude, projectID: UUID(), title: "neu"))
-        XCTAssertEqual(lookup.session(grown[20].id, in: grown)?.title, "neu")
-    }
-}
-
 /// Fokus im Ticket-Modus: ins Terminal nur per Klick ins Terminal.
 @MainActor
 final class BoardChatFocusRuleTests: XCTestCase {

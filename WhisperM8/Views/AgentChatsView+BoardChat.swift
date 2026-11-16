@@ -22,13 +22,12 @@ extension AgentChatsView {
     /// Der Chat in der Spalte: von Hand gewählt, sonst der Jarvis des Projekts.
     ///
     /// Kosten: Gesucht wird nur unter offenen Tabs und laufenden Chats (einige
-    /// Dutzend), nachgeschlagen über `BoardChatSessionLookup`, nie über alle Chats.
+    /// Dutzend), nachgeschlagen über den Index des Workspace (`session(id:)`),
+    /// nie über alle Chats.
     func boardChatPick(projectID: UUID) -> (session: AgentChatSession, isAutomatic: Bool)? {
-        let sessions = workspace.sessions
-        let lookup = BoardChatSessionLookup.shared
         let preferences = BoardChatPreferencesStore.shared.preferences(for: projectID)
         if let chosen = preferences.chosenSessionID,
-           let session = lookup.session(chosen, in: sessions), session.status != .archived {
+           let session = workspaceModel.session(id: chosen), session.status != .archived {
             return (session, false)
         }
         var ids = Set(windowStore.state.windows.flatMap(\.openTabIDs))
@@ -37,7 +36,7 @@ extension AgentChatsView {
         if let last = preferences.lastJarvisSessionID { ids.insert(last) }
         let running = terminalRegistry.activeSessionIDs
         let candidates = ids.compactMap { id -> BoardChatCandidate? in
-            guard let session = lookup.session(id, in: sessions) else { return nil }
+            guard let session = workspaceModel.session(id: id) else { return nil }
             return BoardChatCandidate(
                 id: session.id, title: session.title,
                 projectID: AgentProjectDisplay.displayProjectID(session.projectID, parents: projectParents),
@@ -45,7 +44,7 @@ extension AgentChatsView {
                 isArchived: session.status == .archived)
         }
         guard let id = BoardChatRules.automaticJarvis(in: candidates, projectID: projectID),
-              let session = lookup.session(id, in: sessions) else { return nil }
+              let session = workspaceModel.session(id: id) else { return nil }
         return (session, true)
     }
 
@@ -181,46 +180,5 @@ struct BoardChatSplit<Board: View, Column: View>: View {
                 column(proxy.size.width)
             }
         }
-    }
-}
-
-/// Findet Chats nach ID, ohne bei jeder Auswertung alle rund 5.900 zu
-/// durchsuchen: Die Position eines Chats im Workspace ändert sich selten.
-/// Stimmt eine gemerkte Position nicht mehr, wird einmal neu gezählt, und
-/// zwar höchstens einmal je Stand des Workspace.
-@MainActor
-final class BoardChatSessionLookup {
-    static let shared = BoardChatSessionLookup()
-
-    private var positions: [UUID: Int] = [:]
-    private var builtFor: Signature?
-
-    private struct Signature: Equatable {
-        var count: Int
-        var first: UUID?
-        var last: UUID?
-    }
-
-    func session(_ id: UUID, in sessions: [AgentChatSession]) -> AgentChatSession? {
-        if let index = positions[id] {
-            if sessions.indices.contains(index), sessions[index].id == id { return sessions[index] }
-            // Gemerkt, aber verrutscht: Die Reihenfolge hat sich geändert.
-            builtFor = nil
-        }
-        let signature = Signature(count: sessions.count, first: sessions.first?.id, last: sessions.last?.id)
-        // Unbekannte ID bei unverändertem Stand: kein zweites Zählen.
-        guard signature != builtFor else { return nil }
-        var fresh: [UUID: Int] = [:]
-        fresh.reserveCapacity(sessions.count)
-        // Über die Indizes, nicht die Elemente: Kopien der Chats wären der
-        // teure Teil (WM8-101).
-        for index in sessions.indices {
-            let sessionID = sessions[index].id
-            if fresh[sessionID] == nil { fresh[sessionID] = index }
-        }
-        positions = fresh
-        builtFor = signature
-        guard let index = fresh[id] else { return nil }
-        return sessions[index]
     }
 }

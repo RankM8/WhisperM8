@@ -393,7 +393,7 @@ Idee 3.
 - **Welcher Chat:** von Hand gewählt (`chosenSessionID`, kommt mit Teil c), sonst der Jarvis des Projekts:
   Titel beginnt mit „Jarvis“ (dieselbe Regel wie `tickets board` und `tickets status`), Projekt des Boards samt
   Arbeitsordnern, laufend vor ruhend, dann zuletzt aktiv. Gesucht wird nur unter offenen Tabs und laufenden Chats
-  (`BoardChatRules`, `BoardChatSessionLookup`), nie über alle Chats; dazu der zuletzt gefundene Jarvis des
+  (`BoardChatRules`, nachgeschlagen über `AgentWorkspaceUIModel.session(id:)`), nie über alle Chats; dazu der zuletzt gefundene Jarvis des
   Projekts (`lastJarvisSessionID`), damit er auch gestoppt und ohne Tab als „Hier öffnen“ erscheint. Ohne Jarvis
   sagt die Spalte, wie einer hineinkommt.
 - **Fokus:** Ins Terminal der Spalte kommt der Tastaturfokus nur durch einen Klick ins Terminal. Jeder andere
@@ -411,8 +411,7 @@ Idee 3.
   scrollt waagrecht mit sichtbarem Balken, damit mit Board-Chat jeder Filter erreichbar bleibt.
 - **Kosten:** Öffnen der Tickets hängt das Terminal einmal um (`pane.attach`, gemessen rund 70 ms auf ruhigem
   Rechner), Schließen einmal zurück; im Raster hängt das Schließen wie bisher alle Kacheln wieder ein. Je
-  Auswertung des Fensters: Nachschlagen weniger Dutzend Chats über gemerkte Positionen; nur wenn sich der
-  Workspace verschoben hat, einmal neu zählen. Die Triage beobachtet allein der Breiten-Modifier
+  Auswertung des Fensters: Nachschlagen weniger Dutzend Chats über den Index des Workspace (WM8-101). Die Triage beobachtet allein der Breiten-Modifier
   (`BoardChatColumnFrame`), J/K wertet weder Fenster noch Terminal neu aus. Ein Wechsel zwischen Board und Triage
   ändert die Breite des Terminals (wenn sie über 330 pt liegt): Die TUI zeichnet dann einmal neu, wie beim Wechsel
   zwischen Kachel und Einzelansicht.
@@ -650,5 +649,4 @@ Liste, ⌘C, Prüfung der Regel), `TicketTeamRuleTests`
 (Regel je Team, Spalten nach Status, „Wartet auf mich“, Befehl `setup --status`),
 `TicketBoardControllerTests` (Zuordnung, Abruf nur bei sichtbarer Ansicht, Leerzustände, Projektwechsel, überholte
 Antworten), `AgentWindowStoreTicketsModeTests` (Umschalter je Fenster, Rückkehr zu den Chats, Schnappschuss für
-den Controller) und `BoardChatRulesTests` (Jarvis wie die CLI, Wahl, Ort je Fenster, Breite, Speicher je Projekt,
-Nachschlagen ohne Durchlauf). Bilder des Board-Chats: `make snapshots ONLY=board-chat`. Was nur von Hand prüfbar ist, steht als Liste im Plan unter „Tests und Abnahme“.
+den Controller) und `BoardChatRulesTests` (Jarvis wie die CLI, Wahl, Ort je Fenster, Breite, Speicher je Projekt). Bilder des Board-Chats: `make snapshots ONLY=board-chat`. Was nur von Hand prüfbar ist, steht als Liste im Plan unter „Tests und Abnahme“.
