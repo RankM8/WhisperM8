@@ -475,7 +475,13 @@ lehnt auch mit `--force` ab: Transkript, `/tasks`, `/workflows`,
 Zurückspulen, Auswahl in der Fußzeile, dazu Agent-Liste (ihr Feld „describe a
 task for a new session“ sieht wie ein leeres Eingabefeld aus; das Enter
 startete eine neue Hintergrund-Sitzung), `/config` (das Enter wählte eine
-Einstellung) und Verlaufssuche mit Ctrl+R. Erkannt an der Fußzeile, abgelesen
+Einstellung) und Verlaufssuche mit Ctrl+R. Dieselbe Ablesung prüfen seit dem
+16.11.2026 auch die Wege, die nur einfügen: Ein Diktat (mit wie ohne Senden)
+bleibt in der Zwischenablage und sagt warum, „→ Jarvis“ (Knopf und Dreieck am
+Controller) und die Triage-Knöpfe lehnen mit Warnton und einem Satz unter dem
+Terminal ab (`LiveDictationChatWriter.state` → `.viewOpen`,
+`BoardChatInputRules`). Vorher landete ihr Text im Filter der Einstellungen, in
+der Verlaufssuche oder im Feld der Agent-Liste. Erkannt an der Fußzeile, abgelesen
 an Claude Code 2.1.325; gesucht wird nur dort (mit Feld darunter, ohne Feld in
 den untersten zwei Zeilen), damit ein Chat, der diese Wortlaute zitiert,
 seine Warteschlange nicht anhält.

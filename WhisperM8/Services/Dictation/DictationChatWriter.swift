@@ -43,6 +43,13 @@ final class LiveDictationChatWriter: DictationChatWriting {
             .activeUsageLimit() != nil {
             return .usageLimited
         }
+        // Offene Ansicht von Claude (WM8-123): dieselbe Ablesung wie die
+        // Sendeprüfung, auch hochgescrollt. Zuletzt, weil sie den Bildschirm
+        // liest; einmal je Diktat oder Klick, nie im Body. Codex und Shell:
+        // nicht ablesbar, also nie „offen“.
+        if controller.composerFieldForSendCheck().openView != nil {
+            return .viewOpen
+        }
         return .ready
     }
 
