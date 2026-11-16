@@ -191,6 +191,8 @@ extension TicketBoardViewModel {
     /// Was der Controller über die Ansicht wissen muss.
     func controllerView(isReady: Bool) -> ControllerTicketView {
         // Der Kopf geht vor, auch bevor ein Stand da ist (Aktualisieren, Filter).
+        // Der Kopf der Board-Chat-Spalte zählt dazu (WM8-126).
+        if columnFocus != nil { return columnPickerIndex == nil ? .boardChatHead : .boardChatHeadPicker }
         if headerFocus != nil { return projectPickerIndex == nil ? .header : .headerPicker }
         guard isReady else { return .empty }
         if triage != nil { return focusedChatLine == nil ? .triage : .chatLine }

@@ -257,8 +257,9 @@ final class TicketBoardHeaderTests: XCTestCase {
 
     func testBindingsInTheHeader() {
         let context = header(.header)
-        XCTAssertEqual(action(.move(.right, source: .leftStick, isRepeat: true), context), .ticket(.move(.right)),
-                       "gehalten wandert die Auswahl, ohne zu schalten")
+        XCTAssertEqual(action(.move(.right, source: .leftStick, isRepeat: true), context), .ticket(.repeatMove(.right)),
+                       "gehalten wandert die Auswahl, ohne zu schalten (und nie in den Kopf der Spalte, WM8-126)")
+        XCTAssertEqual(action(.move(.left, source: .leftStick, isRepeat: true), context), .ticket(.move(.left)))
         XCTAssertEqual(action(.press(.cross), context), .ticket(.open))
         XCTAssertEqual(action(.tap(.circle), context), .ticket(.back))
         XCTAssertEqual(action(.tap(.l1), context), .ticket(.adjacent(-1)))
@@ -285,7 +286,7 @@ final class TicketBoardHeaderTests: XCTestCase {
         inputs += [.leftStick, .rightStick, .dpad, .bumpers]
         let plain = Array(Set(inputs.flatMap(ControllerLegend.gestures(for:))))
         let gestures = plain + ControllerLayer.allCases.flatMap { layer in plain.map { ControllerGesture.inLayer(layer, $0) } }
-        for context in [header(.header), header(.headerPicker)] {
+        for context in [header(.header), header(.headerPicker), header(.boardChatHead), header(.boardChatHeadPicker)] {
             for gesture in gestures {
                 guard let action = action(gesture, context) else { continue }
                 switch action {

@@ -470,6 +470,23 @@ Auswahl am Ring in Akzentfarbe wie an den Karten; die Filterzeile scrollt mit. D
 Regeln liegen pur in `Views/Tickets/TicketBoardHeaderSelection.swift`, angewendet in
 `TicketBoardViewModel+Header.swift`; dieselben Wege nimmt die Tastatur (Paket 3c).
 
+**Kopf der Board-Chat-Spalte** (WM8-126, Entscheidung Giuliano 16.11.2026: „Kopfzeile verlängern“): ▶ am
+rechten Ende einer Kopfzeile des Boards (bzw. der Triage) führt weiter in den Kopf der Spalte rechts, auf den
+Chat, der dort steht. Knöpfe in der Reihenfolge am Bildschirm: Jarvis, Produkt-Chat, ein von Hand gewählter Chat,
+„Anderer Chat …“, „Als Tab öffnen“ (nur, wenn das Terminal hier steht), „Board-Chat ausblenden“; zugeklappt nur
+der Knopf zum Aufklappen. ◀ auf dem ersten Knopf führt zurück an die Stelle im Kopf des Boards, von der man kam;
+▼ führt in den Board-Chat (wie ▶ am rechten Rand, mit Ankunftssperre), ohne sichtbaren Board-Chat zurück auf die
+Karte; Kreis zurück auf die Karte. Gehalten bleibt die Auswahl im Kopf: nie hinein, nie hinüber. **Kreuz** wechselt
+den Board-Chat (auf dem schon gezeigten: nichts), öffnet die Liste „Anderer Chat …“ unter dem Kopf (▲ ▼ wählen,
+Kreuz holt den Chat in die Spalte, Kreis schließt), öffnet den Chat als Tab (die Tickets gehen zu, Sperre im Ziel)
+oder blendet die Spalte aus (der Ring springt auf den Knopf zum Aufklappen). Die Liste enthält dieselben
+Kandidaten wie Jarvis und Produkt-Chat (offene Tabs, laufende Chats, nie alle Chats) nach derselben Regel wie
+beim Hineinziehen (`BoardChatRules.rejection`). Ein Wechsel ändert nur die gespeicherte Wahl und schickt nie
+etwas in einen Chat; ein Fokus im alten Board-Chat verfällt von selbst. Mit der Maus öffnet „Anderer Chat …“
+dieselbe Liste. Regeln pur in `Views/Tickets/BoardChatHeadSelection.swift`, angewendet in
+`TicketBoardViewModel+BoardChatHead.swift` und `AgentChatsView+BoardChatHead.swift`; dieselben Wege per Tastatur.
+Tests: `BoardChatHeadTests`, `BoardChatHeadFlowTests`.
+
 **Maus im Kopf:** Jeder Mausklick räumt Ring und offene Liste in allen Boards, damit ein späteres Kreuz oder
 Return keinen alten Knopf trifft (etwa „← Chats“). Der Beobachter dafür hängt an den Boards
 (`TicketBoardControllers`, angelegt mit dem ersten Board), nicht an der Controller-Laufzeit: Auch die Tastatur

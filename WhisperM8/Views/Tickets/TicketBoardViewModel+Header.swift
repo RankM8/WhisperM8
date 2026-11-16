@@ -6,6 +6,9 @@ struct TicketHeaderContext: Equatable {
     var hasBack = true
     /// Ein Board-Chat ist sichtbar: „→ Jarvis“ steht im Kopf der Triage.
     var hasBoardChat = false
+    /// Kopf der Board-Chat-Spalte rechts daneben (WM8-126); ▶ am rechten Ende
+    /// einer Kopfzeile führt hinein. `nil`: keine Spalte (kein Projekt).
+    var column: BoardChatHeadLayout?
 }
 
 /// Was ein Knopf im Kopf auslöst, das das Modell nicht selbst kann. Das
@@ -44,6 +47,7 @@ extension TicketBoardViewModel {
     func enterHeader(_ context: TicketHeaderContext) -> Bool {
         guard let spot = headerLayout(context).entry(remembering: lastHeaderItem) else { return false }
         projectPickerIndex = nil
+        leaveColumn()
         headerFocus = spot
         return true
     }
@@ -52,6 +56,7 @@ extension TicketBoardViewModel {
     func leaveHeader() {
         projectPickerIndex = nil
         headerFocus = nil
+        leaveColumn()
     }
 
     /// Stick und Steuerkreuz im Kopf bzw. in der Liste der Bereiche. Bewegen
@@ -72,6 +77,8 @@ extension TicketBoardViewModel {
             if let item = layout.item(at: next) { lastHeaderItem = item }
             return .done
         case .stay:
+            // ▶ am rechten Ende einer Zeile: weiter in den Kopf der Spalte (WM8-126).
+            if direction == .right, let column = context.column, enterColumn(column, from: spot) { return .done }
             return .nothing
         case .leave:
             leaveHeader()

@@ -71,13 +71,14 @@ enum KeyboardLegend {
                 Item(keys: ["J", "K"], label: String(localized: "Ticket")),
             ]
         // Kopf und Filter (Paket 3d): Pfeile wählen, Return schaltet, Esc zurück.
-        case .header:
+        // Ebenso der Kopf der Board-Chat-Spalte (WM8-126).
+        case .header, .boardChatHead:
             return [
                 Item(keys: ["↑", "↓", "←", "→"], label: String(localized: "Selection")),
                 Item(keys: ["↩"], label: String(localized: "Select")),
                 Item(keys: ["esc"], label: String(localized: "Back")),
             ]
-        case .headerPicker:
+        case .headerPicker, .boardChatHeadPicker:
             return [
                 Item(keys: ["↑", "↓"], label: String(localized: "Selection")),
                 Item(keys: ["↩"], label: String(localized: "Select")),

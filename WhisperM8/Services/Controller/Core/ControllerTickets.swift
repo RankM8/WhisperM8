@@ -20,6 +20,11 @@ enum ControllerTicketView: String, Sendable {
     case header
     /// Liste der Bereiche unter „Alle Bereiche“ offen (Paket 3d).
     case headerPicker
+    /// Auswahl im Kopf der Board-Chat-Spalte: Jarvis, Produkt-Chat,
+    /// „Anderer Chat …“, Als Tab öffnen, Ausblenden (WM8-126).
+    case boardChatHead
+    /// Liste unter „Anderer Chat …“ offen (WM8-126).
+    case boardChatHeadPicker
 }
 
 /// Das Board, das ein Fenster gerade zeigt. Steht im Schnappschuss des
@@ -52,6 +57,9 @@ struct ControllerTicketsPlace: Equatable, Sendable {
     var boardChatID: UUID?
     /// Rufname des Board-Chats für Leiste und Kopf („Jarvis“).
     var boardChatName: String?
+    /// Kopf der Spalte, Auswahl auf „Als Tab öffnen“ (WM8-126): der Chat, der
+    /// dann als Tab aufgeht (für die Ankunftssperre im Ziel, wie „Zum Chat“).
+    var columnTabChatID: UUID?
 
     /// Was Leiste und Insel nach „Tickets · “ nennen.
     var label: String? { team ?? projectName }

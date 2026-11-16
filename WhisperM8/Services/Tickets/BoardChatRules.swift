@@ -117,7 +117,8 @@ enum BoardChatRules {
         pick == automaticJarvis ? nil : pick
     }
 
-    private static func ranksBefore(_ lhs: BoardChatCandidate, _ rhs: BoardChatCandidate) -> Bool {
+    /// Laufende vor ruhenden, dann der zuletzt aktive, bei Gleichstand die ID.
+    static func ranksBefore(_ lhs: BoardChatCandidate, _ rhs: BoardChatCandidate) -> Bool {
         if lhs.isRunning != rhs.isRunning { return lhs.isRunning }
         if lhs.lastActivityAt != rhs.lastActivityAt { return lhs.lastActivityAt > rhs.lastActivityAt }
         return lhs.id.uuidString < rhs.id.uuidString
