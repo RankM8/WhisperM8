@@ -83,6 +83,7 @@ extension ControllerLegendLabel {
         case .backIntoBoard: return String(localized: "Back into the board")
         case .intoBoardChat: return String(localized: "Board chat")
         case .leaveBoardChat: return String(localized: "Back to the ticket")
+        case .handOffToBoardChat: return String(localized: "To the board chat")
         case .limitsCard: return String(localized: "Limits")
         case .alertLevel: return String(localized: "Alerts")
         case .stayAwake: return String(localized: "Stay awake")
@@ -158,6 +159,11 @@ extension ControllerLegendEntry {
         if label == .goToChat, let name {
             let short = name.count > 28 ? String(name.prefix(27)) + "…" : name
             return String(localized: "Go to chat \(short)")
+        }
+        if label == .handOffToBoardChat, let name {
+            // „→ Jarvis“: nur Pfeil und Rufname, wie der Knopf am Ticket.
+            let short = name.count > 28 ? String(name.prefix(27)) + "…" : name
+            return "→ " + short
         }
         if label == .intoBoardChat, let name {
             let short = name.count > 28 ? String(name.prefix(27)) + "…" : name

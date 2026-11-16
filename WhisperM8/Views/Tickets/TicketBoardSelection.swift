@@ -217,7 +217,7 @@ enum TicketBoardSpot: Equatable {
 
 /// Rand, an dem eine Bewegung stehen blieb. Der Controller führt von dort
 /// weiter: links aus der ersten Spalte (oder der Liste) in die Seitenleiste,
-/// später rechts in den Board-Chat (WM8-113).
+/// rechts in den Board-Chat (WM8-91 Paket 3a).
 enum TicketBoardEdge: Equatable {
     case top, bottom, left, right
 }

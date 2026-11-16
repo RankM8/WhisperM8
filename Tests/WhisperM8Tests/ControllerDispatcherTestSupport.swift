@@ -68,6 +68,10 @@ final class ControllerDictationSpy: ControllerDictationControlling {
     func start(target: DictationDeliveryTarget, label: String?) {
         started.append(target); labels.append(label); phase = .recording
         if case let .agentChat(id) = target { targetSessionID = id }
+        if case let .boardChat(id) = target {
+            targetSessionID = id
+            targetNeverSubmits = true
+        }
     }
     func stop(submit: Bool) { stopped.append(submit); phase = .transcribing; targetSessionID = nil }
     func cancel() { cancelCount += 1; phase = nil }

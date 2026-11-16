@@ -12,9 +12,10 @@ import Foundation
 //
 // Überall im Ticket-Modus: L2 getippt und gehalten wie im Chat (Rückweg und
 // „Wohin“), Options, R1 gehalten (nur die App-Raute), Create, Touchpad,
-// L1 + R1. R2 tut nichts, mit Rückmeldung (E4: kein Diktat ohne sichtbares
-// Ziel). Dreieck ist für „→ Jarvis“ reserviert (WM8-113) und tut bis dahin
-// nichts, mit Rückmeldung. Mit der Liste links im Fokus gelten deren Tasten.
+// L1 + R1. R2 diktiert an den sichtbaren Board-Chat, nie mit Senden; ohne ihn
+// tut es nichts, mit Rückmeldung (E4: kein Diktat ohne sichtbares Ziel).
+// Dreieck legt das gewählte Ticket ins Feld des Board-Chats („→ Jarvis“,
+// Paket 3b). Mit der Liste links im Fokus gelten deren Tasten.
 
 extension ControllerBindingResolver {
     static func tickets(_ gesture: ControllerGesture, state: ControllerTicketState) -> ControllerAction? {
@@ -23,8 +24,9 @@ extension ControllerBindingResolver {
         case .press(.options): return .menuToggle
         case .press(.create): return .newChat
         case .press(.touchpad): return .clipboardToggle
-        // E4: Diktat erst mit dem Board-Chat (WM8-113); „geht nicht“ mit Grund.
-        case .press(.r2): return .ticket(.dictationUnavailable)
+        // Paket 3b: R2 diktiert an den Board-Chat, den die Spalte zeigt (nie
+        // mit Senden). Ohne sichtbaren Board-Chat E4: „geht nicht“ mit Grund.
+        case .press(.r2): return state.place.boardChatID == nil ? .ticket(.dictationUnavailable) : .dictationToggle
         default: break
         }
         guard state.area == .content else { return ticketsListFallback(gesture) }
@@ -119,8 +121,10 @@ extension ControllerBindingResolver {
         case .tap(.square): return state.place.hasTicket ? .ticket(.copyLink) : .rejected
         case .press(.l3): return state.place.hasTicket ? .ticket(.openInLinear) : .rejected
         case .tap(.r3): return .ticket(.refresh)
-        // → Jarvis kommt mit dem Board-Chat (WM8-113).
-        case .press(.triangle): return .rejected
+        // Paket 3b: → Jarvis legt das gewählte Ticket ins Feld des sichtbaren
+        // Board-Chats. Ohne Board-Chat oder ohne Ticket „geht nicht“.
+        case .press(.triangle):
+            return state.place.boardChatID != nil && state.place.hasTicket ? .ticket(.handOff) : .rejected
         default: return nil
         }
     }

@@ -661,6 +661,15 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         var target = DictationDeliveryTarget.frontApp
         switch context {
         case .chat, .list: target = chatTarget() ?? .frontApp
+        case let .tickets(state):
+            // Paket 3b: ausdrücklich an den Board-Chat, den die Spalte zeigt —
+            // nie ins Feld mit dem Fokus und nie an den Chat dahinter. Ein
+            // Diktat an ihn geht nie mit Senden (`neverSubmits`).
+            guard let boardChat = state.place.boardChatID else {
+                playHaptic(.rejected)
+                return noteTicket(.dictationNeedsBoardChat)
+            }
+            target = .boardChat(sessionID: boardChat)
         default: break
         }
         startDictation(target: target)
@@ -671,6 +680,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         let label: String
         if case let .agentChat(sessionID) = target {
             label = titleForSession(sessionID) ?? String(localized: "Chat")
+        } else if case let .boardChat(sessionID) = target {
+            label = titleForSession(sessionID) ?? String(localized: "Board chat")
         } else {
             label = String(localized: "App in front")
         }

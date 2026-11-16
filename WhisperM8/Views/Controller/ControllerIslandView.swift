@@ -537,7 +537,7 @@ extension ControllerQuickDrawSlots.Note {
         case .question: return ControllerWritingSlots.Note.question.text(family)
         case .busy: return String(localized: "The chat is working — Continue and Switch mode wait until it is idle.")
         case .dictating: return String(localized: "Dictation running — the text goes into its chat; nothing else goes into the field now.")
-        case .noBoardChat: return String(localized: "In the ticket board these work on the board chat, which is not here yet.")
+        case .noBoardChat: return String(localized: "In the ticket board, R1 offers only the app diamond.")
         }
     }
 }

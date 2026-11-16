@@ -104,9 +104,12 @@ final class ControllerBoardChatFocusTests: XCTestCase {
                 for gesture in gestures {
                     guard let action = action(gesture, context) else { continue }
                     switch action {
+                    // R2 (`dictationToggle`) ist erlaubt: Der Ausführer diktiert im
+                    // Ticket-Modus ausdrücklich an den Board-Chat (Paket 3b,
+                    // `testR2DictatesIntoTheBoardChatAndNeverSubmits`).
                     case .chatResume, .adjacentChat, .moveInContent, .toggleMaximize, .enterList, .listActivate,
                          .listStartRow, .listCloseRow, .pasteNewest, .bridgeKey, .sendNowOrContinue, .cycleMode,
-                         .slashCommand, .dictationToggle, .dictationStopAndSubmit:
+                         .slashCommand, .dictationStopAndSubmit:
                         XCTFail("\(gesture) → \(action) in \(view)")
                     case let .ticket(command) where command == .open:
                         XCTFail("Kreuz öffnet im Board-Chat kein Ticket und keinen Chat: \(gesture)")
@@ -142,6 +145,35 @@ final class ControllerBoardChatFocusTests: XCTestCase {
         XCTAssertFalse(BoardChatControllerFocusFrame.isShown(focus: nil, windowID: window, shownSessionID: Self.boardChatID))
     }
 
+    // MARK: - Paket 3b: R2 und Dreieck
+
+    func testR2DictatesOnlyWithAVisibleBoardChat() {
+        let with = ControllerContext.tickets(ControllerTicketState(place: Self.place(), area: .content))
+        let without = ControllerContext.tickets(ControllerTicketState(place: Self.place(boardChat: false), area: .content))
+        XCTAssertEqual(action(.press(.r2), with), .dictationToggle)
+        XCTAssertEqual(action(.press(.r2), without), .ticket(.dictationUnavailable))
+        XCTAssertEqual(action(.press(.r2), Self.inBoardChat(Self.idleClaude)), .dictationToggle)
+        // Auch mit der Seitenleiste im Fokus: Ziel ist der Board-Chat, nie die Zeile.
+        let sidebar = ControllerContext.tickets(ControllerTicketState(place: Self.place(), area: .list))
+        XCTAssertEqual(action(.press(.r2), sidebar), .dictationToggle)
+        // R1 + R2 bleibt aus.
+        XCTAssertEqual(action(.inLayer(.quickDraw, .press(.r2)), with), .rejected)
+    }
+
+    func testTriangleHandsTheTicketToTheBoardChat() {
+        for view in [ControllerTicketView.board, .list, .triage, .chatLine] {
+            let context = ControllerContext.tickets(ControllerTicketState(place: Self.place(view), area: .content))
+            XCTAssertEqual(action(.press(.triangle), context), .ticket(.handOff), "\(view)")
+        }
+        var noTicket = Self.place()
+        noTicket.hasTicket = false
+        XCTAssertEqual(action(.press(.triangle), .tickets(ControllerTicketState(place: noTicket, area: .content))), .rejected)
+        XCTAssertEqual(action(.press(.triangle), .tickets(ControllerTicketState(place: Self.place(boardChat: false),
+                                                                                area: .content))), .rejected)
+        // Im Board-Chat selbst bleibt Dreieck das Leerzeichen.
+        XCTAssertEqual(action(.press(.triangle), Self.inBoardChat(Self.idleClaude)), .chatKey(.space))
+    }
+
     // MARK: - Leiste
 
     func testLegendShowsTheBoardChatKeys() {
@@ -163,9 +195,15 @@ final class ControllerBoardChatFocusTests: XCTestCase {
         let with = ControllerLegend.entries(
             for: .tickets(ControllerTicketState(place: Self.place(), area: .content)))
         XCTAssertEqual(with.first { $0.label == .intoBoardChat }?.name, "Jarvis")
+        XCTAssertEqual(with.first { $0.label == .handOffToBoardChat }?.title, "→ Jarvis")
+        XCTAssertTrue(with.contains { $0.label == .dictate })
         let without = ControllerLegend.entries(
             for: .tickets(ControllerTicketState(place: Self.place(boardChat: false), area: .content)))
         XCTAssertFalse(without.contains { $0.label == .intoBoardChat })
+        XCTAssertFalse(without.contains { $0.label == .handOffToBoardChat })
+        XCTAssertFalse(without.contains { $0.label == .dictate })
+        let inChat = ControllerLegend.entries(for: Self.inBoardChat(Self.idleClaude)).map(\.label)
+        XCTAssertTrue(inChat.contains(.dictate))
     }
 
     // MARK: - Ablauf durch Erkenner, Belegung und Ausführer
@@ -333,6 +371,36 @@ final class ControllerBoardChatFocusTests: XCTestCase {
         enterFromTheRightEdge()
         dispatcher.closeControllerUI()
         XCTAssertNil(ui.boardChatFocus)
+    }
+
+    /// Paket 3b: R2 diktiert an den Board-Chat der Spalte, nie an den Chat
+    /// dahinter, und Kreuz beim Stoppen sendet nicht.
+    func testR2DictatesIntoTheBoardChatAndNeverSubmits() {
+        tap(.r2)
+        XCTAssertEqual(dictation.started, [.boardChat(sessionID: Self.boardChatID)])
+        XCTAssertEqual(dictation.labels, ["Vic"])
+        tap(.cross)
+        tap(.r2)
+        XCTAssertFalse(dictation.stopped.contains(true), "nie mit Senden: \(dictation.stopped)")
+        XCTAssertTrue(terminals.keys.isEmpty, "\(terminals.keys)")
+    }
+
+    func testR2WithoutBoardChatDoesNotDictate() {
+        window.tickets = Self.place(boardChat: false)
+        tap(.r2)
+        XCTAssertTrue(dictation.started.isEmpty)
+        XCTAssertEqual(haptics.last, .rejected)
+        XCTAssertEqual(ui.ticketNotice, .dictationNeedsBoardChat)
+    }
+
+    func testTriangleSendsTheHandOffToTheBoard() {
+        tap(.triangle)
+        XCTAssertEqual(window.ticketCommands.last, .handOff)
+        XCTAssertEqual(ui.ticketNotice, .handedOff)
+        XCTAssertTrue(terminals.keys.isEmpty, "kein Enter, keine Taste")
+        window.ticketOutcome = .rejected
+        tap(.triangle)
+        XCTAssertEqual(haptics.last, .rejected)
     }
 
     /// Hinter den Tickets ohne Fokus im Board-Chat gibt es kein Ziel für Tasten.

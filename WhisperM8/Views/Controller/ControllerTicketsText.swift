@@ -23,6 +23,7 @@ enum ControllerTicketsText {
         case .listCopied: return String(localized: "List copied")
         case .refreshing: return String(localized: "Refreshing…")
         case .dictationNeedsBoardChat: return String(localized: "Dictation only with the board chat")
+        case .handedOff: return String(localized: "Added to the board chat's field")
         }
     }
 }
