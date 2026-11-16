@@ -39,10 +39,9 @@ extension AgentControlRequestHandler {
                                     withheldDelivery: withheld != nil,
                                     field: screen?.promptField, screenReadable: screen != nil) {
             case .allowed:
+                // Verbucht einen vorgemerkten Auftrag zugleich als zugestellt
+                // (`bookSubmittedWithheldDelivery`).
                 controller.submitComposer()
-                if let id = withheld?.queuedPromptID {
-                    Self.markWithheldQueueEntryDelivered(id, sessionID: targetID)
-                }
                 return (.success(session), withheld != nil)
             case .refused(let code, let message):
                 return (.failure(code, message), false)
@@ -79,8 +78,8 @@ extension AgentControlRequestHandler {
         + "wegen einer Freigabe zurückgehalten wurde und an dem seither jemand getippt, diktiert oder eingefügt hat. "
         + "submit schickt ihn nicht ab, weil er dann (auch) dem User gehört. Nichts abgeschickt. Was im Feld "
         + "steht, zeigt kein chats-Befehl. Deshalb: Direkt gesendeter Auftrag: Der User schickt ihn im Chat mit "
-        + "Enter ab. Vorgemerkter Auftrag (steht noch in `chats queue <ref>`): erst "
-        + "`chats dequeue <ref> <Kurz-ID>`, dann Enter durch den User, sonst kommt er doppelt; oder nach "
+        + "Enter ab. Vorgemerkter Auftrag (steht noch in `chats queue <ref>`): Enter durch den User genügt, "
+        + "die Warteschlange verbucht ihn dann als zugestellt (kein `chats dequeue` nötig); oder nach "
         + "Rückfrage beim User `whisperm8 chats interrupt <ref> --clear-input --force` (leert das ganze Feld), "
         + "dann geht er von selbst neu raus. Leeren mit --force nie ohne Rückfrage beim User."
 

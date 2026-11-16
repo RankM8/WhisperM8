@@ -17,6 +17,15 @@ enum ComposerDraftOnScreen {
         }
     }
 
+    /// Feld für den Kontowechsel. Eine offene Ansicht von Claude zählt als
+    /// „nicht ablesbar“: Das Feld der Agent-Liste sieht aus wie ein leeres
+    /// Eingabefeld und gäbe sonst frei (wie in der Warteschlange).
+    static func field(reading: ComposerFieldReading, profile: TerminalKeyboardProfile,
+                      clearsBeforeSubmit: Bool) -> BoardChatFieldVisibility {
+        guard reading.openView == nil else { return .unknown }
+        return BoardChatFieldVisibility(reading: reading, profile: profile, clearsBeforeSubmit: clearsBeforeSubmit)
+    }
+
     /// Nur bei diesen Status liest der Kontowechsel den Entwurf überhaupt
     /// (`AccountSwitchPlanner.waitReason`); sonst wartet er ohnehin aufs
     /// Turn-Ende, und der Bildschirm muss nicht gelesen werden.
@@ -36,7 +45,7 @@ extension AgentTerminalController {
     func mayHaveUnsentInputForAccountSwitch(status: AgentSessionRuntimeStatus?) -> Bool {
         let estimate = composerDraft.mayHaveUnsentInput
         guard ComposerDraftOnScreen.readsScreen(status: status) else { return estimate }
-        let field = BoardChatFieldVisibility(
+        let field = ComposerDraftOnScreen.field(
             reading: composerFieldForSendCheck(), profile: command.keyboardProfile,
             clearsBeforeSubmit: composerDraft.shouldClearBeforeSubmit)
         return ComposerDraftOnScreen.mayHaveUnsentInput(estimate: estimate, field: field)

@@ -547,7 +547,8 @@ Kontowechsel nach dem Turn behandeln den eingefügten Text nach einem selbst
 begonnenen Turn ebenfalls als Entwurf, lesen aber seit WM8-123 das Feld wie die
 Warteschlange (`ComposerDraftOnScreen`, `mayHaveUnsentInputForAccountSwitch`):
 Sichtbar leer bei unten stehender Ansicht gibt frei, sichtbarer Text hält auch
-hochgescrollt, sonst gilt die Schätzung. Vorher hielt ein Diktat ohne Senden,
+hochgescrollt, eine offene Ansicht von Claude zählt als nicht ablesbar, sonst
+gilt die Schätzung. Vorher hielt ein Diktat ohne Senden,
 das Giuliano mit der Rücktaste wieder gelöscht hatte, den Wechsel bis zum
 nächsten Enter auf (höchstens 30 Minuten). Gelesen wird nur bei einem
 ruhenden Chat, also höchstens alle 2 s je vorgemerktem Wechsel 16 Zeilen.
@@ -876,18 +877,26 @@ Warteschlange nach dem Start zustellte. Deshalb:
   der Warteschlange nach dem Zurückhalten; ein Diktat mit Senden beansprucht
   nie). `submit` schickt ihn ab, wenn der Chat ruht, keine Freigabe offen ist
   und seitdem niemand im Feld getippt, gelöscht, eingefügt oder etwas geholt hat
-  (ESC und Pfeile zählen nicht, Tasten im Freigabe-Dialog auch nicht). Die
-  Antwort trägt `withheldDelivery: true`. War er vorgemerkt, verbucht die
-  Warteschlange ihn mit diesem Enter als zugestellt (`queue_delivered_by_submit`),
-  sonst käme er beim nächsten Turn-Ende ein zweites Mal; ein per `dequeue`
-  stornierter bleibt storniert. Ein Neustart ohne Chatverlust trägt den Vermerk
+  (ESC und Pfeile zählen nicht). Tasten, während der Status noch „wartet“
+  meldet, gehen meist an den Freigabe-Dialog; zählt der Status nach der
+  Antwort aber noch nach, landen sie schon im Feld. Deshalb lassen dort nur
+  typische Antworten den Auftrag unberührt (Enter, ESC, Tab, Leertaste,
+  Pfeile, Ziffern, y, n, Kürzel außer Cmd+V); jede andere Taste macht ihn zum
+  Text des Users. Restlücke: Wer nach der Freigabe sofort nur Ziffern, y oder n
+  tippt, bevor der Status nachzieht. Die Antwort trägt `withheldDelivery:
+  true`. War er vorgemerkt, verbucht die Warteschlange ihn als zugestellt
+  (`queue_delivered_by_submit`), sobald ein Enter ihn abschickt: `submit`, das
+  Enter des Users auf der Tastatur oder am Controller, auch nach Bearbeiten
+  (er ist ja raus). Sonst stellte die Warteschlange ihn beim nächsten
+  Turn-Ende ein zweites Mal zu. Ctrl+C lässt ihn vorgemerkt; er kommt später
+  neu. Ein per `dequeue` stornierter bleibt storniert. Ein Neustart ohne Chatverlust trägt den Vermerk
   im Manifest weiter (`composerWithheldDelivery`, `composerWithheldQueueID`).
   Hat jemand am Text weitergeschrieben, gehört er (auch) dem User; dann lehnt
   `submit` ab, sagt „eingefügt“ und nennt die Wege, die gehen. Direkt
   gesendeter Auftrag: Der User drückt im Chat Enter.
   Vorgemerkter Auftrag (die Warteschlange lässt ihn nach dem zurückgehaltenen
-  Enter vorgemerkt): entweder erst `dequeue`, dann Enter durch den User,
-  sonst kommt er beim nächsten Turn-Ende ein zweites Mal; oder
+  Enter vorgemerkt): Enter durch den User genügt, die Warteschlange verbucht
+  ihn dann als zugestellt (seit WM8-123, vorher erst `dequeue`); oder
   `interrupt <ref> --clear-input --force`, danach geht er von selbst neu raus.
   Leeren mit `--force` nur nach Rückfrage beim User: Kein chats-Befehl zeigt
   das Feld, und der User kann nach der Freigabe weitergetippt haben.

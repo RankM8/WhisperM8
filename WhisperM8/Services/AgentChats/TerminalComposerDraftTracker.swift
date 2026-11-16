@@ -69,6 +69,12 @@ struct TerminalComposerDraftTracker: Equatable {
         var untouched = true
     }
     private(set) var withheldDelivery: WithheldDelivery?
+    /// Ein Enter (Tastatur, Controller, programmatisch) hat einen vorgemerkten
+    /// Auftrag mit zurückgehaltenem Enter abgeschickt; der Controller verbucht
+    /// ihn in der Warteschlange als zugestellt (`takeSubmittedWithheldQueueID`).
+    /// Sonst stellte die Warteschlange ihn beim nächsten Turn-Ende ein zweites
+    /// Mal zu. Auch nach Bearbeiten: Was im Feld stand, ist raus (WM8-123).
+    private(set) var submittedWithheldQueueID: UUID?
 
     /// Den Auftrag darf `chats submit` abschicken: beansprucht, unberuehrt, und
     /// er ist das Einzige, was der Tracker im Feld vermutet.
@@ -208,7 +214,16 @@ struct TerminalComposerDraftTracker: Equatable {
         restoresPromptOnInterrupt: Bool,
         now: Date
     ) {
-        guard status != .awaitingInput else { return }
+        guard status != .awaitingInput else {
+            // Der Status hinkt nach einer Freigabe hinterher: Wer gleich
+            // weitertippt, tippt schon ins Feld. Typische Antworten im Dialog
+            // lassen einen zurückgehaltenen Auftrag unberührt, alles andere
+            // macht ihn zum Text des Users (WM8-123).
+            if withheldDelivery != nil, !Self.isDialogAnswerKey(keyCode: keyCode, modifiers: modifiers) {
+                withheldDelivery?.untouched = false
+            }
+            return
+        }
         guard restoresPromptOnInterrupt else {
             recordKeyDown(keyCode: keyCode, modifiers: modifiers)
             return
@@ -249,6 +264,23 @@ struct TerminalComposerDraftTracker: Equatable {
 
     /// Pfeile, Bild, Pos1/Ende: Bewegen in der Rewind-Liste, kein Text.
     private static let navigationKeyCodes: Set<UInt16> = [115, 116, 119, 121, 123, 124, 125, 126]
+    /// Antworten in Claudes Dialogen (Freigabe, Frage, Plan): Enter, ESC,
+    /// Tab, Leertaste, Pfeile, Ziffern, y und n.
+    private static let dialogAnswerKeyCodes: Set<UInt16> = [
+        36, 76, 53, 48, 49, 123, 124, 125, 126,
+        18, 19, 20, 21, 23, 22, 26, 28, 25, 29,   // 1 bis 9, 0
+        16, 45,                                   // y, n
+    ]
+
+    /// Taste, die in einem Dialog eine Antwort ist und keinen Text ins Feld
+    /// schreibt. Cmd+V fügt ein; andere Cmd-/Ctrl-Kuerzel sind Bedienung.
+    static func isDialogAnswerKey(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {
+        let flags = modifiers.intersection(.deviceIndependentFlagsMask)
+        if flags.contains(.command) { return keyCode != 9 }
+        if flags.contains(.control) { return true }
+        return dialogAnswerKeyCodes.contains(keyCode)
+    }
+
     /// ESC und Navigation: aendern keinen Text im Feld.
     private static let textNeutralKeyCodes: Set<UInt16> = navigationKeyCodes.union([53])
 
@@ -270,6 +302,7 @@ struct TerminalComposerDraftTracker: Equatable {
             if flags.contains(.shift) || flags.contains(.option) {
                 mayHaveTypedInput = true
             } else {
+                noteWithheldSubmitted()
                 clearDraft()
                 mayHoldRestoredPrompt = false
                 mayShowAcceptedSuggestion = false
@@ -370,10 +403,22 @@ struct TerminalComposerDraftTracker: Equatable {
         return true
     }
 
+    private mutating func noteWithheldSubmitted() {
+        if let id = withheldDelivery?.queuedPromptID { submittedWithheldQueueID = id }
+    }
+
+    /// Einmal abholen: Welcher vorgemerkte Auftrag ist mit einem Enter raus?
+    mutating func takeSubmittedWithheldQueueID() -> UUID? {
+        defer { submittedWithheldQueueID = nil }
+        return submittedWithheldQueueID
+    }
+
     /// Programmatisch abgeschickt (`chats send`, Queue-Zustellung) oder
     /// geleert (Ctrl+C von `sendComposerClear`). `programmaticAt` nur beim
     /// echten Absenden: ab dann laeuft das Abbruch-Fenster.
     mutating func recordSubmitted(programmaticAt date: Date? = nil) {
+        // Nur echtes Absenden; ein Leeren per Ctrl+C lässt ihn vorgemerkt.
+        if date != nil { noteWithheldSubmitted() }
         clearDraft()
         mayHoldRestoredPrompt = false
         mayShowAcceptedSuggestion = false

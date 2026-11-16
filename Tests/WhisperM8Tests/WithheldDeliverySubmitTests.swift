@@ -77,12 +77,72 @@ final class WithheldDeliveryTrackerTests: XCTestCase {
         XCTAssertNotNil(tracker.submittableWithheldDelivery)
     }
 
-    /// Tasten im Freigabe-Dialog gehen an den Dialog, nicht ins Feld.
-    func testKeysInTheApprovalDialogLeaveItAlone() {
+    /// Antworten im Freigabe-Dialog (Enter, Ziffern, y/n, Pfeile, ESC) gehen
+    /// an den Dialog, nicht ins Feld.
+    func testDialogAnswersLeaveItAlone() {
         var tracker = withheld()
-        key(&tracker, letterA, status: .awaitingInput)
-        key(&tracker, enter, status: .awaitingInput)
+        for code: UInt16 in [18, 36, 16, 45, 125, 53, 48] {
+            key(&tracker, code, status: .awaitingInput)
+        }
         XCTAssertNotNil(tracker.submittableWithheldDelivery)
+    }
+
+    /// Auflage der Prüferin: Der Status hinkt nach der Freigabe hinterher.
+    /// Tippt Giuliano sofort weiter, steht sein Text schon im Feld; jede Taste,
+    /// die keine Dialog-Antwort ist, macht den Auftrag zu seinem Text.
+    func testTypingWhileTheStatusStillWaitsMakesItTheUsersText() {
+        var letter = withheld()
+        key(&letter, letterA, status: .awaitingInput)
+        XCTAssertNil(letter.submittableWithheldDelivery)
+
+        var paste = withheld()
+        key(&paste, keyV, .command, status: .awaitingInput)
+        XCTAssertNil(paste.submittableWithheldDelivery, "Cmd+V fügt ein")
+
+        var shortcut = withheld()
+        key(&shortcut, controlC, .control, status: .awaitingInput)
+        XCTAssertNotNil(shortcut.submittableWithheldDelivery, "Ctrl+C im Dialog bricht ihn ab, schreibt nichts")
+    }
+
+    /// Auflage der Prüferin: Drückt Giuliano nach der Freigabe selbst Enter,
+    /// ist der vorgemerkte Auftrag raus, auch wenn er ihn vorher bearbeitet
+    /// hat; die Warteschlange darf ihn nicht noch einmal zustellen.
+    func testEnterOfTheUserBooksTheQueuedPrompt() {
+        let id = UUID()
+        var untouched = withheld(queuedPromptID: id)
+        key(&untouched, enter)
+        XCTAssertEqual(untouched.takeSubmittedWithheldQueueID(), id)
+        XCTAssertNil(untouched.takeSubmittedWithheldQueueID(), "nur einmal abholen")
+
+        var edited = withheld(queuedPromptID: id)
+        key(&edited, letterA)
+        key(&edited, enter)
+        XCTAssertEqual(edited.takeSubmittedWithheldQueueID(), id, "bearbeitet, aber raus")
+
+        var viaController = withheld(queuedPromptID: id)
+        viaController.recordSubmitted(programmaticAt: Date())
+        XCTAssertEqual(viaController.takeSubmittedWithheldQueueID(), id)
+    }
+
+    /// Ctrl+C leert, ohne abzuschicken: Der Auftrag bleibt vorgemerkt und kommt
+    /// später neu. Ein direkt gesendeter Auftrag hat keine ID und bucht nichts.
+    func testCtrlCAndDirectSendBookNothing() {
+        let id = UUID()
+        var viaControlC = withheld(queuedPromptID: id)
+        key(&viaControlC, controlC, .control)
+        XCTAssertNil(viaControlC.takeSubmittedWithheldQueueID())
+
+        var cleared = withheld(queuedPromptID: id)
+        cleared.recordSubmitted()   // Leeren per Ctrl+C von `sendComposerClear`
+        XCTAssertNil(cleared.takeSubmittedWithheldQueueID())
+
+        var direct = withheld(queuedPromptID: nil)
+        key(&direct, enter)
+        XCTAssertNil(direct.takeSubmittedWithheldQueueID())
+
+        var shiftEnter = withheld(queuedPromptID: id)
+        key(&shiftEnter, enter, .shift)
+        XCTAssertNil(shiftEnter.takeSubmittedWithheldQueueID(), "Zeilenumbruch, kein Absenden")
     }
 
     func testEnterCtrlCAndSubmitEndIt() {
@@ -240,6 +300,19 @@ final class AccountSwitchScreenDraftTests: XCTestCase {
             status: .idle,
             mayHaveUnsentInput: ComposerDraftOnScreen.mayHaveUnsentInput(estimate: true, field: emptyScrolledBack)),
             .unsentInput)
+    }
+
+    /// Offene Ansicht (Agent-Liste: ihr Feld sieht aus wie ein leeres
+    /// Eingabefeld) gibt den Wechsel nicht frei; dann gilt die Schätzung.
+    func testOpenViewCountsAsUnreadable() {
+        let reading = ComposerFieldReading(field: InsertedTextScreen.field(text: ""), atBottom: true,
+                                           openView: "agents")
+        let field = ComposerDraftOnScreen.field(reading: reading, profile: .claudeCodeChat, clearsBeforeSubmit: false)
+        XCTAssertEqual(field, .unknown)
+        XCTAssertTrue(ComposerDraftOnScreen.mayHaveUnsentInput(estimate: true, field: field))
+        let withoutView = ComposerFieldReading(field: InsertedTextScreen.field(text: ""), atBottom: true)
+        XCTAssertEqual(ComposerDraftOnScreen.field(reading: withoutView, profile: .claudeCodeChat,
+                                                   clearsBeforeSubmit: false), .empty)
     }
 
     func testScreenIsOnlyReadWhileTheChatRests() {

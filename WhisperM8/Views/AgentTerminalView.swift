@@ -670,6 +670,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     func claimWithheldDelivery(queuedPromptID: UUID?) -> Bool {
         composerDraft.claimWithheldDelivery(queuedPromptID: queuedPromptID)
     }
+    func takeSubmittedWithheldQueueID() -> UUID? { composerDraft.takeSubmittedWithheldQueueID() }
 
     /// Sendet einen Prompt über den Control-Socket (`whisperm8 chats send`) in
     /// die laufende TUI — im Gegensatz zu `sendUserText` mit **Bracketed
@@ -737,6 +738,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
             return
         }
         composerDraft.recordSubmitted(programmaticAt: Date())
+        bookSubmittedWithheldDelivery()
         // 80 ms Delay, damit die TUI den Paste-Block verarbeitet hat, bevor das
         // Return kommt. Davor neu prüfen: keine Freigabe aufgegangen (WM8-75).
         let (statusAtPaste, questionAtPaste) = (statusForDelayedEnter, questionOpenForDelayedEnter)
@@ -774,6 +776,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         // In einer Rückfrage bestätigt Enter die Auswahl, nicht das Eingabefeld —
         // ein Entwurf dort bleibt stehen und darf nicht als gesendet gelten.
         if key == .enter || key == .sendNow, status != .awaitingInput { composerDraft.recordSubmitted(programmaticAt: now) }
+        bookSubmittedWithheldDelivery()
         // ↑ holt im Feld den letzten Prompt zurück (Review 12.11.2026): Ein
         // „Weiter“ oder `chats send` darf sich nicht daran hängen.
         if key == .up, status != .awaitingInput, !controllerChoiceListOpen(status: status, at: now) {
@@ -851,6 +854,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         guard isRunning else { return }
         terminal.send([0x0D])
         composerDraft.recordSubmitted(programmaticAt: Date())
+        bookSubmittedWithheldDelivery()
     }
 
     /// Sendet ein einzelnes Ctrl+C — leert in Claude Code den NICHT-leeren
@@ -942,6 +946,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
                 status: AgentSessionStatusCoordinator.shared.statusStore.status(for: self.sessionID),
                 restoresPromptOnInterrupt: self.command.keyboardProfile == .claudeCodeChat,
                 now: Date())
+            self.bookSubmittedWithheldDelivery()
             self.noteKeyboardKeyForController(event)
         }
 
