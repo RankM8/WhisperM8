@@ -188,13 +188,15 @@ struct AgentSessionDetailView: View {
             } else if let controller {
                 AgentTerminalView(controller: controller)
                     .background(AgentTheme.background)
-                    // Meldungen warten wegen des Eingabefelds (WM8-123). Als
-                    // Überlagerung, damit sich die Höhe des Terminals nie
-                    // ändert; eigene Ansicht, damit nur sie auf den Hinweis
-                    // reagiert.
-                    .overlay(alignment: .top) {
+                    // Meldungen warten wegen des Eingabefelds (WM8-123): Pille oben
+                    // rechts als Überlagerung, damit sich die Höhe des Terminals
+                    // nie ändert und Claudes Feld links frei bleibt; eigene
+                    // Ansicht, damit nur sie auf den Hinweis reagiert.
+                    .overlay(alignment: .topTrailing) {
                         QueueHoldStrip(sessionID: session.id)
-                            .allowsHitTesting(false)
+                            .padding(.top, QueueHoldStripContent.topInset)
+                            .padding(.trailing, QueueHoldStripContent.trailingInset)
+                            .padding(.leading, QueueHoldStripContent.leadingInset)
                     }
             } else if session.isTerminal {
                 // Terminal ohne laufenden Controller (App-Neustart oder Tab

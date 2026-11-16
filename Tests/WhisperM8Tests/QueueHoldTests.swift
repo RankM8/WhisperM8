@@ -93,7 +93,7 @@ final class QueueHoldTests: XCTestCase {
         XCTAssertFalse(AgentPromptQueueDelivery.fieldReadable(.plainShell))
     }
 
-    /// `chats dequeue`: Nichts mehr offen heißt sofort keine Leiste; bleibt
+    /// `chats dequeue`: Nichts mehr offen heißt sofort keine Pille; bleibt
     /// etwas offen, stimmt die Zahl. Ohne Hinweis entsteht keiner.
     func testNoticeAfterQueueChange() {
         let held = QueueHoldNotices.Notice(count: 3, reason: .textInField, fieldReadable: false)
@@ -103,7 +103,7 @@ final class QueueHoldTests: XCTestCase {
         XCTAssertNil(QueueHoldNotices.notice(nil, afterOpenCount: 2), "Hinweis entsteht nur beim Zustellversuch")
     }
 
-    /// Über den Store: dequeue aller wartenden Meldungen räumt die Leiste
+    /// Über den Store: dequeue aller wartenden Meldungen räumt die Pille
     /// im selben Durchlauf, ohne den 30-s-Versuch abzuwarten.
     @MainActor
     func testDequeueClearsStripImmediately() throws {

@@ -35,7 +35,7 @@ final class QueueHoldNotices {
 
     func set(_ notice: Notice?, for sessionID: UUID) {
         let value = notice.flatMap { $0.count > 0 ? $0 : nil }
-        // Nur bei echter Änderung schreiben: Jede Zuweisung weckt die Leiste.
+        // Nur bei echter Änderung schreiben: Jede Zuweisung weckt die Pille.
         guard notices[sessionID] != value else { return }
         notices[sessionID] = value
     }
@@ -45,7 +45,7 @@ final class QueueHoldNotices {
     }
 
     /// Pur: Hinweis, nachdem sich die Zahl offener Meldungen geändert hat
-    /// (etwa per `chats dequeue`). Nichts mehr offen heißt: keine Leiste.
+    /// (etwa per `chats dequeue`). Nichts mehr offen heißt: keine Pille.
     /// Ohne bisherigen Hinweis bleibt es dabei; ob neu gewartet wird,
     /// entscheidet erst der nächste Zustellversuch.
     nonisolated static func notice(_ current: Notice?, afterOpenCount openCount: Int) -> Notice? {
@@ -54,7 +54,7 @@ final class QueueHoldNotices {
         return current
     }
 
-    /// Text der Leiste, z. B. „1 Meldung wartet: Text im Eingabefeld“.
+    /// Text der Pille, z. B. „1 Meldung wartet: Text im Eingabefeld“.
     nonisolated static func text(for notice: Notice) -> String {
         switch (notice.reason, notice.count == 1) {
         case (.textInField, true):

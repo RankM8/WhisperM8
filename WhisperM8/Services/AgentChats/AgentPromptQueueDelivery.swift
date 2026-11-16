@@ -185,7 +185,7 @@ final class AgentPromptQueueDelivery {
 
     /// Die Warteschlange des Chats hat sich außerhalb der Zustellung geändert
     /// (`chats dequeue`): Hinweis sofort nachführen statt erst beim nächsten
-    /// Versuch in bis zu 30 s. Ist nichts mehr offen, verschwindet die Leiste
+    /// Versuch in bis zu 30 s. Ist nichts mehr offen, verschwindet die Pille
     /// und der geplante Versuch entfällt. Nur Speicher und ein Lesen der Queue.
     func noteQueueChanged(_ sessionID: UUID) {
         guard let current = notices.notices[sessionID] else { return }
