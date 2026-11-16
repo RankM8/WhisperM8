@@ -932,6 +932,14 @@ final class AgentWindowStore {
     /// Orte je Fenster für L2 am Controller (`AgentWindowStore+PlaceHistory`).
     /// Flüchtig und nicht beobachtet, wie die Kachel je Workspace.
     @ObservationIgnored var placeHistories: [UUID: ChatPlaceHistory] = [:]
+    /// Zuletzt gezeigtes Board je Fenster (Projekt), für „vorher“ im Reiter
+    /// „Tickets“ der Insel (WM8-91). Flüchtig und nicht beobachtet.
+    @ObservationIgnored var lastTicketsProjectIDs: [UUID: UUID] = [:]
+    /// Ist die Ticket-Ansicht eingeschaltet? Sonst ist das Board kein Ziel
+    /// für L2. Tests ersetzen das.
+    @ObservationIgnored var isTicketBoardEnabled: () -> Bool = {
+        UserDefaults.standard.bool(forKey: PreferenceKeys.ticketBoardEnabled)
+    }
 
     /// Einzelansicht öffnen/selektieren — die Workspace-Referenz UND der
     /// gemerkte Pane-Fokus bleiben („Zurück zum Workspace" stellt exakt

@@ -73,6 +73,14 @@ final class ControllerBindingMatrixTests: XCTestCase {
             default: break
             }
         }
+        // Ticket-Modus (WM8-91): L2 und R1 stehen vollständig in der Tabelle,
+        // L1 wirkt wie ohne Ebene.
+        if case .tickets = context {
+            switch gesture {
+            case .layerBegan, .inLayer(.whereTo, _), .inLayer(.quickDraw, _): return nil
+            default: break
+            }
+        }
         if case .paused = context { return nil }
         switch gesture {
         case .layerEnded(.whereTo): return .islandRelease
@@ -206,6 +214,41 @@ final class ControllerBindingMatrixTests: XCTestCase {
             table[.inLayer(.whereTo, gesture)] = action
         }
         return table.merging(appDiamond) { old, _ in old }
+    }()
+
+    /// Ticket-Modus (WM8-91, Paket 1): die Liste links wie bisher, dazu L2
+    /// getippt und gehalten wie im Chat, Options, und R2 „geht nicht“. Unter
+    /// R1 nur die App-Raute; die Chat-Raute ist aus.
+    static let ticketsTable: Table = {
+        var table = merge(moves(.up, .listMove(step: -1)), moves(.down, .listMove(step: 1)), [
+            .move(.right, source: .leftStick, isRepeat: false): .leaveList,
+            .move(.right, source: .dpad, isRepeat: false): .leaveList,
+            .tap(.circle): .leaveList,
+            .press(.cross): .listActivate,
+            .tap(.l1): .listFilter(step: -1),
+            .tap(.r1): .listFilter(step: 1),
+            .holdPending(.square, duration: 0.6): .holdProgress(.square, duration: 0.6),
+            .holdBegan(.square): .listCloseRow,
+            .holdCancelled(.square): .holdProgressCancelled(.square),
+            .tap(.r3): .listStartRow,
+            .press(.create): .newChat,
+            .press(.r2): .rejected,
+            .press(.touchpad): .clipboardToggle,
+            .press(.options): .menuToggle,
+            .tap(.l2): .lastChat,
+            .layerBegan(.whereTo): .islandShow(.whereTo),
+            .layerBegan(.quickDraw): .islandShow(.quickDraw),
+            .inLayer(.quickDraw, .press(.cross)): .rejected,
+            .inLayer(.quickDraw, .press(.triangle)): .rejected,
+            .inLayer(.quickDraw, .press(.square)): .rejected,
+            .inLayer(.quickDraw, .press(.circle)): .rejected,
+            .inLayer(.quickDraw, .press(.l3)): .rejected,
+            .inLayer(.quickDraw, .press(.r2)): .rejected,
+        ], pauseChord, appDiamond)
+        for (gesture, action) in layers {
+            if case .inLayer(.whereTo, _) = gesture { table[gesture] = action }
+        }
+        return table
     }()
 
     /// Insel-Paket: zweite Raute unter R1. Das Steuerkreuz schaltet die App
@@ -518,6 +561,11 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .press(.r2): .dictationToggle,
             .press(.touchpad): .clipboardToggle,
         ], pauseChord)),
+        ("Tickets", .tickets(ControllerTicketState(place: ControllerTicketsPlace(projectID: nil, team: "WM8"))),
+         ticketsTable),
+        ("Tickets, Liste im Fokus",
+         .tickets(ControllerTicketState(place: ControllerTicketsPlace(projectID: nil, team: "WM8"), area: .list)),
+         ticketsTable),
         ("Liste", .list, merge(moves(.up, .listMove(step: -1)), moves(.down, .listMove(step: 1)), [
             .move(.right, source: .leftStick, isRepeat: false): .leaveList,
             .move(.right, source: .dpad, isRepeat: false): .leaveList,
@@ -729,10 +777,11 @@ final class ControllerBindingMatrixTests: XCTestCase {
             case .modal: seen.insert("modal")
             case .list: seen.insert("list")
             case .chat: seen.insert("chat")
+            case .tickets: seen.insert("tickets")
             case .otherWindow: seen.insert("otherWindow")
             case .noWindow: seen.insert("noWindow")
             }
         }
-        XCTAssertEqual(seen.count, 11)
+        XCTAssertEqual(seen.count, 12)
     }
 }

@@ -24,6 +24,21 @@ extension AgentWindowStore {
         // Nur schreiben, wenn sich etwas ändert: Sonst wertete jede
         // Navigation die Ansichten neu aus, die den Modus lesen.
         guard ticketsModeWindowIDs.contains(windowID) != active else { return }
+        setTicketsModeFlag(active, in: windowID)
+        // Ein Ortswechsel für L2 (WM8-91): Board ↔ Chat bzw. Workspace dahinter.
+        recordPlace(of: windowID)
+    }
+
+    /// Eine Navigation will einen Chat oder Workspace zeigen.
+    func leaveTicketsForNavigation(in windowID: UUID) {
+        guard ticketsModeHoldDepth == 0, ticketsModeWindowIDs.contains(windowID) else { return }
+        setTicketsModeFlag(false, in: windowID)
+        // Der neue Ort kommt mit der Navigation; bis dahin bleibt das Board
+        // das Rücksprungziel (nicht der Chat dahinter).
+        recordLeavingTickets(in: windowID)
+    }
+
+    private func setTicketsModeFlag(_ active: Bool, in windowID: UUID) {
         if active {
             ticketsModeWindowIDs.insert(windowID)
         } else {
@@ -31,16 +46,11 @@ extension AgentWindowStore {
         }
     }
 
-    /// Eine Navigation will einen Chat oder Workspace zeigen.
-    func leaveTicketsForNavigation(in windowID: UUID) {
-        guard ticketsModeHoldDepth == 0 else { return }
-        setTicketsMode(false, in: windowID)
-    }
-
     /// Das Fenster ist geschlossen: Modus und Controller der Ticket-Ansicht
     /// (samt letztem Abzug) werden freigegeben.
     func forgetTickets(of windowID: UUID) {
         ticketsModeWindowIDs.remove(windowID)
+        lastTicketsProjectIDs[windowID] = nil
         TicketBoardControllers.shared.forget(windowID)
     }
 

@@ -1,6 +1,6 @@
 ---
 status: aktiv (Kern, Kommandozeile, Skill, Einstellungen und die lesende Ansicht in der App, Stufe 1)
-updated: 2026-11-14
+updated: 2026-11-16
 ---
 
 # Tickets: Linear und die Chats, die daran arbeiten
@@ -369,8 +369,10 @@ in [`../design/ticket-board/`](../design/ticket-board/).
   wieder Chats. Wer zwischen Chats und Tickets wechselt, sieht beim Zurückkommen sofort den letzten Stand; der
   frische Abruf läuft dahinter.
 - **Controller und Tastatur:** Solange Tickets den Chat verdecken, meldet das Fenster dem Controller keinen
-  gewählten Chat. Bestätigen, Abbrechen und Diktat per Controller treffen ihn dann nicht. ⌃⌘Pfeil wechselt den
-  Fokus im verdeckten Raster nicht.
+  gewählten Chat, sondern das Board (eigener Zusammenhang `tickets`, WM8-91). Bestätigen, Abbrechen und Diktat
+  per Controller treffen den Chat dann nicht. Das Board ist ein Ort für L2: hin über „Wohin“ (Reiter „Tickets“)
+  oder Options „Ticket-Board WM8“, zurück mit L2 getippt. Einzelheiten in
+  [controller.md](controller.md#ticket-board). ⌃⌘Pfeil wechselt den Fokus im verdeckten Raster nicht.
 - **Fenster schließen:** gibt Modus und Stand der Ticket-Ansicht dieses Fensters frei.
 
 ### Abruf

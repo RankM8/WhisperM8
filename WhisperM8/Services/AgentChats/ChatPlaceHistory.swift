@@ -1,10 +1,16 @@
 import Foundation
 
 /// Ein Ort im Fenster, zu dem L2 am Controller zurückführt: ein einzelner
-/// Chat oder ein Workspace in der Rasteransicht.
+/// Chat, ein Workspace in der Rasteransicht oder das Ticket-Board eines
+/// Projekts (WM8-91).
 enum ChatPlace: Hashable {
     case chat(UUID)
     case workspace(UUID)
+    /// Die Ticket-Ansicht dieses Fensters, für das Projekt, dessen Board sie
+    /// zeigt (`nil`: ohne gewähltes Projekt). Was im Board ausgewählt oder
+    /// offen war, hält der `TicketBoardController` des Fensters; zurück im
+    /// Board steht es so da, wie man es verlassen hat.
+    case tickets(projectID: UUID?)
 
     /// Ort eines Fensters aus seinem Zustand.
     ///
@@ -15,12 +21,17 @@ enum ChatPlace: Hashable {
     /// Einzelansicht ist ein eigener Ort; ohne Auswahl gibt es keinen.
     /// - Parameter workspaceID: Workspace, den das Fenster referenziert
     ///   (Raster oder Rücksprungziel der Einzelansicht), sofern es ihn gibt.
+    /// - Parameter ticketsProjectID: Zeigt das Fenster die Tickets, das
+    ///   Projekt des Boards (`.some(nil)` ohne Projekt); sonst `nil`. Die
+    ///   Tickets verdecken Chat und Raster und sind dann der Ort.
     static func of(
         selectedSessionID: UUID?,
         showsGrid: Bool,
         workspaceID: UUID?,
-        isWorkspaceMember: (UUID) -> Bool
+        isWorkspaceMember: (UUID) -> Bool,
+        ticketsProjectID: UUID?? = nil
     ) -> ChatPlace? {
+        if let ticketsProjectID { return .tickets(projectID: ticketsProjectID) }
         if let workspaceID {
             if showsGrid { return .workspace(workspaceID) }
             if let selectedSessionID, isWorkspaceMember(selectedSessionID) { return .workspace(workspaceID) }

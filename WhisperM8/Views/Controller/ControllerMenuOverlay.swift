@@ -1,7 +1,9 @@
 import SwiftUI
 
 extension ControllerMenuItem {
-    func title(chat: ControllerChatActionInfo?, archiveModeActive: Bool = false) -> String {
+    func title(
+        chat: ControllerChatActionInfo?, archiveModeActive: Bool = false, ticketBoard: ControllerTicketBoardTarget? = nil
+    ) -> String {
         switch self {
         case .continueWork: return String(localized: "Send “Continue”")
         case .commands: return String(localized: "Commands")
@@ -45,6 +47,9 @@ extension ControllerMenuItem {
         case .stopJob: return String(localized: "Stop job")
         case .archiveMode:
             return archiveModeActive ? String(localized: "Leave archive") : String(localized: "Show archive")
+        case .ticketBoard:
+            return ticketBoard.map { String(localized: "Ticket board \($0.team)") } ?? String(localized: "Ticket board")
+        case .backToChats: return String(localized: "Back to chats")
         case .clipboardHistory: return String(localized: "Clipboard history")
         case .showBindings: return String(localized: "Show button layout")
         case .pause: return String(localized: "Pause controller")
@@ -151,7 +156,9 @@ extension ControllerMenuRow {
         case nil:
             return menu.top.entries.map { entry in
                 ControllerMenuRow(
-                    id: entry.id.rawValue, title: entry.id.title(chat: menu.setup.chat, archiveModeActive: menu.setup.archiveModeActive), hint: entry.id.hint,
+                    id: entry.id.rawValue, title: entry.id.title(
+                        chat: menu.setup.chat, archiveModeActive: menu.setup.archiveModeActive,
+                        ticketBoard: menu.setup.ticketBoard), hint: entry.id.hint,
                     enabled: entry.enabled, startsGroup: menu.startsGroup(entry.id),
                     groupHeading: menu.groupStart(entry.id)?.heading(chat: menu.setup.chat))
             }

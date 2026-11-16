@@ -269,7 +269,7 @@ struct ControllerIslandView: View {
     /// vorigen Ort.
     private func whereTo(_ state: ControllerWhereToState) -> some View {
         VStack(spacing: 0) {
-            tabs(state.tab)
+            tabs(state)
             VStack(spacing: 0) {
                 switch state.tab {
                 case .chats:
@@ -290,6 +290,8 @@ struct ControllerIslandView: View {
                     }
                     more(state.workspaces.hiddenCount)
                     if state.workspaces.rows.isEmpty { empty(String(localized: "No workspaces or projects")) }
+                case .tickets:
+                    ticketBoards(state)
                 }
             }
             .padding(.horizontal, 8)
@@ -297,9 +299,14 @@ struct ControllerIslandView: View {
             if let commands = display.model.keyboard, state.tab == .chats {
                 keyboardCommandRow(commands)
             }
+            if state.tab == .tickets, let hint = ticketsHint(state) {
+                note(hint)
+            }
             if display.model.input == .keyboard {
                 keyboardFooter(state, dictating: display.model.target.dictating,
                                releaseSwitches: display.model.keyboard?.releaseSwitches ?? true)
+            } else if state.tab == .tickets {
+                ticketsFooter()
             } else {
                 footer(state.tab, reopenTitle: state.reopenTitle)
             }
@@ -315,7 +322,7 @@ struct ControllerIslandView: View {
         return rows[index - 1].kind == .workspace
     }
 
-    private func empty(_ text: String) -> some View {
+    func empty(_ text: String) -> some View {
         Text(verbatim: text)
             .font(.system(size: 12))
             .foregroundStyle(palette.secondary)
@@ -324,17 +331,20 @@ struct ControllerIslandView: View {
 
     /// Kleiner Hinweis an der Zeile des vorigen Orts: Dorthin führt
     /// Loslassen ohne Bewegung, genau wie L2 getippt.
-    private func previousTag() -> some View {
+    func previousTag() -> some View {
         Text("previous")
             .font(.system(size: 11))
             .foregroundStyle(palette.tertiary)
             .fixedSize()
     }
 
-    private func tabs(_ selected: ControllerIslandTab) -> some View {
+    private func tabs(_ state: ControllerWhereToState) -> some View {
         HStack(spacing: 2) {
-            tab(String(localized: "Chats"), on: selected == .chats)
-            tab(String(localized: "Workspaces & Projects"), on: selected == .workspaces)
+            tab(String(localized: "Chats"), on: state.tab == .chats)
+            tab(String(localized: "Workspaces & Projects"), on: state.tab == .workspaces)
+            if state.tabs.contains(.tickets) {
+                tab(String(localized: "Tickets"), on: state.tab == .tickets)
+            }
         }
         .padding(2)
         .background(palette.segment, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -439,7 +449,7 @@ struct ControllerIslandView: View {
     }
 
     @ViewBuilder
-    private func more(_ count: Int) -> some View {
+    func more(_ count: Int) -> some View {
         if count > 0 {
             Text(verbatim: String(localized: "+ \(count) more"))
                 .font(.system(size: 11))
@@ -527,6 +537,7 @@ extension ControllerQuickDrawSlots.Note {
         case .question: return ControllerWritingSlots.Note.question.text(family)
         case .busy: return String(localized: "The chat is working — Continue and Switch mode wait until it is idle.")
         case .dictating: return String(localized: "Dictation running — the text goes into its chat; nothing else goes into the field now.")
+        case .noBoardChat: return String(localized: "In the ticket board these work on the board chat, which is not here yet.")
         }
     }
 }

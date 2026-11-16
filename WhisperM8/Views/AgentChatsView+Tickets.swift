@@ -15,6 +15,7 @@ extension AgentChatsView {
     /// gewählten Chat, und sein Subagent-Ergebnis gilt als gelesen.
     func ticketsModeChanged(_ active: Bool) {
         syncActiveAgentChat()
+        if active { refreshTicketTeams() }
         guard !active, let sessionID = selectedSessionID else { return }
         if let session = workspaceModel.session(id: sessionID),
            selectedProjectID != session.projectID {

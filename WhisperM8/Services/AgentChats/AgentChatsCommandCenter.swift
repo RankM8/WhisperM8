@@ -118,6 +118,12 @@ enum AgentChatsCommand: Equatable {
     /// Aktivieren das zuletzt aktive Fenster der App wieder her, etwa die
     /// Einstellungen, und die Tasten des Controllers landen dort.
     case makeKeyWindow
+    /// Ticket-Board zeigen (WM8-91): das Board des Projekts `projectID`
+    /// (`nil`: des gewählten Projekts). Wie der Ticket-Knopf in der Titelzone;
+    /// nur bei eingeschalteter Ticket-Ansicht.
+    case showTickets(projectID: UUID?)
+    /// Von den Tickets zurück zu den Chats (WM8-91), wie der Ticket-Knopf.
+    case showChats
 }
 
 /// Was ein Fenster über sich sagt, wenn eine Eingabe eintrifft. Wird im
@@ -146,6 +152,8 @@ struct AgentChatsWindowSnapshot: Equatable {
     var screenDisplayID: UInt32? = nil
     /// Wohin L2 am Controller zurückführt (voriger Ort des Fensters).
     var backTarget: ControllerBackTarget? = nil
+    /// Das Board, solange das Fenster die Tickets zeigt (WM8-91).
+    var tickets: ControllerTicketsPlace? = nil
 
     /// Etwas Eigenes des Fensters hat die Eingaben (Popover oder Rückfrage)
     /// und ist womöglich selbst Key geworden.
@@ -197,6 +205,13 @@ final class AgentChatsCommandCenter {
         /// Angelegte Workspaces für die Workspace-Auswahl des Controllers, in
         /// der Reihenfolge der Seitenleiste. Im Ereignis-Pfad berechnet.
         var workspaceChoices: () -> [ControllerWorkspaceChoice] = { [] }
+        /// Boards für den Reiter „Tickets“ der Insel (WM8-91). Aus dem
+        /// Zwischenspeicher der Einrichtung, nie von Disk.
+        /// `nil`: Ticket-Ansicht aus, kein Reiter.
+        var ticketBoards: () -> ControllerTicketBoards? = { nil }
+        /// Board des Projekts eines Chats (Options-Menü, WM8-91); `nil` ohne
+        /// Team oder bei ausgeschalteter Ticket-Ansicht.
+        var ticketBoardTarget: (UUID) -> ControllerTicketBoardTarget? = { _ in nil }
     }
 
     struct Token: Equatable {
@@ -269,6 +284,18 @@ final class AgentChatsCommandCenter {
     func workspaceChoices(of windowID: UUID? = nil) -> [ControllerWorkspaceChoice] {
         guard let id = windowID ?? activeWindowID else { return [] }
         return handlers[id]?.handler.workspaceChoices() ?? []
+    }
+
+    /// Boards für den Reiter „Tickets“; ohne `windowID` aus dem aktiven Fenster.
+    func ticketBoards(of windowID: UUID? = nil) -> ControllerTicketBoards? {
+        guard let id = windowID ?? activeWindowID else { return nil }
+        return handlers[id]?.handler.ticketBoards()
+    }
+
+    /// Board des Projekts eines Chats; ohne `windowID` aus dem aktiven Fenster.
+    func ticketBoardTarget(for sessionID: UUID, in windowID: UUID? = nil) -> ControllerTicketBoardTarget? {
+        guard let id = windowID ?? activeWindowID else { return nil }
+        return handlers[id]?.handler.ticketBoardTarget(sessionID)
     }
 
     /// Führt einen Befehl aus. Ohne `windowID` nur im aktiven Fenster, und nur

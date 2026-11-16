@@ -209,6 +209,14 @@ enum KeyboardIslandFooter {
                 Item(keys: ["esc"], label: String(localized: "cancel")),
                 release,
             ]
+        case .tickets:
+            // Ticket-Board (WM8-91): kein Diktat, bis es den Board-Chat gibt.
+            return [
+                Item(keys: ["↑", "↓"], label: String(localized: "select")),
+                Item(keys: ["←"], label: String(localized: "Workspaces")),
+                Item(keys: ["esc"], label: String(localized: "cancel")),
+                release,
+            ]
         }
     }
 }

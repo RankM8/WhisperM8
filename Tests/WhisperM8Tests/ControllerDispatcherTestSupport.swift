@@ -130,6 +130,12 @@ final class ControllerWindowFake {
     var backTarget: ControllerBackTarget?
     /// Wird mit `lastChat` zum neuen Ziel (wie der Ort, den man verlässt).
     var backTargetAfterJump: ControllerBackTarget?
+    /// Ticket-Modus (WM8-91): das gezeigte Board; `nil` zeigt die Chats.
+    var tickets: ControllerTicketsPlace?
+    /// Reiter „Tickets“ der Insel; `nil`: Ticket-Ansicht aus.
+    var ticketBoards: ControllerTicketBoards?
+    /// Board des Projekts eines Chats (Options-Menü).
+    var ticketBoardTarget: ControllerTicketBoardTarget?
     /// Befehle, die „ging nicht“ melden sollen.
     var failing: Set<String> = []
     private(set) var commands: [AgentChatsCommand] = []
@@ -147,25 +153,40 @@ final class ControllerWindowFake {
                 case .showNewChatPicker: isNewChatPickerOpen = true
                 case .switchToProject: break
                 case .lastChat:
-                    // Wie `goBack`: ein voriger Chat wird ausgewählt.
-                    if let target = backTarget, target.kind == .chat, let id = target.id { selected = id }
+                    // Wie `goBack`: ein voriger Chat wird ausgewählt, ein
+                    // voriges Board gezeigt, ein Chat verlässt die Tickets.
+                    if let target = backTarget, target.kind == .chat, let id = target.id {
+                        selected = id
+                        tickets = nil
+                    }
+                    if let target = backTarget, target.kind == .tickets {
+                        tickets = ControllerTicketsPlace(projectID: target.id, team: target.title)
+                    }
                     backTarget = backTargetAfterJump
+                case .showTickets(let projectID):
+                    tickets = ControllerTicketsPlace(projectID: projectID, team: "WM8")
+                case .showChats:
+                    tickets = nil
                 default: break
                 }
                 return !failing.contains(String(describing: command))
             },
             snapshot: { [unowned self] in
-                AgentChatsWindowSnapshot(
+                let snapshot = AgentChatsWindowSnapshot(
                     windowID: id, isKeyWindow: true, selectedSessionID: selected,
                     isGridActive: isGridActive, canReturnToWorkspace: false,
                     isSwitcherOpen: isSwitcherOpen, hasSheet: hasSheet,
                     isSidebarVisible: isSidebarVisible, hasMultiSelection: hasMultiSelection,
                     isArchiveMode: false, isNewChatPickerOpen: isNewChatPickerOpen, screenDisplayID: 7,
-                    backTarget: backTarget)
+                    backTarget: backTarget, tickets: tickets)
+                // Wie das echte Fenster: Tickets verdecken den Chat.
+                return tickets == nil ? snapshot : snapshot.withChatsHidden()
             },
             listRows: { [unowned self] in rows },
             chatActionInfo: { [unowned self] id in chatInfoByID[id] ?? chatInfo },
-            workspaceChoices: { [unowned self] in workspaces }
+            workspaceChoices: { [unowned self] in workspaces },
+            ticketBoards: { [unowned self] in ticketBoards },
+            ticketBoardTarget: { [unowned self] _ in ticketBoardTarget }
         )
     }
 }

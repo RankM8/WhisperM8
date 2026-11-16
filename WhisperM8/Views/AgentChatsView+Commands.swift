@@ -18,9 +18,12 @@ extension AgentChatsView {
                 snapshot: { commandSnapshot() },
                 listRows: { controllerListRows() },
                 chatActionInfo: { controllerChatActionInfo(for: $0) },
-                workspaceChoices: { controllerWorkspaceChoices() }
+                workspaceChoices: { controllerWorkspaceChoices() },
+                ticketBoards: { controllerTicketBoards() },
+                ticketBoardTarget: { controllerTicketBoardTarget(for: $0) }
             )
         )
+        refreshTicketTeams()
     }
 
     func unregisterCommandHandler() {
@@ -50,7 +53,8 @@ extension AgentChatsView {
                 || ControllerConfirmations.shared.isOpen(in: windowID),
             screenDisplayID: (hostWindow?.screen?.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")]
                 as? NSNumber)?.uint32Value,
-            backTarget: controllerBackTarget()
+            backTarget: controllerBackTarget(),
+            tickets: controllerTicketsPlace()
         )
         // Tickets verdecken den Chat: Bestätigen, Abbrechen und Diktat dürfen
         // ihn dann nicht ungesehen treffen.
@@ -67,6 +71,9 @@ extension AgentChatsView {
            !(workspaceModel.session(id: id).map { $0.status != .archived } ?? false) {
             return nil
         }
+        if case .tickets(let projectID?) = place, !workspace.projects.contains(where: { $0.id == projectID }) {
+            return nil
+        }
         return place
     }
 
@@ -78,6 +85,8 @@ extension AgentChatsView {
             return ControllerBackTarget(kind: .chat, title: title, id: id)
         case .workspace(let id)?:
             return windowStore.gridWorkspace(id: id).map { ControllerBackTarget(kind: .workspace, title: $0.name, id: id) }
+        case .tickets(let projectID)?:
+            return controllerTicketsBackTarget(projectID: projectID)
         case nil:
             return nil
         }
@@ -97,6 +106,9 @@ extension AgentChatsView {
         case .workspace(let id)?:
             guard let entity = windowStore.gridWorkspace(id: id),
                   activateWorkspaceFromSidebar(entity, reportConflicts: false) else { return false }
+        case .tickets(let projectID)?:
+            // Zurück ins Board, so wie es verlassen wurde (WM8-91).
+            return showTicketsFromController(projectID: projectID)
         case nil:
             return false
         }
@@ -199,6 +211,10 @@ extension AgentChatsView {
         case .toggleArchiveMode:
             toggleArchiveModeFromController()
             return true
+        case .showTickets(let projectID):
+            return showTicketsFromController(projectID: projectID)
+        case .showChats:
+            return showChatsFromController()
         case .setSidebarVisible(let visible):
             guard isSidebarVisible != visible else { return false }
             isSidebarVisible = visible

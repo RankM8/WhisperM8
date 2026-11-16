@@ -5,17 +5,18 @@ enum ControllerRecordingPhase: String, CaseIterable, Sendable {
     case recording, transcribing, postProcessing
 }
 
-/// Wohin L2 getippt zurückführt: der vorige Ort des Fensters, ein Chat oder
-/// ein Workspace im Raster. Die Legende nennt ihn.
+/// Wohin L2 getippt zurückführt: der vorige Ort des Fensters, ein Chat, ein
+/// Workspace im Raster oder das Ticket-Board (WM8-91). Die Legende nennt ihn.
 struct ControllerBackTarget: Equatable, Sendable {
     enum Kind: String, Sendable {
-        case chat, workspace
+        case chat, workspace, tickets
     }
 
     var kind: Kind
+    /// Titel des Chats, Name des Workspace bzw. beim Board das Team-Kürzel.
     var title: String
-    /// Chat- bzw. Workspace-ID. Dort beginnt die Markierung, wenn L2
-    /// gehalten wird (Cmd-Tab: Loslassen führt ebenfalls dorthin).
+    /// Chat- bzw. Workspace-ID, beim Board das Projekt. Dort beginnt die
+    /// Markierung, wenn L2 gehalten wird (Cmd-Tab: Loslassen führt ebenfalls dorthin).
     var id: UUID? = nil
 }
 
@@ -127,6 +128,8 @@ enum ControllerContext: Equatable, Sendable {
     case modal
     case list
     case chat(ControllerChatState)
+    /// Das Fenster zeigt die Tickets (WM8-91). Kein Chat ist Ziel.
+    case tickets(ControllerTicketState)
     case otherWindow
     case noWindow
 }
@@ -158,12 +161,14 @@ struct ControllerAppSnapshot: Equatable, Sendable {
     var modalOpen: Bool = false
     var area: ControllerFocusArea = .content
     var chat: ControllerChatState?
+    /// Nur, solange das Fenster die Tickets zeigt (WM8-91).
+    var tickets: ControllerTicketState?
 }
 
 enum ControllerContextResolver {
     /// Vorrang: pausiert → Aufnahme → Schnellaktion → Zwischenablage-Verlauf →
     /// andere App vorn → kein Fenster → anderes Fenster → Menü → Dialog →
-    /// Liste → Chat. Die Insel (L1, R1, L2 gehalten) ist kein eigener
+    /// Tickets → Liste → Chat. Die Insel (L1, R1, L2 gehalten) ist kein eigener
     /// Zusammenhang: Ihre Gesten tragen die Ebene selbst (`.inLayer`), und die
     /// Legende bleibt beim Halten, wie sie ist. Aufnahme und Verlauf gehen vor „andere App“,
     /// weil sie auch dann bedienbar sein müssen.
@@ -200,6 +205,12 @@ enum ControllerContextResolver {
             return .menu(dialogOpen: snapshot.chat?.status == .awaitingInput)
         }
         if snapshot.modalOpen { return .modal }
+        // Tickets verdecken die Chats: eigener Zusammenhang, auch mit der
+        // Liste links im Fokus (dort gilt die Liste, aber nie ein Chat).
+        if var tickets = snapshot.tickets {
+            tickets.area = snapshot.area
+            return .tickets(tickets)
+        }
         guard snapshot.area == .content, let chat = snapshot.chat else { return .list }
         return .chat(chat)
     }

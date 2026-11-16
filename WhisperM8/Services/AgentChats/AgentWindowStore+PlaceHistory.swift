@@ -1,22 +1,24 @@
 import Foundation
 
 /// Verlauf der Orte je Fenster (`ChatPlaceHistory`) für L2 am Controller:
-/// „zurück dorthin, wo ich vorher war“ — ein einzelner Chat oder ein
-/// Workspace im Raster.
+/// „zurück dorthin, wo ich vorher war“ — ein einzelner Chat, ein Workspace im
+/// Raster oder das Ticket-Board (WM8-91).
 ///
 /// Festgehalten wird im Store nach jeder Änderung des Zustands, nicht in der
 /// View: So zählen alle Wege gleich (Maus, Tastatur, Controller, CLI), und
 /// auch ein Workspace-Wechsel ohne neue Auswahl (ein Chat in zwei Workspaces)
 /// wird ein Ortswechsel. Flüchtig, nur für diesen App-Start.
 extension AgentWindowStore {
-    /// Ort eines Fensters im gegebenen Zustand.
-    static func place(of window: AgentChatWindowState, in state: AgentUIState) -> ChatPlace? {
+    /// Ort eines Fensters im gegebenen Zustand. `ticketsMode`: Das Fenster
+    /// zeigt die Tickets; dann ist das Board des gewählten Projekts der Ort.
+    static func place(of window: AgentChatWindowState, in state: AgentUIState, ticketsMode: Bool = false) -> ChatPlace? {
         let entity = window.activeWorkspaceID.flatMap { id in state.gridWorkspaces.first { $0.id == id } }
         return ChatPlace.of(
             selectedSessionID: window.selectedSessionID,
             showsGrid: window.showsGrid,
             workspaceID: entity?.id,
-            isWorkspaceMember: { entity?.slotIndex(of: $0) != nil }
+            isWorkspaceMember: { entity?.slotIndex(of: $0) != nil },
+            ticketsProjectID: ticketsMode ? .some(window.selectedProjectID) : nil
         )
     }
 
@@ -29,10 +31,17 @@ extension AgentWindowStore {
     /// Chat ist kein Ziel) und nicht im Workspace liegt, den das Fenster
     /// gerade referenziert: Ihn zu wählen ergäbe wieder diesen Workspace
     /// (Kachel-Fokus statt Ortswechsel), L2 hinge dann auf der Stelle.
+    ///
+    /// Das Board, solange die Ticket-Ansicht eingeschaltet ist
+    /// (`ticketBoardEnabled`). Ob es das Projekt noch gibt, prüft wie beim
+    /// Chat die Ansicht (`backPlace()`), die den Workspace kennt.
     static func isPlaceAvailable(
-        _ place: ChatPlace, window: AgentChatWindowState?, in state: AgentUIState
+        _ place: ChatPlace, window: AgentChatWindowState?, in state: AgentUIState,
+        ticketBoardEnabled: Bool = true
     ) -> Bool {
         switch place {
+        case .tickets:
+            return ticketBoardEnabled && window != nil
         case .workspace(let id):
             guard state.gridWorkspaces.contains(where: { $0.id == id }) else { return false }
             let owner = state.windows.first { $0.activeWorkspaceID == id }?.id
@@ -51,27 +60,71 @@ extension AgentWindowStore {
     /// damit auch der erste Wechsel nach dem Start ein Ziel hat. Billig:
     /// eine Suche je Fenster.
     func recordPlaces(before: AgentUIState) {
+        let boardEnabled = isTicketBoardEnabled()
         for window in state.windows {
+            let ticketsMode = ticketsModeWindowIDs.contains(window.id)
             var history = placeHistories[window.id] ?? ChatPlaceHistory()
             if placeHistories[window.id] == nil,
                let old = before.windows.first(where: { $0.id == window.id }) {
-                history.record(Self.place(of: old, in: before), isAvailable: { _ in true })
+                history.record(Self.place(of: old, in: before, ticketsMode: ticketsMode), isAvailable: { _ in true })
             }
-            history.record(Self.place(of: window, in: state)) { place in
-                Self.isPlaceAvailable(place, window: window, in: state)
+            history.record(Self.place(of: window, in: state, ticketsMode: ticketsMode)) { place in
+                Self.isPlaceAvailable(place, window: window, in: state, ticketBoardEnabled: boardEnabled)
             }
             if placeHistories[window.id] != history { placeHistories[window.id] = history }
+            noteShownBoard(history.current, in: window.id)
         }
         if placeHistories.count > state.windows.count {
             let ids = Set(state.windows.map(\.id))
             placeHistories = placeHistories.filter { ids.contains($0.key) }
+            lastTicketsProjectIDs = lastTicketsProjectIDs.filter { ids.contains($0.key) }
         }
     }
 
+    /// Ort eines Fensters jetzt festhalten, außerhalb einer Änderung des
+    /// Zustands: Die Ticket-Ansicht liegt neben dem Zustand
+    /// (`ticketsModeWindowIDs`), ihr Umschalten ist trotzdem ein Ortswechsel.
+    func recordPlace(of windowID: UUID) {
+        guard let window = state.windows.first(where: { $0.id == windowID }) else { return }
+        let boardEnabled = isTicketBoardEnabled()
+        var history = placeHistories[windowID] ?? ChatPlaceHistory()
+        let place = Self.place(of: window, in: state, ticketsMode: ticketsModeWindowIDs.contains(windowID))
+        history.record(place) { Self.isPlaceAvailable($0, window: window, in: state, ticketBoardEnabled: boardEnabled) }
+        if placeHistories[windowID] != history { placeHistories[windowID] = history }
+        noteShownBoard(history.current, in: windowID)
+    }
+
+    /// Eine Navigation verlässt die Tickets und zeigt gleich einen Chat oder
+    /// Workspace. Bis dahin gilt „kein Ort“: Das Board wird so zum
+    /// Rücksprungziel und nicht der Chat, der hinter den Tickets gewählt war
+    /// und gleich ersetzt wird. Den neuen Ort hält die Änderung des Zustands
+    /// fest; ändert sie nichts (derselbe Chat), holt `previousPlace` ihn nach.
+    func recordLeavingTickets(in windowID: UUID) {
+        guard var history = placeHistories[windowID], case .tickets = history.current else { return }
+        history.record(nil, isAvailable: { _ in true })
+        placeHistories[windowID] = history
+    }
+
+    private func noteShownBoard(_ place: ChatPlace?, in windowID: UUID) {
+        guard case let .tickets(projectID?)? = place, lastTicketsProjectIDs[windowID] != projectID else { return }
+        lastTicketsProjectIDs[windowID] = projectID
+    }
+
     /// Ziel von L2 in diesem Fenster: der vorige Ort, sofern es ihn noch gibt.
+    /// Gleicht vorher den aktuellen Ort ab (nach einer Navigation ohne
+    /// Änderung des Zustands steht dort noch „kein Ort“).
     func previousPlace(in windowID: UUID) -> ChatPlace? {
+        guard placeHistories[windowID] != nil else { return nil }
+        recordPlace(of: windowID)
         guard let history = placeHistories[windowID] else { return nil }
         let window = state.windows.first { $0.id == windowID }
-        return history.target { Self.isPlaceAvailable($0, window: window, in: state) }
+        let boardEnabled = isTicketBoardEnabled()
+        return history.target { Self.isPlaceAvailable($0, window: window, in: state, ticketBoardEnabled: boardEnabled) }
+    }
+
+    /// Zuletzt gezeigtes Board dieses Fensters (Projekt), für „vorher“ im
+    /// Reiter „Tickets“ der Insel.
+    func lastTicketsProjectID(in windowID: UUID) -> UUID? {
+        lastTicketsProjectIDs[windowID]
     }
 }

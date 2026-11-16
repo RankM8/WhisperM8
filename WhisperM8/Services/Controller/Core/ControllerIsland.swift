@@ -124,9 +124,10 @@ struct ControllerIslandList<Row: Identifiable & Equatable & Sendable>: Equatable
     }
 }
 
-/// Reiter der Ebene „Wohin“: Chats sowie Workspaces & Projekte.
+/// Reiter der Ebene „Wohin“: Chats, Workspaces & Projekte und, bei
+/// eingeschalteter Ticket-Ansicht, Tickets (WM8-91).
 enum ControllerIslandTab: Int, CaseIterable, Sendable {
-    case chats, workspaces
+    case chats, workspaces, tickets
 }
 
 /// Ebene „Wohin“ (L2 gehalten, Insel-Paket): Die Liste steht sofort da, die
@@ -144,6 +145,8 @@ struct ControllerWhereToState: Equatable, Sendable {
         case workspace(UUID)
         /// Projekt als Raster seiner aktiven Chats (wie in der Seitenleiste).
         case project(UUID)
+        /// Ticket-Board dieses Projekts (WM8-91).
+        case tickets(UUID)
     }
 
     private(set) var tab: ControllerIslandTab
@@ -152,23 +155,37 @@ struct ControllerWhereToState: Equatable, Sendable {
     var reopenTitle: String?
     private(set) var chats: ControllerIslandList<ControllerIslandChatRow>
     private(set) var workspaces: ControllerIslandList<ControllerWorkspaceChoice>
-    /// Voriger Ort, sofern er in einer der beiden Listen steht (die Zeile
-    /// trägt „vorher“).
+    /// Boards im Reiter „Tickets“; leer ohne den Reiter.
+    private(set) var tickets: ControllerIslandList<ControllerTicketBoardChoice>
+    /// Was der Reiter „Tickets“ zeigt; `nil`: Es gibt ihn nicht (Ticket-Ansicht aus).
+    let ticketBoards: ControllerTicketBoards?
+    /// Voriger Ort, sofern er in einer der Listen steht (die Zeile trägt
+    /// „vorher“).
     let previous: Destination
     private let currentChatID: UUID?
 
-    /// Start-Reiter: im Raster „Workspaces & Projekte“, in der Einzelansicht
-    /// „Chats“ (ohne Workspace oder Projekt im Reiter nur die Chats), jeweils
-    /// auf dem aktuellen Eintrag.
+    /// Start-Reiter: im Ticket-Modus „Tickets“, im Raster „Workspaces &
+    /// Projekte“, in der Einzelansicht „Chats“ (ohne Workspace oder Projekt im
+    /// Reiter nur die Chats), jeweils auf dem aktuellen Eintrag. Im Reiter
+    /// „Tickets“ beginnt die Markierung auf „hier“, dem Board des aktuellen
+    /// Projekts: Außerhalb des Boards ist es ein Ziel, L2 halten, ▶ ▶ und
+    /// Loslassen öffnen es.
     init(
         chats: [ControllerIslandChatRow], currentChatID: UUID?,
         workspaces: [ControllerWorkspaceChoice], gridActive: Bool,
-        previous: Destination = .stay
+        previous: Destination = .stay, tickets: ControllerTicketBoards? = nil
     ) {
         self.currentChatID = currentChatID
-        let previous = Self.resolve(previous, chats: chats, workspaces: workspaces)
+        let previous = Self.resolve(previous, chats: chats, workspaces: workspaces, tickets: tickets?.rows ?? [])
         self.previous = previous
-        tab = gridActive && !workspaces.isEmpty ? .workspaces : .chats
+        ticketBoards = tickets
+        self.tickets = ControllerIslandList(
+            rows: tickets?.rows ?? [], startID: tickets?.rows.first(where: \.isHere)?.id)
+        if tickets?.inTickets == true {
+            tab = .tickets
+        } else {
+            tab = gridActive && !workspaces.isEmpty ? .workspaces : .chats
+        }
         let chats = Self.placingPrevious(
             chats, isPrevious: { previous == .chat($0.id) }, isCurrent: { $0.id == currentChatID })
         let workspaces = Self.placingPrevious(
@@ -198,9 +215,12 @@ struct ControllerWhereToState: Equatable, Sendable {
     /// Der vorige Ort, wie die Listen ihn kennen: Eine Projekt-Ansicht ist
     /// als Workspace gemerkt, steht hier aber als Projekt-Zeile.
     private static func resolve(
-        _ previous: Destination, chats: [ControllerIslandChatRow], workspaces: [ControllerWorkspaceChoice]
+        _ previous: Destination, chats: [ControllerIslandChatRow], workspaces: [ControllerWorkspaceChoice],
+        tickets: [ControllerTicketBoardChoice]
     ) -> Destination {
         switch previous {
+        case let .tickets(id) where tickets.contains(where: { $0.id == id }):
+            return previous
         case let .chat(id) where chats.contains(where: { $0.id == id }):
             return previous
         case let .workspace(id):
@@ -221,21 +241,33 @@ struct ControllerWhereToState: Equatable, Sendable {
         switch tab {
         case .chats: chats.move(step)
         case .workspaces: workspaces.move(step)
+        case .tickets: tickets.move(step)
         }
     }
 
-    /// Links/rechts: anderer Reiter (zwei Reiter, kein Umlauf). Die
-    /// Markierung dort beginnt wieder auf dem aktuellen Eintrag. `false`,
-    /// wenn es nichts zu wechseln gab.
+    /// Die Reiter in ihrer Reihenfolge; „Tickets“ nur bei eingeschalteter
+    /// Ticket-Ansicht.
+    var tabs: [ControllerIslandTab] {
+        ticketBoards == nil ? [.chats, .workspaces] : [.chats, .workspaces, .tickets]
+    }
+
+    /// Links/rechts: der Nachbar-Reiter, ein Schritt je Druck, kein Umlauf
+    /// (aus „Chats“ sind es zwei Schritte bis „Tickets“). Die Markierung dort
+    /// beginnt wieder auf dem aktuellen Eintrag, in „Tickets“ auf „hier“.
+    /// `false`, wenn es nichts zu wechseln gab.
     @discardableResult
     mutating func switchTab(_ step: Int) -> Bool {
-        let target: ControllerIslandTab = step < 0 ? .chats : .workspaces
-        guard target != tab else { return false }
-        tab = target
-        switch target {
+        let tabs = tabs
+        guard let index = tabs.firstIndex(of: tab) else { return false }
+        let target = index + (step < 0 ? -1 : 1)
+        guard tabs.indices.contains(target) else { return false }
+        tab = tabs[target]
+        switch tab {
         case .chats: chats = ControllerIslandList(rows: chats.rows, startID: currentChatID)
         case .workspaces:
             workspaces = ControllerIslandList(rows: workspaces.rows, startID: workspaces.rows.first(where: \.isCurrent)?.id)
+        case .tickets:
+            tickets = ControllerIslandList(rows: tickets.rows, startID: tickets.rows.first(where: \.isHere)?.id)
         }
         return true
     }
@@ -274,6 +306,10 @@ struct ControllerWhereToState: Equatable, Sendable {
             guard switchingTab || tab == .workspaces, workspaces.contains(id) else { return false }
             tab = .workspaces
             return workspaces.select(id)
+        case let .tickets(id):
+            guard switchingTab || tab == .tickets, tickets.contains(id) else { return false }
+            tab = .tickets
+            return tickets.select(id)
         }
     }
 
@@ -285,6 +321,9 @@ struct ControllerWhereToState: Equatable, Sendable {
         case .workspaces:
             guard let choice = workspaces.selected, !choice.isCurrent else { return .stay }
             return choice.kind == .project ? .project(choice.id) : .workspace(choice.id)
+        case .tickets:
+            guard let board = tickets.selected, !board.isCurrent else { return .stay }
+            return .tickets(board.id)
         }
     }
 
@@ -463,6 +502,9 @@ struct ControllerQuickDrawSlots: Equatable, Sendable {
         case busy
         /// Ein Diktat läuft: Ins Feld kommt gleich der Diktattext (Runde 5).
         case dictating
+        /// Das Fenster zeigt die Tickets: Die Chat-Raute wirkt erst auf den
+        /// Board-Chat (WM8-113); bis dahin ist sie aus (WM8-91).
+        case noBoardChat
     }
 
     var enabled: Set<ControllerMenuItem>
