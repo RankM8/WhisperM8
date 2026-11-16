@@ -440,6 +440,14 @@ Idee 3.
   `DelayedEnterGuard.approvalPending` wie bei `chats send`), beim Hochfahren oder am Limit kommt nichts hinein: Warnton
   und ein Satz unter dem Terminal. Aufträge nennen nur Nummer, Titel und Adresse (`BoardChatText`, Titel ohne
   Steuerzeichen wie beim Kopieren, höchstens 200 Zeichen), nie die Beschreibung.
+- **Triage sammeln (Teil d):** Mit sichtbarem Board-Chat steht unter der Leiste der Triage „Triage, gesammelt für
+  Jarvis:“ mit Annehmen, Zurückfragen, Zuweisen…, Später, Doppelt, Ablehnen. Ein Klick legt eine Zeile
+  „- WM8-81 „Titel“ <Adresse>: annehmen“ ins Eingabefeld des Board-Chats (nie mit Enter) und geht zum nächsten
+  Ticket; der erste Klick eines Auftrags setzt „Triage in WM8, bitte ausführen:“ davor. Die Zeile der Liste zeigt
+  „→ Annehmen · gesammelt“. Eine geänderte Entscheidung kommt als neue Zeile mit „(statt: …)“. Ist das Feld seit
+  dem letzten Sammeln leer (abgeschickt), beginnt ein neuer Auftrag. Bei offener Frage oder Freigabe: Warnton,
+  Hinweis, keine Zeile, keine Markierung. Das Board schreibt nichts nach Linear; das tut der Board-Chat nach
+  Giulianos Enter (Entscheidung E1).
 - **Kosten:** Öffnen der Tickets hängt das Terminal einmal um (`pane.attach`, gemessen rund 70 ms auf ruhigem
   Rechner), Schließen einmal zurück; im Raster hängt das Schließen wie bisher alle Kacheln wieder ein. Je
   Auswertung des Fensters: Nachschlagen weniger Dutzend Chats über den Index des Workspace (WM8-101). Die Triage beobachtet allein der Breiten-Modifier

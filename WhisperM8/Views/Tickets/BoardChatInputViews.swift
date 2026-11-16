@@ -112,3 +112,61 @@ struct BoardChatRegistrationModifier: ViewModifier {
             }
     }
 }
+
+/// Triage-Knöpfe unter der Leiste der Triage (Teil d): sammeln Entscheidungen
+/// im Eingabefeld des Board-Chats und gehen zum nächsten Ticket. Stehen nur
+/// da, wenn dieses Fenster einen sichtbaren Board-Chat hat.
+struct BoardChatTriageButtons: View {
+    let windowID: UUID
+    let ticketKey: String
+    /// Nach einer gesammelten Entscheidung: nächstes Ticket.
+    let next: () -> Void
+    var inputs: BoardChatInputs = .shared
+
+    var body: some View {
+        if let chat = inputs.boardChat(in: windowID) {
+            let current = inputs.triageDecision(for: ticketKey, in: windowID)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    Text("Triage, collected for \(chat.name):")
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(AgentTheme.textSecondary)
+                        .fixedSize()
+                    ForEach(TriageDecision.allCases, id: \.self) { decision in
+                        Button {
+                            if inputs.decide(decision, in: windowID) { next() }
+                        } label: {
+                            Text(verbatim: decision.label)
+                                .font(.system(size: 12, weight: decision == current ? .semibold : .regular))
+                                .foregroundStyle(decision == current ? AgentTheme.accent : AgentTheme.textPrimary)
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 3)
+                                .background(decision == current ? AgentTheme.accentTintSoft : AgentTheme.surface,
+                                            in: RoundedRectangle(cornerRadius: 6))
+                                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(AgentTheme.border))
+                        }
+                        .buttonStyle(.plain)
+                        .help(String(localized: "Adds “\(decision.instruction)” for \(ticketKey) to the input field of \(chat.name). Nothing is sent until you press Return there."))
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            }
+        }
+    }
+}
+
+/// „→ Annehmen“ an einer Zeile der Triage-Liste: Was für dieses Ticket gesammelt ist.
+struct BoardChatTriageMark: View {
+    let windowID: UUID
+    let ticketKey: String
+    var inputs: BoardChatInputs = .shared
+
+    var body: some View {
+        if let decision = inputs.triageDecision(for: ticketKey, in: windowID) {
+            Text(verbatim: "→ \(decision.label.replacingOccurrences(of: "…", with: "")) · " + String(localized: "collected"))
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(AgentTheme.accent)
+        }
+    }
+}

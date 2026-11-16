@@ -24983,6 +24983,166 @@
           }
         }
       }
+    },
+    "Accept": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annehmen"
+          }
+        }
+      }
+    },
+    "Ask back": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurückfragen"
+          }
+        }
+      }
+    },
+    "Assign…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zuweisen…"
+          }
+        }
+      }
+    },
+    "Later": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Später"
+          }
+        }
+      }
+    },
+    "accept": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "annehmen"
+          }
+        }
+      }
+    },
+    "ask back what is unclear": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "zurückfragen, was unklar ist"
+          }
+        }
+      }
+    },
+    "assign: ask me to whom": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "zuweisen: frag mich, an wen"
+          }
+        }
+      }
+    },
+    "later, bring it up again in two weeks": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "später, in zwei Wochen wieder vorlegen"
+          }
+        }
+      }
+    },
+    "close as duplicate": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "als doppelt schließen"
+          }
+        }
+      }
+    },
+    "decline with a short reason": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ablehnen, mit kurzer Begründung"
+          }
+        }
+      }
+    },
+    "Triage in %@, please carry out:": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Triage in %@, bitte ausführen:"
+          }
+        }
+      }
+    },
+    "(instead of: %@)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "(statt: %@)"
+          }
+        }
+      }
+    },
+    "Triage, collected for %@:": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Triage, gesammelt für %@:"
+          }
+        }
+      }
+    },
+    "Adds “%@” for %@ to the input field of %@. Nothing is sent until you press Return there.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Legt „%@“ für %@ ins Eingabefeld von %@. Abgeschickt wird erst mit deinem Return dort."
+          }
+        }
+      }
+    },
+    "collected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "gesammelt"
+          }
+        }
+      }
+    },
+    "Is a duplicate": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Doppelt"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

@@ -17,6 +17,7 @@ final class BoardChatInputsTests: XCTestCase {
     private var inserted: [(String, UUID)] = []
     private var beeps = 0
     private var shown: [UUID: BoardChatTicket] = [:]
+    private var fieldHasText = false
 
     private let ticket81 = BoardChatTicket(key: "WM8-81", title: "Ticket-Board: Board und Backlog lesen",
                                            url: "https://linear.app/whisperm8/issue/WM8-81")
@@ -38,6 +39,8 @@ final class BoardChatInputsTests: XCTestCase {
         inputs.approvalPending = { [unowned self] _ in approval }
         inputs.insert = { [unowned self] text, id in inserted.append((text, id)); return true }
         inputs.refuseSound = { [unowned self] in beeps += 1 }
+        fieldHasText = false
+        inputs.hasUnsentInput = { [unowned self] _ in fieldHasText }
         inputs.noticeSeconds = 60
     }
 
@@ -126,6 +129,65 @@ final class BoardChatInputsTests: XCTestCase {
         XCTAssertNotNil(inputs.referenceForDictation(to: jarvis), "erst nach dem Schreiben verbraucht")
         reference.commit()
         XCTAssertNil(inputs.referenceForDictation(to: jarvis))
+    }
+
+    // MARK: Triage sammeln (Teil d)
+
+    func testDecisionsCollectAsOneOrderWithHeaderAndNeverSend() {
+        inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
+        XCTAssertTrue(inputs.decide(.accept, in: window))
+        fieldHasText = true                                // die erste Zeile steht im Feld
+        shown[window] = ticket86
+        XCTAssertTrue(inputs.decide(.later, in: window))
+        let header = String(localized: "Triage in WM8, please carry out:")
+        XCTAssertEqual(inserted.map(\.0), [
+            header + "\n- WM8-81 „Ticket-Board: Board und Backlog lesen“ https://linear.app/whisperm8/issue/WM8-81: "
+                + TriageDecision.accept.instruction,
+            "\n- WM8-86 „Entscheidung festhalten“ https://linear.app/whisperm8/issue/WM8-86: " + TriageDecision.later.instruction,
+        ])
+        XCTAssertFalse(inserted.map(\.0).joined().contains("\r"), "nie ein Enter")
+        XCTAssertEqual(inputs.triageDecision(for: "WM8-81", in: window), .accept)
+        XCTAssertEqual(inputs.triageDecision(for: "WM8-86", in: window), .later)
+    }
+
+    func testChangingADecisionSaysWhatItReplaces() {
+        inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
+        inputs.decide(.accept, in: window)
+        fieldHasText = true
+        inputs.decide(.decline, in: window)
+        XCTAssertEqual(inserted.last?.0, "\n- WM8-81 „Ticket-Board: Board und Backlog lesen“ https://linear.app/whisperm8/issue/WM8-81: "
+            + TriageDecision.decline.instruction + " " + String(localized: "(instead of: \(TriageDecision.accept.instruction))"))
+        XCTAssertEqual(inputs.triageDecision(for: "WM8-81", in: window), .decline)
+    }
+
+    func testAfterSendingANewOrderStartsWithItsHeader() {
+        inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
+        inputs.decide(.accept, in: window)
+        fieldHasText = false                               // Giuliano hat abgeschickt
+        shown[window] = ticket86
+        inputs.decide(.duplicate, in: window)
+        XCTAssertTrue(inserted.last!.0.hasPrefix(String(localized: "Triage in WM8, please carry out:")))
+        XCTAssertNil(inputs.triageDecision(for: "WM8-81", in: window), "Markierungen des alten Auftrags sind weg")
+        XCTAssertEqual(inputs.triageDecision(for: "WM8-86", in: window), .duplicate)
+    }
+
+    func testOwnTextInTheFieldPutsTheOrderOnANewLine() {
+        inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
+        fieldHasText = true
+        inputs.decide(.askBack, in: window)
+        XCTAssertTrue(inserted[0].0.hasPrefix("\n" + String(localized: "Triage in WM8, please carry out:")))
+    }
+
+    func testNoDecisionIntoAnOpenQuestionAndNoMark() {
+        inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
+        state = .awaitingInput
+        XCTAssertFalse(inputs.decide(.accept, in: window))
+        approval = true
+        state = .ready
+        XCTAssertFalse(inputs.decide(.accept, in: window))
+        XCTAssertTrue(inserted.isEmpty)
+        XCTAssertNil(inputs.triageDecision(for: "WM8-81", in: window))
+        XCTAssertEqual(beeps, 2)
     }
 
     // MARK: Texte

@@ -134,7 +134,11 @@ final class BoardChatInputs {
     private(set) var dismissedReference: [UUID: String] = [:]
     /// Bezug, der schon mitgegangen ist (Ticket-Nummer je Fenster).
     private(set) var usedReference: [UUID: String] = [:]
-    private(set) var notices: [UUID: Notice] = [:]
+    var notices: [UUID: Notice] = [:]
+    /// Gesammelte Triage-Entscheidungen je Fenster (Teil d), Ticket-Nummer → Entscheidung.
+    var triageDecisions: [UUID: [String: TriageDecision]] = [:]
+    /// Fenster, deren Sammelauftrag schon seine Überschrift im Eingabefeld hat.
+    @ObservationIgnored var triageBatchOpen: Set<UUID> = []
 
     // MARK: Abhängigkeiten (Tests ersetzen sie)
 
@@ -156,6 +160,10 @@ final class BoardChatInputs {
     /// Ins Eingabefeld, ohne Enter.
     @ObservationIgnored var insert: (String, UUID) -> Bool = { text, sessionID in
         LiveDictationChatWriter().write(text, to: sessionID, submit: false)
+    }
+    /// Steht im Eingabefeld noch ungesendeter Text (Schätzung wie bei `chats send`)?
+    @ObservationIgnored var hasUnsentInput: (UUID) -> Bool = { sessionID in
+        AgentTerminalRegistry.shared.controller(for: sessionID)?.composerDraft.mayHaveUnsentInput ?? false
     }
     @ObservationIgnored var refuseSound: () -> Void = { NSSound.beep() }
     @ObservationIgnored var noticeSeconds: Double = 4
