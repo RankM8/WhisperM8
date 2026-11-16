@@ -24,6 +24,9 @@ struct BoardChatColumnState: Equatable {
     var isRunning: Bool = true
     /// Hat der Chat schon einen Verlauf (dann „Fortsetzen“, sonst „Starten“)?
     var canResume: Bool = true
+    /// Knöpfe im Kopf (Teil c): Jarvis, Produkt-Chat, hineingezogener Chat.
+    /// Leer: Der Kopf zeigt nur den Titel.
+    var choices: [BoardChatChoice] = []
 }
 
 /// Knöpfe der Spalte. Alles, was einen Chat verschiebt oder startet, geht nur
@@ -34,6 +37,10 @@ struct BoardChatColumnActions {
     var openAsTab: () -> Void = {}
     var start: () -> Void = {}
     var setCollapsed: (Bool) -> Void = { _ in }
+    /// Klick auf einen Knopf im Kopf.
+    var choose: (UUID) -> Void = { _ in }
+    /// Ein Chat wurde auf die Spalte gezogen (ID, Zahl der Chats im Zug); `false` lehnt ab.
+    var drop: (UUID, Int) -> Bool = { _, _ in false }
 
     static let none = BoardChatColumnActions()
 }
@@ -48,29 +55,48 @@ struct BoardChatColumnView<StatusDot: View, Terminal: View>: View {
     @ViewBuilder let statusDot: () -> StatusDot
     @ViewBuilder let terminal: () -> Terminal
 
+    @State private var isDropTargeted = false
+
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider().overlay(AgentTheme.border)
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if state.content == .terminal, let inputBar { inputBar }
+            // Auch ohne Terminal: Hinweise (etwa „anderes Projekt“) müssen sichtbar sein.
+            if let inputBar { inputBar }
             footer
         }
         .background(AgentTheme.background)
+        // Chat aus Seitenleiste oder Tab-Leiste hierher ziehen (Teil c).
+        .dropDestination(for: DraggableSession.self) { items, _ in
+            guard let item = items.first else { return false }
+            return actions.drop(item.sessionID, max(items.count, item.groupMemberIDs?.count ?? 1))
+        } isTargeted: { isDropTargeted = $0 }
+        .overlay {
+            if isDropTargeted {
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(AgentTheme.accent.opacity(0.7), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                    .padding(4)
+                    .allowsHitTesting(false)
+            }
+        }
     }
 
     // MARK: Kopf
 
     private var header: some View {
         HStack(spacing: 6) {
+            // Bleibt immer stehen, sonst sagt nichts mehr, was die Spalte ist.
             Text("Board chat")
                 .textCase(.uppercase)
                 .font(.system(size: 11, weight: .semibold))
                 .kerning(0.5)
                 .foregroundStyle(AgentTheme.textTertiary)
                 .fixedSize()
-            if let title = state.title {
+            if !state.choices.isEmpty {
+                ForEach(state.choices) { choice in choiceButton(choice) }
+            } else if let title = state.title {
                 HStack(spacing: 6) {
                     statusDot()
                     Text(title)
@@ -103,6 +129,31 @@ struct BoardChatColumnView<StatusDot: View, Terminal: View>: View {
         .padding(.horizontal, 8)
         .frame(height: 34)
         .background(AgentTheme.header)
+    }
+
+    private func choiceButton(_ choice: BoardChatChoice) -> some View {
+        Button { if !choice.isSelected { actions.choose(choice.id) } } label: {
+            HStack(spacing: 6) {
+                if choice.isSelected { statusDot() }
+                Text(verbatim: choice.kind == .product ? "\(choice.name) · " + String(localized: "Product") : choice.name)
+                    .font(.system(size: 12, weight: choice.isSelected ? .semibold : .regular))
+                    .foregroundStyle(choice.isSelected ? AgentTheme.textPrimary : AgentTheme.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(choice.isSelected ? AgentTheme.surface : Color.clear, in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6)
+                .strokeBorder(choice.isSelected ? AgentTheme.borderStrong : AgentTheme.border))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(choice.title)
+        .accessibilityLabel(choice.isSelected
+            ? String(localized: "\(choice.title), shown as board chat")
+            : String(localized: "Show \(choice.title) as board chat"))
+        .layoutPriority(choice.isSelected ? 1 : 0.5)
     }
 
     private func headerButton(systemImage: String, help: String, action: @escaping () -> Void) -> some View {
@@ -148,7 +199,7 @@ struct BoardChatColumnView<StatusDot: View, Terminal: View>: View {
                 Text("No Jarvis found")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AgentTheme.textSecondary)
-                Text("A chat of this project whose title starts with “Jarvis” appears here as soon as it runs or is open as a tab.")
+                Text("A chat of this project whose title starts with “Jarvis” appears here as soon as it runs or is open as a tab. Or drag any chat here.")
                     .font(.system(size: 11.5))
                     .foregroundStyle(AgentTheme.textTertiary)
                     .multilineTextAlignment(.center)
@@ -189,8 +240,8 @@ struct BoardChatColumnView<StatusDot: View, Terminal: View>: View {
     private var footer: some View {
         if state.title != nil {
             (state.isAutomatic
-                ? Text("Chosen automatically: this project's Jarvis.")
-                : Text("Chosen by you for this project."))
+                ? Text("Chosen automatically: this project's Jarvis. Drag another chat here to switch.")
+                : Text("Chosen by you for this project. Drag another chat here to switch."))
                 .font(.system(size: 11))
                 .foregroundStyle(AgentTheme.textTertiary)
                 .lineLimit(2)

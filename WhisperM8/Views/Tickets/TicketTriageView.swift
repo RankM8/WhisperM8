@@ -28,6 +28,10 @@ struct TicketTriageView: View {
                 VStack(spacing: 0) {
                     TicketTriageBar(model: model, triage: triage, load: load, actions: actions)
                         .controllerTicketMenuAnchor(active: true)
+                    if let windowID = model.windowID {
+                        // Triage-Knöpfe sammeln für den Board-Chat (WM8-113); nur mit sichtbarem Board-Chat.
+                        BoardChatTriageButtons(windowID: windowID, ticketKey: triage.current) { model.nextInTriage() }
+                    }
                     Rectangle().fill(AgentTheme.border).frame(height: 1)
                     HStack(spacing: 0) {
                         TicketTriageText(model: model, ticketKey: triage.current)
@@ -94,7 +98,8 @@ private struct TicketTriageList: View {
                     LazyVStack(spacing: 2) {
                         ForEach(triage.keys, id: \.self) { key in
                             if let entry = model.presentation.entry(key: key) {
-                                TicketTriageRow(entry: entry, isCurrent: key == triage.current, source: source) {
+                                TicketTriageRow(entry: entry, isCurrent: key == triage.current, source: source,
+                                                windowID: model.windowID) {
                                     model.selectInTriage(key)
                                 }
                                 .id(key)
@@ -119,6 +124,8 @@ private struct TicketTriageRow: View {
     let entry: TicketBoardEntry
     let isCurrent: Bool
     let source: TicketChatStatusSource
+    /// Für die gesammelte Entscheidung an der Zeile (WM8-113).
+    let windowID: UUID?
     let select: () -> Void
 
     var body: some View {
@@ -149,6 +156,7 @@ private struct TicketTriageRow: View {
                 .font(.system(size: 11))
                 .foregroundStyle(AgentTheme.textSecondary)
                 .lineLimit(1)
+                if let windowID { BoardChatTriageMark(windowID: windowID, ticketKey: entry.ticket.key) }
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 7)

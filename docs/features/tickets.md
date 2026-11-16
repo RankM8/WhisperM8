@@ -391,7 +391,18 @@ Idee 3.
   „Läuft in Fenster 2 · Hierher holen“ (das Hauptfenster ist 1, die weiteren folgen in ihrer Reihenfolge) oder
   „In keinem Fenster offen · Hier öffnen“. Verschoben oder geöffnet wird nur auf Klick; „Hier öffnen“ legt den
   Tab an, ohne die Tickets zu verlassen.
-- **Welcher Chat:** von Hand gewählt (`chosenSessionID`, kommt mit Teil c), sonst der Jarvis des Projekts:
+- **Wahl (Teil c):** Im Kopf stehen Knöpfe für den Jarvis und den Produkt-Chat des Projekts (Titel enthält
+  „Produkt“ oder „Product“ und ist kein Jarvis), dazu ein von Hand hineingezogener Chat. Ein Chat lässt sich aus
+  Seitenleiste oder Tab-Leiste auf die Spalte ziehen. Die Wahl gilt je Projekt und bleibt gespeichert
+  (`chosenSessionID`); ein Klick auf den Jarvis-Knopf löscht sie, dann übernimmt wieder der automatische Jarvis.
+  Angenommen werden nur echte Agent-Chats (Claude, Codex, einzelne Hintergrund-Agents) dieses Projekts, einzeln:
+  Ein Terminal-Tab, `claude agents`, ein Subagent-Job, ein archivierter Chat, ein Chat eines anderen Projekts oder
+  eine Tab-Gruppe werden mit einem sichtbaren Satz abgelehnt (`BoardChatRules.rejection`). Dieselbe Prüfung gilt
+  beim Lesen der gespeicherten Wahl und für den automatischen Jarvis und Produkt-Chat: In einer Shell gingen die
+  Zeilenumbrüche aus Bezug und Triage als Return hinaus. Produkt-Chat heißt „Produkt“ oder „Product“ als ganzes
+  Wort („Produktion“ zählt nicht). Steht der gewählte Chat in einem anderen Fenster, gilt der Hinweis
+  „Läuft in Fenster 2“.
+- **Welcher Chat:** von Hand gewählt (`chosenSessionID`), sonst der Jarvis des Projekts:
   Titel beginnt mit „Jarvis“ (dieselbe Regel wie `tickets board` und `tickets status`), Projekt des Boards samt
   Arbeitsordnern, laufend vor ruhend, dann zuletzt aktiv. Gesucht wird nur unter offenen Tabs und laufenden Chats
   (`BoardChatRules`, nachgeschlagen über `AgentWorkspaceUIModel.session(id:)`), nie über alle Chats; dazu der zuletzt gefundene Jarvis des
@@ -416,7 +427,8 @@ Idee 3.
   ein ausdrückliches Ziel (Controller, Insel) bleibt. Das Ziel ist ein eigenes, `.boardChat`: Es geht nie mit
   Senden hinaus (auch nicht bei einem Stopp mit Kreuz; die Legende bietet kein Senden an, Kreuz tut nichts), und es
   prüft wie „→ Jarvis“ (`BoardChatInputRules`): offene Frage, auch mit Textfeld, Freigabe laut Sendeweg der CLI,
-  Hochfahren oder Limit heißt nur Zwischenablage. Pille und Insel nennen den Board-Chat. Der Board-Chat ist im Ticket-Modus auch Kontext des
+  Hochfahren oder Limit heißt nur Zwischenablage, ebenso wenn der Board-Chat beim Ausliefern in keiner
+  Spalte mehr steht. Pille und Insel nennen den Board-Chat. Der Board-Chat ist im Ticket-Modus auch Kontext des
   Diktats. Tastatur geht nur bei Fokus im Terminal an ihn; J/K, ⌘C und Esc im Board bleiben beim Board.
 - **Bezug:** Unter dem Terminal steht „Bezug: WM8-81 ✕“ für das Ticket der Triage. Das nächste Diktat an den
   Board-Chat beginnt mit einer Zeile „Bezug: WM8-81 „Titel“ <Adresse>“, danach gilt der Bezug für dieses Ticket als
@@ -428,6 +440,18 @@ Idee 3.
   `DelayedEnterGuard.approvalPending` wie bei `chats send`), beim Hochfahren oder am Limit kommt nichts hinein: Warnton
   und ein Satz unter dem Terminal. Aufträge nennen nur Nummer, Titel und Adresse (`BoardChatText`, Titel ohne
   Steuerzeichen wie beim Kopieren, höchstens 200 Zeichen), nie die Beschreibung.
+- **Triage sammeln (Teil d):** Mit sichtbarem Board-Chat steht unter der Leiste der Triage „Triage, gesammelt für
+  Jarvis:“ mit Annehmen, Zurückfragen, Zuweisen…, Später, Doppelt, Ablehnen. Ein Klick legt eine Zeile
+  „- WM8-81 „Titel“ <Adresse>: annehmen“ ins Eingabefeld des Board-Chats (nie mit Enter) und geht zum nächsten
+  Ticket; der erste Klick eines Auftrags setzt „Triage in WM8, bitte ausführen:“ davor. Die Zeile der Liste zeigt
+  „→ Annehmen · gesammelt“. Eine geänderte Entscheidung kommt als neue Zeile mit „(statt: …)“. Ein neuer Auftrag
+  beginnt, wenn das Feld sichtbar leer ist oder, falls der Bildschirm nichts sagt, die Tasten-Schätzung keinen
+  Entwurf mehr sieht (wie die Warteschlange), oder wenn ein anderer Chat in der Spalte steht; die Marken gehören
+  zum Auftrag und verschwinden mit ihm. Ein zweiter Klick innerhalb einer halben Sekunde zählt nicht (er träfe
+  das nächste, ungesehene Ticket). Bezug und „→ Jarvis“ beginnen auf einer neuen Zeile, wenn im Feld schon Text
+  steht. Bei offener Frage oder Freigabe: Warnton,
+  Hinweis, keine Zeile, keine Markierung. Das Board schreibt nichts nach Linear; das tut der Board-Chat nach
+  Giulianos Enter (Entscheidung E1).
 - **Kosten:** Öffnen der Tickets hängt das Terminal einmal um (`pane.attach`, gemessen rund 70 ms auf ruhigem
   Rechner), Schließen einmal zurück; im Raster hängt das Schließen wie bisher alle Kacheln wieder ein. Je
   Auswertung des Fensters: Nachschlagen weniger Dutzend Chats über den Index des Workspace (WM8-101). Die Triage beobachtet allein der Breiten-Modifier

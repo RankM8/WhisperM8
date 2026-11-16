@@ -24734,26 +24734,6 @@
         }
       }
     },
-    "Chosen automatically: this project's Jarvis.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Automatisch gewählt: der Jarvis dieses Projekts."
-          }
-        }
-      }
-    },
-    "Chosen by you for this project.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Von dir für dieses Projekt gewählt."
-          }
-        }
-      }
-    },
     "Drag to resize the board chat": {
       "localizations": {
         "de": {
@@ -24770,16 +24750,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kein Jarvis gefunden"
-          }
-        }
-      }
-    },
-    "A chat of this project whose title starts with “Jarvis” appears here as soon as it runs or is open as a tab.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ein Chat dieses Projekts, dessen Titel mit „Jarvis“ beginnt, erscheint hier, sobald er läuft oder als Tab offen ist."
           }
         }
       }
@@ -24900,6 +24870,276 @@
           "stringUnit": {
             "state": "translated",
             "value": "Steht vor deinem nächsten Diktat: Nummer, Titel und Link."
+          }
+        }
+      }
+    },
+    "Chosen automatically: this project's Jarvis. Drag another chat here to switch.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch gewählt: der Jarvis dieses Projekts. Zieh einen anderen Chat hierher, um zu wechseln."
+          }
+        }
+      }
+    },
+    "Chosen by you for this project. Drag another chat here to switch.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Von dir für dieses Projekt gewählt. Zieh einen anderen Chat hierher, um zu wechseln."
+          }
+        }
+      }
+    },
+    "A chat of this project whose title starts with “Jarvis” appears here as soon as it runs or is open as a tab. Or drag any chat here.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Chat dieses Projekts, dessen Titel mit „Jarvis“ beginnt, erscheint hier, sobald er läuft oder als Tab offen ist. Oder zieh einen beliebigen Chat hierher."
+          }
+        }
+      }
+    },
+    "Product": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Produkt"
+          }
+        }
+      }
+    },
+    "%@, shown as board chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, steht als Board-Chat da"
+          }
+        }
+      }
+    },
+    "Show %@ as board chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ als Board-Chat zeigen"
+          }
+        }
+      }
+    },
+    "Only agent chats can be the board chat, not a terminal or a subagent.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur Agent-Chats können Board-Chat sein, kein Terminal und kein Subagent."
+          }
+        }
+      }
+    },
+    "Archived chats can't be the board chat.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archivierte Chats können nicht Board-Chat sein."
+          }
+        }
+      }
+    },
+    "%@ works in another project. The board chat must belong to %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ arbeitet in einem anderen Projekt. Der Board-Chat muss zu %@ gehören."
+          }
+        }
+      }
+    },
+    "Drag a single chat, not a group.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zieh einen einzelnen Chat, keine Gruppe."
+          }
+        }
+      }
+    },
+    "The board chat isn't shown anymore, so the dictation wasn't added. Your text is on the clipboard.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Board-Chat wird nicht mehr gezeigt, deshalb wurde das Diktat nicht eingefügt. Dein Text liegt in der Zwischenablage."
+          }
+        }
+      }
+    },
+    "Accept": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Annehmen"
+          }
+        }
+      }
+    },
+    "Ask back": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurückfragen"
+          }
+        }
+      }
+    },
+    "Assign…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zuweisen…"
+          }
+        }
+      }
+    },
+    "Later": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Später"
+          }
+        }
+      }
+    },
+    "accept": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "annehmen"
+          }
+        }
+      }
+    },
+    "ask back what is unclear": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "zurückfragen, was unklar ist"
+          }
+        }
+      }
+    },
+    "assign: ask me to whom": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "zuweisen: frag mich, an wen"
+          }
+        }
+      }
+    },
+    "later, bring it up again in two weeks": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "später, in zwei Wochen wieder vorlegen"
+          }
+        }
+      }
+    },
+    "close as duplicate": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "als doppelt schließen"
+          }
+        }
+      }
+    },
+    "decline with a short reason": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ablehnen, mit kurzer Begründung"
+          }
+        }
+      }
+    },
+    "Triage in %@, please carry out:": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Triage in %@, bitte ausführen:"
+          }
+        }
+      }
+    },
+    "(instead of: %@)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "(statt: %@)"
+          }
+        }
+      }
+    },
+    "Triage, collected for %@:": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Triage, gesammelt für %@:"
+          }
+        }
+      }
+    },
+    "Adds “%@” for %@ to the input field of %@. Nothing is sent until you press Return there.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Legt „%@“ für %@ ins Eingabefeld von %@. Abgeschickt wird erst mit deinem Return dort."
+          }
+        }
+      }
+    },
+    "collected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "gesammelt"
+          }
+        }
+      }
+    },
+    "Is a duplicate": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Doppelt"
           }
         }
       }

@@ -20,16 +20,18 @@ extension AgentChatsView {
     }
 
     /// Der Chat in der Spalte: von Hand gewählt, sonst der Jarvis des Projekts.
+    /// Dazu Jarvis und Produkt-Chat für die Knöpfe im Kopf.
     ///
-    /// Kosten: Gesucht wird nur unter offenen Tabs und laufenden Chats (einige
-    /// Dutzend), nachgeschlagen über den Index des Workspace (`session(id:)`),
-    /// nie über alle Chats.
-    func boardChatPick(projectID: UUID) -> (session: AgentChatSession, isAutomatic: Bool)? {
+    /// Kosten: Gesucht wird nur unter offenen Tabs, laufenden Chats und dem
+    /// zuletzt gefundenen Jarvis (einige Dutzend), nachgeschlagen über
+    /// den Index des Workspace (`session(id:)`), nie über alle Chats.
+    func boardChatPick(projectID: UUID) -> BoardChatPickResult {
         let preferences = BoardChatPreferencesStore.shared.preferences(for: projectID)
-        if let chosen = preferences.chosenSessionID,
-           let session = workspaceModel.session(id: chosen), session.status != .archived {
-            return (session, false)
-        }
+        // Eine gespeicherte Wahl zählt nur, wenn sie noch erlaubt ist: Die
+        // Datei kann einen alten Shell-Tab oder einen Chat eines anderen Projekts enthalten.
+        let chosen = preferences.chosenSessionID
+            .flatMap { workspaceModel.session(id: $0) }
+            .flatMap { boardChatRejection(of: $0, projectID: projectID) == nil ? $0 : nil }
         var ids = Set(windowStore.state.windows.flatMap(\.openTabIDs))
         ids.formUnion(terminalRegistry.activeSessionIDs)
         // Der zuletzt gefundene Jarvis zählt mit, auch gestoppt und ohne Tab.
@@ -41,11 +43,21 @@ extension AgentChatsView {
                 id: session.id, title: session.title,
                 projectID: AgentProjectDisplay.displayProjectID(session.projectID, parents: projectParents),
                 isRunning: running.contains(session.id), lastActivityAt: session.lastActivityAt,
-                isArchived: session.status == .archived)
+                isArchived: session.status == .archived, kind: session.effectiveKind)
         }
-        guard let id = BoardChatRules.automaticJarvis(in: candidates, projectID: projectID),
-              let session = workspaceModel.session(id: id) else { return nil }
-        return (session, true)
+        let jarvis = BoardChatRules.automaticJarvis(in: candidates, projectID: projectID).flatMap { workspaceModel.session(id: $0) }
+        let product = BoardChatRules.automaticProduct(in: candidates, projectID: projectID).flatMap { workspaceModel.session(id: $0) }
+        return BoardChatPickResult(current: chosen ?? jarvis, isAutomatic: chosen == nil, jarvis: jarvis, product: product,
+                                   chosen: chosen)
+    }
+
+    /// Pur über `BoardChatRules.rejection`; Projekt wie bei Jarvis und Produkt-Chat
+    /// nach dem Haupt-Projekt (Arbeitsordner zählen dazu).
+    func boardChatRejection(of session: AgentChatSession, projectID: UUID, groupSize: Int = 1) -> BoardChatRejection? {
+        BoardChatRules.rejection(
+            kind: session.effectiveKind, isArchived: session.status == .archived,
+            projectID: AgentProjectDisplay.displayProjectID(session.projectID, parents: projectParents),
+            boardProjectID: projectID, groupSize: groupSize)
     }
 
     /// Spalte samt Breite. `available`: Breite von Board und Spalte zusammen.
@@ -61,10 +73,10 @@ extension AgentChatsView {
                     // gespeicherte Breite und „zugeklappt“, dann das Terminal.
                     AgentTheme.background
                 } else if preferences.isCollapsed == true {
-                    BoardChatCollapsedRail(title: pick?.session.title, expand: {
+                    BoardChatCollapsedRail(title: pick.current?.title, expand: {
                         preferencesStore.setCollapsed(false, for: projectID)
                     }) {
-                        if let pick { boardChatStatusDot(pick.session) }
+                        if let current = pick.current { boardChatStatusDot(current) }
                     }
                 } else {
                     boardChatExpanded(pick: pick, projectID: projectID)
@@ -78,9 +90,9 @@ extension AgentChatsView {
                 setWidth: { preferencesStore.setWidth($0, for: projectID) }))
             .task { preferencesStore.preload() }
             // Einmal je gefundenem Jarvis merken (nicht im Body schreiben).
-            .task(id: "\(pick.flatMap { $0.isAutomatic ? $0.session.id.uuidString : nil } ?? "-")|\(preferencesStore.isLoaded)") {
-                if let pick, pick.isAutomatic, preferencesStore.isLoaded {
-                    preferencesStore.setLastJarvis(pick.session.id, for: projectID)
+            .task(id: "\(pick.jarvis?.id.uuidString ?? "-")|\(preferencesStore.isLoaded)") {
+                if let jarvis = pick.jarvis, preferencesStore.isLoaded {
+                    preferencesStore.setLastJarvis(jarvis.id, for: projectID)
                 }
             }
             // Klick außerhalb des Terminals gibt den Fokus ans Fenster zurück.
@@ -89,19 +101,23 @@ extension AgentChatsView {
     }
 
     @ViewBuilder
-    private func boardChatExpanded(pick: (session: AgentChatSession, isAutomatic: Bool)?, projectID: UUID) -> some View {
-        let session = pick?.session
+    private func boardChatExpanded(pick: BoardChatPickResult, projectID: UUID) -> some View {
+        let session = pick.current
         let placement = session.map { boardChatPlacement(of: $0.id) } ?? .notOpen
         let isRunning = session.map { terminalRegistry.controller(for: $0.id)?.isRunning == true } ?? false
         let state = BoardChatColumnState(
             title: session?.title,
-            isAutomatic: pick?.isAutomatic ?? true,
+            isAutomatic: pick.isAutomatic,
             content: Self.boardChatContent(hasChat: session != nil, placement: placement),
             isRunning: isRunning,
-            canResume: session?.externalSessionID != nil)
+            canResume: session?.externalSessionID != nil,
+            choices: BoardChatRules.choices(
+                jarvis: pick.jarvis.map(Self.boardChatChoiceChat), product: pick.product.map(Self.boardChatChoiceChat),
+                chosen: pick.chosen.map(Self.boardChatChoiceChat), current: session?.id))
         BoardChatColumnView(
             state: state,
-            actions: boardChatActions(session: session, placement: placement, projectID: projectID),
+            actions: boardChatActions(session: session, placement: placement, projectID: projectID,
+                                      automaticJarvis: pick.jarvis?.id),
             inputBar: AnyView(BoardChatInputBar(windowID: windowID)),
             statusDot: { if let session { boardChatStatusDot(session) } },
             terminal: {
@@ -144,11 +160,33 @@ extension AgentChatsView {
             statusStore: runtimeStatusStore)
     }
 
+    nonisolated static func boardChatChoiceChat(_ session: AgentChatSession) -> BoardChatChoice.Chat {
+        BoardChatChoice.Chat(id: session.id, name: BoardChatText.callName(session.title), title: session.title)
+    }
+
     private func boardChatActions(session: AgentChatSession?, placement: BoardChatPlacement,
-                                  projectID: UUID) -> BoardChatColumnActions {
+                                  projectID: UUID, automaticJarvis: UUID?) -> BoardChatColumnActions {
         let preferencesStore = BoardChatPreferencesStore.shared
         var actions = BoardChatColumnActions()
         actions.setCollapsed = { preferencesStore.setCollapsed($0, for: projectID) }
+        // Wahl je Projekt, gespeichert (Teil c). Der automatische Jarvis heißt
+        // „keine Wahl“: Ein neuer Jarvis übernimmt dann von selbst.
+        let choose: (UUID) -> Void = { id in
+            preferencesStore.setChosenSession(BoardChatRules.storedChoice(after: id, automaticJarvis: automaticJarvis), for: projectID)
+        }
+        actions.choose = choose
+        let projectName = selectedProject?.name ?? ""
+        actions.drop = { [workspaceModel, windowID] id, groupSize in
+            guard let dropped = workspaceModel.session(id: id) else { return false }
+            // Nur echte Agent-Chats dieses Projekts, einzeln; sonst sichtbar sagen, warum nicht.
+            if let rejection = boardChatRejection(of: dropped, projectID: projectID, groupSize: groupSize) {
+                BoardChatInputs.shared.showNotice(
+                    BoardChatInputRules.message(rejection, chatName: dropped.title, projectName: projectName), in: windowID)
+                return false
+            }
+            choose(id)
+            return true
+        }
         guard let session else { return actions }
         let sessionID = session.id
         actions.moveHere = { [windowStore, windowID] in
@@ -215,3 +253,13 @@ extension AgentChatsView {
         if AppState.shared.activeAgentChat != ref { AppState.shared.activeAgentChat = ref }
     }
 }
+
+/// Wer in der Spalte steht, und wer im Kopf zur Wahl steht.
+struct BoardChatPickResult {
+    var current: AgentChatSession?
+    var isAutomatic: Bool
+    var jarvis: AgentChatSession?
+    var product: AgentChatSession?
+    var chosen: AgentChatSession?
+}
+

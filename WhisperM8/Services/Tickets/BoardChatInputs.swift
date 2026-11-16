@@ -83,6 +83,15 @@ enum BoardChatInputRules {
         }
     }
 
+    static func message(_ rejection: BoardChatRejection, chatName: String, projectName: String) -> String {
+        switch rejection {
+        case .notAgentChat: return String(localized: "Only agent chats can be the board chat, not a terminal or a subagent.")
+        case .archived: return String(localized: "Archived chats can't be the board chat.")
+        case .otherProject: return String(localized: "\(chatName) works in another project. The board chat must belong to \(projectName).")
+        case .group: return String(localized: "Drag a single chat, not a group.")
+        }
+    }
+
     static func message(_ refusal: Refusal, chatName: String) -> String {
         switch refusal {
         case .noBoardChat: return String(localized: "No board chat is shown here.")
@@ -125,7 +134,12 @@ final class BoardChatInputs {
     private(set) var dismissedReference: [UUID: String] = [:]
     /// Bezug, der schon mitgegangen ist (Ticket-Nummer je Fenster).
     private(set) var usedReference: [UUID: String] = [:]
-    private(set) var notices: [UUID: Notice] = [:]
+    var notices: [UUID: Notice] = [:]
+    /// Sammelauftrag der Triage je Fenster (Teil d). Gehört zu genau einem
+    /// Board-Chat: Wechselt der Chat, beginnt ein neuer Auftrag.
+    var triageBatches: [UUID: TriageBatch] = [:]
+    /// Wann zuletzt gesammelt wurde (Sperre gegen Doppelklick).
+    @ObservationIgnored var lastDecisionAt: [UUID: Date] = [:]
 
     // MARK: Abhängigkeiten (Tests ersetzen sie)
 
@@ -148,6 +162,21 @@ final class BoardChatInputs {
     @ObservationIgnored var insert: (String, UUID) -> Bool = { text, sessionID in
         LiveDictationChatWriter().write(text, to: sessionID, submit: false)
     }
+    /// Steht im Eingabefeld noch ungesendeter Text (Schätzung wie bei `chats send`)?
+    @ObservationIgnored var hasUnsentInput: (UUID) -> Bool = { sessionID in
+        AgentTerminalRegistry.shared.controller(for: sessionID)?.composerDraft.mayHaveUnsentInput ?? false
+    }
+    /// Was der Bildschirm über das Eingabefeld sagt (wie die Warteschlange).
+    @ObservationIgnored var fieldVisibility: (UUID) -> BoardChatFieldVisibility = { sessionID in
+        guard let controller = AgentTerminalRegistry.shared.controller(for: sessionID) else { return .unknown }
+        let profile = controller.command.keyboardProfile
+        let field = controller.controllerScreenSnapshot()?.promptField
+        if PromptSubmitCheck.fieldVisiblyEmpty(field: field, profile: profile) { return .empty }
+        if PromptSubmitCheck.visibleDraft(field: field, profile: profile,
+                                          clearsBeforeSubmit: controller.composerDraft.shouldClearBeforeSubmit) { return .hasText }
+        return .unknown
+    }
+    @ObservationIgnored var now: () -> Date = { Date() }
     @ObservationIgnored var refuseSound: () -> Void = { NSSound.beep() }
     @ObservationIgnored var noticeSeconds: Double = 4
 
@@ -164,9 +193,24 @@ final class BoardChatInputs {
         guard let current = registrations[windowID], token == nil || current.token == token else { return }
         registrations[windowID] = nil
         notices[windowID] = nil
+        triageBatches[windowID] = nil
+        lastDecisionAt[windowID] = nil
+    }
+
+    /// Steht im Feld dieses Chats vermutlich schon Text (Entwurf, eingefügte
+    /// Zeilen, offener Sammelauftrag)? Dann beginnt Neues auf eigener Zeile.
+    func fieldProbablyHasText(_ sessionID: UUID, in windowID: UUID) -> Bool {
+        switch fieldVisibility(sessionID) {
+        case .empty: return false
+        case .hasText: return true
+        case .unknown: return hasUnsentInput(sessionID) || triageBatches[windowID]?.sessionID == sessionID
+        }
     }
 
     func boardChat(in windowID: UUID) -> Registration? { registrations[windowID] }
+
+    /// Steht dieser Chat gerade in einer Spalte?
+    func isShown(_ sessionID: UUID) -> Bool { registrations.values.contains { $0.sessionID == sessionID } }
 
     // MARK: Diktat
 
@@ -204,7 +248,8 @@ final class BoardChatInputs {
     func referenceForDictation(to sessionID: UUID) -> (prefix: String, commit: () -> Void)? {
         guard let windowID = registrations.first(where: { $0.value.sessionID == sessionID })?.key,
               let ticket = reference(in: windowID) else { return nil }
-        return (BoardChatText.referencePrefix(ticket), { [weak self] in self?.usedReference[windowID] = ticket.key })
+        let lead = fieldProbablyHasText(sessionID, in: windowID) ? "\n" : ""
+        return (lead + BoardChatText.referencePrefix(ticket), { [weak self] in self?.usedReference[windowID] = ticket.key })
     }
 
     // MARK: „→ Jarvis“
@@ -225,7 +270,8 @@ final class BoardChatInputs {
             refuse(refusal, in: windowID, name: registration.name)
             return false
         }
-        guard insert(BoardChatText.handOff(ticket), sessionID) else {
+        let lead = fieldProbablyHasText(sessionID, in: windowID) ? "\n" : ""
+        guard insert(lead + BoardChatText.handOff(ticket), sessionID) else {
             refuse(.notRunning, in: windowID, name: registration.name)
             return false
         }
@@ -240,9 +286,14 @@ final class BoardChatInputs {
         notices[windowID] = Notice(text: text)
     }
 
-    private func refuse(_ refusal: BoardChatInputRules.Refusal, in windowID: UUID, name: String) {
+    func refuse(_ refusal: BoardChatInputRules.Refusal, in windowID: UUID, name: String) {
+        showNotice(BoardChatInputRules.message(refusal, chatName: name), in: windowID)
+    }
+
+    /// Warnton und ein Satz unter dem Terminal, der nach einigen Sekunden geht.
+    func showNotice(_ text: String, in windowID: UUID) {
         refuseSound()
-        let notice = Notice(text: BoardChatInputRules.message(refusal, chatName: name))
+        let notice = Notice(text: text)
         notices[windowID] = notice
         let seconds = noticeSeconds
         Task { [weak self] in

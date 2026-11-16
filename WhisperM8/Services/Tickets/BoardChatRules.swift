@@ -10,6 +10,20 @@ struct BoardChatCandidate: Equatable {
     var isRunning: Bool
     var lastActivityAt: Date
     var isArchived: Bool
+    /// Nur echte Agent-Chats kommen in Frage (`BoardChatRules.acceptsKind`).
+    var kind: AgentSessionKind = .chat
+}
+
+/// Warum ein Chat nicht Board-Chat werden kann.
+enum BoardChatRejection: Equatable {
+    /// Terminal-Tab, `claude agents`, Subagent-Job: In eine Shell gingen
+    /// Zeilenumbrüche aus Bezug und Triage als Return, Ticket-Text liefe als Befehl.
+    case notAgentChat
+    case archived
+    /// Arbeitet in einem anderen Projekt als das Board.
+    case otherProject
+    /// Gruppe aus der Tab-Leiste statt eines einzelnen Chats.
+    case group
 }
 
 /// Wo der Board-Chat gerade lebt, von diesem Fenster aus gesehen. Ein Chat
@@ -38,14 +52,69 @@ enum BoardChatRules {
         TicketBoardBuilder.isSupervisor(title: title)
     }
 
+    /// Nur interaktive Agent-Chats (Claude, Codex) und einzelne Hintergrund-
+    /// Agents, die in einer Agent-TUI laufen.
+    static func acceptsKind(_ kind: AgentSessionKind) -> Bool {
+        kind == .chat || kind == .backgroundChat
+    }
+
+    /// Darf dieser Chat Board-Chat des Projekts sein? Gilt beim Hineinziehen
+    /// und beim Lesen einer gespeicherten Wahl (die Datei kann eine alte enthalten).
+    static func rejection(kind: AgentSessionKind, isArchived: Bool, projectID: UUID, boardProjectID: UUID,
+                          groupSize: Int = 1) -> BoardChatRejection? {
+        if groupSize > 1 { return .group }
+        if !acceptsKind(kind) { return .notAgentChat }
+        if isArchived { return .archived }
+        if projectID != boardProjectID { return .otherProject }
+        return nil
+    }
+
     /// Automatisch gewählter Board-Chat: der Jarvis des Projekts. Laufende
     /// vor ruhenden, dann der zuletzt aktive; bei Gleichstand entscheidet die
     /// ID, damit die Wahl nicht zwischen zwei Chats springt.
     static func automaticJarvis(in candidates: [BoardChatCandidate], projectID: UUID) -> UUID? {
         candidates
-            .filter { $0.projectID == projectID && !$0.isArchived && isJarvis(title: $0.title) }
+            .filter { $0.projectID == projectID && !$0.isArchived && acceptsKind($0.kind) && isJarvis(title: $0.title) }
             .min(by: ranksBefore)?
             .id
+    }
+
+    /// Der Produkt-Chat: Titel enthält „Produkt“ (oder „Product“) und ist
+    /// kein Jarvis. Er steht als zweiter Knopf im Kopf der Spalte.
+    static func isProduct(title: String) -> Bool {
+        guard !isJarvis(title: title) else { return false }
+        // Ganzes Wort: „Produktion“ und „Production-Fix“ sind keine Produkt-Chats.
+        return title.range(of: #"\b(produkt|product)\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+    }
+
+    static func automaticProduct(in candidates: [BoardChatCandidate], projectID: UUID) -> UUID? {
+        candidates
+            .filter { $0.projectID == projectID && !$0.isArchived && acceptsKind($0.kind) && isProduct(title: $0.title) }
+            .min(by: ranksBefore)?
+            .id
+    }
+
+    /// Knöpfe im Kopf: der Jarvis, der Produkt-Chat, und ein von Hand
+    /// hineingezogener Chat, wenn er keiner von beiden ist. Gewählt ist der
+    /// Chat, der in der Spalte steht.
+    static func choices(jarvis: BoardChatChoice.Chat?, product: BoardChatChoice.Chat?, chosen: BoardChatChoice.Chat?,
+                        current: UUID?) -> [BoardChatChoice] {
+        var result: [BoardChatChoice] = []
+        func add(_ chat: BoardChatChoice.Chat?, _ kind: BoardChatChoice.Kind) {
+            guard let chat, !result.contains(where: { $0.id == chat.id }) else { return }
+            result.append(BoardChatChoice(id: chat.id, name: chat.name, title: chat.title, kind: kind, isSelected: chat.id == current))
+        }
+        add(jarvis, .jarvis)
+        add(product, .product)
+        add(chosen, .other)
+        return result
+    }
+
+    /// Gespeicherte Wahl nach einem Klick auf einen Knopf oder einem
+    /// hineingezogenen Chat: Der automatische Jarvis heißt „keine Wahl“, damit
+    /// ein neuer Jarvis später von selbst übernimmt.
+    static func storedChoice(after pick: UUID, automaticJarvis: UUID?) -> UUID? {
+        pick == automaticJarvis ? nil : pick
     }
 
     private static func ranksBefore(_ lhs: BoardChatCandidate, _ rhs: BoardChatCandidate) -> Bool {
@@ -104,3 +173,28 @@ enum BoardChatRules {
         return width.rounded()
     }
 }
+
+/// Ein Knopf im Kopf der Spalte.
+struct BoardChatChoice: Equatable, Identifiable {
+    struct Chat: Equatable {
+        var id: UUID
+        var name: String
+        var title: String
+    }
+
+    enum Kind: Equatable {
+        case jarvis
+        case product
+        /// Von Hand hineingezogen.
+        case other
+    }
+
+    var id: UUID
+    /// Rufname auf dem Knopf.
+    var name: String
+    /// Ganzer Titel für Hilfe und Bedienungshilfen.
+    var title: String
+    var kind: Kind
+    var isSelected: Bool
+}
+

@@ -52,8 +52,25 @@ extension UISnapshotGallery {
             AnyView(BoardChatInputBar(windowID: window, inputs: inputs(notice: notice)))
         }
 
+        let collectedText = """
+        ❯ Erst die Abnahme.
+
+        ⏺ WM8-86 liegt links groß. Sag mir je
+          Schritt: bestanden oder nicht.
+
+        ────────────────────────────────────────
+        ❯ Triage in WM8, bitte ausführen:
+          - WM8-69 „Chats am Nutzungslimit …“
+            https://linear.app/whisperm8/issue/WM8-69:
+            annehmen
+          - WM8-12 „Neustart ohne Chatverlust …“
+            https://linear.app/whisperm8/issue/WM8-12:
+            später, in zwei Wochen wieder vorlegen
+        ────────────────────────────────────────
+        """
+
         func screen(_ board: String, state: BoardChatColumnState, triage: Bool = false, collapsed: Bool = false,
-                    width: Double? = nil, inputBar: AnyView? = nil) -> AnyView {
+                    width: Double? = nil, inputBar: AnyView? = nil, terminal: String? = nil) -> AnyView {
             AnyView(BoardChatSplit {
                 base(board)
             } column: { available in
@@ -63,7 +80,7 @@ extension UISnapshotGallery {
                     } else {
                         BoardChatColumnView(state: state, actions: .none, inputBar: inputBar,
                                             statusDot: { dot(AgentTheme.statusWorking) }) {
-                            Text(terminalText)
+                            Text(terminal ?? terminalText)
                                 .font(.system(size: 11.5, design: .monospaced))
                                 .foregroundStyle(AgentTheme.textPrimary)
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -76,6 +93,9 @@ extension UISnapshotGallery {
             .background(AgentTheme.background))
         }
 
+        let jarvisChoice = BoardChatChoice.Chat(id: UUID(), name: "Jarvis", title: "Jarvis: Supervisor WhisperM8")
+        let productChoice = BoardChatChoice.Chat(id: UUID(), name: "Pia", title: "Pia · Produkt WM8 (Beispiel)")
+        let vicChoice = BoardChatChoice.Chat(id: UUID(), name: "Vic", title: "Vic · Prüfer: Insel Paket 2")
         let jarvis = BoardChatColumnState(title: "Jarvis: Supervisor WhisperM8", isAutomatic: true, content: .terminal)
         let size = CGSize(width: 1500, height: 860)
         return [
@@ -104,6 +124,25 @@ extension UISnapshotGallery {
             },
             Fixture(name: "tickets-board-chat-schmales-fenster", size: CGSize(width: 900, height: 700)) {
                 screen("tickets-board", state: jarvis, width: 600)
+            },
+            // Teil c: Knöpfe für Jarvis und den Produkt-Chat, dazu ein hineingezogener Chat.
+            Fixture(name: "tickets-board-chat-wahl", size: size) {
+                var state = jarvis
+                state.choices = BoardChatRules.choices(jarvis: jarvisChoice, product: productChoice, chosen: nil, current: jarvisChoice.id)
+                return screen("tickets-board", state: state)
+            },
+            Fixture(name: "tickets-board-chat-wahl-gezogen", size: size) {
+                var state = BoardChatColumnState(title: "Vic · Prüfer: Insel Paket 2", isAutomatic: false, content: .terminal)
+                state.choices = BoardChatRules.choices(jarvis: jarvisChoice, product: productChoice, chosen: vicChoice, current: vicChoice.id)
+                return screen("tickets-triage", state: state, triage: true)
+            },
+            // Teil d: Triage-Knöpfe, gesammelte Entscheidungen an den Zeilen und im Eingabefeld.
+            Fixture(name: "tickets-board-chat-gesammelt", size: size) {
+                let shared = BoardChatInputs.shared
+                let board = UUID()
+                shared.register(windowID: window, sessionID: board, name: "Jarvis")
+                shared.triageBatches[window] = TriageBatch(sessionID: board, decisions: ["WM8-69": .accept, "WM8-12": .later])
+                return screen("tickets-triage-mit-fenster", state: jarvis, triage: true, terminal: collectedText)
             },
             // Teil b: „→ Jarvis“ oben in der Triage, Bezug unter dem Terminal.
             Fixture(name: "tickets-board-chat-bezug", size: size) {

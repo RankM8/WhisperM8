@@ -554,6 +554,13 @@ final class RecordingCoordinatorDeliveryTests: XCTestCase {
 
 @MainActor
 extension RecordingCoordinatorDeliveryTests {
+    /// Coordinator, für den der Board-Chat in einer Spalte steht.
+    private func makeBoardCoordinator(text: String) -> RecordingCoordinator {
+        let coordinator = makeCoordinator(text: text)
+        coordinator.boardChatShown = { _ in true }
+        return coordinator
+    }
+
     private func boardDelivery(submit: Bool = false) -> DictationDelivery {
         DictationDelivery.atStop(target: .boardChat(sessionID: sessionID), submit: submit)
     }
@@ -563,7 +570,7 @@ extension RecordingCoordinatorDeliveryTests {
         XCTAssertTrue(DictationDelivery.atStop(target: .agentChat(sessionID: sessionID), submit: true).submit,
                       "ein bewusst gewählter Chat bleibt, wie er war")
         let audio = try makeAudio()
-        let coordinator = makeCoordinator(text: "Erst die Abnahme.")
+        let coordinator = makeBoardCoordinator(text: "Erst die Abnahme.")
         let forced = DictationDelivery(target: .boardChat(sessionID: sessionID), submit: true)  // selbst wenn submit durchrutschte
         try await coordinator.transcribeAndDeliver(
             audioURL: audio, audioDuration: 2, outputMode: rawMode, contextBundle: .empty, delivery: forced)
@@ -573,7 +580,7 @@ extension RecordingCoordinatorDeliveryTests {
     func testBoardChatDictationGetsTheReferenceFrozenAtStartOnce() async throws {
         preferences.isAutoPasteEnabled = true
         let audio = try makeAudio()
-        let coordinator = makeCoordinator(text: "Erst die Abnahme.")
+        let coordinator = makeBoardCoordinator(text: "Erst die Abnahme.")
         var commits = 0
         coordinator.boardChatReference = { _ in XCTFail("Bezug wird beim Start bestimmt, nicht beim Ausliefern"); return nil }
         coordinator.boardChatReferenceAtStart = (sessionID, "Bezug: WM8-86 „Titel“ https://linear.app/whisperm8/issue/WM8-86\n", { commits += 1 })
@@ -591,7 +598,7 @@ extension RecordingCoordinatorDeliveryTests {
 
     func testReferenceOfAnotherChatIsNotUsed() async throws {
         let audio = try makeAudio()
-        let coordinator = makeCoordinator(text: "Text")
+        let coordinator = makeBoardCoordinator(text: "Text")
         coordinator.boardChatReferenceAtStart = (UUID(), "Bezug: WM8-1\n", { XCTFail("fremder Chat") })
         try await coordinator.transcribeAndDeliver(
             audioURL: audio, audioDuration: 2, outputMode: rawMode, contextBundle: .empty, delivery: boardDelivery())
@@ -600,7 +607,7 @@ extension RecordingCoordinatorDeliveryTests {
 
     func testFailedWriteKeepsTheReferenceUnused() async throws {
         let audio = try makeAudio()
-        let coordinator = makeCoordinator(text: "Text")
+        let coordinator = makeBoardCoordinator(text: "Text")
         chatWriter.writeSucceeds = false
         var commits = 0
         coordinator.boardChatReferenceAtStart = (sessionID, "Bezug: WM8-1\n", { commits += 1 })
@@ -614,7 +621,7 @@ extension RecordingCoordinatorDeliveryTests {
     func testRedirectedDictationNeverGoesIntoAQuestionOrApproval() async throws {
         for (state, approval) in [(DictationChatState.questionAcceptsText, false), (.awaitingInput, false), (.ready, true)] {
             let audio = try makeAudio()
-            let coordinator = makeCoordinator(text: "Text")
+            let coordinator = makeBoardCoordinator(text: "Text")
             chatWriter.chatState = state
             coordinator.boardChatApprovalPending = { _ in approval }
             try await coordinator.transcribeAndDeliver(
@@ -647,6 +654,10 @@ extension RecordingCoordinatorDeliveryTests {
                                                       approvalPending: { _ in true }),
                        .clipboardOnly(.decisionPending))
         XCTAssertEqual(DictationDeliveryRouter.decide(delivery: delivery, text: " ", chatState: { _ in .ready }), .nothing)
+        // Beim Ausliefern nirgends mehr als Board-Chat gezeigt: nur Zwischenablage.
+        XCTAssertEqual(DictationDeliveryRouter.decide(delivery: delivery, text: "x", chatState: { _ in .ready },
+                                                      boardChatShown: { _ in false }),
+                       .clipboardOnly(.boardChatHidden))
         // Ein bewusst gewählter Chat behält das Feld der Frage.
         XCTAssertEqual(DictationDeliveryRouter.decide(delivery: DictationDelivery(target: .agentChat(sessionID: id)),
                                                       text: "x", chatState: { _ in .questionAcceptsText }),

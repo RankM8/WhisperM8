@@ -118,7 +118,7 @@ extension RecordingCoordinator {
         switch reason {
         // Am Limit kein ⌘V-Tipp: auch eingefügter Text würde verbraucht.
         case .decisionPending, .chatUsageLimited: return String(localized: "On the clipboard")
-        case .chatStarting, .chatNotRunning, .writeFailed: return String(localized: "On the clipboard · ⌘V to paste")
+        case .chatStarting, .chatNotRunning, .writeFailed, .boardChatHidden: return String(localized: "On the clipboard · ⌘V to paste")
         }
     }
 
@@ -137,6 +137,8 @@ extension RecordingCoordinator {
             return String(localized: "The chat isn't running anymore, so the dictation wasn't added. Your text is on the clipboard.")
         case .writeFailed:
             return String(localized: "The dictation couldn't be written to the chat. Your text is on the clipboard.")
+        case .boardChatHidden:
+            return String(localized: "The board chat isn't shown anymore, so the dictation wasn't added. Your text is on the clipboard.")
         }
     }
 }
