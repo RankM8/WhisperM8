@@ -60,7 +60,7 @@ struct TicketBoardView: View {
             } else {
                 // „Liste kopieren“ steht im Kopf: Die Filterzeile braucht die ganze
                 // Breite, sobald rechts der Board-Chat steht (WM8-113).
-                TicketBoardHeader(title: title, mode: $model.mode, load: load, back: actions.back, refresh: actions.refresh) {
+                TicketBoardHeader(title: title, mode: $model.mode, load: load, back: actions.back, refresh: actions.refresh) { compact in
                     if model.copied == .link {
                         // ⌘C auf dem Board: Dort gibt es keinen Link-Knopf, der „Kopiert“ zeigen könnte.
                         Label("Link copied", systemImage: "checkmark")
@@ -68,7 +68,7 @@ struct TicketBoardView: View {
                             .foregroundStyle(AgentTheme.textSecondary)
                             .fixedSize()
                     }
-                    TicketCopyButton(kind: .list, copied: model.copied) { model.copyList(title: listTitle) }
+                    TicketCopyButton(kind: .list, copied: model.copied, iconOnly: compact) { model.copyList(title: listTitle) }
                 }
                 TicketBoardFilterBar(filter: $model.filter, counts: presentation.counts, projects: presentation.projects)
                 TicketBoardProblemLine(load: load)
@@ -153,12 +153,24 @@ private struct TicketBoardHeader<Trailing: View>: View {
     let load: TicketBoardLoad
     let back: TicketsBackLinkModel?
     let refresh: () -> Void
-    @ViewBuilder let trailing: () -> Trailing
+    /// `true`: knapper Kopf, Knöpfe nur als Symbol.
+    @ViewBuilder let trailing: (_ compact: Bool) -> Trailing
 
+    /// Passt der volle Kopf nicht (Board-Chat weit gezogen, Board bei seiner
+    /// Mindestbreite), nimmt er die knappe Form: „← Chats“ ohne Namen,
+    /// „Liste kopieren“ als Symbol, ohne Uhrzeit. Sonst würde der Kopf breiter
+    /// als das Board und schöbe die Spalte daneben aus dem Fenster (WM8-124).
     var body: some View {
-        HStack(spacing: 12) {
+        ViewThatFits(in: .horizontal) {
+            row(compact: false)
+            row(compact: true)
+        }
+    }
+
+    private func row(compact: Bool) -> some View {
+        HStack(spacing: compact ? 8 : 12) {
             if let back {
-                TicketsBackLinkButton(link: back)
+                TicketsBackLinkButton(link: back, compact: compact)
             }
             Text(verbatim: title)
                 .font(.system(size: 15, weight: .semibold))
@@ -176,8 +188,8 @@ private struct TicketBoardHeader<Trailing: View>: View {
 
             Spacer(minLength: 8)
 
-            trailing()
-            TicketBoardSyncLabel(load: load)
+            trailing(compact)
+            if !compact { TicketBoardSyncLabel(load: load) }
             TicketBoardRefreshButton(load: load, refresh: refresh)
         }
     }

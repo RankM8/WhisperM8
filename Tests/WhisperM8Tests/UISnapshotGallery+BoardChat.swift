@@ -114,7 +114,9 @@ extension UISnapshotGallery {
             },
             // Weit gezogen: Das Board behält 420 pt.
             Fixture(name: "tickets-board-chat-weit-gezogen", size: size) {
-                screen("tickets-board", state: jarvis, width: 1400)
+                var state = jarvis
+                state.hasCustomWidth = true                // Knopf zurück zur Vorgabe im Kopf
+                return screen("tickets-board", state: state, width: 1400)
             },
             Fixture(name: "tickets-board-chat-fenster-2", size: size) {
                 screen("tickets-board", state: BoardChatColumnState(title: "Jarvis: Supervisor WhisperM8", isAutomatic: true,

@@ -86,7 +86,8 @@ extension AgentChatsView {
                 storedWidth: preferences.width,
                 isCollapsed: preferences.isCollapsed == true,
                 available: available,
-                setWidth: { preferencesStore.setWidth($0, for: projectID) }))
+                setWidth: { preferencesStore.setWidth($0, for: projectID) },
+                resetWidth: { preferencesStore.setWidth(nil, for: projectID) }))
             .task { preferencesStore.preload() }
             // Einmal je gefundenem Jarvis merken (nicht im Body schreiben).
             .task(id: "\(pick.jarvis?.id.uuidString ?? "-")|\(preferencesStore.isLoaded)") {
@@ -115,7 +116,8 @@ extension AgentChatsView {
             choices: BoardChatRules.choices(
                 jarvis: pick.jarvis.map(Self.boardChatChoiceChat), product: pick.product.map(Self.boardChatChoiceChat),
                 chosen: pick.chosen.map(Self.boardChatChoiceChat), current: session?.id),
-            showsIntro: !BoardChatPreferencesStore.shared.introSeen)
+            showsIntro: !BoardChatPreferencesStore.shared.introSeen,
+            hasCustomWidth: BoardChatPreferencesStore.shared.preferences(for: projectID).width != nil)
         BoardChatColumnView(
             state: state,
             actions: boardChatActions(session: session, placement: placement, projectID: projectID,
@@ -172,6 +174,7 @@ extension AgentChatsView {
         var actions = BoardChatColumnActions()
         actions.setCollapsed = { preferencesStore.setCollapsed($0, for: projectID) }
         actions.introSeen = { preferencesStore.markIntroSeen() }
+        actions.resetWidth = { preferencesStore.setWidth(nil, for: projectID) }
         // Wahl je Projekt, gespeichert (Teil c). Der automatische Jarvis heißt
         // „keine Wahl“: Ein neuer Jarvis übernimmt dann von selbst.
         let choose: (UUID) -> Void = { id in

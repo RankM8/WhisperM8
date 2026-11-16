@@ -429,7 +429,8 @@ Idee 3.
   mindestens 280 pt. Gezogen wird am Griff auf der linken Kante (ein senkrechter Strich, immer sichtbar); die
   Breite ändert sich beim Loslassen, vorher zeigt eine Linie die neue Kante (sonst bekäme die TUI bei jedem
   Mausschritt eine neue Größe). Eine Obergrenze gibt es nicht, nur das Board behält mindestens 420 pt; die gezogene
-  Breite gilt in Board und Triage gleich. Zugeklappt bleibt eine schmale Leiste mit
+  Breite gilt in Board und Triage gleich. Zurück zur Vorgabe geht es mit einem Doppelklick auf den Griff oder mit dem Knopf im
+  Kopf der Spalte, der nur dasteht, solange eine eigene Breite gilt. Zugeklappt bleibt eine schmale Leiste mit
   Knopf. Breite, Zuklappen und Wahl gelten je Projekt und liegen in `ticket-board-chat.json`
   (`BoardChatPreferencesStore`), nicht im UI-Zustand der Fenster: Eine Änderung dort ließe alle Fenster samt
   Seitenleiste neu auswerten.
@@ -463,7 +464,8 @@ Idee 3.
   „→ Annehmen · gesammelt“. Eine geänderte Entscheidung kommt als neue Zeile mit „(statt: …)“. Ein neuer Auftrag
   beginnt, wenn das Feld sichtbar leer ist oder, falls der Bildschirm nichts sagt, die Tasten-Schätzung keinen
   Entwurf mehr sieht (wie die Warteschlange), wenn das Feld seit Beginn des Auftrags abgeschickt oder geleert wurde
-  (Zähler `fieldResets` des Trackers; so beginnt nach Abschicken und neuem Tippen ein neuer Auftrag mit
+  (Zähler `fieldResets` des Trackers, gelesen nach dem eigenen Einfügen, weil das Einfügen einen nach Esc
+  zurückgelegten Prompt selbst mit Ctrl+C leert; so beginnt nach Abschicken und neuem Tippen ein neuer Auftrag mit
   Überschrift), oder wenn ein anderer Chat in der Spalte steht; die Marken gehören zum Auftrag und verschwinden
   mit ihm. Verschwindet nur die Spalte (Tickets kurz zu, zugeklappt, Chat in einem anderen Fenster), bleibt der
   Auftrag; erst mit dem Fenster geht er. Ein zweiter Klick innerhalb einer halben Sekunde zählt nicht (er träfe
@@ -584,9 +586,11 @@ gezeigten Stands.
   öffnen“ (bricht nicht um) und Aktualisieren. Die Tasten stehen nicht im Kopf, sondern in der Leiste unten, wenn
   sie die Tastatur zeigt: „J K Ticket · ⌘C Link kopieren · esc Board“ (`KeyboardLegend.ticketItems`, WM8-124). Beim Blättern steht in der Mitte nur der Text des gezeigten Tickets. J/K oder ↑↓ wechseln das
   Ticket, Esc führt zurück zum Board auf dieselbe Karte; das wirkt nur, wenn der Fokus nicht in einem Textfeld oder
-  Terminal liegt. Wird es eng (unter 960 pt für die Triage, etwa mit breitem Board-Chat), rücken Status, Priorität,
-  Zugewiesen, „Fertig, wenn“ und Labels als Zeile in den Kopf des Tickets, darunter die Chats am Ticket mit „Zum
-  Chat“; Bereich und Meilenstein stehen dann nur auf der Karte. Erst unter 660 pt fällt die Liste links weg
+  Terminal liegt. Wird es eng (unter 960 pt für die Triage, etwa mit breitem Board-Chat), stehen die Eigenschaften
+  als eine Zeile über dem Titel (Entscheidung Giuliano, 16.11.2026): „In Progress · Hoch · Giuliano · 1/4 · Feature ·
+  ● Jon [Zum Chat]“, dazu „Abgegeben von …“ oder „Früher: …“. Reicht die Breite nicht, bricht die Zeile um; nichts
+  wird abgeschnitten. Bereich, Meilenstein, „seit …“ und „Kein Chat“ stehen dann nur auf der Karte bzw. in der
+  breiten Ansicht. Erst unter 660 pt fällt die Liste links weg
   (`TicketTriageLayout`, pur und getestet). Knöpfe, die in Linear etwas ändern, gibt es nicht
   (Entscheidung E1 vom 15.11.2026: Das Board schreibt nicht nach Linear; die Triage-Knöpfe kommen mit dem
   Board-Chat, WM8-113). Die Auswahl-Logik ist pur (`TicketBoardSelection`), damit Controller und Tastatur-Insel

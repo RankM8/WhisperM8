@@ -238,6 +238,26 @@ final class BoardChatInputsTests: XCTestCase {
         XCTAssertEqual(inputs.triageDecision(for: "WM8-81", in: window), .decline)
     }
 
+    /// Prüfung zu Paket 3: Esc hat den Turn abgebrochen, der alte Prompt liegt
+    /// im Feld. Das erste Einfügen leert ihn mit Ctrl+C (zählt hoch); der
+    /// zweite Klick gehört trotzdem zum selben Auftrag.
+    func testClearBeforeTheFirstInsertDoesNotEndTheOrder() {
+        inputs.insert = { [unowned self] text, id in
+            if inserted.isEmpty { resets = (resets ?? 0) + 1 }  // sendPrompt leert den Rückleger zuerst
+            inserted.append((text, id))
+            return true
+        }
+        inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
+        decideLater(.accept, in: window)
+        fieldHasText = true
+        field = .hasText
+        shown[window] = ticket86
+        decideLater(.later, in: window)
+        XCTAssertTrue(inserted.last!.0.hasPrefix("\n- WM8-86"), "keine zweite Überschrift")
+        XCTAssertEqual(inputs.triageDecision(for: "WM8-81", in: window), .accept, "Marke vom ersten Ticket bleibt")
+        XCTAssertEqual(inserted.filter { $0.0.contains(String(localized: "Triage in WM8, please carry out:")) }.count, 1)
+    }
+
     /// Ohne Terminal (kein Zähler) gilt wie bisher nur das Feld.
     func testWithoutCounterTheFieldDecides() {
         resets = nil

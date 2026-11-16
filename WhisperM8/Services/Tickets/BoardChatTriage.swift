@@ -69,7 +69,11 @@ extension BoardChatText {
 struct TriageBatch: Equatable {
     var sessionID: UUID
     var decisions: [String: TriageDecision] = [:]
-    /// Stand von `fieldResets` beim Beginn des Auftrags; `nil` ohne Terminal.
+    /// Stand von `fieldResets` nach dem letzten eigenen Einfügen; `nil` ohne
+    /// Terminal. Gelesen NACH dem Einfügen: Liegt nach einem Abbruch (Esc)
+    /// der alte Prompt im Feld, leert das Einfügen ihn zuerst mit Ctrl+C, und
+    /// das zählt mit. Vorher gelesen, hielte der nächste Klick den Auftrag für
+    /// beendet (zweite Überschrift mitten im Text).
     var fieldResetsAtStart: Int? = nil
 }
 
@@ -144,8 +148,10 @@ extension BoardChatInputs {
             refuse(.notRunning, in: windowID, name: registration.name)
             return false
         }
-        var updated = batch ?? TriageBatch(sessionID: sessionID, fieldResetsAtStart: resets)
+        var updated = batch ?? TriageBatch(sessionID: sessionID)
         updated.decisions[ticket.key] = decision
+        // Erst jetzt: Das Einfügen selbst kann das Feld geleert haben (alter Prompt nach Esc).
+        updated.fieldResetsAtStart = fieldResets(sessionID)
         triageBatches[windowID] = updated
         lastDecisionAt[windowID] = now()
         notices[windowID] = nil

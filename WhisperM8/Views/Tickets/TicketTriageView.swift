@@ -409,10 +409,11 @@ private struct TicketTriageProperties: View {
 
 // MARK: - Eigenschaften als Zeile (wenig Platz)
 
-/// Status, Priorität, Zugewiesen, „Fertig, wenn“ und Labels in einer Zeile
-/// unter dem Kopf des Tickets; bricht nur um, wenn auch das nicht passt.
-/// Darunter, nur wenn es welche gibt, die Chats am Ticket mit „Zum Chat“:
-/// Controller und Maus erreichen sie hier wie in der Spalte.
+/// Eine Zeile über dem Titel, wenn die Spalte „Eigenschaften“ keinen Platz hat
+/// (Entscheidung Giuliano, 16.11.2026): „In Progress · Hoch · Giuliano ·
+/// Feature · ● Jon [Zum Chat]“. Reicht die Breite nicht, bricht sie um
+/// (Fließ-Anordnung); abgeschnitten wird nichts, auch nicht „Zum Chat“ oder
+/// die Markierung des Controllers auf einer Chat-Zeile.
 private struct TicketTriagePropertyStrip: View {
     let content: TicketDetailContent
     let rule: TicketTeamRule
@@ -424,62 +425,60 @@ private struct TicketTriagePropertyStrip: View {
     private var ticket: Ticket { entry.ticket }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            StatisticsFlowLayout(horizontalSpacing: 14, verticalSpacing: 6) {
-                item("Status") {
-                    Text(verbatim: ticket.status.name)
-                    if entry.waitsForMe {
-                        Text("waits for you").foregroundStyle(AgentTheme.statusAwaiting)
-                    }
-                }
-                item("Priority") {
-                    TicketPriorityBars(priority: ticket.priority)
-                    Text(verbatim: TicketBoardText.priority(ticket.priority))
-                }
-                item("Assignee") {
-                    if let assignee = ticket.assignee { Text(verbatim: assignee.name) } else { Text("Nobody") }
-                }
-                if let criteria = entry.criteria {
-                    item("Done when") {
-                        TicketCriteriaBadge(progress: criteria)
-                        Text("\(criteria.done) of \(criteria.total) done")
-                    }
-                }
-                if !ticket.labels.isEmpty || ticket.isBlocked {
-                    TicketCardTags(ticket: ticket, rule: rule, maxLabels: 8, hidesColumnStatus: true)
+        StatisticsFlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+            part(first: true) {
+                Text(verbatim: ticket.status.name)
+                if entry.waitsForMe {
+                    Text("waits for you").foregroundStyle(AgentTheme.statusAwaiting)
                 }
             }
-            if !content.agents.isEmpty || content.localChatID != nil {
-                HStack(spacing: 12) {
-                    Text("Chats on this ticket")
-                        .font(.system(size: 11))
-                        .foregroundStyle(AgentTheme.textSecondary)
-                    ForEach(Array(content.agents.enumerated()), id: \.element.id) { index, line in
-                        TicketAgentRow(entry: line.entry, source: source)
-                            .ticketChatLineFocus(focusedChat == index)
-                    }
-                    if let chatID = content.localChatID {
-                        Button("Go to chat") { actions.openChat(chatID) }
-                            .buttonStyle(SettingsButtonStyle.standard)
-                    }
-                    Spacer(minLength: 0)
+            part {
+                TicketPriorityBars(priority: ticket.priority)
+                Text(verbatim: TicketBoardText.priority(ticket.priority))
+            }
+            part {
+                if let assignee = ticket.assignee { Text(verbatim: assignee.name) } else { Text("Nobody") }
+            }
+            if let criteria = entry.criteria {
+                part { TicketCriteriaBadge(progress: criteria) }
+                    .help(Text("\(criteria.done) of \(criteria.total) done"))
+            }
+            if !ticket.labels.isEmpty || ticket.isBlocked {
+                part { TicketCardTags(ticket: ticket, rule: rule, maxLabels: 8, hidesColumnStatus: true) }
+            }
+            ForEach(Array(content.agents.enumerated()), id: \.element.id) { index, line in
+                part {
+                    TicketAgentRow(entry: line.entry, source: source, compact: true)
+                        .ticketChatLineFocus(focusedChat == index)
                 }
-                .lineLimit(1)
+            }
+            if let chatID = content.localChatID {
+                Button("Go to chat") { actions.openChat(chatID) }
+                    .buttonStyle(SettingsButtonStyle.standard)
+                    .fixedSize()
+            }
+            if entry.isHandedOver {
+                // Wie auf der Karte: abgegeben heißt, es wartet auf den nächsten Schritt (Merge).
+                part { Text("Handed over by \(entry.handedOverBy.joined(separator: ", "))").foregroundStyle(AgentTheme.textSecondary) }
+            } else if !entry.handedOverBy.isEmpty {
+                part { Text("Earlier: \(entry.handedOverBy.joined(separator: ", "))").foregroundStyle(AgentTheme.textSecondary) }
             }
         }
         .font(.system(size: 12))
         .foregroundStyle(AgentTheme.textPrimary)
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(AgentTheme.surface)
     }
 
-    private func item<Value: View>(_ label: LocalizedStringKey, @ViewBuilder value: () -> Value) -> some View {
+    /// Ein Teil der Zeile, mit „·“ davor (außer dem ersten). Teile brechen nur
+    /// als Ganzes um.
+    private func part<Value: View>(first: Bool = false, @ViewBuilder value: () -> Value) -> some View {
         HStack(spacing: 5) {
-            Text(label)
-                .font(.system(size: 11))
-                .foregroundStyle(AgentTheme.textSecondary)
+            if !first {
+                Text(verbatim: "·").foregroundStyle(AgentTheme.textTertiary)
+            }
             value()
         }
         .lineLimit(1)

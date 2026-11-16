@@ -29,6 +29,8 @@ struct BoardChatColumnState: Equatable {
     var choices: [BoardChatChoice] = []
     /// Erklärung unter dem Chat, nur bis sie einmal dastand (WM8-124).
     var showsIntro = false
+    /// Breite von Hand gezogen: Der Kopf zeigt dann den Weg zurück zur Vorgabe.
+    var hasCustomWidth = false
 }
 
 /// Knöpfe der Spalte. Alles, was einen Chat verschiebt oder startet, geht nur
@@ -45,6 +47,8 @@ struct BoardChatColumnActions {
     var drop: (UUID, Int) -> Bool = { _, _ in false }
     /// Die Erklärung wurde gelesen (OK) oder stand beim Schließen schon da.
     var introSeen: () -> Void = {}
+    /// Zurück zur Vorgabebreite (40 %).
+    var resetWidth: () -> Void = {}
 
     static let none = BoardChatColumnActions()
 }
@@ -123,6 +127,11 @@ struct BoardChatColumnView<StatusDot: View, Terminal: View>: View {
                 headerButton(systemImage: "play.fill",
                              help: state.canResume ? String(localized: "Resume") : String(localized: "Start"),
                              action: actions.start)
+            }
+            if state.hasCustomWidth {
+                // Sichtbar, solange eine eigene Breite gilt; Doppelklick auf den Griff tut dasselbe.
+                headerButton(systemImage: "arrow.left.and.right.square",
+                             help: String(localized: "Back to the default width"), action: actions.resetWidth)
             }
             if state.title != nil, state.content == .terminal {
                 headerButton(systemImage: "arrow.up.left.and.arrow.down.right",
@@ -314,6 +323,8 @@ struct BoardChatColumnFrame: ViewModifier {
     let isCollapsed: Bool
     let available: Double
     let setWidth: (Double) -> Void
+    /// Doppelklick auf den Griff: zurück zur Vorgabe (WM8-124).
+    var resetWidth: () -> Void = {}
 
     @State private var dragStart: Double?
     @State private var dragTranslation: Double = 0
@@ -370,7 +381,8 @@ struct BoardChatColumnFrame: ViewModifier {
                         setWidth(BoardChatRules.draggedWidth(from: start, translation: value.translation.width, available: available))
                     }
             )
-            .help(String(localized: "Drag to resize the board chat"))
+            .simultaneousGesture(TapGesture(count: 2).onEnded { resetWidth() })
+            .help(String(localized: "Drag to resize the board chat. Double-click for the default width."))
             .accessibilityHidden(true)
     }
 }

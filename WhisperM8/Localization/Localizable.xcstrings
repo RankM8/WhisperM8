@@ -2831,6 +2831,16 @@
         }
       }
     },
+    "Back to the default width": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück zur Standardbreite"
+          }
+        }
+      }
+    },
     "Back to workspace “%@”": {
       "localizations": {
         "de": {
@@ -6107,6 +6117,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Losgelöster Job in einem isolierten Git-Worktree (Branch subagent/<id>)"
+          }
+        }
+      }
+    },
+    "Drag to resize the board chat. Double-click for the default width.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ziehen ändert die Breite des Board-Chats. Doppelklick stellt die Standardbreite wieder her."
           }
         }
       }
@@ -24740,16 +24760,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ hier öffnen"
-          }
-        }
-      }
-    },
-    "Drag to resize the board chat": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ziehen ändert die Breite des Board-Chats"
           }
         }
       }
