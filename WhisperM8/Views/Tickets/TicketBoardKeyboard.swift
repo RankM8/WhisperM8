@@ -94,6 +94,15 @@ extension AgentChatsView {
             return true
         case .rightEdge:
             return focusBoardChatFromKeyboard()
+        case .topEdge:
+            // Wandelt das Fenster selbst in den Einstieg in den Kopf um (Paket 3d).
+            return true
+        case .goBack:
+            // „← Chats“ im Kopf (Paket 3d): wie der Knopf. Return und Esc warten
+            // im Ziel-Chat 1 s, wie nach jedem Sprung per Tastatur.
+            if case .chat(let id) = backPlace() { KeyboardArrivalLock.shared.arrive(at: id) }
+            ticketsBackLink.go()
+            return true
         case .rejected:
             // Esc außerhalb der Triage gehört dem Fenster (Dialoge, Suche).
             if key == .close { return false }

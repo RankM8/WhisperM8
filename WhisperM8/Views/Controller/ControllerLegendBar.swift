@@ -93,7 +93,9 @@ struct ControllerLegendBar: View {
                 }
             }
             .frame(maxWidth: 320, alignment: .leading)
-            .layoutPriority(0)
+            // Das Ziel bleibt stehen; gekürzt wird bei den Tasten (WM8-91: bei
+            // vielen Tastatur-Kürzeln schrumpfte „Tickets · WM8“ auf null).
+            .layoutPriority(2)
 
             Rectangle()
                 .fill(AppTheme.borderStrong)
@@ -107,7 +109,15 @@ struct ControllerLegendBar: View {
             // sehen und ist die einzige Angabe, die sich nicht von selbst
             // versteht.
             if let keyboardItems {
-                keyboardKeys(keyboardItems).layoutPriority(1)
+                // Wie bei den Tasten des Controllers von hinten kürzen; sonst
+                // lief die Leiste im Ticket-Board über den Fensterrand.
+                ViewThatFits(in: .horizontal) {
+                    keyboardKeys(keyboardItems)
+                    keyboardKeys(Array(keyboardItems.prefix(6)))
+                    keyboardKeys(Array(keyboardItems.prefix(4)))
+                    keyboardKeys(Array(keyboardItems.prefix(2)))
+                }
+                .layoutPriority(1)
             } else {
                 ViewThatFits(in: .horizontal) {
                     keys(entries)

@@ -70,6 +70,19 @@ enum KeyboardLegend {
                 Item(keys: ["esc"], label: String(localized: "List")),
                 Item(keys: ["J", "K"], label: String(localized: "Ticket")),
             ]
+        // Kopf und Filter (Paket 3d): Pfeile wählen, Return schaltet, Esc zurück.
+        case .header:
+            return [
+                Item(keys: ["↑", "↓", "←", "→"], label: String(localized: "Selection")),
+                Item(keys: ["↩"], label: String(localized: "Select")),
+                Item(keys: ["esc"], label: String(localized: "Back")),
+            ]
+        case .headerPicker:
+            return [
+                Item(keys: ["↑", "↓"], label: String(localized: "Selection")),
+                Item(keys: ["↩"], label: String(localized: "Select")),
+                Item(keys: ["esc"], label: String(localized: "Close")),
+            ]
         }
     }
 

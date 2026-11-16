@@ -21,6 +21,12 @@ final class TicketKeyboardLegendTests: XCTestCase {
         XCTAssertTrue(KeyboardLegend.ticketItems(for: nil).isEmpty)
     }
 
+    /// WM8-91 Paket 3d per Tastatur: im Kopf Pfeile, Return schaltet, Esc zurück.
+    func testHeaderShowsItsKeys() {
+        XCTAssertEqual(KeyboardLegend.ticketItems(for: context(.header)).map(\.keys), [["↑", "↓", "←", "→"], ["↩"], ["esc"]])
+        XCTAssertEqual(KeyboardLegend.ticketItems(for: context(.headerPicker)).map(\.keys), [["↑", "↓"], ["↩"], ["esc"]])
+    }
+
     /// WM8-91 Paket 3c: auf dem Board die Kürzel aus dem Plan, ⌘J nur mit
     /// sichtbarem Board-Chat.
     func testBoardShowsTheBoardKeys() {
