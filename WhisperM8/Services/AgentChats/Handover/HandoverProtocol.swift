@@ -224,6 +224,13 @@ struct HandoverManifest: Codable, Equatable {
     /// Turn-Start frei (WM8-121). `nil` bei Manifesten älterer Builds, gilt
     /// dann wie bisher als getippter Entwurf.
     var composerInsertedText: Bool?
+    /// Der eingefügte Text ist ein Auftrag von `chats send` oder der
+    /// Warteschlange, dessen Enter zurückgehalten wurde, unberührt: `chats
+    /// submit` darf ihn auch nach der Übernahme abschicken (WM8-123). `nil`
+    /// bei älteren Manifesten: dann nicht.
+    var composerWithheldDelivery: Bool?
+    /// Vorgemerkter Auftrag dazu (UUID), damit `submit` ihn als zugestellt verbucht.
+    var composerWithheldQueueID: String?
     /// Vorgemerkter Kontowechsel nach dem Turn (Entscheidung 9), undurchsichtig.
     var pendingAccountSwitch: HandoverJSONValue?
     var accountProfile: String?

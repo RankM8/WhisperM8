@@ -95,9 +95,19 @@ extension AgentTerminalController {
         if manifest.hasComposerDraft != false {
             // Unbekannt zählt als „Entwurf vorhanden“: Queue und `chats send`
             // schreiben sonst in einen halb getippten Text.
-            noteComposerDraftAdopted(insertedText: manifest.composerInsertedText == true)
+            noteComposerDraftAdopted(insertedText: manifest.composerInsertedText == true,
+                                     withheldDelivery: Self.withheldDelivery(from: manifest))
         }
         return true
+    }
+
+    /// Beanspruchter, unberührter Auftrag mit zurückgehaltenem Enter aus dem
+    /// Manifest (WM8-123); `nil` bei älteren Manifesten.
+    nonisolated static func withheldDelivery(from manifest: HandoverManifest)
+        -> TerminalComposerDraftTracker.WithheldDelivery? {
+        guard manifest.composerWithheldDelivery == true else { return nil }
+        return .init(fromSender: true, queuedPromptID: manifest.composerWithheldQueueID.flatMap(UUID.init(uuidString:)),
+                     untouched: true)
     }
 
     /// Chat endete in der Lücke: letztes Bild zeigen, Status „beendet“.

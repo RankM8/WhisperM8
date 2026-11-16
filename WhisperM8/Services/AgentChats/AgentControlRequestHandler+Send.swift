@@ -141,6 +141,11 @@ extension AgentControlRequestHandler {
         case .success(let session):
             // Zurückgehaltenes Enter (WM8-75) nie als Erfolg, Idempotenz erst danach.
             if submit, await AgentTerminalController.enterWasWithheld(sessionID: targetID, clearedInput: clearedInput, since: sentAt) {
+                // Der Text im Feld ist dieser Auftrag: `chats submit` darf ihn
+                // nach der Freigabe abschicken (WM8-123).
+                await MainActor.run {
+                    _ = AgentTerminalRegistry.shared.controller(for: targetID)?.claimWithheldDelivery(queuedPromptID: nil)
+                }
                 releaseIdempotency(request.requestID)
                 await audit(request.actor, method: "send", target: await sessionLabel(targetID), outcome: "withheld", prompt: prompt)
                 return Self.enterWithheldResponse(requestID: request.requestID)

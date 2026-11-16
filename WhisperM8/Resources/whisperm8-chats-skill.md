@@ -78,7 +78,10 @@ whisperm8 chats interrupt <ref> [--force] [--clear-input]
                                                      # auch User-Entwürfe, deshalb opt-in
 whisperm8 chats submit <ref>                         # Text, der im Eingabefeld eines ruhenden Claude-Chats
                                                      # liegengeblieben ist, abschicken (nur Enter, kein neuer
-                                                     # Text). Statt noch einmal zu senden — das verdoppelte ihn
+                                                     # Text). Statt noch einmal zu senden — das verdoppelte ihn.
+                                                     # Auch nach approvalPending mit textInField: Nach der
+                                                     # Freigabe schickt submit den eigenen Auftrag ab, solange
+                                                     # niemand im Feld weitergeschrieben hat
 whisperm8 chats open <ref>                           # Tab fokussieren (startet NICHT neu)
 whisperm8 chats close <ref> [<ref>…]                 # NUR den UI-Tab schließen (nicht destruktiv)
 whisperm8 chats close <ref> --stop [--force]         # Tab zu + Agent beenden (kein Archiv, Verlauf bleibt);
@@ -391,12 +394,14 @@ unterbrochen.
    lehnt ab („Chat lädt noch“, Exit 4), bis das Eingabefeld steht. Meldet
    `send`, der Text stehe im Eingabefeld (`detail.reason: inInputField`),
    **nie noch einmal senden oder vormerken**: `submit <ref>` schickt ihn ab.
-   Lehnt `submit` ab, weil die App den Text eingefügt hat (Diktat, „→ Jarvis“,
-   oder dein Auftrag, dessen Enter eine Freigabe zurückhielt): Was im Feld
-   steht, kannst du nicht prüfen, der User kann weitergetippt haben. Direkt
-   gesendeter Auftrag: dem User melden, er schickt ihn mit Enter ab.
-   Vorgemerkter Auftrag (steht noch in `chats queue <ref>`): erst `dequeue`
-   (Kurz-ID), dann Enter durch den User, sonst kommt er doppelt; oder
+   Hielt eine Freigabe das Enter deines Auftrags zurück (`approvalPending`
+   mit `textInField`), schickt `submit <ref>` ihn nach der Freigabe ab, solange
+   im Feld niemand weitergeschrieben hat. Lehnt `submit` ab, weil die App den
+   Text eingefügt hat (Diktat, „→ Jarvis“, oder dein Auftrag, an dem der User
+   seither etwas geändert hat): Was im Feld steht, kannst du nicht prüfen.
+   Direkt gesendeter Auftrag: dem User melden, er schickt ihn mit Enter ab.
+   Vorgemerkter Auftrag (steht noch in `chats queue <ref>`): Enter durch den
+   User genügt, die Warteschlange verbucht ihn dann als zugestellt; oder
    `interrupt <ref> --clear-input --force`, dann geht er von selbst neu raus.
    `--force` nur nach Rückfrage beim User, wie in Regel 8.
    **Nach Exit 5 oder 6 nie blind wiederholen.** Exit 6 („Ausgang unklar“)

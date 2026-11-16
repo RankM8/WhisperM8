@@ -12564,6 +12564,16 @@
         }
       }
     },
+    "On the clipboard · Claude view open": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In der Zwischenablage · Ansicht offen"
+          }
+        }
+      }
+    },
     "On the clipboard · ⌘V to paste": {
       "localizations": {
         "de": {
