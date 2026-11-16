@@ -360,7 +360,8 @@ unerreichbar, 124 wait-Timeout, 130 unterbrochen.
 `--answer` ergänzt `awaitingInput`; `--force` überstimmt) → ⑤ Prompt nicht leer → ⑥ kein vermuteter Entwurf im
 Eingabefeld (`--force` überstimmt; ein alter Rückleger wird stattdessen geleert,
 siehe unten). Danach Bracketed Paste
-(`ESC[200~ … ESC[201~`, Pflicht gegen Newline-Auto-Submit) + CR nach 80 ms. In
+(`ESC[200~ … ESC[201~`, Pflicht gegen Newline-Auto-Submit) + CR nach 80 ms (bei Claude erst, wenn
+der Text im Feld steht, siehe WM8-119 unten). In
 Terminal-Tabs nur, wenn das Programm den Einfüge-Modus eingeschaltet hat (zsh
 tut das); sonst kommt der Text wie getippt an, ohne Steuerzeichen, ein
 Zeilenumbruch wird zum Enter (WM8-47). Mehrzeiliger Text wird dort also
@@ -961,6 +962,38 @@ Kosten: Jedes `send` mit Enter an einen ruhenden Claude-Chat antwortet mit
 dem Nachsehen meist 0,8 bis 1 s später als vorher (ein leeres Feld zählt erst
 ab 0,8 s), im Fehlerfall nach 4 s. Abgelesen werden 16 Zeilen am unteren Rand,
 je Zustellung einmal und im Startfenster höchstens einmal je Sekunde.
+
+### Enter erst, wenn der Text im Feld steht (WM8-119)
+
+Am 16.11.2026 blieben drei lange Meldungen im Eingabefeld des Supervisors
+stehen (`queue_stuck_in_field`); erst `chats submit` schickte sie ab. Allen
+dreien gemeinsam: Sie nannten Pfade zu PNG-Dateien (Snapshots). Claude Code
+macht aus eingefügten Bildpfaden Anhänge („[Image #1]“) und liest die Dateien
+dafür erst ein; so lange steht vom Einfügen noch nichts im Feld. Ein Enter in
+dieser Zeit merkt sich Claude, verwirft es aber, sobald das Einlesen fertig
+ist (Claude Code 2.1.325; bei reinem Text holt es das Enter nach). Das Enter
+der App kam fest nach 80 ms und verlor das Rennen, sobald das Einlesen länger
+dauerte. Meldungen ohne Bildpfad gingen auch mit über 5.000 Zeichen durch;
+an der Länge lag es nicht.
+
+Seitdem wartet das Enter bei einem Claude-Chat, der beim Einfügen ruhte, bis
+der Text im Feld steht (`DelayedEnterLanding`, pur getestet): Zeigt das Feld
+nach 80 ms noch eine leere Zeile mit dem Cursor am Anfang, sieht die App alle
+100 ms wieder nach, höchstens 3 s lang. Danach geht das Enter wie früher; bleibt
+der Text dann stehen, meldet es das Nachsehen wie oben. Tippt, fügt ein,
+schickt ab oder leert jemand in dieser Zeit, kommt kein Enter (es schickte
+seinen Text mit ab; Log `delayed_enter_skipped_field_touched`). Gewartete
+Enter loggt die App mit Dauer (`delayed_enter_after_wait … waitedMs=…
+landed=…`). Codex, Terminals, offene Rückfragen und ein nicht ablesbares Feld
+bleiben beim festen Enter nach 80 ms. Die Prüfung auf eine aufgehende Freigabe
+(WM8-75) läuft wie bisher direkt vor dem Enter.
+
+`send` und die Warteschlange werten erst aus, wenn das Enter entschieden ist;
+ein noch leeres Feld hieße sonst „abgeschickt“. `enqueue` an einen ruhenden
+Chat wartet deshalb bis zu 8 s auf das Ergebnis (vorher 6 s). Kosten: wie
+bisher eine Ablesung der untersten 16 Zeilen je Senden; nur während des
+Wartens eine je 100 ms, höchstens 30. Reiner Text steht nach 80 ms im Feld,
+dort ändert sich nichts.
 
 ### Vormerken und Start bestätigen (WM8-70)
 
