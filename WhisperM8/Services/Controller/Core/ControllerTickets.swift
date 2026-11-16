@@ -10,15 +10,15 @@ enum ControllerTicketView: String, Sendable {
     case empty
     /// Spalten nach Status.
     case board
-    /// Modus Liste (nach Projekt).
+    /// Modus Liste (Gruppen der Ansicht aus Linear, WM8-125).
     case list
     /// Ticket groß, Fokus in der Liste links.
     case triage
     /// Ticket groß, Fokus auf einer Zeile unter „Chats am Ticket“.
     case chatLine
-    /// Auswahl im Kopf: Filter, Board/Liste, „← Chats“ … (Paket 3d).
+    /// Auswahl im Kopf: Reiter, Liste/Board, „← Chats“ … (Paket 3d, WM8-125).
     case header
-    /// Liste der Bereiche unter „Alle Bereiche“ offen (Paket 3d).
+    /// Liste unter „Mehr“ offen (WM8-125; vorher die Liste der Bereiche).
     case headerPicker
     /// Auswahl im Kopf der Board-Chat-Spalte: Jarvis, Produkt-Chat,
     /// „Anderer Chat …“, Als Tab öffnen, Ausblenden (WM8-126).
@@ -48,6 +48,8 @@ struct ControllerTicketsPlace: Equatable, Sendable {
     var chatBehind: UUID?
     /// Ein Ticket ist gewählt (Karte, Zeile oder groß).
     var hasTicket = false
+    /// In der Liste steht die Auswahl auf dem Kopf einer Gruppe (WM8-125).
+    var onGroup = false
     /// Das gewählte Ticket hat Chats (▶ in der Triage führt dorthin).
     var ticketHasChats = false
     /// Board-Chat, den die Spalte rechts gerade zeigt (WM8-91 Paket 3a): nur,
@@ -191,8 +193,7 @@ enum ControllerTicketCommand: Equatable, Sendable {
     case refresh
     /// Rechter Stick in der Triage: Beschreibung und Verlauf blättern.
     case scroll(lines: Int)
-    /// Menü: Filter „Wartet auf mich“ an/aus, Liste kopieren.
-    case toggleWaitingFilter
+    /// Menü: Liste kopieren.
     case copyList
     /// Menü „Zum Chat ›“: dieser Chat am gewählten Ticket.
     case goToChat(UUID)
@@ -257,7 +258,6 @@ struct ControllerTicketMenuInfo: Equatable, Sendable {
     /// Chats am Ticket, die auf diesem Rechner laufen.
     var chats: [Chat] = []
     var hasURL = false
-    var waitingFilterOn = false
 }
 
 /// Kurze Bestätigung in der Leiste nach einer Taste im Ticket-Board.

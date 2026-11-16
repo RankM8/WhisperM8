@@ -79,6 +79,8 @@ struct Ticket: Equatable, Identifiable {
     var url: String?
     /// Letzte Änderung am Ticket, so wie das Werkzeug sie führt.
     var updatedAt: Date?
+    /// Nummer des Eltern-Tickets, wenn es eine Unteraufgabe ist (WM8-125).
+    var parentKey: String? = nil
 
     var activeLinks: [TicketChatLink] { links.filter(\.isActive) }
 

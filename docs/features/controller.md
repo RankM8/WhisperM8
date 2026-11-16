@@ -454,21 +454,27 @@ Tastatur beenden ihn, und er lebt beim Zurückkommen nicht wieder auf. Zweite Si
 Tasten, Scrollen und Leeren nur an `chatInputSessionID`, und das ist dort nur der Board-Chat mit Fokus, sonst
 keiner. Tests: `ControllerBoardChatFocusTests`.
 
-**Kopf und Filter** (Paket 3d, Auftrag Giuliano 16.11.2026): Stick oder Steuerkreuz ▲ über die oberste Karte,
-die oberste Zeile der Liste oder das erste Ticket der Triage führt in den Kopf, auch aus einem leeren Board (etwa
-wenn ein Filter alles ausblendet). Auf Board und Liste zuerst in die Filterzeile („Wartet auf mich“, „Alle
-Bereiche“, Agent: Alle · Mit Agent · Ohne Agent, Person: Alle · Nicht zugewiesen · je Person), mit ▲ darüber in
-die Kopfzeile („← Chats“, Board, Liste, „Liste kopieren“, Aktualisieren). In der Triage gibt es eine Zeile
-(„← Chats“, „Board“, Link, → Jarvis mit Board-Chat, Linear mit Adresse, Aktualisieren). ◀ ▶ wandern durch die
-Knöpfe, ohne Umlauf; **nur Kreuz schaltet**, Bewegen wählt nur aus, auch gehalten. ▼ unter der untersten Zeile
-und Kreis führen zurück auf die Karte, von der man kam. Ein gehaltener Stick rutscht nie in den Kopf (wie nie in
-den Board-Chat); hinein nur mit einem einzelnen Druck. „← Chats“ nimmt denselben Weg wie L2 getippt, mit
-Ankunftssperre. **„Alle Bereiche“** öffnet mit Kreuz eine Liste direkt darunter (Entscheidung 16.11.2026): ▲ ▼
-wählen, Kreuz übernimmt, Kreis schließt ohne Änderung; das Board filtert erst beim Übernehmen. Sichtbar ist die
-Auswahl am Ring in Akzentfarbe wie an den Karten; die Filterzeile scrollt mit. Die Leiste nennt im Kopf
-„Bewegen · Auswählen · Zurück“, in der Liste „Bewegen · Auswählen · Schließen“, auf dem Board „▲ Filter“. Die
-Regeln liegen pur in `Views/Tickets/TicketBoardHeaderSelection.swift`, angewendet in
-`TicketBoardViewModel+Header.swift`; dieselben Wege nimmt die Tastatur (Paket 3c).
+**Kopf und Reiter** (Paket 3d, Auftrag Giuliano 16.11.2026; seit WM8-125 Reiter statt Filter): Stick oder
+Steuerkreuz ▲ über die oberste Karte, die oberste Stelle der Liste oder das erste Ticket der Triage führt in den
+Kopf, auch aus einem leeren Board. Auf Board und Liste zuerst in die Reiterzeile (die Ansichten aus Linear, wie sie
+am Bildschirm stehen, dazu „Mehr“), Einstieg auf dem gezeigten Reiter; mit ▲ darüber in die Kopfzeile („← Chats“,
+Liste, Board, „Liste kopieren“, Aktualisieren). In der Triage gibt es eine Zeile („← Chats“, „‹ Liste“ bzw.
+„‹ Board“, Link, → Jarvis mit Board-Chat, Linear mit Adresse, Aktualisieren). ◀ ▶ wandern durch die Knöpfe, ohne
+Umlauf; **nur Kreuz schaltet**, Bewegen wählt nur aus, auch gehalten. ▼ unter der untersten Zeile und Kreis führen
+zurück auf die Stelle, von der man kam. Ein gehaltener Stick rutscht nie in den Kopf (wie nie in den Board-Chat);
+hinein nur mit einem einzelnen Druck. „← Chats“ nimmt denselben Weg wie L2 getippt, mit Ankunftssperre.
+**„Mehr“** öffnet mit Kreuz die Reiter, die nicht in die Zeile passen, als Liste direkt darunter: ▲ ▼ wählen, Kreuz
+zeigt die Ansicht, Kreis schließt ohne Änderung. Mit der Maus ist „Mehr“ ein Menü-Knopf. Sichtbar ist die Auswahl
+am Ring in Akzentfarbe wie an den Karten. Die Leiste nennt im Kopf „Bewegen · Auswählen · Zurück“, in der Liste
+unter „Mehr“ „Bewegen · Auswählen · Schließen“, auf Board und Liste „▲ Ansichten“. Die Regeln liegen pur in
+`Views/Tickets/TicketBoardHeaderSelection.swift`, angewendet in `TicketBoardViewModel+Header.swift`; dieselben Wege
+nimmt die Tastatur (Paket 3c).
+
+**Liste mit Gruppen** (WM8-125): Die Köpfe der Gruppen sind eigene Stellen zwischen den Tickets. ▲ ▼ gehen durch
+Köpfe und Tickets aufgeklappter Gruppen; auf einem Kopf klappt Kreuz bzw. Return auf und zu, ◀ klappt zu, ▶ auf,
+erst danach geht ◀ in die Seitenleiste und ▶ in den Board-Chat. Die Leiste nennt dort „Auf- und zuklappen“. Wird
+die Gruppe mit dem gewählten Ticket zugeklappt, rückt die Auswahl auf ihren Kopf. Pur: `listStops`,
+`TicketListStop`, angewendet in `TicketBoardViewModel+Controller.swift`.
 
 **Kopf der Board-Chat-Spalte** (WM8-126, Entscheidung Giuliano 16.11.2026: „Kopfzeile verlängern“): ▶ am
 rechten Ende einer Kopfzeile des Boards (bzw. der Triage) führt weiter in den Kopf der Spalte rechts, auf den
@@ -491,8 +497,8 @@ Tests: `BoardChatHeadTests`, `BoardChatHeadFlowTests`.
 Return keinen alten Knopf trifft (etwa „← Chats“). Der Beobachter dafür hängt an den Boards
 (`TicketBoardControllers`, angelegt mit dem ersten Board), nicht an der Controller-Laufzeit: Auch die Tastatur
 wählt Knöpfe im Kopf. Geräumt wird direkt nach dem Klick, nicht beim Mausdruck. So wählt ein Klick auf einen
-Eintrag der Liste der Bereiche diesen Bereich (`chooseProjectByMouse`, schon beim Drücken) und schließt die
-Liste; vorher war sie nur Anzeige, ging beim Mausdruck zu, und der Klick landete auf der Karte darunter.
+Eintrag der Liste unter „Mehr“ diese Ansicht (`chooseMoreViewByMouse`, schon beim Drücken) und schließt die
+Liste; sonst ginge sie beim Mausdruck zu, und der Klick landete auf der Zeile darunter.
 Kosten je Klick: ein Blick je Fenster mit Board.
 
 **Leiste nach Ortswechsel per Maus:** Wechselt man Ticket-Modus, Projekt, Board/Liste oder öffnet die Triage mit
@@ -519,7 +525,7 @@ mit Fokus und ohne vorigen Ort im Chat hinter den Tickets (`KeyboardBackArrival`
 Die erste Bewegung zeigt die Start-Auswahl: die Karte des Tickets, an dem der Chat dahinter hängt, sonst
 die erste Karte der ersten Spalte, in der etwas wartet, sonst die erste Karte. **Options** öffnet die
 Menü-Karte an der gewählten Karte bzw. am Kopf des großen Tickets: Ticket (Zum Chat ›, Link kopieren, In
-Linear öffnen), Board (Nur „Wartet auf mich“ an/aus, Liste kopieren, Aktualisieren), Steuerung (Zu den
+Linear öffnen), Board (Liste kopieren, Aktualisieren; „Nur ‚Wartet auf mich‘“ ist seit WM8-125 ein Reiter aus Linear), Steuerung (Zu den
 Chats, Zwischenablage-Verlauf, Belegung anzeigen, Controller pausieren). Paddles wie in der Liste: Sprünge
 verlassen das Board, Eingaben in einen Chat „geht nicht“. Die Leiste zeigt je Zustand nur die Tasten, die
 dort etwas tun (Board, Triage, Chat-Zeile, Seitenleiste).

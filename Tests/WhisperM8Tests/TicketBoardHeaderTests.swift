@@ -2,27 +2,23 @@ import Foundation
 import XCTest
 @testable import WhisperM8
 
-/// WM8-91 Paket 3d: Kopf und Filter des Boards mit dem Controller (Auftrag
-/// Giuliano 16.11.2026). ▲ über die oberste Karte in die Filterzeile, darüber
-/// die Kopfzeile; ◀ ▶ wählen, Kreuz schaltet, ▼ und Kreis zurück auf die Karte.
-/// Nie schaltet Bewegen einen Filter. „Alle Bereiche“ als Liste darunter.
+/// WM8-91 Paket 3d, seit WM8-125 mit Reitern statt Filtern: ▲ über die
+/// oberste Karte bzw. Zeile in die Reiterzeile, darüber die Kopfzeile; ◀ ▶
+/// wählen, Kreuz schaltet, ▼ und Kreis zurück. Nie schaltet Bewegen einen
+/// Reiter. Was nicht in die Zeile passt, steht unter „Mehr“ als Liste darunter.
 @MainActor
 final class TicketBoardHeaderTests: XCTestCase {
-    private let ada = TicketPerson(id: "u1", name: "Ada Erfunden")
-    private let bo = TicketPerson(id: "u2", name: "Bo Beispiel")
-
     // MARK: - Pur
 
     private var boardLayout: TicketHeaderLayout {
-        .board(hasBack: true, people: [.person(id: "u1"), .person(id: "u2")])
+        .board(hasBack: true, tabs: ["n", "w", "e"], hasMore: true)
     }
 
     func testBoardLayoutFollowsTheScreen() {
-        XCTAssertEqual(boardLayout.rows[0], [.back, .modeBoard, .modeList, .copyList, .refresh])
-        XCTAssertEqual(boardLayout.rows[1], [
-            .waitingForMe, .project, .agent(.all), .agent(.withAgent), .agent(.withoutAgent),
-            .person(.all), .person(.unassigned), .person(.person(id: "u1")), .person(.person(id: "u2")),
-        ])
+        XCTAssertEqual(boardLayout.rows[0], [.back, .modeList, .modeBoard, .copyList, .refresh])
+        XCTAssertEqual(boardLayout.rows[1], [.view("n"), .view("w"), .view("e"), .moreViews])
+        XCTAssertEqual(TicketHeaderLayout.board(hasBack: false, tabs: ["n"], hasMore: false).rows,
+                       [[.modeList, .modeBoard, .copyList, .refresh], [.view("n")]])
         XCTAssertEqual(TicketHeaderLayout.triage(hasBack: true, hasBoardChat: false, hasURL: true).rows,
                        [[.back, .closeTriage, .copyLink, .openInLinear, .refresh]])
         XCTAssertEqual(TicketHeaderLayout.triage(hasBack: true, hasBoardChat: true, hasURL: false).rows,
@@ -31,7 +27,7 @@ final class TicketBoardHeaderTests: XCTestCase {
 
     func testEntryIsTheBottomRowAndRemembersTheLastItem() {
         XCTAssertEqual(boardLayout.entry(), TicketHeaderSpot(row: 1, index: 0))
-        XCTAssertEqual(boardLayout.entry(remembering: .agent(.withAgent)), TicketHeaderSpot(row: 1, index: 3))
+        XCTAssertEqual(boardLayout.entry(remembering: .view("e")), TicketHeaderSpot(row: 1, index: 2))
         XCTAssertEqual(boardLayout.entry(remembering: .modeList), TicketHeaderSpot(row: 1, index: 0),
                        "nur Knöpfe der untersten Zeile werden gemerkt")
     }
@@ -40,76 +36,96 @@ final class TicketBoardHeaderTests: XCTestCase {
         let start = TicketHeaderSpot(row: 1, index: 0)
         XCTAssertEqual(TicketHeaderSelection.step(start, .left, in: boardLayout), .stay)
         XCTAssertEqual(TicketHeaderSelection.step(start, .right, in: boardLayout), .spot(TicketHeaderSpot(row: 1, index: 1)))
-        XCTAssertEqual(TicketHeaderSelection.step(TicketHeaderSpot(row: 1, index: 8), .right, in: boardLayout), .stay)
-        XCTAssertEqual(TicketHeaderSelection.step(TicketHeaderSpot(row: 1, index: 7), .up, in: boardLayout),
-                       .spot(TicketHeaderSpot(row: 0, index: 4)), "höchstens der letzte Knopf der Zeile darüber")
+        XCTAssertEqual(TicketHeaderSelection.step(TicketHeaderSpot(row: 1, index: 3), .right, in: boardLayout), .stay)
+        XCTAssertEqual(TicketHeaderSelection.step(TicketHeaderSpot(row: 1, index: 3), .up, in: boardLayout),
+                       .spot(TicketHeaderSpot(row: 0, index: 3)))
         XCTAssertEqual(TicketHeaderSelection.step(TicketHeaderSpot(row: 0, index: 2), .up, in: boardLayout), .stay)
-        XCTAssertEqual(TicketHeaderSelection.step(TicketHeaderSpot(row: 0, index: 2), .down, in: boardLayout),
-                       .spot(TicketHeaderSpot(row: 1, index: 2)))
+        XCTAssertEqual(TicketHeaderSelection.step(TicketHeaderSpot(row: 0, index: 4), .down, in: boardLayout),
+                       .spot(TicketHeaderSpot(row: 1, index: 3)), "höchstens der letzte Knopf der Zeile darunter")
         XCTAssertEqual(TicketHeaderSelection.step(start, .down, in: boardLayout), .leave)
     }
 
-    func testProjectListSteps() {
-        let options = TicketHeaderSelection.projectOptions(["A", "B"])
-        XCTAssertEqual(options, [nil, "A", "B"])
-        XCTAssertEqual(TicketHeaderSelection.projectStart(current: "B", options: options), 2)
-        XCTAssertEqual(TicketHeaderSelection.projectStart(current: nil, options: options), 0)
-        XCTAssertEqual(TicketHeaderSelection.projectStep(0, .up, count: 3), 0)
-        XCTAssertEqual(TicketHeaderSelection.projectStep(0, .down, count: 3), 1)
-        XCTAssertEqual(TicketHeaderSelection.projectStep(2, .down, count: 3), 2)
+    func testPickerSteps() {
+        XCTAssertEqual(TicketHeaderSelection.pickerStep(0, .up, count: 3), 0)
+        XCTAssertEqual(TicketHeaderSelection.pickerStep(0, .down, count: 3), 1)
+        XCTAssertEqual(TicketHeaderSelection.pickerStep(2, .down, count: 3), 2)
+        XCTAssertEqual(TicketHeaderSelection.pickerStep(5, .left, count: 3), 2)
+    }
+
+    // MARK: Reiter in der Zeile
+
+    private func view(_ id: String) -> TicketView { TicketFixtures.view(id) }
+
+    func testTabsAllFitWithoutMore() {
+        let views = [view("a"), view("b"), view("c")]
+        let tabs = TicketViewTabs.split(views, active: "a", width: 400) { _ in 100 }
+        XCTAssertEqual(tabs.shown.map(\.id), ["a", "b", "c"])
+        XCTAssertTrue(tabs.more.isEmpty)
+        XCTAssertEqual(TicketViewTabs.split(views, active: "a", width: nil) { _ in 1000 }.shown.count, 3, "ungemessen: alle")
+    }
+
+    func testTabsThatDoNotFitGoUnderMoreAndTheActiveOneStays() {
+        let views = [view("a"), view("b"), view("c"), view("d"), view("e")]
+        // 100 je Reiter, „Mehr“ 84: in 330 passen zwei Reiter und „Mehr“.
+        let tabs = TicketViewTabs.split(views, active: "a", width: 330) { _ in 100 }
+        XCTAssertEqual(tabs.shown.map(\.id), ["a", "b"])
+        XCTAssertEqual(tabs.more.map(\.id), ["c", "d", "e"])
+
+        let activeLate = TicketViewTabs.split(views, active: "e", width: 330) { _ in 100 }
+        XCTAssertEqual(activeLate.shown.map(\.id), ["a", "e"], "der gezeigte Reiter steht immer in der Zeile")
+        XCTAssertEqual(activeLate.more.map(\.id), ["b", "c", "d"])
+
+        let tiny = TicketViewTabs.split(views, active: "d", width: 50) { _ in 100 }
+        XCTAssertEqual(tiny.shown.map(\.id), ["d"], "zur Not nur der gezeigte")
     }
 
     // MARK: - Modell
 
-    private func viewModel() -> TicketBoardViewModel {
-        TicketBoardViewModel(model: TicketBoardBuilder.build(snapshot: TicketFixtures.snapshot([
-            TicketFixtures.ticket(1, status: "Todo", assignee: ada, project: "B"),
-            TicketFixtures.ticket(2, status: "Todo", assignee: bo, project: "A"),
+    private func viewModel(width: CGFloat? = nil) -> TicketBoardViewModel {
+        var board = TicketBoardBuilder.build(snapshot: TicketFixtures.snapshot([
+            TicketFixtures.ticket(1, status: "Todo", project: "B"),
+            TicketFixtures.ticket(2, status: "Todo", project: "A"),
             TicketFixtures.ticket(3, status: "In Progress", project: "A"),
-        ]), chats: [], projectPath: nil), documents: .immediate)
+        ]), chats: [], projectPath: nil)
+        board.view = view("n")
+        let model = TicketBoardViewModel(model: board, documents: .immediate)
+        model.setViews(TicketViewCatalog(views: [view("n"), view("w"), view("e"), view("x")], defaultID: "n"),
+                       active: "n", isLoading: false)
+        if let width { model.setTabsWidth(width) }
+        return model
     }
 
     private let context = TicketHeaderContext(hasBack: true, hasBoardChat: false)
 
-    func testMovingOnlySelectsCrossSwitches() {
+    func testMovingOnlySelectsCrossSwitchesTheView() {
         let model = viewModel()
+        var asked: [String] = []
+        model.onSelectView = { asked.append($0) }
         XCTAssertTrue(model.enterHeader(context))
-        XCTAssertEqual(model.headerItem(context), .waitingForMe)
+        XCTAssertEqual(model.headerItem(context), .view("n"), "Einstieg auf dem gezeigten Reiter")
         XCTAssertEqual(model.controllerView(isReady: true), .header)
-        // Gehalten durch die ganze Zeile: kein Filter ändert sich.
+        // Gehalten durch die ganze Zeile: kein Reiter wechselt.
         for _ in 0..<12 { _ = model.headerMove(.right, context) }
-        XCTAssertEqual(model.filter, TicketBoardFilter.all, "Bewegen schaltet nie")
+        XCTAssertEqual(model.activeViewID, "n", "Bewegen schaltet nie")
+        XCTAssertTrue(asked.isEmpty)
         for _ in 0..<12 { _ = model.headerMove(.left, context) }
-        _ = model.headerMove(.right, context)   // „Alle Bereiche“
-        _ = model.headerMove(.right, context)   // Agent: Alle
-        _ = model.headerMove(.right, context)   // Mit Agent
-        XCTAssertEqual(model.headerItem(context), .agent(.withAgent))
+        _ = model.headerMove(.right, context)
+        XCTAssertEqual(model.headerItem(context), .view("w"))
         XCTAssertEqual(model.headerActivate(context), .done)
-        XCTAssertEqual(model.filter.agent, .withAgent)
-        XCTAssertEqual(model.headerItem(context), .agent(.withAgent), "die Auswahl bleibt auf dem Knopf")
+        XCTAssertEqual(model.activeViewID, "w")
+        XCTAssertEqual(asked, ["w"])
+        XCTAssertEqual(model.headerItem(context), .view("w"), "die Auswahl bleibt auf dem Reiter")
     }
 
-    func testWaitingForMeAndPersonToggle() {
-        let model = viewModel()
-        model.enterHeader(context)
-        XCTAssertEqual(model.headerActivate(context), .done)
-        XCTAssertTrue(model.filter.waitingForMe)
-        XCTAssertEqual(model.headerActivate(context), .done)
-        XCTAssertFalse(model.filter.waitingForMe)
-        for _ in 0..<6 { _ = model.headerMove(.right, context) }   // Person: Nicht zugewiesen
-        XCTAssertEqual(model.headerItem(context), .person(.unassigned))
-        _ = model.headerActivate(context)
-        XCTAssertEqual(model.filter.person, .unassigned)
-    }
-
-    func testDownAndCircleGoBackToTheCard() {
+    func testDownAndCircleGoBackToTheRow() {
         let model = viewModel()
         model.ensureControllerSelection(preferringChat: nil)
-        let spot = model.boardSpot
+        let stop = model.listStop
+        XCTAssertNotNil(stop)
         model.enterHeader(context)
         XCTAssertEqual(model.headerMove(.down, context), .done)
         XCTAssertNil(model.headerFocus)
-        XCTAssertEqual(model.boardSpot, spot, "zurück auf die Karte, von der man kam")
+        XCTAssertEqual(model.listStop, stop, "zurück auf die Zeile, von der man kam")
         model.enterHeader(context)
         _ = model.headerMove(.up, context)
         XCTAssertEqual(model.headerItem(context), .back)
@@ -121,40 +137,74 @@ final class TicketBoardHeaderTests: XCTestCase {
     func testTopRowSwitchesModeAndHandsOutTheRest() {
         let model = viewModel()
         model.enterHeader(context)
-        _ = model.headerMove(.up, context)               // ← Chats
+        _ = model.headerMove(.up, context)
+        XCTAssertEqual(model.headerItem(context), .back)
         XCTAssertEqual(model.headerActivate(context), .goBack)
-        _ = model.headerMove(.right, context)            // Board
         _ = model.headerMove(.right, context)            // Liste
+        _ = model.headerMove(.right, context)            // Board
+        XCTAssertEqual(model.headerActivate(context), .done)
+        XCTAssertEqual(model.mode, .board)
+        _ = model.headerMove(.left, context)
         XCTAssertEqual(model.headerActivate(context), .done)
         XCTAssertEqual(model.mode, .list)
+        _ = model.headerMove(.right, context)
         _ = model.headerMove(.right, context)
         XCTAssertEqual(model.headerActivate(context), .copyList)
         _ = model.headerMove(.right, context)
         XCTAssertEqual(model.headerActivate(context), .refresh)
     }
 
-    /// Entscheidung 16.11.2026: Liste darunter, ▲ ▼ wählen, Kreuz übernimmt,
-    /// Kreis schließt ohne Änderung; das Board filtert erst beim Übernehmen.
-    func testProjectListOpensBelowAndAppliesOnlyOnCross() {
-        let model = viewModel()
+    /// WM8-126: ▶ hinter „Mehr“ am Ende der Reiterzeile führt in den Kopf der
+    /// Board-Chat-Spalte, ◀ zurück auf „Mehr“. Aus der offenen Liste unter
+    /// „Mehr“ führt ▶ nicht hinüber.
+    func testRightAfterMoreEntersTheBoardChatHead() {
+        let model = viewModel(width: 280)
+        let jarvis = UUID()
+        let column = BoardChatHeadLayout.make(
+            choices: [BoardChatChoice(id: jarvis, name: "Jarvis", title: "Jarvis", kind: .jarvis, isSelected: true)],
+            others: [], canOpenAsTab: true, isCollapsed: false)
+        let withColumn = TicketHeaderContext(hasBack: true, hasBoardChat: true, column: column)
+        model.enterHeader(withColumn)
+        _ = model.headerMove(.right, withColumn)
+        _ = model.headerMove(.right, withColumn)
+        XCTAssertEqual(model.headerItem(withColumn), .moreViews)
+        XCTAssertEqual(model.headerActivate(withColumn), .done)
+        XCTAssertEqual(model.headerMove(.right, withColumn), .nothing, "aus der Liste unter „Mehr“ nicht hinüber")
+        XCTAssertNil(model.columnFocus)
+        model.headerBack()
+        XCTAssertEqual(model.headerMove(.right, withColumn), .done)
+        XCTAssertEqual(model.columnFocus, .choice(jarvis))
+        XCTAssertEqual(model.controllerView(isReady: true), .boardChatHead)
+        XCTAssertEqual(model.columnMove(.left, withColumn, exit: .toBoard), .done)
+        XCTAssertEqual(model.headerItem(withColumn), .moreViews)
+    }
+
+    /// Wie früher die Liste der Bereiche: Liste darunter, ▲ ▼ wählen, Kreuz
+    /// zeigt die Ansicht, Kreis schließt ohne Änderung.
+    func testMoreOpensAListAndSwitchesOnlyOnCross() {
+        // Reiter „Ansicht n“ je rund 85 pt: In 280 passen zwei und „Mehr“.
+        let model = viewModel(width: 280)
+        XCTAssertEqual(model.tabs.shown.map(\.id), ["n", "w"])
+        XCTAssertEqual(model.tabs.more.map(\.id), ["e", "x"])
         model.enterHeader(context)
         _ = model.headerMove(.right, context)
-        XCTAssertEqual(model.headerItem(context), .project)
+        _ = model.headerMove(.right, context)
+        XCTAssertEqual(model.headerItem(context), .moreViews)
         XCTAssertEqual(model.headerActivate(context), .done)
-        XCTAssertEqual(model.projectPickerIndex, 0, "auf „Alle Bereiche“")
+        XCTAssertEqual(model.morePickerIndex, 0)
         XCTAssertEqual(model.controllerView(isReady: true), .headerPicker)
         _ = model.headerMove(.down, context)
-        XCTAssertNil(model.filter.project, "Bewegen filtert nicht")
+        XCTAssertEqual(model.activeViewID, "n", "Bewegen wechselt nicht")
         model.headerBack()
-        XCTAssertNil(model.projectPickerIndex)
-        XCTAssertNil(model.filter.project, "Kreis schließt ohne Änderung")
-        XCTAssertEqual(model.headerItem(context), .project, "die Auswahl bleibt auf dem Knopf")
+        XCTAssertNil(model.morePickerIndex)
+        XCTAssertEqual(model.activeViewID, "n", "Kreis schließt ohne Änderung")
         _ = model.headerActivate(context)
         _ = model.headerMove(.down, context)
-        let wanted = TicketHeaderSelection.projectOptions(model.presentation.projects)[1]
         XCTAssertEqual(model.headerActivate(context), .done)
-        XCTAssertEqual(model.filter.project, wanted)
-        XCTAssertNil(model.projectPickerIndex)
+        XCTAssertEqual(model.activeViewID, "x")
+        XCTAssertNil(model.morePickerIndex)
+        XCTAssertTrue(model.tabs.shown.contains { $0.id == "x" }, "der gezeigte Reiter rückt in die Zeile")
+        XCTAssertEqual(model.headerItem(context), .view("x"), "die Auswahl folgt ihm")
     }
 
     func testOpeningTheTriageResetsTheHeader() {
@@ -162,62 +212,82 @@ final class TicketBoardHeaderTests: XCTestCase {
         var changes = 0
         model.onControllerViewChange = { changes += 1 }
         model.enterHeader(context)
-        model.openFromLane("WM8-1")
+        model.openFromList("WM8-1")
         XCTAssertNil(model.headerFocus)
         XCTAssertEqual(changes, 1, "Triage auf: die Leiste liest neu")
         model.enterHeader(context)
         XCTAssertEqual(model.headerItem(context), .back, "die Triage hat eine Zeile")
         _ = model.headerMove(.right, context)
         XCTAssertEqual(model.headerActivate(context), .done)
-        XCTAssertNil(model.triage, "„Board“ schließt die Triage")
-        model.mode = .list
+        XCTAssertNil(model.triage, "„‹ Liste“ schließt die Triage")
+        model.mode = .board
         XCTAssertEqual(changes, 3)
     }
 
     /// Folgepunkt der Prüferin zu 3d: Ein Mausklick räumt Kopf und offene
-    /// Liste der Bereiche in jedem Board; ein späteres Kreuz trifft keinen
-    /// alten Knopf mehr.
+    /// Liste in jedem Board; ein späteres Kreuz trifft keinen alten Knopf mehr.
     func testMouseClearsTheHeaderInEveryBoard() {
-        let first = viewModel(), second = viewModel(), idle = viewModel()
+        let first = viewModel(), second = viewModel(width: 280), idle = viewModel()
         first.enterHeader(context)
         second.enterHeader(context)
         _ = second.headerMove(.right, context)
-        _ = second.headerActivate(context)   // Liste der Bereiche offen
-        XCTAssertNotNil(second.projectPickerIndex)
+        _ = second.headerMove(.right, context)
+        _ = second.headerActivate(context)   // Liste unter „Mehr“ offen
+        XCTAssertNotNil(second.morePickerIndex)
         TicketBoardControllers.leaveHeaders([first, second, idle])
         XCTAssertNil(first.headerFocus)
         XCTAssertNil(second.headerFocus)
-        XCTAssertNil(second.projectPickerIndex)
+        XCTAssertNil(second.morePickerIndex)
         XCTAssertNil(idle.headerFocus)
         XCTAssertNotEqual(first.controllerView(isReady: true), .header)
         XCTAssertEqual(first.headerActivate(context), .rejected, "Kreuz danach schaltet keinen alten Knopf")
     }
 
-    /// Mausklick auf einen Eintrag der offenen Liste der Bereiche (Kommentar
-    /// vom 16.11., 18:00): wählt ihn, statt die Liste zu schließen und
-    /// durchzuklicken. Auch wenn das Räumen nach dem Klick schon gelaufen ist.
+    /// Mausklick auf einen Eintrag der offenen Liste: wählt ihn, auch wenn das
+    /// Räumen nach dem Klick schon gelaufen ist.
     func testMouseClickOnAListEntryChoosesIt() {
-        let model = viewModel()
+        let model = viewModel(width: 280)
         model.enterHeader(context)
         _ = model.headerMove(.right, context)
+        _ = model.headerMove(.right, context)
         _ = model.headerActivate(context)
-        XCTAssertNotNil(model.projectPickerIndex)
-        let wanted = TicketHeaderSelection.projectOptions(model.presentation.projects)[2]
-        model.chooseProjectByMouse(wanted)
-        XCTAssertEqual(model.filter.project, wanted)
-        XCTAssertNil(model.projectPickerIndex, "Liste zu")
+        XCTAssertNotNil(model.morePickerIndex)
+        TicketBoardControllers.leaveHeaders([model])
+        model.chooseMoreViewByMouse("e")
+        XCTAssertEqual(model.activeViewID, "e")
+        XCTAssertNil(model.morePickerIndex, "Liste zu")
         XCTAssertNil(model.headerFocus, "die Maus hat übernommen: kein Ring mehr")
         XCTAssertEqual(model.headerActivate(context), .rejected, "ein späteres Kreuz schaltet nichts im Kopf")
+    }
 
-        let late = viewModel()
-        late.enterHeader(context)
-        _ = late.headerMove(.right, context)
-        _ = late.headerActivate(context)
-        TicketBoardControllers.leaveHeaders([late])
-        late.chooseProjectByMouse(nil)
-        XCTAssertNil(late.filter.project, "„Alle Bereiche“ gewählt")
-        late.chooseProjectByMouse("A")
-        XCTAssertEqual(late.filter.project, "A", "Räumen lief schon: die Wahl gilt trotzdem")
+    // MARK: Liste mit Gruppen (WM8-125)
+
+    func testListWalksGroupHeadersAndCollapsesWithLeftAndRight() {
+        let model = viewModel()
+        XCTAssertEqual(model.listStops, ["group:status:in progress", "WM8-3", "group:status:todo", "WM8-1", "WM8-2"])
+        model.ensureControllerSelection(preferringChat: nil)
+        XCTAssertEqual(model.listStop, "WM8-3", "Start auf dem ersten Ticket")
+        XCTAssertEqual(model.controllerMove(.up), .done)
+        XCTAssertEqual(model.selectedGroupID, "status:in progress")
+        XCTAssertNil(model.selectedKey)
+        XCTAssertEqual(model.controllerView(isReady: true), .list)
+        XCTAssertEqual(model.controllerMove(.up), .topEdge, "über dem ersten Kopf: in die Reiter")
+
+        XCTAssertEqual(model.controllerMove(.left), .done)
+        XCTAssertTrue(model.isCollapsed("status:in progress"))
+        XCTAssertEqual(model.controllerMove(.left), .leftEdge, "schon zu: weiter in die Seitenleiste")
+        XCTAssertEqual(model.controllerMove(.down), .done)
+        XCTAssertEqual(model.selectedGroupID, "status:todo", "zugeklappte Tickets werden übersprungen")
+        XCTAssertEqual(model.controllerOpen(), .done, "Kreuz auf dem Kopf klappt")
+        XCTAssertTrue(model.isCollapsed("status:todo"))
+        XCTAssertNil(model.triage)
+        XCTAssertEqual(model.controllerView(isReady: true), .list, "alles zu: trotzdem bedienbar")
+        XCTAssertEqual(model.controllerMove(.right), .done)
+        XCTAssertFalse(model.isCollapsed("status:todo"))
+        XCTAssertEqual(model.controllerMove(.down), .done)
+        XCTAssertEqual(model.selectedKey, "WM8-1")
+        XCTAssertEqual(model.controllerOpen(), .done)
+        XCTAssertEqual(model.triage?.keys, ["WM8-1", "WM8-2"], "die Triage kennt nur aufgeklappte Gruppen")
     }
 
     /// „← Chats“ per Tastatur (Kommentar vom 16.11., 18:00): Im Raster wartet
@@ -305,6 +375,6 @@ final class TicketBoardHeaderTests: XCTestCase {
         let labels = ControllerLegend.entries(for: header(.header)).map(\.label)
         XCTAssertEqual(Array(labels.prefix(3)), [.move, .select, .back])
         XCTAssertEqual(ControllerLegend.entries(for: header(.headerPicker)).map(\.label), [.move, .select, .close])
-        XCTAssertTrue(ControllerLegend.entries(for: header(.board)).map(\.label).contains(.boardFilters), "▲ Filter auf dem Board")
+        XCTAssertTrue(ControllerLegend.entries(for: header(.board)).map(\.label).contains(.boardViews), "▲ Filter auf dem Board")
     }
 }

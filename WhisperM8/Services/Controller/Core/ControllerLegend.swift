@@ -41,7 +41,9 @@ enum ControllerLegendLabel: String, CaseIterable, Sendable {
     // Board-Chat (WM8-91 Paket 3a): ▶ am rechten Rand hinein, Stick ◀ zurück aufs Ticket.
     case intoBoardChat, leaveBoardChat
     /// ▲ in den Kopf des Boards: Filter, Board/Liste, „← Chats“ (Paket 3d).
-    case boardFilters
+    case boardViews
+    /// Kreuz auf dem Kopf einer Gruppe der Liste (WM8-125).
+    case toggleGroup
     /// Dreieck „→ Jarvis“ (Paket 3b): Name in `ControllerLegendEntry.name`.
     case handOffToBoardChat
 }
@@ -360,13 +362,15 @@ enum ControllerLegend {
             entry: ControllerLegendEntry(inputs: [.button(.dpadRight)], label: .intoBoardChat,
                                          name: state.place.boardChatName),
             probes: [.move(.right, source: .dpad, isRepeat: false)])]
-        // ▲ in den Kopf (Paket 3d): Filter, Board/Liste, „← Chats“.
-        let filters = candidate(.button(.dpadUp), .boardFilters, [.move(.up, source: .dpad, isRepeat: false)])
+        // ▲ in den Kopf (Paket 3d): Reiter aus Linear, Liste/Board, „← Chats“ (WM8-125).
+        let filters = candidate(.button(.dpadUp), .boardViews, [.move(.up, source: .dpad, isRepeat: false)])
         switch state.place.view {
         case .empty:
             return [filters, menu, candidate(.button(.r3), .refresh, [.tap(.r3)])] + back + [layers]
         case .board, .list:
-            return [stick, candidate(.button(.cross), .open, [.press(.cross)]), filters] + intoChat + toBoardChat
+            // Auf dem Kopf einer Gruppe klappt Kreuz auf und zu (WM8-125).
+            let cross = candidate(.button(.cross), state.place.onGroup ? .toggleGroup : .open, [.press(.cross)])
+            return [stick, cross, filters] + intoChat + toBoardChat
                 + [link, bumpers, linear, refresh, menu] + back + [layers]
         case .header:
             return [

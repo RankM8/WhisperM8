@@ -26,6 +26,8 @@ final class TicketBoardLoad {
     /// Fertig übersetzter Satz, wenn der letzte Abruf scheiterte. Der letzte
     /// Stand bleibt stehen.
     var problem: String?
+    /// Fertiger Satz, wenn Reiter oder Tickets einer Ansicht nicht kamen (WM8-125).
+    var viewProblem: String?
 
     init(fetchedAt: Date? = nil, isLoading: Bool = false, problem: String? = nil) {
         self.fetchedAt = fetchedAt
@@ -37,6 +39,7 @@ final class TicketBoardLoad {
         fetchedAt = nil
         isLoading = false
         problem = nil
+        viewProblem = nil
     }
 }
 
@@ -49,6 +52,8 @@ struct TicketBoardView: View {
     let load: TicketBoardLoad
     let source: TicketChatStatusSource
     let actions: TicketBoardActions
+    /// Projekt des Boards, für die Breite der Liste in der Triage (WM8-125).
+    var projectID: UUID? = nil
 
     var body: some View {
         let presentation = model.presentation
@@ -56,10 +61,9 @@ struct TicketBoardView: View {
             if let triage = model.triage {
                 // Triage nimmt den Platz des Boards ein: Liste, Ticket, Eigenschaften.
                 TicketBoardProblemLine(load: load)
-                TicketTriageView(model: model, triage: triage, load: load, source: source, actions: actions)
+                TicketTriageView(model: model, triage: triage, load: load, source: source, actions: actions, projectID: projectID)
             } else {
-                // „Liste kopieren“ steht im Kopf: Die Filterzeile braucht die ganze
-                // Breite, sobald rechts der Board-Chat steht (WM8-113).
+                // Kopf, darunter die Reiter aus Linear und was die Ansicht tut (WM8-125).
                 TicketBoardHeader(title: title, mode: $model.mode, load: load, back: actions.back, refresh: actions.refresh,
                                   model: model) { compact in
                     if model.copied == .link {
@@ -72,10 +76,13 @@ struct TicketBoardView: View {
                     TicketCopyButton(kind: .list, copied: model.copied, iconOnly: compact) { model.copyList(title: listTitle) }
                         .ticketHeaderRing(.copyList, model: model)
                 }
-                TicketBoardFilterBar(filter: $model.filter, counts: presentation.counts, projects: presentation.projects,
-                                     model: model)
-                    // Über dem Board: Die Liste der Bereiche hängt darunter (Paket 3d).
-                    .zIndex(1)
+                VStack(alignment: .leading, spacing: 4) {
+                    TicketViewTabsBar(model: model)
+                    TicketViewInfoLine(model: model, load: load, openURL: actions.openURL)
+                        .padding(.horizontal, 4)
+                }
+                // Über dem Board: Die Liste unter „Mehr“ hängt darunter.
+                .zIndex(1)
                 TicketBoardProblemLine(load: load)
                 content(presentation)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -88,10 +95,8 @@ struct TicketBoardView: View {
         .background(AgentTheme.background)
     }
 
-    /// Überschrift der kopierten Liste: Board, Ansicht und Filter.
-    private var listTitle: String {
-        model.filter.waitingForMe ? title + " · " + String(localized: "Waiting for me") : title
-    }
+    /// Überschrift der kopierten Liste: Board und Ansicht.
+    private var listTitle: String { model.listTitle(board: title) }
 
     @ViewBuilder
     private func content(_ presentation: TicketBoardPresentation) -> some View {
@@ -100,9 +105,7 @@ struct TicketBoardView: View {
             TicketBoardLanesView(lanes: presentation.lanes, rule: presentation.rule, selectedKey: model.selectedKey,
                                  source: source, open: { model.openFromLane($0) }, moreColumn: model.moreColumn)
         case .list:
-            TicketBacklogListView(groups: presentation.groups, selectedKey: model.selectedKey, source: source) {
-                model.openFromList($0)
-            }
+            TicketListView(model: model, source: source)
         }
     }
 }
@@ -184,20 +187,21 @@ private struct TicketBoardHeader<Trailing: View>: View {
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(AgentTheme.textPrimary)
                 .lineLimit(1)
+            // Liste zuerst: Sie ist der Standard (WM8-125), wie in Linear.
             Picker(selection: $mode) {
-                Text("Board").tag(TicketBoardViewModel.Mode.board)
                 Text("List").tag(TicketBoardViewModel.Mode.list)
+                Text("Board").tag(TicketBoardViewModel.Mode.board)
             } label: {
                 Text("Board or list")
             }
             .pickerStyle(.segmented)
             .labelsHidden()
             .fixedSize()
-            // Je eine Hälfte für Board und Liste (beide Wörter sind etwa gleich lang).
+            // Je eine Hälfte für Liste und Board (beide Wörter sind etwa gleich lang).
             .overlay {
                 HStack(spacing: 0) {
-                    Color.clear.ticketHeaderRing(.modeBoard, model: model, cornerRadius: 6)
                     Color.clear.ticketHeaderRing(.modeList, model: model, cornerRadius: 6)
+                    Color.clear.ticketHeaderRing(.modeBoard, model: model, cornerRadius: 6)
                 }
             }
 
@@ -269,153 +273,5 @@ private struct TicketBoardProblemLine: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(AgentTheme.statusAwaiting.opacity(0.10), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
-    }
-}
-
-// MARK: - Filter
-
-/// Zwei Gruppen, die sich kombinieren lassen (Agent, Person), dazu das Projekt.
-/// Jede Zahl gilt innerhalb der übrigen Auswahl.
-private struct TicketBoardFilterBar: View {
-    @Binding var filter: TicketBoardFilter
-    let counts: TicketFilterCounts
-    let projects: [String]
-    /// Für Ringe, Mitscrollen und die Liste der Bereiche (Paket 3d).
-    let model: TicketBoardViewModel
-
-    var body: some View {
-        let names = TicketBoardText.chipNames(counts.people.map(\.person))
-        // Waagrecht scrollbar, mit sichtbarem Balken: Mit Board-Chat passt die
-        // Zeile oft nicht ganz, und jeder Filter muss erreichbar bleiben.
-        ScrollViewReader { proxy in
-        ScrollView(.horizontal, showsIndicators: true) {
-            HStack(spacing: 6) {
-                // Die Auswahl des Projekts zuerst: Sie bleibt sichtbar, auch
-                // wenn viele Personen die Zeile füllen.
-                // Zuerst, was auf den Nutzer wartet: die Frage, mit der er das Board öffnet.
-                TicketFilterChip(isOn: filter.waitingForMe, count: counts.waitingForMe,
-                                 tone: AgentTheme.statusAwaiting, tint: AgentTheme.statusAwaiting.opacity(0.14)) {
-                    filter.waitingForMe.toggle()
-                } label: {
-                    Text("Waiting for me")
-                }
-                .ticketHeaderRing(.waitingForMe, model: model)
-                .id(TicketHeaderItem.waitingForMe)
-
-                Rectangle().fill(AgentTheme.border).frame(width: 1, height: 16).padding(.horizontal, 4)
-
-                Picker(selection: $filter.project) {
-                    Text("All projects").tag(String?.none)
-                    ForEach(projects, id: \.self) { project in
-                        Text(verbatim: TicketBoardText.project(project)).tag(String?.some(project))
-                    }
-                } label: {
-                    Text("Linear project")
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .fixedSize()
-                .ticketHeaderRing(.project, model: model)
-                .id(TicketHeaderItem.project)
-                .anchorPreference(key: TicketProjectPickerAnchorKey.self, value: .bounds) { $0 }
-
-                Rectangle().fill(AgentTheme.border).frame(width: 1, height: 16).padding(.horizontal, 4)
-
-                TicketFilterGroupLabel(text: "Agent")
-                TicketFilterChip(isOn: filter.agent == .all, count: counts.all) { filter.agent = .all } label: { Text("All") }
-                    .ticketHeaderRing(.agent(.all), model: model)
-                    .id(TicketHeaderItem.agent(.all))
-                TicketFilterChip(isOn: filter.agent == .withAgent, count: counts.withAgent) { filter.agent = .withAgent } label: {
-                    Text("With agent")
-                }
-                .ticketHeaderRing(.agent(.withAgent), model: model)
-                .id(TicketHeaderItem.agent(.withAgent))
-                TicketFilterChip(isOn: filter.agent == .withoutAgent, count: counts.withoutAgent) { filter.agent = .withoutAgent } label: {
-                    Text("Without agent")
-                }
-                .ticketHeaderRing(.agent(.withoutAgent), model: model)
-                .id(TicketHeaderItem.agent(.withoutAgent))
-
-                Rectangle().fill(AgentTheme.border).frame(width: 1, height: 16).padding(.horizontal, 4)
-
-                TicketFilterGroupLabel(text: "Person")
-                TicketFilterChip(isOn: filter.person == .all, count: nil) { filter.person = .all } label: { Text("All") }
-                    .ticketHeaderRing(.person(.all), model: model)
-                    .id(TicketHeaderItem.person(.all))
-                TicketFilterChip(isOn: filter.person == .unassigned, count: counts.unassigned) { filter.person = .unassigned } label: {
-                    Text("Unassigned")
-                }
-                .ticketHeaderRing(.person(.unassigned), model: model)
-                .id(TicketHeaderItem.person(.unassigned))
-                ForEach(counts.people, id: \.person.id) { entry in
-                    TicketFilterChip(isOn: filter.person == .person(id: entry.person.id), count: entry.count) {
-                        filter.person = .person(id: entry.person.id)
-                    } label: {
-                        Text(verbatim: names[entry.person.id] ?? entry.person.name)
-                    }
-                    .ticketHeaderRing(.person(.person(id: entry.person.id)), model: model)
-                    .id(TicketHeaderItem.person(.person(id: entry.person.id)))
-                }
-            }
-            // Platz für den Balken (und die Ringe), damit er keine Filter verdeckt.
-            .padding(.bottom, 8)
-            .padding(.horizontal, 4)
-            .padding(.top, 4)
-            .background { TicketHeaderScroller(model: model, proxy: proxy) }
-        }
-        }
-        // Liste der Bereiche direkt unter „Alle Bereiche“ (Entscheidung 16.11.2026).
-        .overlayPreferenceValue(TicketProjectPickerAnchorKey.self) { anchor in
-            GeometryReader { geometry in
-                if let anchor {
-                    let rect = geometry[anchor]
-                    TicketProjectPickerList(model: model, projects: projects)
-                        .offset(x: rect.minX, y: rect.maxY + 4)
-                }
-            }
-            // Nur die Liste nimmt Klicks (ihre Einträge, `chooseProjectByMouse`);
-            // die leere Fläche drumherum lässt sie durch.
-        }
-    }
-}
-
-private struct TicketFilterGroupLabel: View {
-    let text: LocalizedStringKey
-
-    var body: some View {
-        Text(text)
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(AgentTheme.textSecondary)
-    }
-}
-
-private struct TicketFilterChip<Label: View>: View {
-    let isOn: Bool
-    let count: Int?
-    /// Farbe des Rahmens; Bernstein für „wartet auf mich“.
-    var tone: Color = AgentTheme.accent
-    var tint: Color = AgentTheme.accentTint
-    let action: () -> Void
-    @ViewBuilder let label: Label
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 5) {
-                label
-                    .font(.system(size: 12, weight: .medium))
-                if let count {
-                    Text(verbatim: "\(count)")
-                        .font(.system(size: 11, weight: .medium).monospacedDigit())
-                        .foregroundStyle(AgentTheme.textSecondary)
-                }
-            }
-            .foregroundStyle(AgentTheme.textPrimary)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4)
-            .background(isOn ? tint : AgentTheme.control, in: Capsule())
-            .overlay { Capsule().strokeBorder(isOn ? tone : AgentTheme.border, lineWidth: 1) }
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(isOn ? [.isSelected] : [])
     }
 }

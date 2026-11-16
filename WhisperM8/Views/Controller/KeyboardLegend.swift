@@ -47,10 +47,12 @@ enum KeyboardLegend {
         case .empty:
             return []
         case .board, .list:
-            // Plan „Die Leiste unten“, Zustand Board (Paket 3c).
+            // Plan „Die Leiste unten“, Zustand Board (Paket 3c). Auf dem Kopf
+            // einer Gruppe klappt Return auf und zu (WM8-125).
             return [
                 Item(keys: ["↑", "↓", "←", "→"], label: String(localized: "Selection")),
-                Item(keys: ["↩"], label: String(localized: "Open")),
+                Item(keys: ["↩"], label: state.place.onGroup
+                    ? String(localized: "Collapse or expand") : String(localized: "Open")),
                 Item(keys: ["⌘", "C"], label: String(localized: "Copy link")),
                 Item(keys: ["⌘", "⌥", "←", "→"], label: String(localized: "Ticket")),
             ] + jarvis + [

@@ -37,6 +37,32 @@ enum TicketBoardText {
         }
     }
 
+    /// Zeile unter den Reitern: „From Linear · grouped by status · sorted by
+    /// priority · 21 tickets“, dazu der Hinweis bei unbekannter Gruppierung.
+    static func viewSummary(_ view: TicketView, count: Int) -> String {
+        let grouping: String
+        switch view.grouping {
+        case .status: grouping = String(localized: "grouped by status")
+        case .project: grouping = String(localized: "grouped by project")
+        case .priority: grouping = String(localized: "grouped by priority")
+        case .assignee: grouping = String(localized: "grouped by person")
+        case .label: grouping = String(localized: "grouped by label")
+        case .none: grouping = String(localized: "not grouped")
+        case .unsupported(let name): grouping = String(localized: "grouped by \(name) in Linear, shown by status")
+        }
+        let ordering = view.ordering == .updated ? String(localized: "last updated first") : String(localized: "sorted by priority")
+        let tickets = count == 1 ? String(localized: "1 ticket") : String(localized: "\(count) tickets")
+        var parts = [String(localized: "From Linear"), grouping, ordering]
+        if !view.showsSubIssues { parts.append(String(localized: "without sub-issues")) }
+        parts.append(tickets)
+        return parts.joined(separator: " · ")
+    }
+
+    /// Datum in der Liste, kurz wie in Linear („16. Nov.“ bzw. „Nov 16“).
+    static func shortDate(_ date: Date) -> String {
+        date.formatted(.dateTime.day().month(.abbreviated))
+    }
+
     static func project(_ name: String) -> String {
         name.isEmpty ? String(localized: "No Linear project") : name
     }

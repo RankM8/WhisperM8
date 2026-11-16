@@ -30,9 +30,10 @@ final class TicketBoardPresentationTests: XCTestCase {
         let presentation = TicketBoardPresentation.make(model: model(), filter: .all)
         XCTAssertEqual(presentation.lanes.map(\.status.name), ["In Progress", "Todo", "Backlog"], "nur Status mit offenen Tickets")
         XCTAssertEqual(presentation.lanes.map { $0.entries.map(\.ticket.key) }, [["WM8-1"], ["WM8-2", "WM8-4"], ["WM8-3"]])
-        XCTAssertEqual(presentation.groups.map(\.project), ["Agent Chats", "Tickets", ""], "alphabetisch, ohne Projekt am Ende")
-        XCTAssertEqual(presentation.groups[1].entries.map(\.ticket.key), ["WM8-1", "WM8-4"])
-        XCTAssertEqual(presentation.groups[1].agentCount, 1)
+        // Ohne Ansicht aus Linear: Liste nach Status wie die Spalten (WM8-125).
+        XCTAssertEqual(presentation.groups.map(\.title), ["In Progress", "Todo", "Backlog"])
+        XCTAssertEqual(presentation.groups[1].entries.map(\.ticket.key), ["WM8-2", "WM8-4"])
+        XCTAssertEqual(presentation.groups[0].agentCount, 1)
         XCTAssertEqual(presentation.projects, ["Agent Chats", "Tickets", ""])
         XCTAssertEqual(presentation.visibleCount, 4, "das erledigte Ticket steht nur für die Spur im Abzug")
         XCTAssertNil(presentation.entry(key: "WM8-5"))
@@ -44,7 +45,7 @@ final class TicketBoardPresentationTests: XCTestCase {
         var filter = TicketBoardFilter()
         filter.project = "Tickets"
         let presentation = TicketBoardPresentation.make(model: model(), filter: filter)
-        XCTAssertEqual(presentation.groups.map(\.project), ["Tickets"])
+        XCTAssertEqual(presentation.groups.map { $0.entries.map(\.ticket.key) }, [["WM8-1"], ["WM8-4"]])
         XCTAssertEqual(presentation.projects, ["Agent Chats", "Tickets", ""], "die Auswahl zeigt weiter alle Projekte")
         XCTAssertEqual(presentation.counts.all, 2)
         XCTAssertEqual(presentation.counts.withAgent, 1)
@@ -56,16 +57,11 @@ final class TicketBoardPresentationTests: XCTestCase {
 
     // MARK: Zustand der Ansicht
 
-    func testViewModelRebuildsOnFilterAndKeepsSelection() {
+    func testViewModelKeepsSelectionAcrossANewSnapshot() {
         let viewModel = TicketBoardViewModel(model: model())
         viewModel.selectedKey = "WM8-1"
         XCTAssertEqual(viewModel.selected?.ticket.key, "WM8-1")
-
-        viewModel.filter.agent = .withoutAgent
-        XCTAssertEqual(viewModel.presentation.visibleCount, 2)
-        XCTAssertNil(viewModel.selected, "das gewählte Ticket ist ausgeblendet")
-        XCTAssertEqual(viewModel.selectedKey, "WM8-1", "die Auswahl selbst bleibt, bis der Filter zurückgeht")
-        viewModel.filter.agent = .all
+        viewModel.update(model())
         XCTAssertEqual(viewModel.selected?.ticket.key, "WM8-1")
     }
 
@@ -124,18 +120,16 @@ final class TicketBoardPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.counts.people.map(\.count), [0])
     }
 
-    func testResetAndVanishedPerson() {
+    func testResetGoesBackToTheList() {
         let viewModel = TicketBoardViewModel(model: model())
-        viewModel.filter.person = .person(id: "u1")
+        viewModel.setViews(TicketViewCatalog(views: [TicketFixtures.view("n")], defaultID: "n"), active: "n", isLoading: false)
+        viewModel.toggleGroup("status:todo")
         viewModel.selectedKey = "WM8-1"
-        viewModel.mode = .list
-        // Neuer Abzug ohne Tickets dieser Person: Der Filter blendete sonst alles aus.
-        viewModel.update(TicketBoardModel(entries: model().entries.filter { $0.ticket.assignee == nil }, looseChats: [], supervisors: []))
-        XCTAssertEqual(viewModel.filter.person, .all)
-        viewModel.filter.agent = .withAgent
+        viewModel.mode = .board
         viewModel.reset()
-        XCTAssertEqual(viewModel.filter, TicketBoardFilter())
-        XCTAssertEqual(viewModel.mode, .board)
+        XCTAssertEqual(viewModel.mode, .list, "Liste ist der Standard (WM8-125)")
+        XCTAssertNil(viewModel.activeViewID)
+        XCTAssertTrue(viewModel.collapsedGroups.isEmpty)
         XCTAssertEqual(viewModel.presentation, .empty)
     }
 
@@ -156,12 +150,10 @@ final class TicketBoardPresentationTests: XCTestCase {
     func testViewModelDropsWhatNoLongerExists() {
         let viewModel = TicketBoardViewModel(model: model())
         viewModel.selectedKey = "WM8-2"
-        viewModel.filter.project = "Agent Chats"
-        // Neuer Abzug: Das Ticket und sein Projekt gibt es nicht mehr.
+        // Neuer Abzug: Das Ticket gibt es nicht mehr.
         let remaining = model().entries.filter { $0.ticket.key != "WM8-2" }
         viewModel.update(TicketBoardModel(entries: remaining, looseChats: [], supervisors: []))
         XCTAssertNil(viewModel.selectedKey)
-        XCTAssertNil(viewModel.filter.project, "ein Filter auf ein verschwundenes Projekt blendete sonst alles aus")
         XCTAssertEqual(viewModel.presentation.visibleCount, 3)
     }
 

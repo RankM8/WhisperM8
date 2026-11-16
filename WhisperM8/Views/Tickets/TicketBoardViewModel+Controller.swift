@@ -72,7 +72,30 @@ extension TicketBoardViewModel {
             let start = TicketBoardSelection.controllerStart(preferred: preferred, waiting: waiting, in: boardColumns)
             setBoardSpot(start.map(TicketBoardSpot.card))
         case .list:
-            if selectedKey == nil || !listKeys.contains(selectedKey!) { selectedKey = listKeys.first }
+            guard listStop.map(listStops.contains) != true else { return }
+            setListStop(listKeys.first ?? listStops.first)
+        }
+    }
+
+    // MARK: Liste mit Gruppen (WM8-125)
+
+    /// Stellen der Liste in Reihenfolge: der Kopf jeder Gruppe, darunter die
+    /// Tickets aufgeklappter Gruppen. Köpfe als `group:<id>`, Tickets als Nummer.
+    var listStops: [String] {
+        presentation.groups.flatMap { group in
+            [TicketListStop.group(group.id)] + (isCollapsed(group.id) ? [] : group.rows.map(\.id))
+        }
+    }
+
+    /// Wo die Auswahl in der Liste steht: Kopf einer Gruppe oder Ticket.
+    var listStop: String? { selectedGroupID.map(TicketListStop.group) ?? selectedKey }
+
+    func setListStop(_ stop: String?) {
+        if let id = stop.flatMap(TicketListStop.groupID) {
+            if selectedGroupID != id { selectedGroupID = id }
+        } else {
+            if selectedGroupID != nil { selectedGroupID = nil }
+            if selectedKey != stop { selectedKey = stop }
         }
     }
 
@@ -111,12 +134,19 @@ extension TicketBoardViewModel {
             setBoardSpot(step.spot)
             return .done
         case .list:
-            let step = TicketBoardSelection.stepInList(selectedKey, direction, keys: listKeys)
+            // Auf dem Kopf einer Gruppe: ◀ klappt zu, ▶ auf; erst am Rand geht es weiter.
+            if let group = selectedGroupID, direction == .left || direction == .right {
+                let collapsed = isCollapsed(group)
+                if direction == .left, !collapsed { setGroup(group, collapsed: true); return .done }
+                if direction == .right, collapsed { setGroup(group, collapsed: false); return .done }
+            }
+            let stop = listStop
+            let step = TicketBoardSelection.stepInList(stop, direction, keys: listStops)
             if step.edge == .left { return .leftEdge }
             if step.edge == .right { return .rightEdge }
             if step.edge == .top { return .topEdge }
-            guard step.key != selectedKey else { return .nothing }
-            selectedKey = step.key
+            guard step.key != stop else { return .nothing }
+            setListStop(step.key)
             return .done
         }
     }
@@ -130,6 +160,11 @@ extension TicketBoardViewModel {
             guard let key = TicketBoardSelection.openKey(boardSpot, in: boardColumns) else { return .rejected }
             openFromLane(key)
         case .list:
+            if let group = selectedGroupID {
+                // Kreuz bzw. Return auf dem Kopf einer Gruppe: auf- und zuklappen.
+                toggleGroup(group)
+                return .done
+            }
             guard let key = selectedKey, listKeys.contains(key) else { return .rejected }
             openFromList(key)
         }
@@ -183,22 +218,17 @@ extension TicketBoardViewModel {
         return chatLines[index].chatID
     }
 
-    /// Filter „Wartet auf mich“ an/aus (Menü-Karte).
-    func toggleWaitingFilter() {
-        filter.waitingForMe.toggle()
-    }
-
     /// Was der Controller über die Ansicht wissen muss.
     func controllerView(isReady: Bool) -> ControllerTicketView {
         // Der Kopf geht vor, auch bevor ein Stand da ist (Aktualisieren, Filter).
         // Der Kopf der Board-Chat-Spalte zählt dazu (WM8-126).
         if columnFocus != nil { return columnPickerIndex == nil ? .boardChatHead : .boardChatHeadPicker }
-        if headerFocus != nil { return projectPickerIndex == nil ? .header : .headerPicker }
+        if headerFocus != nil { return morePickerIndex == nil ? .header : .headerPicker }
         guard isReady else { return .empty }
         if triage != nil { return focusedChatLine == nil ? .triage : .chatLine }
         switch mode {
         case .board: return presentation.lanes.contains(where: { !$0.entries.isEmpty }) ? .board : .empty
-        case .list: return listKeys.isEmpty ? .empty : .list
+        case .list: return presentation.groups.isEmpty ? .empty : .list
         }
     }
 }

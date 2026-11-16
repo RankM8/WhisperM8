@@ -116,6 +116,8 @@ final class TicketBoardController {
     @ObservationIgnored private var hasModel = false
     /// Mit welchen Chats zuletzt abgeglichen wurde.
     @ObservationIgnored private var builtWith: [TicketChat]?
+    /// Für welche Ansicht und welchen Abruf ihrer Tickets zuletzt abgeglichen wurde (WM8-125).
+    @ObservationIgnored private var builtView: TicketBuiltView?
     @ObservationIgnored private var watchesChats = false
     @ObservationIgnored private var chatsTask: Task<Void, Never>?
     @ObservationIgnored private var isVisible = false
@@ -126,6 +128,12 @@ final class TicketBoardController {
         viewModel = TicketBoardViewModel(documents: environment.documents)
         viewModel.onShowTicket = { [weak self] ticket in self?.showComments(for: ticket, fresh: false) }
         viewModel.onReloadComments = { [weak self] ticket in self?.showComments(for: ticket, fresh: true) }
+        viewModel.onSelectView = { [weak self] id in
+            guard let self, let store = self.active?.store else { return }
+            // Der Store holt die Tickets, wenn sein Zwischenspeicher nicht frisch ist.
+            store.viewID = id
+            self.storeChanged(store)
+        }
     }
 
     /// Kommentare des Tickets in der Triage: aus dem Zwischenspeicher sofort,
@@ -227,6 +235,7 @@ final class TicketBoardController {
         active = nil
         builtFor = nil
         builtWith = nil
+        builtView = nil
         buildSequence += 1
         hasModel = false
         viewModel.reset()
@@ -238,12 +247,17 @@ final class TicketBoardController {
         if load.isLoading != store.isLoading { load.isLoading = store.isLoading }
         let problem = store.lastError?.userText
         if load.problem != problem { load.problem = problem }
+        let viewProblem = store.viewError.map { String(localized: "Views from Linear: \($0.userText)") }
+        if load.viewProblem != viewProblem { load.viewProblem = viewProblem }
         guard let snapshot = store.snapshot else {
             phase = store.lastError.map { .unreachable($0.userText) } ?? .loading
             return
         }
         if load.fetchedAt != snapshot.fetchedAt { load.fetchedAt = snapshot.fetchedAt }
         if hasModel, phase != .ready { phase = .ready }
+        let viewID = store.effectiveViewID
+        viewModel.setViews(store.catalog ?? .empty, active: viewID,
+                           isLoading: viewID != nil && viewID.flatMap { store.viewTickets[$0] } == nil)
         match(snapshot, projectPath: active.projectPath, rule: active.rule)
     }
 
@@ -251,16 +265,23 @@ final class TicketBoardController {
     /// Zustand der Chats liefern die Status-Punkte selbst, ohne Abgleich.
     private func match(_ snapshot: TicketBoardSnapshot, projectPath: String, rule: TicketTeamRule) {
         let chats = PerfBudgets.ticketsChats.withInterval { environment.chats() }
-        guard builtFor != snapshot.fetchedAt || builtWith != chats else { return }
+        let store = active?.store
+        let viewID = store?.effectiveViewID
+        let view = store?.catalog?.views.first { $0.id == viewID }
+        let viewTickets = viewID.flatMap { store?.viewTickets[$0] }
+        let wanted = TicketBuiltView(viewID: viewID, fetchedAt: viewTickets?.fetchedAt)
+        guard builtFor != snapshot.fetchedAt || builtWith != chats || builtView != wanted else { return }
         builtFor = snapshot.fetchedAt
         builtWith = chats
+        builtView = wanted
         buildSequence += 1
         let sequence = buildSequence
         Task { [weak self] in
             // Abgleich abseits des Main Threads: bis zu 500 Tickets gegen alle Chats.
             let model = await Task.detached(priority: .userInitiated) {
                 PerfBudgets.ticketsBuild.withInterval {
-                    TicketBoardBuilder.build(snapshot: snapshot, chats: chats, projectPath: projectPath, rule: rule)
+                    TicketBoardBuilder.build(snapshot: snapshot, chats: chats, projectPath: projectPath, rule: rule,
+                                             view: view, viewTickets: viewTickets)
                 }
             }.value
             guard let self, sequence == self.buildSequence else { return }
@@ -298,6 +319,12 @@ final class TicketBoardController {
     }
 }
 
+/// Ansicht und Abruf, für die zuletzt abgeglichen wurde.
+struct TicketBuiltView: Equatable {
+    var viewID: String?
+    var fetchedAt: Date?
+}
+
 /// Ein Controller je Fenster, außerhalb der View: Wer zwischen Chats und
 /// Tickets wechselt, sieht beim Zurückkommen sofort den letzten Stand statt
 /// „Loading“, und der frische Abruf läuft dahinter.
@@ -321,8 +348,8 @@ final class TicketBoardControllers {
     /// Controller-Laufzeit: Auch die Tastatur wählt Knöpfe im Kopf (Paket 3c),
     /// und ein späteres Return nach einem Klick wirkte sonst auf den alten
     /// Knopf (WM8-91). Erst nach dem Klick geräumt, nicht beim Mausdruck: Ein
-    /// Klick auf einen Eintrag der offenen Liste der Bereiche wählt ihn
-    /// (`chooseProjectByMouse`), statt dass die Liste vorher verschwindet und der
+    /// Klick auf einen Eintrag der offenen Liste unter „Mehr“ wählt ihn
+    /// (`chooseMoreViewByMouse`), statt dass die Liste vorher verschwindet und der
     /// Klick darunter landet. Einmal je App, sobald es ein Board gibt. Kosten je
     /// Klick: ein Blick je Fenster mit Board, nie je Taste.
     private func watchMouse() {
@@ -352,7 +379,7 @@ final class TicketBoardControllers {
     }
 
     static func leaveHeaders(_ models: [TicketBoardViewModel]) {
-        for model in models where model.headerFocus != nil || model.projectPickerIndex != nil
+        for model in models where model.headerFocus != nil || model.morePickerIndex != nil
             || model.columnFocus != nil || model.columnPickerIndex != nil {
             model.leaveHeader()
         }
@@ -367,6 +394,8 @@ struct TicketBoardScreen: View, Equatable {
     /// Projekt, dessen Tickets gezeigt werden; `nil` ohne gewähltes Projekt.
     let projectPath: String?
     let projectName: String
+    /// Daran hängen Einstellungen je Projekt, etwa die Breite der Liste in der Triage (WM8-125).
+    var projectID: UUID? = nil
     let controller: TicketBoardController
     /// Der Schalter ging aus, während die Ansicht offen war: Das Fenster
     /// kehrt zu den Chats zurück.
@@ -387,7 +416,8 @@ struct TicketBoardScreen: View, Equatable {
     /// Die Closures zählen nicht: Sie tun für dasselbe Fenster immer dasselbe.
     /// Vom Rückweg zählt nur, was auf dem Knopf steht.
     nonisolated static func == (lhs: TicketBoardScreen, rhs: TicketBoardScreen) -> Bool {
-        lhs.projectPath == rhs.projectPath && lhs.projectName == rhs.projectName && lhs.controller === rhs.controller
+        lhs.projectPath == rhs.projectPath && lhs.projectName == rhs.projectName && lhs.projectID == rhs.projectID
+            && lhs.controller === rhs.controller
             && lhs.back?.destination == rhs.back?.destination
     }
 
@@ -399,7 +429,7 @@ struct TicketBoardScreen: View, Equatable {
                 switch controller.phase {
                 case .ready:
                     TicketBoardView(title: String(localized: "Tickets · \(controller.title)"), model: controller.viewModel,
-                                    load: controller.load, source: source ?? .live, actions: screenActions)
+                                    load: controller.load, source: source ?? .live, actions: screenActions, projectID: projectID)
                 case .noProject:
                     TicketBoardEmptyState(kind: .noProject, actions: screenActions)
                 case .notMapped:

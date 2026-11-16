@@ -298,11 +298,16 @@ Services/Tickets/TicketRecordText.swift      fester Aufbau für Entscheidung und
 Services/Tickets/TicketHygiene.swift         Ordnung der Tickets, Tabelle der Bereiche, Bild-Typen
 Services/Tickets/TicketBoardStore.swift      Abzug mit Takt für die Ansicht
 Views/Tickets/TicketErrorText.swift          Fehler als übersetzter Satz für die Oberfläche
-Views/Tickets/TicketBoardPresentation.swift  fertig gerechneter Inhalt, Zustand der Ansicht (Filter, Auswahl), Live-Zustand der Chats
-Views/Tickets/TicketBoardView.swift          Kopf, Umschalter Board/Liste, Filter
+Models/Tickets/TicketView.swift              gespeicherte Ansichten aus Linear, Reiter und Standard (WM8-125)
+Views/Tickets/TicketBoardPresentation.swift  fertig gerechneter Inhalt, Zustand der Ansicht (Auswahl), Live-Zustand der Chats
+Views/Tickets/TicketBoardViewModel+Views.swift  Reiter, Aufklappen, was unter „Mehr“ steht
+Views/Tickets/TicketBoardView.swift          Kopf, Umschalter Liste/Board
+Views/Tickets/TicketViewTabsBar.swift        Reiterzeile, „Mehr“, Zeile unter den Reitern
 Views/Tickets/TicketCardView.swift           Karte und Spalten
-Views/Tickets/TicketBacklogListView.swift    Liste nach Projekt, Zeile „Chats ohne Ticket“
-Views/Tickets/TicketTriageView.swift         Triage: Liste links, Ticket in der Mitte, Eigenschaften rechts
+Views/Tickets/TicketListGrouping.swift       Gruppen, Reihenfolge und Unteraufgaben der Liste, pur
+Views/Tickets/TicketListView.swift           Liste: Gruppenköpfe, Zeile wie Linear plus Chat, was bei Enge wegfällt
+Views/Tickets/TicketLooseChatsBar.swift      Zeile „Chats ohne Ticket“
+Views/Tickets/TicketTriageView.swift         Triage: Liste links (ziehbar), Ticket mit Eigenschaften-Zeile
 Views/Tickets/TicketBoardSelection.swift     Auswahl und Tasten der Triage, pur (gewählt, nächstes, voriges, schließen, Abgleich)
 Views/Tickets/TicketBoardViewModel+Triage.swift  Triage auf den Zustand der Ansicht angewendet
 Views/Tickets/TicketTextDocument.swift       Titel, Beschreibung und Kommentare als ein Text, dazu die Textansicht
@@ -436,8 +441,8 @@ Idee 3.
   Knopf. Breite, Zuklappen und Wahl gelten je Projekt und liegen in `ticket-board-chat.json`
   (`BoardChatPreferencesStore`), nicht im UI-Zustand der Fenster: Eine Änderung dort ließe alle Fenster samt
   Seitenleiste neu auswerten.
-- **Filter:** „Liste kopieren“ steht im Kopf neben „Aktualisieren“; die Filterzeile hat die ganze Breite und
-  scrollt waagrecht mit sichtbarem Balken, damit mit Board-Chat jeder Filter erreichbar bleibt.
+- **Reiter:** „Liste kopieren“ steht im Kopf neben „Aktualisieren“; die Reiterzeile darunter hat die ganze Breite
+  des Boards. Was mit Board-Chat nicht mehr hineinpasst, steht unter „Mehr“ (WM8-125).
 - **Eingaben (Teil b):** Solange die Spalte ihr Terminal zeigt, meldet sie den Chat als sichtbar an
   (`BoardChatInputs`, je Fenster, mit Zeichen gegen späte Abmeldungen). Ein Diktat per Hotkey geht dann an ihn,
   gleich wo der Tastaturfokus steht, solange ein Agent-Chats-Fenster vorn ist (`RecordingCoordinator.boardChatTarget`);
@@ -485,7 +490,11 @@ Idee 3.
 
 ### Abruf
 
-- Abgerufen wird beim Zeigen sofort, danach alle 120 Sekunden, dazu der Knopf im Kopf. Ist das Fenster verdeckt,
+- Abgerufen wird beim Zeigen sofort, danach alle 120 Sekunden, dazu der Knopf im Kopf. Je Abruf kommen nach dem
+  Board die Tickets der gezeigten Ansicht (eine Anfrage, WM8-125); die Reiter selbst höchstens alle zehn Minuten
+  (`TicketBoardStore.catalogLifetime`), mit dem Knopf sofort. Ein anderer Reiter holt seine Tickets nur, wenn der
+  Zwischenspeicher älter als ein Takt ist. Scheitert das Holen der Ansichten, bleibt das Board stehen und die Zeile
+  unter den Reitern nennt den Grund. Ist das Fenster verdeckt,
   minimiert oder geschlossen, zeigt es Chats, oder ist der Schalter aus, gibt es keinen Abruf.
 - Meldet Linear „Rate limited“, ruht der Takt 15 Minuten (`TicketBoardStore.rateLimitPause`), auch über
   Verdecken und Zeigen hinweg. Der Knopf fragt trotzdem, einmal je Druck.
@@ -499,6 +508,11 @@ Idee 3.
   lesen, Main Thread), `tickets.build` (Abgleich abseits des Main Threads).
 
 ### Was ein Abruf bei Linear kostet
+
+Mit den Ansichten (WM8-125, gemessen am 16.11.2026 an der Ansicht „Als Nächstes: Giuliano“, 14 Tickets): die Tickets
+einer Ansicht eine Anfrage und rund 3.460 Punkte je Takt (die Beschreibung ist dabei); die Reiter eine Anfrage und
+rund 790 Punkte, höchstens alle zehn Minuten. Ein sichtbares Board braucht damit je Stunde rund 96 Anfragen (3,8 %
+des Budgets) statt 60, und rund 112.000 Punkte (3,7 %).
 
 Linear zählt je Key und Stunde 2.500 Anfragen und 3.000.000 „Complexity“-Punkte. Derselbe Key trägt die Ansicht
 und jeden `tickets`-Befehl aller Chats: Ist das Budget weg, steht beides. Gemessen am 14.11.2026 über die
@@ -577,24 +591,44 @@ gezeigten Stands.
   Titel, Projekt und Meilenstein, Status und Labels; Labels, mit denen ein Ticket auf mich wartet, in Bernstein.
   Die Chat-Zeile steht nur da, wo ein Chat sitzt oder abgegeben hat („Abgegeben von …“). „Kein Agent“ gibt es
   nicht mehr: In Teams, deren Entwickler ohne WhisperM8-Chats arbeiten, stand es auf fast jeder Karte.
-- **Liste:** dieselben Tickets als Liste, nach Projekt gruppiert.
-- **Filter:** „Wartet auf mich“ (Bernstein, vorn), Agent (alle, mit, ohne) und Person (alle, nicht zugewiesen, je
-  Person) lassen sich kombinieren, dazu die Auswahl eines Projekts. Jede Zahl gilt innerhalb der übrigen Auswahl.
-  „Ohne Agent“ zählt keine Status, die nach der Regel „fertig“ oder „wartet auf mich“ bedeuten.
+- **Ansichten aus Linear als Reiter (WM8-125, Entscheidungen Giuliano 16.11.2026):** Oben im Board stehen die
+  gespeicherten Ansichten aus Linear (`customView`), die der Nutzer im Workspace des Projekts als Favoriten hat, in
+  deren Reihenfolge. Standard ist die Ansicht „Als Nächstes: <Vorname>“, auch wenn sie kein Favorit ist; ohne sie
+  der erste Favorit (`TicketViewCatalog.make`, pur). Ansichten über Vorhaben (etwa „Laufende Vorhaben“) werden kein
+  Reiter. Was nicht in die Zeile passt, steht unter „Mehr“ (`TicketViewTabs.split`, pur); der gezeigte Reiter steht
+  immer in der Zeile. Gefiltert wird bei Linear: Die Liste zeigt genau die Tickets der Ansicht, auch aus anderen
+  Teams des Workspaces. Unter den Reitern eine Zeile, was die Ansicht tut („Aus Linear · nach Status gruppiert ·
+  nach Priorität sortiert · 21 Tickets · In Linear öffnen“). Ohne Ansichten (kein Favorit, Fehler) zeigt das Board
+  alle offenen Tickets des Teams nach Status. Nach Linear wird nichts geschrieben.
+- **Liste (Standard):** Die Liste ist die Ansicht beim Öffnen, das Board bleibt umschaltbar. Sie gruppiert wie die
+  Ansicht in Linear (Status, Vorhaben, Priorität, Person, Label; was WhisperM8 nicht kennt, nach Status mit Hinweis),
+  Gruppen nach Status in derselben Reihenfolge wie die Spalten des Boards, innerhalb nach Priorität
+  (`TicketListGrouping`, pur). Jeder Gruppenkopf zeigt Zahl und „N mit Chat“ und klappt per Klick auf und zu (je
+  Ansicht und Fenster, nicht gespeichert). Unteraufgaben stehen eingerückt unter ihrem Eltern-Ticket und gehören zu
+  dessen Gruppe; ist das Eltern-Ticket nicht in der Ansicht, steht die Unteraufgabe für sich mit grauem „↳ WM8-91“.
+  Hat die Ansicht Unteraufgaben aus, fehlen sie. Zeile wie in Linear plus Chat: Priorität, Nummer, Status, Titel,
+  rechts Labels, Projekt, der Chat am Ticket mit Status-Punkt (feste Spalte), Person, Datum der letzten Änderung.
+  Wird es eng, fällt zuerst das Datum weg (unter 900 pt), dann das Projekt (780 pt), dann rücken die Labels auf eines
+  plus „+N“ (660 pt), dann gehen Labels und Person (560 pt); Titel und Chat bleiben immer
+  (`TicketListRowLayout`, pur).
+- **Filter:** Die früheren Filterknöpfe („Wartet auf mich“, Agent, Person, Bereich) gibt es nicht mehr; ihre Fragen
+  beantworten Ansichten in Linear (Entscheidung Giuliano, 16.11.2026). Die Linear-Ansicht „Wartet auf mich“ zeigt,
+  was ihr Filter sagt; die Regel des Teams (unten) färbt weiter Gruppen und Labels.
 - **Triage:** Ein Klick auf eine Karte (oder eine Zeile der Liste) öffnet das Ticket groß, wie die Triage in
-  Linear. Links die Liste, aus der es kommt (die Spalte, „N weitere · in der Liste“ öffnet die ganze Spalte, aus
-  der Liste alle sichtbaren Tickets), in der Mitte Titel, Beschreibung und Verlauf, rechts die Eigenschaften
-  (Status mit „wartet auf dich“, Priorität, Person, Bereich, Vorhaben, „Fertig, wenn“, Labels, Chats am Ticket mit
-  „Zum Chat“). Oben links „‹ Board“ (immer sichtbar, auch im schmalen Fenster), voriges/nächstes, „3 von 5“, „In Linear
-  öffnen“ (bricht nicht um) und Aktualisieren. Die Tasten stehen nicht im Kopf, sondern in der Leiste unten, wenn
+  Linear, aber mit der Liste daneben (WM8-125). Links dieselbe Liste schmal: aus der Liste mit den Gruppen der
+  Ansicht, Zahl, Aufklappen und Chat-Punkt, das offene Ticket markiert; aus dem Board die Spalte („N weitere · in der
+  Liste“ öffnet die ganze Spalte). Die Breite der Liste ist am Griff auf ihrer rechten Kante ziehbar (220 bis 480 pt,
+  ab Werk 320; Doppelklick zurück), gilt je Projekt und liegt in `ticket-board-chat.json` (`triageListWidth`). Unter
+  270 pt fallen dort Nummer und Chat-Name weg. In der Mitte die Eigenschaften als Zeile über dem Titel, dann
+  Beschreibung und Verlauf; rechts steht der Board-Chat. Oben links „‹ Liste“ bzw. „‹ Board“ (immer sichtbar),
+  voriges/nächstes, „3 von 5“, „In Linear öffnen“ (bricht nicht um) und Aktualisieren. Die Tasten stehen nicht im Kopf, sondern in der Leiste unten, wenn
   sie die Tastatur zeigt: „J K Ticket · ⌘C Link kopieren · esc Board“ (`KeyboardLegend.ticketItems`, WM8-124). Beim Blättern steht in der Mitte nur der Text des gezeigten Tickets. J/K oder ↑↓ wechseln das
   Ticket, Esc führt zurück zum Board auf dieselbe Karte; das wirkt nur, wenn der Fokus nicht in einem Textfeld oder
-  Terminal liegt. Wird es eng (unter 960 pt für die Triage, etwa mit breitem Board-Chat), stehen die Eigenschaften
-  als eine Zeile über dem Titel (Entscheidung Giuliano, 16.11.2026): „In Progress · Hoch · Giuliano · 1/4 · Feature ·
-  ● Jon [Zum Chat]“, dazu „Abgegeben von …“ oder „Früher: …“. Reicht die Breite nicht, bricht die Zeile um; nichts
-  wird abgeschnitten. Bereich, Meilenstein, „seit …“ und „Kein Chat“ stehen dann nur auf der Karte bzw. in der
-  breiten Ansicht. Erst unter 660 pt fällt die Liste links weg
-  (`TicketTriageLayout`, pur und getestet). Knöpfe, die in Linear etwas ändern, gibt es nicht
+  Terminal liegt. Die Eigenschaften stehen als eine Zeile über dem Titel (Entscheidung Giuliano, 16.11.2026; seit
+  WM8-125 immer): „In Progress · Hoch · Giuliano · 1/4 · Feature · Tickets · Unteraufgabe von WM8-111 · ● Jon [Zum
+  Chat]“, dazu „Abgegeben von …“ oder „Früher: …“. Reicht die Breite nicht, bricht die Zeile um; nichts wird
+  abgeschnitten. Behält das Ticket keine 400 pt neben der Liste, fällt die Liste weg (`TicketTriageLayout`, pur und
+  getestet). J/K und die Liste der Triage gehen nur durch aufgeklappte Gruppen. Knöpfe, die in Linear etwas ändern, gibt es nicht
   (Entscheidung E1 vom 15.11.2026: Das Board schreibt nicht nach Linear; die Triage-Knöpfe kommen mit dem
   Board-Chat, WM8-113). Die Auswahl-Logik ist pur (`TicketBoardSelection`), damit Controller und Tastatur-Insel
   (WM8-91) dieselben Funktionen nutzen: auf dem Board `columns(lanes)`, `start`, `move(key, .up/.down/.left/.right)`
@@ -605,9 +639,9 @@ gezeigten Stands.
   Ticket in der Triage) legen zwei Zeilen in die Zwischenablage: `WM8-104 Titel` und darunter die Adresse.
   Markierter Text geht vor: Ist in der Beschreibung etwas markiert oder liegt der Fokus in einem Textfeld oder
   Terminal, kopiert ⌘C wie gewohnt. ⌘⇧C bleibt der Zwischenablage-Verlauf (Entscheidung Giuliano, 15.11.2026).
-  „Liste kopieren“ (Knopf neben den Filtern, in der Triage über der Liste) kopiert die gezeigten Tickets in ihrer
+  „Liste kopieren“ (Knopf im Kopf, in der Triage über der Liste) kopiert die gezeigten Tickets in ihrer
   Reihenfolge, je Ticket eine Zeile mit Adresse: auf dem Board Spalte für Spalte samt dem, was unter „N weitere“
-  steht, in der Liste nach Projekt, in der Triage ihre Liste. Nur Nummer, Titel und Adresse, nie Ticket-Text.
+  steht, in der Liste nach ihren Gruppen (Überschrift: Board und Ansicht), in der Triage ihre Liste. Nur Nummer, Titel und Adresse, nie Ticket-Text.
   Steuer- und Formatzeichen im Titel (ESC, Bidi-Umkehr) werden zu Leerzeichen: Eingefügt wird oft in ein Terminal,
   und `ESC[201~` beendete dort ein Bracketed Paste. Auf dem Board zeigt „Link kopiert“ neben „Liste kopieren“, dass
   ⌘C gegriffen hat. Die
@@ -620,7 +654,7 @@ gezeigten Stands.
   dem Supervisor. Aufgeklappt die Chats mit dem Ticket, an dem sie zuletzt saßen; Supervisor-Chats stehen getrennt
   daneben und zählen nicht als Lücke.
 - **Schmales Fenster:** Die Spalten werden nicht schmaler als 260 pt, darunter scrollt das Board waagrecht.
-  Die Liste lässt unter 640 pt Status und Fortschritt weg.
+  Was die Liste bei wenig Breite weglässt, steht oben unter „Liste“.
 - **Labels auf der Karte:** höchstens zwei, zuerst alles, was etwas über den Stand sagt; die Art des Tickets
   (Linears Bug, Feature, Improvement) zuletzt und zurückhaltend. Der Status steht nur auf der Karte, wenn er
   mehr sagt als die Spalte.
@@ -704,9 +738,15 @@ So bleibt die Triage schnell:
   nicht zu sehen (er wechselt trotzdem).
 - **„Zum Chat“ liest die Workspace-Datei auf dem Main Thread.** Das ist der vorhandene Weg der App
   (`WindowRequestCenter.requestSessionFocus`), nicht neu, aber hier ein weiterer Aufrufer.
-- **Mit Board-Chat wird die Triage eng:** Die Liste links fällt unter 820 pt Breite des Ticket-Bereichs weg
-  (J/K blättert weiter). Mit Seitenleiste und Board-Chat passiert das in Fenstern unter rund 1.400 pt; dann den
-  Board-Chat schmaler ziehen oder zuklappen.
+- **Mit Board-Chat wird die Triage eng:** Die Liste links fällt weg, wenn neben ihr (mindestens 220 pt) keine
+  400 pt für das Ticket bleiben (J/K blättert weiter). Dann den Board-Chat schmaler ziehen oder zuklappen.
+- **Ansichten nur aus den Favoriten:** Eine Ansicht, die kein Favorit ist, wird kein Reiter (außer „Als Nächstes:
+  <Vorname>“). Wer eine neue Ansicht als Reiter will, setzt in Linear den Stern. Neue Favoriten erscheinen nach
+  spätestens zehn Minuten oder mit dem Knopf „Aktualisieren“.
+- **Gruppierung nur zum Teil:** Zyklus, Meilenstein, Team und Untergruppen aus Linear zeigt die Liste nach Status;
+  Sortierung nach etwas anderem als Priorität oder Änderung nach Priorität. Labels sind ohne Linears Farben.
+- **Regel des Teams auch für fremde Teams:** Zeigt eine Ansicht Tickets anderer Teams des Workspaces, gilt für sie
+  die Regel des Teams, zu dem das Projekt gehört.
 - **Board-Chat erkennt den Jarvis nur am Titel,** wie die Kommandozeile. Wer seinen Supervisor anders nennt, wählt
   ihn von Hand (Teil c).
 
@@ -716,7 +756,8 @@ So bleibt die Triage schnell:
 `TicketsCLITests`: pure Typen, Quelle gegen feste Antworten, Speicher mit eingespeister Wartefunktion,
 Kommandozeile gegen eine Quelle aus Closures. Kein Test braucht Netz, Schlüsselbund oder die App.
 
-Für die Ansicht: `TicketBoardPresentationTests` (Spalten, Filter, Zählungen, Detail), `TicketTriageTests`
+Für die Ansicht: `TicketViewTests` (Reiter aus Linear, Standard, Abruf), `TicketListGroupingTests` (Gruppen,
+Unteraufgaben, Aufklappen, Ansicht im Abgleich), `TicketBoardPresentationTests` (Spalten, Zählungen, Detail), `TicketTriageTests`
 (Auswahl, Tasten, Triage im ViewModel, Kommentare aus Linear, sicherer Text, Kosten), `TicketCopyTests` (Link und
 Liste, ⌘C, Prüfung der Regel), `TicketTeamRuleTests`
 (Regel je Team, Spalten nach Status, „Wartet auf mich“, Befehl `setup --status`),
