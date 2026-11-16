@@ -462,13 +462,16 @@ final class AgentWorkspaceUIModel {
     /// An der gefundenen Position wird die ID gegengeprüft (Auflage Noa): Eine
     /// veraltete Position darf nie einen anderen Chat liefern, sonst träfe
     /// Senden, Schließen oder ein Kontowechsel den falschen. Passt sie nicht,
-    /// gilt die lineare Suche.
+    /// gilt die lineare Suche. Steht die ID gar nicht im Index, gibt es den
+    /// Chat nicht (der Index wird synchron im didSet gebaut): dann sofort
+    /// `nil`, sonst liefe für jeden verschwundenen Chat (offener Tab eines
+    /// gelöschten Chats, alte Auswahl) bei jedem Aufruf ein voller Durchlauf.
     func session(id: UUID) -> AgentChatSession? {
-        if let index = sessionIndexByID[id], workspace.sessions.indices.contains(index),
-           workspace.sessions[index].id == id {
+        guard let index = sessionIndexByID[id] else { return nil }
+        if workspace.sessions.indices.contains(index), workspace.sessions[index].id == id {
             return workspace.sessions[index]
         }
-        return workspace.sessions.first { $0.id == id }
+        return workspace.sessions.first { $0.id == id }  // nur bei falscher Fundstelle
     }
 
     /// Erste Position je ID (wie `Dictionary(uniquingKeysWith: first)`).

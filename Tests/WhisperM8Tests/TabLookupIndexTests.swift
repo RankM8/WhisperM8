@@ -92,6 +92,8 @@ final class TabLookupIndexTests: XCTestCase {
         func assertLookups(_ step: String, line: UInt = #line) {
             let sessions = store.loadWorkspace().sessions
             XCTAssertEqual(model.workspace.sessions.map(\.id), sessions.map(\.id), "\(step): Modell folgt dem Store", line: line)
+            // Der Index selbst, sonst überdeckte der Rückfall jeden Fehler.
+            XCTAssertEqual(model.sessionIndexByID, AgentWorkspaceUIModel.index(of: model.workspace.sessions), "\(step): Index", line: line)
             for session in sessions {
                 XCTAssertEqual(model.session(id: session.id)?.id, session.id, "\(step)", line: line)
                 XCTAssertEqual(model.session(id: session.id)?.title, session.title, "\(step)", line: line)
