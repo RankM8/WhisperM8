@@ -49,8 +49,32 @@ final class TurnContactLedgerTests: XCTestCase {
             .init(target: jarvis, at: turnStart.addingTimeInterval(40)),
             .init(target: jarvis, at: turnStart.addingTimeInterval(50)),
         ]
-        XCTAssertEqual(context(delivery: nil, messages: messages, turnStartedAt: turnStart).messaged, [jarvis])
+        XCTAssertEqual(context(delivery: nil, messages: messages, turnStartedAt: turnStart, lasting: 60).messaged, [jarvis])
         XCTAssertEqual(context(delivery: nil, messages: messages, turnStartedAt: nil).messaged, [])
+    }
+
+    /// Prüferin zu WM8-119: Als Antwort gilt nur ein Turn bis 2 Minuten. Ein
+    /// „Commit und push“ oder ein kleiner Fix von drei Minuten weckt weiter.
+    func testReplyIsAtMostTwoMinutes() {
+        XCTAssertEqual(TurnContactLedger.replyMaxSeconds, 120)
+        let delivery = TurnContactLedger.Delivery(sender: jarvis, at: turnStart.addingTimeInterval(-2))
+        XCTAssertEqual(context(delivery: delivery, turnStartedAt: turnStart, lasting: 90).repliedTo, jarvis)
+        XCTAssertNil(context(delivery: delivery, turnStartedAt: turnStart, lasting: 180).repliedTo)
+    }
+
+    /// Prüferin zu WM8-119: Nur eine Meldung in den letzten 2 Minuten vor dem
+    /// Turn-Ende zählt. Eine frühe Zwischenmeldung mit danach langer Arbeit
+    /// ohne Schlussmeldung soll den Supervisor weiter wecken.
+    func testOnlyMessagesShortlyBeforeTurnEndCount() {
+        let thirtyMinutes: TimeInterval = 30 * 60
+        let early = [TurnContactLedger.Message(target: jarvis, at: turnStart.addingTimeInterval(5 * 60))]
+        XCTAssertEqual(context(delivery: nil, messages: early, turnStartedAt: turnStart, lasting: thirtyMinutes).messaged, [])
+        let final = [TurnContactLedger.Message(target: jarvis, at: turnStart.addingTimeInterval(thirtyMinutes - 60))]
+        XCTAssertEqual(context(delivery: nil, messages: final, turnStartedAt: turnStart, lasting: thirtyMinutes).messaged, [jarvis])
+        let edge = [TurnContactLedger.Message(target: jarvis, at: turnStart.addingTimeInterval(thirtyMinutes - 120))]
+        XCTAssertEqual(context(delivery: nil, messages: edge, turnStartedAt: turnStart, lasting: thirtyMinutes).messaged, [jarvis])
+        let tooEarly = [TurnContactLedger.Message(target: jarvis, at: turnStart.addingTimeInterval(thirtyMinutes - 121))]
+        XCTAssertEqual(context(delivery: nil, messages: tooEarly, turnStartedAt: turnStart, lasting: thirtyMinutes).messaged, [])
     }
 
     /// Ohne geprüften Absender und an sich selbst wird nichts vermerkt; je

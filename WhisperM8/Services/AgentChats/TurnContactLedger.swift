@@ -9,9 +9,12 @@ import Foundation
 /// eigene Nachricht antworteten („Verstanden, ich warte auf die Bahn“).
 /// Entscheidung Giuliano 16.11.2026: beide still. Die Board-Mod liest dafür
 /// `repliedTo` und `messaged` aus dem Journal. Als Antwort gilt nur ein Turn
-/// von höchstens 10 Minuten: Die Antworten am 16.11. dauerten fast alle unter
-/// zwei Minuten; ein langer Auftrag des Supervisors soll am Ende weiter wecken,
-/// falls der Chat vergisst zu melden.
+/// von höchstens 2 Minuten: Die Antworten am 16.11. dauerten fast alle unter
+/// zwei Minuten; ein „Commit und push“ oder ein kleiner Fix dauert auch nur
+/// ein paar Minuten und soll am Ende weiter wecken, falls der Chat vergisst zu
+/// melden. Ebenso zählt eine Meldung nur in den letzten 2 Minuten vor dem
+/// Turn-Ende: Nach einer frühen Zwischenmeldung und langer Arbeit ohne
+/// Schlussmeldung soll der Supervisor weiter geweckt werden (Prüferin zu WM8-119).
 ///
 /// Nur Speicher, nur auf dem Main Thread, je Senden ein Eintrag; nichts wird
 /// über alle Chats gezählt.
@@ -42,7 +45,9 @@ final class TurnContactLedger {
     nonisolated static let startWindowAfter: TimeInterval = 1
     nonisolated static let maxMessagesPerSender = 20
     /// Länger dauert eine Antwort nicht; ein längerer Turn ist Arbeit.
-    nonisolated static let replyMaxSeconds: TimeInterval = 600
+    nonisolated static let replyMaxSeconds: TimeInterval = 120
+    /// Nur eine Meldung so kurz vor dem Turn-Ende zählt als Schlussmeldung.
+    nonisolated static let messagedWithinSeconds: TimeInterval = 120
 
     /// Ein Prompt mit bekanntem, geprüftem Absender wurde eingefügt (Zeitpunkt des Einfügens).
     func noteDelivered(to target: UUID, from sender: UUID?, at: Date = Date()) {
@@ -66,7 +71,8 @@ final class TurnContactLedger {
     }
 
     /// Pur: War der Turn eine kurze Antwort auf die Zustellung, die ihn anstieß,
-    /// und wen hat der Chat seit dem Turn-Start angeschrieben? Ohne bekannten
+    /// und wen hat der Chat kurz vor dem Turn-Ende angeschrieben (seit dem
+    /// Turn-Start und höchstens `messagedWithinSeconds` vorher)? Ohne bekannten
     /// Turn-Start: nichts.
     nonisolated static func context(delivery: Delivery?, messages: [Message], turnStartedAt: Date?, endedAt: Date)
         -> (repliedTo: UUID?, messaged: [UUID]) {
@@ -79,7 +85,8 @@ final class TurnContactLedger {
             repliedTo = delivery.sender
         }
         var messaged: [UUID] = []
-        for message in messages where message.at >= turnStartedAt && !messaged.contains(message.target) {
+        let recent = max(turnStartedAt, endedAt.addingTimeInterval(-messagedWithinSeconds))
+        for message in messages where message.at >= recent && !messaged.contains(message.target) {
             messaged.append(message.target)
         }
         return (repliedTo, messaged)

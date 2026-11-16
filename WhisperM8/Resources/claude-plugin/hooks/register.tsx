@@ -296,9 +296,9 @@ type WatchEvent = {
   to?: string | null
   /** Offene Hintergrund-Befehle beim Turn-Ende (`working → idle`); fehlt = unbekannt (WM8-105). */
   backgroundTasks?: number
-  /** Turn-Ende: Der Turn war eine kurze Antwort auf diesen Chat (höchstens 10 min, WM8-119). */
+  /** Turn-Ende: Der Turn war eine kurze Antwort auf diesen Chat (höchstens 2 min, WM8-119). */
   repliedTo?: string
-  /** Turn-Ende: Chats, an die dieser Chat im Turn geschrieben hat (WM8-119). */
+  /** Turn-Ende: Chats, an die dieser Chat in den letzten 2 Minuten des Turns geschrieben hat (WM8-119). */
   messaged?: string[]
 }
 
@@ -429,9 +429,9 @@ const handleEvent = async ($: EngineInterface, ev: WatchEvent) => {
  * Auch kein „fertig“ (WM8-119, Entscheidung Giuliano 16.11.2026), wenn der
  * Turn eine kurze Antwort auf eine Nachricht des Supervisors (`owner`) war
  * (etwa „Verstanden, ich warte auf die Bahn“; die App setzt `repliedTo` nur
- * bei Turns bis 10 Minuten, ein langer Auftrag weckt weiter) oder
- * wenn der Chat ihm im Turn schon geschrieben hat (die Meldung kommt über die
- * Warteschlange). Am 16.11. waren das 37 von 55 Hinweisen.
+ * bei Turns bis 2 Minuten, längere Arbeit weckt weiter) oder wenn der Chat
+ * ihm kurz vor dem Turn-Ende geschrieben hat (`messaged`, letzte 2 Minuten;
+ * die Meldung kommt über die Warteschlange). Am 16.11. waren das 37 von 55 Hinweisen.
  */
 export const wakeReason = (ev: WatchEvent, owner: string | null = null): string | null => {
   if (ev.to === 'awaitingInput') return 'wartet auf dich'

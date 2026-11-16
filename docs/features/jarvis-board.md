@@ -178,10 +178,11 @@ mehreren Boards stehen (`otherOwners`).
   25 solche Fehlalarme.
 - **Kein „fertig“ für Antworten und Doppel (WM8-119, Entscheidung Giuliano
   16.11.2026):** War der Turn eine kurze Antwort auf eine Nachricht von
-  Jarvis selbst (`repliedTo` im Strom, nur bei Turns bis 10 Minuten, etwa
-  „Verstanden, ich warte auf die Bahn“; ein langer Auftrag weckt am Ende
-  weiter), oder hat der Chat Jarvis im Turn schon geschrieben (`messaged`,
-  die Meldung kommt über die Warteschlange), weckt das Turn-Ende nicht. Am
+  Jarvis selbst (`repliedTo` im Strom, nur bei Turns bis 2 Minuten, etwa
+  „Verstanden, ich warte auf die Bahn“; längere Arbeit weckt am Ende
+  weiter), oder hat der Chat Jarvis in den letzten 2 Minuten des Turns
+  geschrieben (`messaged`, die Schlussmeldung kommt über die Warteschlange;
+  eine frühe Zwischenmeldung zählt nicht), weckt das Turn-Ende nicht. Am
   16.11.2026 waren das 37 von 55 Hinweisen „fertig – prüfen“. Eine Antwort auf
   eine Frage von Jarvis sieht er nur noch, wenn er nachsieht oder der Chat sie
   per Warteschlange schickt. „Wartet auf dich“ weckt weiter immer.

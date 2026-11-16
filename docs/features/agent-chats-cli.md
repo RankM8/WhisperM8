@@ -827,9 +827,11 @@ Aufrufer zu brechen.
 - **`repliedTo`, `messaged`** (seit WM8-119, nur bei `working → idle`):
   `repliedTo` ist der Chat, dessen Nachricht (`send` oder Warteschlange, nur
   mit geprüftem Absender) bis zu 15 s vor dem gesehenen Turn-Start eingefügt
-  wurde, sofern der Turn höchstens 10 Minuten dauerte (eine Antwort, keine
-  Arbeit an einem Auftrag); `messaged` sind die Chats, an die dieser Chat seit
-  dem Turn-Start gesendet oder vorgemerkt hat. Beide fehlen, wenn leer. Die
+  wurde, sofern der Turn höchstens 2 Minuten dauerte (eine Antwort; ein
+  „Commit und push“ oder ein kleiner Fix dauert länger und weckt weiter);
+  `messaged` sind die Chats, an die dieser Chat in den letzten 2 Minuten vor
+  dem Turn-Ende gesendet oder vorgemerkt hat (eine frühe Zwischenmeldung mit
+  langer Arbeit danach zählt nicht). Beide fehlen, wenn leer. Die
   Board-Mod weckt den Supervisor dann nicht mit „fertig – prüfen“, wenn der
   Chat nur ihm antwortete oder ihm schon schrieb ([jarvis-board.md](jarvis-board.md)).
   Quelle ist ein Register im Speicher (`TurnContactLedger`), je Senden ein

@@ -51,11 +51,12 @@ struct ChatsStatusJournalEntry: Codable, Equatable {
     /// Endet der Befehl, beginnt Claude von selbst einen neuen Turn.
     var backgroundTasks: Int? = nil
     /// Turn-Ende: Chat, dessen Nachricht (`send`, Warteschlange) diesen Turn
-    /// anstieß, wenn er kurz war (höchstens 10 min, eine Antwort; WM8-119).
+    /// anstieß, wenn er kurz war (höchstens 2 min, eine Antwort; WM8-119).
     /// Die Board-Mod weckt nicht mit „fertig“, wenn das der Supervisor war.
     var repliedTo: UUID? = nil
-    /// Turn-Ende: Chats, an die dieser Chat im Turn gesendet oder vorgemerkt
-    /// hat (WM8-119). Steht der Supervisor darunter, hat er die Meldung schon.
+    /// Turn-Ende: Chats, an die dieser Chat in den letzten 2 Minuten des Turns
+    /// gesendet oder vorgemerkt hat (WM8-119). Steht der Supervisor darunter,
+    /// hat er die Schlussmeldung schon.
     var messaged: [UUID]? = nil
 
     static let boardKind = "board"
