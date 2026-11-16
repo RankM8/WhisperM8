@@ -283,6 +283,9 @@ final class StayAwakeTests: XCTestCase {
         let (controller, _, working) = makeController(system)
         controller.start(workingPublisher: working.eraseToAnyPublisher())
         waitUntil { controller.permission == .ready }
+        // Das Abschalten beim Start liest einmal zurück (`apply`); erst danach zählen.
+        waitUntil { system.setCalls.count == 1 && system.sleepReads == 1 }
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
         let before = system.sleepReads
         controller.refreshPower()
         RunLoop.main.run(until: Date().addingTimeInterval(0.2))
