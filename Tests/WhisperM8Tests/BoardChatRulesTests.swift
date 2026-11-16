@@ -65,6 +65,44 @@ final class BoardChatRulesTests: XCTestCase {
         XCTAssertNil(BoardChatRules.automaticJarvis(in: [], projectID: project))
     }
 
+    // MARK: Produkt-Chat und Wahl (Teil c)
+
+    func testProductChatIsRecognisedButNeverAJarvis() {
+        XCTAssertTrue(BoardChatRules.isProduct(title: "Pia · Produkt WM8"))
+        XCTAssertTrue(BoardChatRules.isProduct(title: "Product chat"))
+        XCTAssertFalse(BoardChatRules.isProduct(title: "Jarvis: Produkt und Supervisor"))
+        XCTAssertFalse(BoardChatRules.isProduct(title: "Vic · Prüfer"))
+    }
+
+    func testAutomaticProductOfThisProject() {
+        let product = chat("Pia · Produkt WM8")
+        let foreign = chat("Ada · Produkt", project: otherProject)
+        let jarvis = chat("Jarvis")
+        XCTAssertEqual(BoardChatRules.automaticProduct(in: [foreign, jarvis, product], projectID: project), product.id)
+        XCTAssertNil(BoardChatRules.automaticProduct(in: [jarvis], projectID: project))
+    }
+
+    func testChoicesListJarvisProductAndAChosenChatOnce() {
+        let jarvis = BoardChatChoice.Chat(id: UUID(), name: "Jarvis", title: "Jarvis: Supervisor WhisperM8")
+        let product = BoardChatChoice.Chat(id: UUID(), name: "Pia", title: "Pia · Produkt WM8")
+        let other = BoardChatChoice.Chat(id: UUID(), name: "Vic", title: "Vic · Prüfer")
+        let all = BoardChatRules.choices(jarvis: jarvis, product: product, chosen: other, current: other.id)
+        XCTAssertEqual(all.map(\.name), ["Jarvis", "Pia", "Vic"])
+        XCTAssertEqual(all.map(\.kind), [.jarvis, .product, .other])
+        XCTAssertEqual(all.filter(\.isSelected).map(\.id), [other.id])
+        // Gewählt ist der Produkt-Chat: kein dritter Knopf.
+        let two = BoardChatRules.choices(jarvis: jarvis, product: product, chosen: product, current: product.id)
+        XCTAssertEqual(two.map(\.name), ["Jarvis", "Pia"])
+        XCTAssertEqual(BoardChatRules.choices(jarvis: nil, product: nil, chosen: nil, current: nil), [])
+    }
+
+    func testChoosingTheAutomaticJarvisStoresNoChoice() {
+        let jarvis = UUID(), product = UUID()
+        XCTAssertNil(BoardChatRules.storedChoice(after: jarvis, automaticJarvis: jarvis))
+        XCTAssertEqual(BoardChatRules.storedChoice(after: product, automaticJarvis: jarvis), product)
+        XCTAssertEqual(BoardChatRules.storedChoice(after: product, automaticJarvis: nil), product)
+    }
+
     // MARK: Ort
 
     func testPlacementFollowsTheTabOwner() {

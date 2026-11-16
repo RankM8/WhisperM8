@@ -391,7 +391,13 @@ Idee 3.
   „Läuft in Fenster 2 · Hierher holen“ (das Hauptfenster ist 1, die weiteren folgen in ihrer Reihenfolge) oder
   „In keinem Fenster offen · Hier öffnen“. Verschoben oder geöffnet wird nur auf Klick; „Hier öffnen“ legt den
   Tab an, ohne die Tickets zu verlassen.
-- **Welcher Chat:** von Hand gewählt (`chosenSessionID`, kommt mit Teil c), sonst der Jarvis des Projekts:
+- **Wahl (Teil c):** Im Kopf stehen Knöpfe für den Jarvis und den Produkt-Chat des Projekts (Titel enthält
+  „Produkt“ oder „Product“ und ist kein Jarvis), dazu ein von Hand hineingezogener Chat. Ein Chat lässt sich aus
+  Seitenleiste oder Tab-Leiste auf die Spalte ziehen. Die Wahl gilt je Projekt und bleibt gespeichert
+  (`chosenSessionID`); ein Klick auf den Jarvis-Knopf löscht sie, dann übernimmt wieder der automatische Jarvis.
+  Ein archivierter Chat wird nicht angenommen. Steht der gewählte Chat in einem anderen Fenster, gilt der Hinweis
+  „Läuft in Fenster 2“.
+- **Welcher Chat:** von Hand gewählt (`chosenSessionID`), sonst der Jarvis des Projekts:
   Titel beginnt mit „Jarvis“ (dieselbe Regel wie `tickets board` und `tickets status`), Projekt des Boards samt
   Arbeitsordnern, laufend vor ruhend, dann zuletzt aktiv. Gesucht wird nur unter offenen Tabs und laufenden Chats
   (`BoardChatRules`, nachgeschlagen über `AgentWorkspaceUIModel.session(id:)`), nie über alle Chats; dazu der zuletzt gefundene Jarvis des

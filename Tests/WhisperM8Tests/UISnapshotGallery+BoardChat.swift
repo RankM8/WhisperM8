@@ -76,6 +76,9 @@ extension UISnapshotGallery {
             .background(AgentTheme.background))
         }
 
+        let jarvisChoice = BoardChatChoice.Chat(id: UUID(), name: "Jarvis", title: "Jarvis: Supervisor WhisperM8")
+        let productChoice = BoardChatChoice.Chat(id: UUID(), name: "Pia", title: "Pia · Produkt WM8 (Beispiel)")
+        let vicChoice = BoardChatChoice.Chat(id: UUID(), name: "Vic", title: "Vic · Prüfer: Insel Paket 2")
         let jarvis = BoardChatColumnState(title: "Jarvis: Supervisor WhisperM8", isAutomatic: true, content: .terminal)
         let size = CGSize(width: 1500, height: 860)
         return [
@@ -104,6 +107,17 @@ extension UISnapshotGallery {
             },
             Fixture(name: "tickets-board-chat-schmales-fenster", size: CGSize(width: 900, height: 700)) {
                 screen("tickets-board", state: jarvis, width: 600)
+            },
+            // Teil c: Knöpfe für Jarvis und den Produkt-Chat, dazu ein hineingezogener Chat.
+            Fixture(name: "tickets-board-chat-wahl", size: size) {
+                var state = jarvis
+                state.choices = BoardChatRules.choices(jarvis: jarvisChoice, product: productChoice, chosen: nil, current: jarvisChoice.id)
+                return screen("tickets-board", state: state)
+            },
+            Fixture(name: "tickets-board-chat-wahl-gezogen", size: size) {
+                var state = BoardChatColumnState(title: "Vic · Prüfer: Insel Paket 2", isAutomatic: false, content: .terminal)
+                state.choices = BoardChatRules.choices(jarvis: jarvisChoice, product: productChoice, chosen: vicChoice, current: vicChoice.id)
+                return screen("tickets-triage", state: state, triage: true)
             },
             // Teil b: „→ Jarvis“ oben in der Triage, Bezug unter dem Terminal.
             Fixture(name: "tickets-board-chat-bezug", size: size) {

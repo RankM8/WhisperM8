@@ -48,6 +48,44 @@ enum BoardChatRules {
             .id
     }
 
+    /// Der Produkt-Chat: Titel enthält „Produkt“ (oder „Product“) und ist
+    /// kein Jarvis. Er steht als zweiter Knopf im Kopf der Spalte.
+    static func isProduct(title: String) -> Bool {
+        guard !isJarvis(title: title) else { return false }
+        let lower = title.lowercased()
+        return lower.contains("produkt") || lower.contains("product")
+    }
+
+    static func automaticProduct(in candidates: [BoardChatCandidate], projectID: UUID) -> UUID? {
+        candidates
+            .filter { $0.projectID == projectID && !$0.isArchived && isProduct(title: $0.title) }
+            .min(by: ranksBefore)?
+            .id
+    }
+
+    /// Knöpfe im Kopf: der Jarvis, der Produkt-Chat, und ein von Hand
+    /// hineingezogener Chat, wenn er keiner von beiden ist. Gewählt ist der
+    /// Chat, der in der Spalte steht.
+    static func choices(jarvis: BoardChatChoice.Chat?, product: BoardChatChoice.Chat?, chosen: BoardChatChoice.Chat?,
+                        current: UUID?) -> [BoardChatChoice] {
+        var result: [BoardChatChoice] = []
+        func add(_ chat: BoardChatChoice.Chat?, _ kind: BoardChatChoice.Kind) {
+            guard let chat, !result.contains(where: { $0.id == chat.id }) else { return }
+            result.append(BoardChatChoice(id: chat.id, name: chat.name, title: chat.title, kind: kind, isSelected: chat.id == current))
+        }
+        add(jarvis, .jarvis)
+        add(product, .product)
+        add(chosen, .other)
+        return result
+    }
+
+    /// Gespeicherte Wahl nach einem Klick auf einen Knopf oder einem
+    /// hineingezogenen Chat: Der automatische Jarvis heißt „keine Wahl“, damit
+    /// ein neuer Jarvis später von selbst übernimmt.
+    static func storedChoice(after pick: UUID, automaticJarvis: UUID?) -> UUID? {
+        pick == automaticJarvis ? nil : pick
+    }
+
     private static func ranksBefore(_ lhs: BoardChatCandidate, _ rhs: BoardChatCandidate) -> Bool {
         if lhs.isRunning != rhs.isRunning { return lhs.isRunning }
         if lhs.lastActivityAt != rhs.lastActivityAt { return lhs.lastActivityAt > rhs.lastActivityAt }
@@ -104,3 +142,28 @@ enum BoardChatRules {
         return width.rounded()
     }
 }
+
+/// Ein Knopf im Kopf der Spalte.
+struct BoardChatChoice: Equatable, Identifiable {
+    struct Chat: Equatable {
+        var id: UUID
+        var name: String
+        var title: String
+    }
+
+    enum Kind: Equatable {
+        case jarvis
+        case product
+        /// Von Hand hineingezogen.
+        case other
+    }
+
+    var id: UUID
+    /// Rufname auf dem Knopf.
+    var name: String
+    /// Ganzer Titel für Hilfe und Bedienungshilfen.
+    var title: String
+    var kind: Kind
+    var isSelected: Bool
+}
+

@@ -24734,26 +24734,6 @@
         }
       }
     },
-    "Chosen automatically: this project's Jarvis.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Automatisch gewählt: der Jarvis dieses Projekts."
-          }
-        }
-      }
-    },
-    "Chosen by you for this project.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Von dir für dieses Projekt gewählt."
-          }
-        }
-      }
-    },
     "Drag to resize the board chat": {
       "localizations": {
         "de": {
@@ -24770,16 +24750,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kein Jarvis gefunden"
-          }
-        }
-      }
-    },
-    "A chat of this project whose title starts with “Jarvis” appears here as soon as it runs or is open as a tab.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ein Chat dieses Projekts, dessen Titel mit „Jarvis“ beginnt, erscheint hier, sobald er läuft oder als Tab offen ist."
           }
         }
       }
@@ -24900,6 +24870,66 @@
           "stringUnit": {
             "state": "translated",
             "value": "Steht vor deinem nächsten Diktat: Nummer, Titel und Link."
+          }
+        }
+      }
+    },
+    "Chosen automatically: this project's Jarvis. Drag another chat here to switch.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch gewählt: der Jarvis dieses Projekts. Zieh einen anderen Chat hierher, um zu wechseln."
+          }
+        }
+      }
+    },
+    "Chosen by you for this project. Drag another chat here to switch.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Von dir für dieses Projekt gewählt. Zieh einen anderen Chat hierher, um zu wechseln."
+          }
+        }
+      }
+    },
+    "A chat of this project whose title starts with “Jarvis” appears here as soon as it runs or is open as a tab. Or drag any chat here.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Chat dieses Projekts, dessen Titel mit „Jarvis“ beginnt, erscheint hier, sobald er läuft oder als Tab offen ist. Oder zieh einen beliebigen Chat hierher."
+          }
+        }
+      }
+    },
+    "Product": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Produkt"
+          }
+        }
+      }
+    },
+    "%@, shown as board chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@, steht als Board-Chat da"
+          }
+        }
+      }
+    },
+    "Show %@ as board chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ als Board-Chat zeigen"
           }
         }
       }
