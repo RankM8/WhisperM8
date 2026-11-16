@@ -375,6 +375,40 @@ in [`../design/ticket-board/`](../design/ticket-board/).
   [controller.md](controller.md#ticket-board). ⌃⌘Pfeil wechselt den Fokus im verdeckten Raster nicht.
 - **Fenster schließen:** gibt Modus und Stand der Ticket-Ansicht dieses Fensters frei.
 
+### Board-Chat (Seitenspalte, WM8-113)
+
+Rechts neben Board und Triage steht der Board-Chat. Plan: [`../plans/ticket-board-alltag.md`](../plans/ticket-board-alltag.md),
+Idee 3.
+
+- **Derselbe Chat, kein zweites Terminal:** Die Spalte baut die Detailansicht über `sessionDetailContent`, wie
+  Einzelansicht und Kachel. Ein Controller hat genau ein Terminal-NSView; `AgentTerminalContainerView` hängt es in
+  den Host, der im Fenster steht. Weil die Tickets im Fenster Einzelansicht und Raster ersetzen, hängt es während
+  der Tickets in der Spalte und danach wieder an seinem Platz (Tab, Kachel). Prozess, Verlauf, Raster und die
+  Übergabe beim Neustart sind nicht beteiligt. Die Spalte zieht nie den Fokus und startet nichts von selbst
+  (`suppressesAutoActivation`); ein ruhender Chat startet über ▶ im Kopf.
+- **Nur ein Tab dieses Fensters:** Wie im Raster steht das Terminal nur, wenn der Chat hier ein Tab ist. Sonst
+  „Läuft in Fenster 2 · Hierher holen“ (das Hauptfenster ist 1, die weiteren folgen in ihrer Reihenfolge) oder
+  „In keinem Fenster offen · Hier öffnen“. Verschoben oder geöffnet wird nur auf Klick; „Hier öffnen“ legt den
+  Tab an, ohne die Tickets zu verlassen.
+- **Welcher Chat:** von Hand gewählt (`chosenSessionID`, kommt mit Teil c), sonst der Jarvis des Projekts:
+  Titel beginnt mit „Jarvis“ (dieselbe Regel wie `tickets board` und `tickets status`), Projekt des Boards samt
+  Arbeitsordnern, laufend vor ruhend, dann zuletzt aktiv. Gesucht wird nur unter offenen Tabs und laufenden Chats
+  (`BoardChatRules`, `BoardChatSessionLookup`), nie über alle Chats. Ohne Jarvis sagt die Spalte, wie einer
+  hineinkommt.
+- **Breite und Zuklappen:** Ziehen am linken Rand; die Breite ändert sich beim Loslassen, vorher zeigt eine Linie
+  die neue Kante (sonst bekäme die TUI bei jedem Mausschritt eine neue Größe). 280 bis 720 pt, Vorgabe 380; das
+  Board behält mindestens 420 pt. In der Triage höchstens 330 pt. Zugeklappt bleibt eine schmale Leiste mit
+  Knopf. Breite, Zuklappen und Wahl gelten je Projekt und liegen in `ticket-board-chat.json`
+  (`BoardChatPreferencesStore`), nicht im UI-Zustand der Fenster: Eine Änderung dort ließe alle Fenster samt
+  Seitenleiste neu auswerten.
+- **Kosten:** Öffnen der Tickets hängt das Terminal einmal um (`pane.attach`, gemessen rund 70 ms auf ruhigem
+  Rechner), Schließen einmal zurück; im Raster hängt das Schließen wie bisher alle Kacheln wieder ein. Je
+  Auswertung des Fensters: Nachschlagen weniger Dutzend Chats über gemerkte Positionen; nur wenn sich der
+  Workspace verschoben hat, einmal neu zählen. Die Triage beobachtet allein der Breiten-Modifier
+  (`BoardChatColumnFrame`), J/K wertet weder Fenster noch Terminal neu aus. Ein Wechsel zwischen Board und Triage
+  ändert die Breite des Terminals (wenn sie über 330 pt liegt): Die TUI zeichnet dann einmal neu, wie beim Wechsel
+  zwischen Kachel und Einzelansicht.
+
 ### Abruf
 
 - Abgerufen wird beim Zeigen sofort, danach alle 120 Sekunden, dazu der Knopf im Kopf. Ist das Fenster verdeckt,
@@ -590,6 +624,11 @@ So bleibt die Triage schnell:
   nicht zu sehen (er wechselt trotzdem).
 - **„Zum Chat“ liest die Workspace-Datei auf dem Main Thread.** Das ist der vorhandene Weg der App
   (`WindowRequestCenter.requestSessionFocus`), nicht neu, aber hier ein weiterer Aufrufer.
+- **Mit Board-Chat wird die Triage eng:** Die Liste links fällt unter 820 pt Breite des Ticket-Bereichs weg
+  (J/K blättert weiter). Mit Seitenleiste und Board-Chat passiert das in Fenstern unter rund 1.400 pt; dann den
+  Board-Chat schmaler ziehen oder zuklappen.
+- **Board-Chat erkennt den Jarvis nur am Titel,** wie die Kommandozeile. Wer seinen Supervisor anders nennt, wählt
+  ihn von Hand (Teil c).
 
 ## Tests
 
@@ -602,5 +641,6 @@ Für die Ansicht: `TicketBoardPresentationTests` (Spalten, Filter, Zählungen, D
 Liste, ⌘C, Prüfung der Regel), `TicketTeamRuleTests`
 (Regel je Team, Spalten nach Status, „Wartet auf mich“, Befehl `setup --status`),
 `TicketBoardControllerTests` (Zuordnung, Abruf nur bei sichtbarer Ansicht, Leerzustände, Projektwechsel, überholte
-Antworten) und `AgentWindowStoreTicketsModeTests` (Umschalter je Fenster, Rückkehr zu den Chats, Schnappschuss für
-den Controller). Was nur von Hand prüfbar ist, steht als Liste im Plan unter „Tests und Abnahme“.
+Antworten), `AgentWindowStoreTicketsModeTests` (Umschalter je Fenster, Rückkehr zu den Chats, Schnappschuss für
+den Controller) und `BoardChatRulesTests` (Jarvis wie die CLI, Wahl, Ort je Fenster, Breite, Speicher je Projekt,
+Nachschlagen ohne Durchlauf). Bilder des Board-Chats: `make snapshots ONLY=board-chat`. Was nur von Hand prüfbar ist, steht als Liste im Plan unter „Tests und Abnahme“.
