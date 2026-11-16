@@ -558,6 +558,7 @@ extension RecordingCoordinatorDeliveryTests {
     private func makeBoardCoordinator(text: String) -> RecordingCoordinator {
         let coordinator = makeCoordinator(text: text)
         coordinator.boardChatShown = { _ in true }
+        coordinator.boardChatLead = { _ in "" }
         return coordinator
     }
 
@@ -594,6 +595,36 @@ extension RecordingCoordinatorDeliveryTests {
         XCTAssertNil(coordinator.boardChatReferenceAtStart, "einmal verbraucht")
         XCTAssertEqual(pasteSpy.clipboardText, "Erst die Abnahme.", "Zwischenablage nur mit dem Diktat")
         XCTAssertEqual(pasteSpy.keyEvents, 0)
+    }
+
+    /// Prüfpunkt 3 (WM8-124): Der Umbruch wird beim Ausliefern bestimmt, auch
+    /// ohne Bezug, und steht vor dem Bezug.
+    func testBoardChatDictationGetsItsLineBreakOnDelivery() async throws {
+        let audio = try makeAudio()
+        let coordinator = makeBoardCoordinator(text: "Erst die Abnahme.")
+        var asked = 0
+        coordinator.boardChatLead = { id in asked += 1; return id == self.sessionID ? "\n" : "" }
+        try await coordinator.transcribeAndDeliver(
+            audioURL: audio, audioDuration: 2, outputMode: rawMode, contextBundle: .empty, delivery: boardDelivery())
+        XCTAssertEqual(chatWriter.writes.map(\.text), ["\nErst die Abnahme."])
+        XCTAssertEqual(asked, 1)
+
+        let second = try makeAudio()
+        coordinator.boardChatReferenceAtStart = (sessionID, "Bezug: WM8-1\n", {})
+        try await coordinator.transcribeAndDeliver(
+            audioURL: second, audioDuration: 2, outputMode: rawMode, contextBundle: .empty, delivery: boardDelivery())
+        XCTAssertEqual(chatWriter.writes.last?.text, "\nBezug: WM8-1\nErst die Abnahme.")
+    }
+
+    /// Ein bewusst gewählter Chat bekommt keinen Umbruch davor.
+    func testChosenChatDictationGetsNoLineBreak() async throws {
+        let audio = try makeAudio()
+        let coordinator = makeBoardCoordinator(text: "Text")
+        coordinator.boardChatLead = { _ in XCTFail("nur für den Board-Chat"); return "\n" }
+        try await coordinator.transcribeAndDeliver(
+            audioURL: audio, audioDuration: 2, outputMode: rawMode, contextBundle: .empty,
+            delivery: DictationDelivery.atStop(target: .agentChat(sessionID: sessionID), submit: false))
+        XCTAssertEqual(chatWriter.writes.map(\.text), ["Text"])
     }
 
     func testReferenceOfAnotherChatIsNotUsed() async throws {

@@ -54,36 +54,32 @@ struct BoardChatInputBar: View {
     }
 }
 
-/// „Bezug: WM8-81 ✕“ und darunter, wann er mitgeht.
+/// „Bezug: WM8-81 ✕“ in einer Zeile. Wann er mitgeht, sagt die Erklärung
+/// beim ersten Öffnen (`BoardChatIntro`) und die Hilfe an der Marke (WM8-124).
 struct BoardChatReferenceChip: View {
     let ticketKey: String
     let dismiss: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 6) {
-                Text("Re: \(ticketKey)")
-                    .font(.system(size: 11.5, weight: .semibold))
+        HStack(spacing: 6) {
+            Text("Re: \(ticketKey)")
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(AgentTheme.accent)
+            Button(action: dismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(AgentTheme.accent)
-                Button(action: dismiss) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(AgentTheme.accent)
-                        .frame(width: 16, height: 16)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help(String(localized: "Remove the reference"))
-                .accessibilityLabel(String(localized: "Remove the reference to \(ticketKey)"))
+                    .frame(width: 16, height: 16)
+                    .contentShape(Rectangle())
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(AgentTheme.accentTintSoft, in: RoundedRectangle(cornerRadius: 5))
-            Text("Goes in front of your next dictation: number, title and link.")
-                .font(.system(size: 11))
-                .foregroundStyle(AgentTheme.textTertiary)
-                .fixedSize(horizontal: false, vertical: true)
+            .buttonStyle(.plain)
+            .help(String(localized: "Remove the reference"))
+            .accessibilityLabel(String(localized: "Remove the reference to \(ticketKey)"))
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(AgentTheme.accentTintSoft, in: RoundedRectangle(cornerRadius: 5))
+        .help(String(localized: "Goes in front of your next dictation: number, title and link."))
     }
 }
 

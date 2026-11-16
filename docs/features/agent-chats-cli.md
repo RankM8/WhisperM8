@@ -446,8 +446,54 @@ Zustellungen sieht die App dagegen vollständig; die Schätzung irrt in die
 sichere Richtung (Fehlalarm = Wartezeit oder ein Ctrl+C in ein leeres Feld).
 Seit WM8-100 liest die App bei Claude-Chats zusätzlich das Feld am Bildschirm
 ab (`ControllerScreenReading`, derselbe Leser wie für den Controller und
-WM8-75), aber nur als zweite Sicherung: Ist das Feld nicht abzulesen (Ansicht
-hochgescrollt), gilt allein die Schätzung.
+WM8-75), aber nur als zweite Sicherung: Ist kein Feld zu erkennen (Dialog,
+offene Ansicht, Vollbild, Codex), gilt allein die Schätzung.
+
+**Getippter Entwurf sperrt auch hochgescrollt (WM8-123, 16.11.2026):** Für
+`send` und die Warteschlange liest die App das Feld eines Claude-Chats vom
+lebendigen Bildschirm, auch wenn die Ansicht hochgescrollt ist
+(`composerFieldForSendCheck`, `ControllerScreenCapture.liveBottomLines`; der
+Cursor kommt ohnehin von dort). Vorher sah sie hochgescrollt nichts; begann der
+Chat von selbst einen Turn, löschte das die Schätzung für Getipptes, und ein
+halber Satz ging mit der nächsten Meldung hinaus. Dasselbe deckt ein Enter in
+einer Vervollständigung (@-Datei, Slash-Menü) ab: Die Schätzung hält es für
+Absenden, der Text steht aber noch im Feld und sperrt. Was Claude selbst
+zeichnet (grauer Vorschlag im leeren Feld, Hinweiszeilen darunter,
+vorgemerkte Nachrichten darüber), zählt nicht als Text; „[Pasted text …]“ im
+Feld schon, das ist eingefügter, nicht abgeschickter Text. Gelockert wird
+nichts: Ein sichtbar leeres Feld gibt weiter nur frei, wenn die Ansicht unten
+steht. Kosten: je Zustellversuch bzw. `send` einmal die Suche nach dem Anfang
+des lebendigen Bildschirms (wenige Zeilenzugriffe) und 16 Zeilen, nie je
+Taste. Codex-Felder liest die App weiter nicht.
+
+Dieselbe Ablesung nutzen die Freigabe-Erkennung (Warteschlange, `send`,
+`submit`, verzögertes Enter; ein Bildschirm macht sie nur strenger), das
+Zeichen „!“ des Shell-Modus zählt als Prompt-Zeichen, und der Sammelauftrag
+der Triage im Board-Chat liest das Feld genauso. Ist eine Ansicht von Claude
+offen, wartet die Warteschlange („Ansicht von Claude offen …“), und `send`
+lehnt auch mit `--force` ab: Transkript, `/tasks`, `/workflows`,
+Zurückspulen, Auswahl in der Fußzeile, dazu Agent-Liste (ihr Feld „describe a
+task for a new session“ sieht wie ein leeres Eingabefeld aus; das Enter
+startete eine neue Hintergrund-Sitzung), `/config` (das Enter wählte eine
+Einstellung) und Verlaufssuche mit Ctrl+R. Erkannt an der Fußzeile, abgelesen
+an Claude Code 2.1.325; gesucht wird nur dort (mit Feld darunter, ohne Feld in
+den untersten zwei Zeilen), damit ein Chat, der diese Wortlaute zitiert,
+seine Warteschlange nicht anhält.
+
+**Wartende Meldungen sichtbar und neu versucht (WM8-123):** Hält die
+Warteschlange eine Meldung wegen Text im Feld oder einer offenen Ansicht
+zurück, steht über dem Terminal des Chats eine Leiste „1 Meldung wartet: Text
+im Eingabefeld“ (bzw. „… Eine Ansicht von Claude ist offen“) mit dem Weg, wie
+sie frei wird (`QueueHoldStrip`, Zustand nur im Speicher in
+`QueueHoldNotices`; Seitenleiste und Status-Punkte bleiben unberührt). Vorher
+stieß nur das nächste Turn-Ende einen neuen Versuch an, und das kommt bei
+einem ruhenden Chat nie. Jetzt sieht die Warteschlange alle 30 s nach, solange
+so eine Meldung wartet, und sofort (höchstens einmal je Sekunde), wenn das
+Terminal wieder ganz unten ankommt. Dieses Nachsehen liest nur das Feld und
+schreibt die Queue-Datei nicht; erst wenn die Sperre frei gibt, läuft die
+normale Zustellung. Arbeitet der Chat oder startet er, endet es, dann
+übernehmen Turn-Ende und Start. Kosten je wartendem Chat: eine Ablesung der
+untersten 16 Zeilen alle 30 s.
 
 **Sichtbar leer schlägt die Schätzung (WM8-64, 15.11.2026):** Ist das Feld
 eines Claude-Chats am Bildschirm abzulesen und leer, gilt kein Entwurf, auch
@@ -467,8 +513,8 @@ blieben Tasten aus Dialogen dauerhaft als Entwurf stehen), den eingefügten Text
 nicht: Beginnt der Chat von selbst einen Turn (Hintergrund-Befehl fertig,
 Subagent meldet sich, Monitor oder Wecker), steht der Text weiter im Feld.
 Vorher stellte die Warteschlange am Ende dieses Turns zu, wenn das Terminal
-hochgescrollt war (dann liest die App das Feld nicht), hängte die Meldung an
-den Text und schickte beides mit Enter ab.
+hochgescrollt war (dann las die App das Feld bis WM8-123 nicht), hängte die
+Meldung an den Text und schickte beides mit Enter ab.
 
 Frei wird der Vermerk durch Enter oder Ctrl+C im Terminal (auch vom
 Controller), durch jedes programmatische Absenden oder Leeren (`send`,

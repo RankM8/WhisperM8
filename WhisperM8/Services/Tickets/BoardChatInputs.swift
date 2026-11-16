@@ -169,12 +169,14 @@ final class BoardChatInputs {
     /// Was der Bildschirm über das Eingabefeld sagt (wie die Warteschlange).
     @ObservationIgnored var fieldVisibility: (UUID) -> BoardChatFieldVisibility = { sessionID in
         guard let controller = AgentTerminalRegistry.shared.controller(for: sessionID) else { return .unknown }
-        let profile = controller.command.keyboardProfile
-        let field = controller.controllerScreenSnapshot()?.promptField
-        if PromptSubmitCheck.fieldVisiblyEmpty(field: field, profile: profile) { return .empty }
-        if PromptSubmitCheck.visibleDraft(field: field, profile: profile,
-                                          clearsBeforeSubmit: controller.composerDraft.shouldClearBeforeSubmit) { return .hasText }
-        return .unknown
+        return BoardChatFieldVisibility(
+            reading: controller.composerFieldForSendCheck(), profile: controller.command.keyboardProfile,
+            clearsBeforeSubmit: controller.composerDraft.shouldClearBeforeSubmit)
+    }
+    /// Zähler fürs Abschicken oder Leeren des Felds (`TerminalComposerDraftTracker.fieldResets`);
+    /// `nil` ohne Terminal.
+    @ObservationIgnored var fieldResets: (UUID) -> Int? = { sessionID in
+        AgentTerminalRegistry.shared.controller(for: sessionID)?.composerDraft.fieldResets
     }
     @ObservationIgnored var now: () -> Date = { Date() }
     @ObservationIgnored var refuseSound: () -> Void = { NSSound.beep() }
@@ -189,12 +191,20 @@ final class BoardChatInputs {
     }
 
     /// `token == nil`: ohne Rücksicht auf die anmeldende Ansicht (Fenster zu).
+    ///
+    /// Der Sammelauftrag der Triage bleibt, wenn nur die Spalte verschwindet
+    /// (Tickets kurz zu, Spalte zugeklappt, Chat in ein anderes Fenster): Seine
+    /// Zeilen stehen weiter im Feld. Ob er noch gilt, entscheiden beim nächsten
+    /// Klick Session-ID, Zähler und Feld (`TriageBatchRules`). Erst mit dem
+    /// Fenster geht er (WM8-124).
     func unregister(windowID: UUID, token: UUID? = nil) {
         guard let current = registrations[windowID], token == nil || current.token == token else { return }
         registrations[windowID] = nil
         notices[windowID] = nil
-        triageBatches[windowID] = nil
-        lastDecisionAt[windowID] = nil
+        if token == nil {
+            triageBatches[windowID] = nil
+            lastDecisionAt[windowID] = nil
+        }
     }
 
     /// Steht im Feld dieses Chats vermutlich schon Text (Entwurf, eingefügte
@@ -245,11 +255,19 @@ final class BoardChatInputs {
 
     /// Für ein Diktat an `sessionID`: der Bezug als Vorspann und ein Abschluss,
     /// der ihn als mitgegangen markiert (nur nach erfolgreichem Schreiben).
+    /// Ohne Umbruch davor: Den bestimmt `leadForDictation` beim Ausliefern.
     func referenceForDictation(to sessionID: UUID) -> (prefix: String, commit: () -> Void)? {
         guard let windowID = registrations.first(where: { $0.value.sessionID == sessionID })?.key,
               let ticket = reference(in: windowID) else { return nil }
-        let lead = fieldProbablyHasText(sessionID, in: windowID) ? "\n" : ""
-        return (lead + BoardChatText.referencePrefix(ticket), { [weak self] in self?.usedReference[windowID] = ticket.key })
+        return (BoardChatText.referencePrefix(ticket), { [weak self] in self?.usedReference[windowID] = ticket.key })
+    }
+
+    /// Umbruch vor einem Diktat an den Board-Chat, bestimmt beim Ausliefern
+    /// (nicht beim Start der Aufnahme) und mit oder ohne Bezug: Steht im Feld
+    /// schon Text, beginnt das Diktat auf eigener Zeile (WM8-124).
+    func leadForDictation(to sessionID: UUID) -> String {
+        guard let windowID = registrations.first(where: { $0.value.sessionID == sessionID })?.key else { return "" }
+        return fieldProbablyHasText(sessionID, in: windowID) ? "\n" : ""
     }
 
     // MARK: „→ Jarvis“

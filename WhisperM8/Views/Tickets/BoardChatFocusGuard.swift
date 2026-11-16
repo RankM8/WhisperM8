@@ -21,6 +21,12 @@ enum BoardChatFocusRule {
         return String(describing: type(of: responder)).contains("TerminalView")
     }
 
+    /// Hört der Board-Chat auf zu laufen, behielte sein Terminal den Fokus,
+    /// und das Board reagierte erst nach einem Klick daneben auf Tasten.
+    static func releasesFocusWhenStopped(wasRunning: Bool, isRunning: Bool) -> Bool {
+        wasRunning && !isRunning
+    }
+
     /// Für Bedienwege ohne Maus (Controller, WM8-91): Fokus aus dem Terminal
     /// ans Fenster zurück, bevor Board oder Triage etwas tun.
     @MainActor
@@ -34,13 +40,28 @@ enum BoardChatFocusRule {
 /// solange die Tickets offen sind, und wendet `BoardChatFocusRule` an. Der Klick
 /// selbst geht danach unverändert weiter.
 struct BoardChatFocusGuard: NSViewRepresentable {
-    func makeNSView(context: Context) -> BoardChatFocusGuardView { BoardChatFocusGuardView() }
-    func updateNSView(_ nsView: BoardChatFocusGuardView, context: Context) {}
+    /// Läuft der Prozess des Board-Chats? Wechsel auf „gestoppt“ gibt den Fokus frei.
+    var isBoardChatRunning = true
+
+    func makeNSView(context: Context) -> BoardChatFocusGuardView {
+        let view = BoardChatFocusGuardView()
+        view.wasRunning = isBoardChatRunning
+        return view
+    }
+
+    func updateNSView(_ nsView: BoardChatFocusGuardView, context: Context) {
+        if BoardChatFocusRule.releasesFocusWhenStopped(wasRunning: nsView.wasRunning, isRunning: isBoardChatRunning) {
+            BoardChatFocusRule.releaseTerminalFocus(in: nsView.window)
+        }
+        nsView.wasRunning = isBoardChatRunning
+    }
     static func dismantleNSView(_ nsView: BoardChatFocusGuardView, coordinator: ()) { nsView.stop() }
 }
 
 final class BoardChatFocusGuardView: NSView {
     private var monitor: Any?
+    /// Zuletzt gesehener Zustand des Board-Chats (für `updateNSView`).
+    var wasRunning = true
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 

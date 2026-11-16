@@ -208,11 +208,23 @@ final class BoardChatRulesTests: XCTestCase {
     // MARK: Triage
 
     func testTriageMovesPropertiesFirstThenDropsTheList() {
-        XCTAssertEqual(TicketTriageLayout(width: 1200), TicketTriageLayout(showsList: true, propertiesInline: false))
-        XCTAssertEqual(TicketTriageLayout(width: 960), TicketTriageLayout(showsList: true, propertiesInline: false))
-        XCTAssertEqual(TicketTriageLayout(width: 959), TicketTriageLayout(showsList: true, propertiesInline: true))
-        XCTAssertEqual(TicketTriageLayout(width: 660), TicketTriageLayout(showsList: true, propertiesInline: true))
-        XCTAssertEqual(TicketTriageLayout(width: 659), TicketTriageLayout(showsList: false, propertiesInline: true))
+        func columns(_ width: CGFloat) -> [Bool] {
+            let layout = TicketTriageLayout(width: width)
+            return [layout.showsList, layout.propertiesInline]
+        }
+        XCTAssertEqual(columns(1200), [true, false])
+        XCTAssertEqual(columns(960), [true, false])
+        XCTAssertEqual(columns(959), [true, true])
+        XCTAssertEqual(columns(660), [true, true])
+        XCTAssertEqual(columns(659), [false, true])
+    }
+
+    /// Der Kopf wird knapp, wenn die Ticket-Spalte (ohne Liste) schmal ist.
+    func testHeadGetsCompactInANarrowTicketColumn() {
+        XCTAssertFalse(TicketTriageLayout(width: 1100).compactHead, "Ticket-Spalte 839 pt")
+        XCTAssertTrue(TicketTriageLayout(width: 900).compactHead, "Ticket-Spalte 639 pt")
+        XCTAssertFalse(TicketTriageLayout(width: 659).showsList)
+        XCTAssertTrue(TicketTriageLayout(width: 659).compactHead, "ohne Liste, 659 pt")
     }
 
     /// Der Board-Chat ab Werk lässt in üblichen Fenstern Liste und Ticket stehen.
@@ -292,6 +304,21 @@ final class BoardChatPreferencesStoreTests: XCTestCase {
         XCTAssertEqual(disk.file?.projects.isEmpty, true)
     }
 
+    /// Die Erklärung unter dem Board-Chat kommt einmal (WM8-124).
+    func testIntroIsShownOnceAndRemembered() async throws {
+        let disk = Disk(nil)
+        let store = makeStore(disk)
+        await store.waitUntilLoaded()
+        XCTAssertFalse(store.introSeen)
+        store.markIntroSeen()
+        XCTAssertTrue(store.introSeen)
+        try await settle(store)
+        XCTAssertEqual(disk.file?.introSeen, true)
+        let reloaded = makeStore(disk)
+        await reloaded.waitUntilLoaded()
+        XCTAssertTrue(reloaded.introSeen)
+    }
+
     func testRemembersTheLastJarvisPerProject() async throws {
         let disk = Disk(nil)
         let store = makeStore(disk)
@@ -347,6 +374,15 @@ final class BoardChatFocusRuleTests: XCTestCase {
                        "Klick ins Terminal: Fokus bleibt")
         XCTAssertFalse(BoardChatFocusRule.releasesFocus(responderIsTerminal: false, clickInsideResponder: false),
                        "Textfeld oder Fenster hat den Fokus: nichts tun")
+    }
+
+    /// Prüfpunkt 5 (WM8-124): Hört der Board-Chat auf zu laufen, gibt sein
+    /// Terminal den Fokus ab, sonst reagiert das Board erst nach einem Klick.
+    func testStoppingTheBoardChatReleasesItsFocus() {
+        XCTAssertTrue(BoardChatFocusRule.releasesFocusWhenStopped(wasRunning: true, isRunning: false))
+        XCTAssertFalse(BoardChatFocusRule.releasesFocusWhenStopped(wasRunning: true, isRunning: true))
+        XCTAssertFalse(BoardChatFocusRule.releasesFocusWhenStopped(wasRunning: false, isRunning: false), "schon gestoppt")
+        XCTAssertFalse(BoardChatFocusRule.releasesFocusWhenStopped(wasRunning: false, isRunning: true), "startet")
     }
 
     func testTerminalIsRecognisedLikeTheBoardKeys() {

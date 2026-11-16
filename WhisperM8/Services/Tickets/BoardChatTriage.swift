@@ -69,20 +69,44 @@ extension BoardChatText {
 struct TriageBatch: Equatable {
     var sessionID: UUID
     var decisions: [String: TriageDecision] = [:]
+    /// Stand von `fieldResets` nach dem letzten eigenen Einfügen; `nil` ohne
+    /// Terminal. Gelesen NACH dem Einfügen: Liegt nach einem Abbruch (Esc)
+    /// der alte Prompt im Feld, leert das Einfügen ihn zuerst mit Ctrl+C, und
+    /// das zählt mit. Vorher gelesen, hielte der nächste Klick den Auftrag für
+    /// beendet (zweite Überschrift mitten im Text).
+    var fieldResetsAtStart: Int? = nil
 }
 
 /// Was der Bildschirm über das Eingabefeld sagt.
 enum BoardChatFieldVisibility: Equatable {
     case empty
     case hasText
-    /// Hochgescrollt, eingeklappter Paste, Codex: nicht ablesbar.
+    /// Kein Feld erkannt (Dialog, Ansicht, Codex), Text ohne Cursor, oder
+    /// hochgescrollt ein leeres Feld: Dann zählt die Schätzung.
     case unknown
+
+    /// Dieselbe Ablesung wie `send` und Warteschlange (WM8-123): Text zählt
+    /// auch hochgescrollt, „leer“ nur, wenn die Ansicht unten steht.
+    init(reading: ComposerFieldReading, profile: TerminalKeyboardProfile, clearsBeforeSubmit: Bool) {
+        if PromptSubmitCheck.fieldVisiblyEmpty(field: reading.fieldForRelease, profile: profile) {
+            self = .empty
+        } else if PromptSubmitCheck.visibleDraft(field: reading.field, profile: profile,
+                                                 clearsBeforeSubmit: clearsBeforeSubmit) {
+            self = .hasText
+        } else {
+            self = .unknown
+        }
+    }
 }
 
 enum TriageBatchRules {
     /// Ist der letzte Sammelauftrag raus? Sichtbar leeres Feld: ja. Sichtbarer
     /// Text: nein. Sonst die Schätzung der Tasten (wie die Warteschlange).
-    static func batchEnded(field: BoardChatFieldVisibility, hasUnsentInput: Bool) -> Bool {
+    static func batchEnded(field: BoardChatFieldVisibility, hasUnsentInput: Bool,
+                           resetsAtStart: Int? = nil, resetsNow: Int? = nil) -> Bool {
+        // Seit Beginn abgeschickt oder geleert: raus, auch wenn schon wieder
+        // neuer Text im Feld steht (der gehört dann nicht zum Auftrag).
+        if let resetsAtStart, let resetsNow, resetsNow != resetsAtStart { return true }
         switch field {
         case .empty: return true
         case .hasText: return false
@@ -122,8 +146,11 @@ extension BoardChatInputs {
         }
         let field = fieldVisibility(sessionID)
         let unsent = hasUnsentInput(sessionID)
+        let resets = fieldResets(sessionID)
         if let batch = triageBatches[windowID],
-           batch.sessionID != sessionID || TriageBatchRules.batchEnded(field: field, hasUnsentInput: unsent) {
+           batch.sessionID != sessionID
+            || TriageBatchRules.batchEnded(field: field, hasUnsentInput: unsent,
+                                           resetsAtStart: batch.fieldResetsAtStart, resetsNow: resets) {
             // Anderer Chat oder der letzte Auftrag ist raus: neu anfangen, alte Marken weg.
             triageBatches[windowID] = nil
         }
@@ -137,6 +164,8 @@ extension BoardChatInputs {
         }
         var updated = batch ?? TriageBatch(sessionID: sessionID)
         updated.decisions[ticket.key] = decision
+        // Erst jetzt: Das Einfügen selbst kann das Feld geleert haben (alter Prompt nach Esc).
+        updated.fieldResetsAtStart = fieldResets(sessionID)
         triageBatches[windowID] = updated
         lastDecisionAt[windowID] = now()
         notices[windowID] = nil

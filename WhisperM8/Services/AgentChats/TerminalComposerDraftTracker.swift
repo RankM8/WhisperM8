@@ -80,6 +80,11 @@ struct TerminalComposerDraftTracker: Equatable {
     /// Einfuegen, Datei-Drop, Leeren). Ein verzögertes Ctrl+C prüft daran, ob seit seiner Planung
     /// jemand anderes geschrieben hat (`deferredClearIsSafe`).
     private(set) var programmaticWrites = 0
+    /// Wie oft das Feld abgeschickt oder geleert wurde (Enter, Ctrl+C,
+    /// programmatisch). Der Sammelauftrag der Triage merkt sich den Stand:
+    /// Hat er sich geändert, ist der Auftrag raus, auch wenn danach schon
+    /// wieder etwas getippt wurde (WM8-124).
+    private(set) var fieldResets = 0
     /// Aufeinanderfolgende ESC ohne Text dazwischen. Ab zwei oeffnet Claude im
     /// leeren Feld die Rewind-Auswahl; das Return darin ist kein Absenden.
     private var escapeRun = 0
@@ -342,5 +347,6 @@ struct TerminalComposerDraftTracker: Equatable {
     private mutating func clearDraft() {
         mayHaveTypedInput = false
         mayHoldInsertedText = false
+        fieldResets &+= 1
     }
 }

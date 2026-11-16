@@ -358,12 +358,16 @@ enum ControllerScreenReading {
         return leading > 0 || line.first == " "
     }
 
-    /// Spalte, an der der Text nach dem Prompt-Zeichen beginnt.
+    /// Spalte, an der der Text nach dem Prompt-Zeichen beginnt. „!“ ist der
+    /// Shell-Modus von Claude Code (am 16.11.2026 an 2.1.325 abgelesen: „! git
+    /// sta“ zwischen den Linien, darunter „! for shell mode“). Ohne ihn fand der
+    /// Leser dort kein Feld, und ein halb getippter Befehl ging mit einer
+    /// Meldung als Shell-Befehl hinaus (WM8-123).
     static func promptStart(_ line: String) -> Int? {
         let characters = Array(line)
         var index = 0
         while index < characters.count, characters[index] == " " || characters[index] == "│" { index += 1 }
-        guard index < characters.count, characters[index] == "❯" || characters[index] == ">" else { return nil }
+        guard index < characters.count, ["❯", ">", "!"].contains(characters[index]) else { return nil }
         index += 1
         if index < characters.count, characters[index] == " " { index += 1 }
         return index
