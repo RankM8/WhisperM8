@@ -371,6 +371,10 @@ extension ControllerActionDispatcher {
         if let sessionID = setup.sessionID, terminals.state(of: sessionID)?.screen?.codexApproval == true {
             return playHaptic(.rejected)
         }
+        // Offene Ansicht (WM8-123): Enter, „Jetzt senden“ und „Weiter“ gingen in sie.
+        if let sessionID = setup.sessionID, openViewBlocksSending(to: sessionID) {
+            return playHaptic(.rejected)
+        }
         switch setup.quickCross {
         case let cross? where cross != .continueWork:
             guard let sessionID = setup.sessionID, sessionID == selectedSessionID else {
