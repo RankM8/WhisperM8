@@ -455,9 +455,11 @@ Rückgabe, `openKey`, `adjacent`, `stepInList`, `triageStep`, `controllerStart`)
 Diktat, auch nicht über die Insel (L2 + R2 auf „hier“ im Board) oder per Tastatur (Leertaste in ⌥Tab).
 Kreuz springt nie von selbst in einen Chat: Dreimal schnell Kreuz öffnet das Ticket groß und tut dann
 nichts; „Zum Chat“ verlangt die Chat-Zeile (▶, dann Kreuz, E3). **Ankunftssperre:** Springt der Controller
-in einen Chat („Zum Chat“, L2 getippt, „Wohin“ per Controller oder ⌥Tab, „Zu den Chats“), warten Kreuz und
-Kreis dort 1 s (`arrivalLock`, länger als die 0,5 s nach einer Frage). Ein zweites, schnell nachgedrücktes
-Kreuz bestätigt so keine Freigabe, die schon lange offen ist. L1/R1 und die Paddles sind davon nicht berührt.
+in einen Chat („Zum Chat“, L2 getippt, „Wohin“ per Controller oder ⌥Tab, „Zu den Chats“, Kreuz auf einer
+Zeile der Seitenleiste), warten Kreuz und Kreis dort 1 s (`arrivalLock`, länger als die 0,5 s nach einer
+Frage). Die Sperre hängt an der Ziel-ID, die der Befehl kennt, und gilt ab dem Befehl, auch wenn das Fenster
+die neue Auswahl erst später meldet. Ein zweites, schnell nachgedrücktes Kreuz bestätigt so keine Freigabe,
+die schon lange offen ist. L1/R1 und die Paddles sind davon nicht berührt.
 `ControllerTicketsSafetyTests` prüft das für jede Geste, jede Ebene und jede Paddle-Belegung und spielt
 alle Tasten an einem Chat mit offener Freigabe durch. Das Board schreibt nichts nach Linear.
 

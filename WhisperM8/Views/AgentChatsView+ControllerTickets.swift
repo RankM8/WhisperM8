@@ -29,6 +29,7 @@ extension AgentChatsView {
         let project = selectedProject
         var place = ControllerTicketsPlace(
             projectID: project?.id, team: TicketTeamDirectory.shared.team(of: project?.id), projectName: project?.name)
+        place.chatBehind = selectedSessionID
         guard TicketBoardControllers.shared.hasController(for: windowID) else { return place }
         let controller = TicketBoardControllers.shared.controller(for: windowID)
         let model = controller.viewModel
@@ -38,6 +39,7 @@ extension AgentChatsView {
         if place.view == .chatLine, let index = model.focusedChatLine, model.chatLines.indices.contains(index),
            model.chatLines[index].chatID != nil {
             place.chatLineTitle = model.chatLines[index].name
+            place.chatLineChatID = model.chatLines[index].chatID
         }
         return place
     }

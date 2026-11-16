@@ -32,6 +32,11 @@ struct ControllerTicketsPlace: Equatable, Sendable {
     /// Auf der Chat-Zeile: Titel des Chats, zu dem Kreuz führt; `nil`, wenn
     /// der Chat nicht auf diesem Rechner läuft (dann geht „Zum Chat“ nicht).
     var chatLineTitle: String?
+    /// Auf der Chat-Zeile: der Chat, zu dem Kreuz führt (für die
+    /// Ankunftssperre im Ziel).
+    var chatLineChatID: UUID?
+    /// Chat, der hinter den Tickets gewählt ist; „Zu den Chats“ zeigt ihn.
+    var chatBehind: UUID?
     /// Ein Ticket ist gewählt (Karte, Zeile oder groß).
     var hasTicket = false
     /// Das gewählte Ticket hat Chats (▶ in der Triage führt dorthin).

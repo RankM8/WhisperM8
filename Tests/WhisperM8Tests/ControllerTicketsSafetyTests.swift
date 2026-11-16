@@ -366,6 +366,7 @@ final class ControllerTicketsSafetyTests: XCTestCase {
         line.view = .chatLine
         line.hasTicket = true
         line.chatLineTitle = "Vic"
+        line.chatLineChatID = target
         window.tickets = line
         window.onTicketCommand = { [unowned self] command in
             guard command == .open else { return }
@@ -380,6 +381,48 @@ final class ControllerTicketsSafetyTests: XCTestCase {
         nowValue = nowValue.addingTimeInterval(ControllerBindingResolver.arrivalLock + 0.1)
         tap(.cross)
         XCTAssertEqual(terminals.keys, [.enter], "nach der Sperre gilt wieder die Regel des Chats")
+    }
+
+    /// Meldet das Fenster die neue Auswahl erst im nächsten Durchgang, greift
+    /// die Sperre trotzdem: Sie hängt an der Ziel-ID, die der Befehl kennt.
+    func testArrivalLockHoldsWhenTheWindowReportsTheChatLate() {
+        let target = approvalWaitingSinceAMinute()
+        var line = Self.place
+        line.view = .chatLine
+        line.hasTicket = true
+        line.chatLineTitle = "Vic"
+        line.chatLineChatID = target
+        window.tickets = line
+        var pending = false
+        window.onTicketCommand = { command in if command == .open { pending = true } }
+        tap(.cross)
+        XCTAssertNotEqual(window.selected, target, "das Fenster meldet den Chat noch nicht")
+        XCTAssertTrue(pending)
+        window.tickets = nil
+        window.selected = target
+        tap(.cross)
+        XCTAssertTrue(terminals.keys.isEmpty, "kein Enter: \(terminals.keys)")
+    }
+
+    /// Kreuz auf einer Zeile der Seitenleiste öffnet den Chat; ein zweites
+    /// Kreuz gleich danach ist kein Enter. Auch mit verzögert gemeldeter Auswahl.
+    func testCrossOnASidebarRowThenCrossDoesNotConfirm() {
+        let target = approvalWaitingSinceAMinute()
+        window.tickets = nil
+        window.rows = [AgentChatsListRow(row: .chat(chat)), AgentChatsListRow(row: .chat(target))]
+        window.defersSelection = true
+        ui.area = .list
+        ui.listWindowID = window.id
+        ui.markedRow = .chat(target)
+        tap(.cross)
+        window.applyPendingSelection()
+        XCTAssertEqual(window.selected, target)
+        XCTAssertEqual(ui.area, .content)
+        tap(.cross)
+        XCTAssertTrue(terminals.keys.isEmpty, "kein Enter gleich nach dem Öffnen aus der Liste: \(terminals.keys)")
+        nowValue = nowValue.addingTimeInterval(ControllerBindingResolver.arrivalLock + 0.1)
+        tap(.cross)
+        XCTAssertEqual(terminals.keys, [.enter])
     }
 
     /// Dasselbe für L2 getippt aus dem Board zurück in einen Chat.
@@ -397,6 +440,7 @@ final class ControllerTicketsSafetyTests: XCTestCase {
     func testCrossAfterBackToChatsDoesNotConfirm() {
         let target = approvalWaitingSinceAMinute()
         window.selected = target
+        window.tickets?.chatBehind = target
         tap(.options)
         guard let menu = ui.menu, menu.top.entries.contains(where: { $0.id == .backToChats }) else {
             return XCTFail("kein „Zu den Chats“")

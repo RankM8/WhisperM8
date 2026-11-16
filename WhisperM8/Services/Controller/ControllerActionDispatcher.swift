@@ -314,8 +314,9 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         // dem man jetzt ist, als Ziel.
         case .lastChat:
             let before = visibleChatID
+            let target = backTargetChatID
             if command(.lastChat, orReject: true) {
-                noteArrival(from: before)
+                noteArrival(at: target, before: before)
                 refreshContext()
             }
         case let .moveInContent(direction): moveInContent(direction)
@@ -575,10 +576,13 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         switch row.row {
         case let .chat(sessionID):
             done = command(.selectSession(sessionID), orReject: true)
+            // Ankunftssperre (WM8-91): Ein zweites Kreuz wäre sonst Enter im Chat.
+            if done { noteArrival(at: sessionID, before: nil) }
         case let .workspaceChat(sessionID, workspaceID):
             // Wie der Klick auf die Zeile: Ist der Workspace hier nicht
             // sichtbar, wechselt das Fenster hinein (Runde 3).
             done = command(.selectWorkspaceChat(sessionID, workspaceID: workspaceID), orReject: true)
+            if done { noteArrival(at: sessionID, before: nil) }
         case let .workspace(workspaceID):
             done = command(.activateWorkspace(workspaceID), orReject: true)
         case let .project(projectID):
@@ -839,9 +843,9 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             guard let board = setup.ticketBoard else { return playHaptic(.rejected) }
             if command(.showTickets(projectID: board.projectID), orReject: true) { refreshContext() }
         case .backToChats:
-            let before = visibleChatID
+            let behind = targetWindowID.flatMap { chats.snapshot(of: $0) }?.tickets?.chatBehind
             if command(.showChats, orReject: true) {
-                noteArrival(from: before)
+                noteArrival(at: behind, before: nil)
                 refreshContext()
             }
         case .clipboardHistory:
@@ -934,10 +938,27 @@ extension ControllerActionDispatcher {
         return window.selectedSessionID
     }
 
-    /// Der Controller hat einen Chat sichtbar gemacht, der es vorher nicht war:
-    /// Kreuz und Kreis warten dort `arrivalLock` ab.
-    func noteArrival(from before: UUID?) {
-        guard let shown = visibleChatID, shown != before else { return }
-        lastControllerArrival = (shown, now())
+    /// Der Controller hat den Chat `target` geöffnet: Kreuz und Kreis warten
+    /// dort `arrivalLock` ab, gemessen ab dem Befehl. Fest an der ID, die der
+    /// Befehl kennt, nicht am Vergleich vorher/nachher: Meldet das Fenster die
+    /// neue Auswahl erst im nächsten Durchgang, griffe die Sperre sonst nie.
+    /// Ohne bekanntes Ziel (ein Workspace mit seiner Kachel) zählt der Chat,
+    /// den das Fenster danach zeigt, falls es ein anderer ist als vorher.
+    func noteArrival(at target: UUID?, before: UUID?) {
+        if let target {
+            lastControllerArrival = (target, now())
+        } else if let shown = visibleChatID, shown != before {
+            lastControllerArrival = (shown, now())
+        }
+    }
+}
+
+extension ControllerActionDispatcher {
+    /// Chat, in den L2 getippt zurückführt; `nil` bei Workspace und Board.
+    var backTargetChatID: UUID? {
+        guard let target = targetWindowID.flatMap({ chats.snapshot(of: $0) })?.backTarget, target.kind == .chat else {
+            return nil
+        }
+        return target.id
     }
 }

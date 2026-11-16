@@ -142,6 +142,15 @@ final class ControllerWindowFake {
     var ticketOutcome: ControllerTicketOutcome = .done
     /// Wirkung eines Board-Befehls auf das Fenster (etwa „Zum Chat“).
     var onTicketCommand: ((ControllerTicketCommand) -> Void)?
+    /// Wie ein `@State`, der erst im nächsten Durchgang stimmt: Eine neue
+    /// Auswahl (selectSession) meldet der Schnappschuss erst nach
+    /// `applyPendingSelection()`.
+    var defersSelection = false
+    private var pendingSelection: UUID?
+    func applyPendingSelection() {
+        if let pendingSelection { selected = pendingSelection }
+        pendingSelection = nil
+    }
     var ticketMenu: ControllerTicketMenuInfo?
     /// Befehle, die „ging nicht“ melden sollen.
     var failing: Set<String> = []
@@ -155,7 +164,8 @@ final class ControllerWindowFake {
                 case .switcherCancel: isSwitcherOpen = false
                 case .setSidebarVisible(let visible): isSidebarVisible = visible
                 case .clearMultiSelection: hasMultiSelection = false
-                case .selectSession(let id): selected = id
+                case .selectSession(let id):
+                    if defersSelection { pendingSelection = id } else { selected = id }
                 case .selectWorkspaceChat(let id, _): selected = id
                 case .showNewChatPicker: isNewChatPickerOpen = true
                 case .switchToProject: break
