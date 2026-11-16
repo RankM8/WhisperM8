@@ -328,8 +328,7 @@ final class TicketBoardControllerTests: XCTestCase {
         await controller.show(projectPath: projectA, projectName: "whisperm8")
         await settle { controller.phase == .ready }
         controller.viewModel.selectedKey = "WM8-1"
-        controller.viewModel.mode = .list
-        controller.viewModel.filter.project = "Neustart"
+        controller.viewModel.mode = .board
 
         world.holdResolves()
         let change = Task { await controller.show(projectPath: projectB, projectName: "ListM8") }
@@ -337,8 +336,7 @@ final class TicketBoardControllerTests: XCTestCase {
         // Schon vor der Antwort: nichts vom alten Projekt bleibt stehen.
         XCTAssertEqual(controller.phase, .loading)
         XCTAssertNil(controller.viewModel.selectedKey)
-        XCTAssertEqual(controller.viewModel.mode, .board)
-        XCTAssertNil(controller.viewModel.filter.project)
+        XCTAssertEqual(controller.viewModel.mode, .list, "zurück auf den Standard")
         XCTAssertEqual(controller.viewModel.presentation.visibleCount, 0)
         XCTAssertNil(controller.load.fetchedAt)
 

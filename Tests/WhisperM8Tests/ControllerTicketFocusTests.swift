@@ -24,7 +24,7 @@ final class ControllerTicketFocusTests: XCTestCase {
     func testBoardActionsTakeTheFocusOutOfTheTerminal() {
         let commands: [ControllerTicketCommand] = [
             .move(.down), .open, .back, .adjacent(1), .copyLink, .openInLinear, .refresh, .scroll(lines: 3),
-            .toggleWaitingFilter, .copyList, .dictationUnavailable,
+            .copyList, .dictationUnavailable,
         ]
         for command in commands {
             let (window, terminal) = windowWithFocusedTerminal()

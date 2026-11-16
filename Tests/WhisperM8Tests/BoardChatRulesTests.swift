@@ -207,35 +207,37 @@ final class BoardChatRulesTests: XCTestCase {
 
     // MARK: Triage
 
-    func testTriageMovesPropertiesFirstThenDropsTheList() {
-        func columns(_ width: CGFloat) -> [Bool] {
-            let layout = TicketTriageLayout(width: width)
-            return [layout.showsList, layout.propertiesInline]
-        }
-        XCTAssertEqual(columns(1200), [true, false])
-        XCTAssertEqual(columns(960), [true, false])
-        XCTAssertEqual(columns(959), [true, true])
-        XCTAssertEqual(columns(660), [true, true])
-        XCTAssertEqual(columns(659), [false, true])
+    func testTriageListIsDraggableWithinBoundsAndDropsLast() {
+        XCTAssertEqual(TicketTriageLayout.listWidth(stored: nil, available: 1000), 320, "Vorgabe")
+        XCTAssertEqual(TicketTriageLayout.listWidth(stored: 900, available: 2000), 480, "höchstens 480")
+        XCTAssertEqual(TicketTriageLayout.listWidth(stored: 100, available: 2000), 220, "mindestens 220")
+        XCTAssertEqual(TicketTriageLayout.listWidth(stored: 450, available: 800), 400, "das Ticket behält 400 pt")
+        XCTAssertEqual(TicketTriageLayout.listWidth(stored: nil, available: 600), 220)
+
+        XCTAssertEqual(TicketTriageLayout.draggedListWidth(from: 320, translation: 100, available: 1400), 420)
+        XCTAssertEqual(TicketTriageLayout.draggedListWidth(from: 320, translation: 400, available: 1400), 480)
+        XCTAssertEqual(TicketTriageLayout.draggedListWidth(from: 320, translation: -200, available: 1400), 220)
+        XCTAssertEqual(TicketTriageLayout.draggedListWidth(from: 320, translation: 300, available: 800), 400)
+
+        XCTAssertTrue(TicketTriageLayout(width: 620, listWidth: 220).showsList)
+        XCTAssertFalse(TicketTriageLayout(width: 619, listWidth: 220).showsList, "zu schmal: die Liste fällt weg")
     }
 
     /// Der Kopf wird knapp, wenn die Ticket-Spalte (ohne Liste) schmal ist.
     func testHeadGetsCompactInANarrowTicketColumn() {
-        XCTAssertFalse(TicketTriageLayout(width: 1100).compactHead, "Ticket-Spalte 839 pt")
-        XCTAssertTrue(TicketTriageLayout(width: 900).compactHead, "Ticket-Spalte 639 pt")
-        XCTAssertFalse(TicketTriageLayout(width: 659).showsList)
-        XCTAssertTrue(TicketTriageLayout(width: 659).compactHead, "ohne Liste, 659 pt")
+        XCTAssertFalse(TicketTriageLayout(width: 1200, listWidth: 320).compactHead, "Ticket-Spalte 879 pt")
+        XCTAssertTrue(TicketTriageLayout(width: 1000, listWidth: 320).compactHead, "Ticket-Spalte 679 pt")
+        XCTAssertFalse(TicketTriageLayout(width: 600, listWidth: 220).showsList)
+        XCTAssertTrue(TicketTriageLayout(width: 600, listWidth: 220).compactHead, "ohne Liste, 600 pt")
     }
 
-    /// Der Board-Chat ab Werk lässt in üblichen Fenstern Liste und Ticket stehen.
+    /// Der Board-Chat ab Werk (40 %) lässt in üblichen Fenstern Liste und Ticket stehen.
     func testDefaultColumnKeepsListAndTicketInTheTriage() {
         for available in [1300.0, 1500, 1800] {
             let board = available - BoardChatRules.width(stored: nil, available: available)
-            let layout = TicketTriageLayout(width: board)
+            let layout = TicketTriageLayout(width: board, listWidth: TicketTriageLayout.listWidth(stored: nil, available: board))
             XCTAssertTrue(layout.showsList, "Bereich \(available)")
         }
-        // Breites Fenster: auch die Eigenschaften-Spalte.
-        XCTAssertFalse(TicketTriageLayout(width: 2000 - BoardChatRules.width(stored: nil, available: 2000)).propertiesInline)
     }
 }
 

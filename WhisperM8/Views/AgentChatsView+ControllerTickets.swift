@@ -42,6 +42,7 @@ extension AgentChatsView {
         let model = controller.viewModel
         place.view = model.controllerView(isReady: controller.phase == .ready)
         place.hasTicket = model.detail != nil
+        place.onGroup = place.view == .list && model.selectedGroupID != nil
         place.ticketHasChats = !model.chatLines.isEmpty
         if place.view == .chatLine, let index = model.focusedChatLine, model.chatLines.indices.contains(index),
            model.chatLines[index].chatID != nil {
@@ -58,8 +59,7 @@ extension AgentChatsView {
         return ControllerTicketMenuInfo(
             key: model.detail?.entry.ticket.key,
             chats: model.chatLines.compactMap { line in line.chatID.map { .init(id: $0, title: line.name) } },
-            hasURL: model.detail?.url != nil,
-            waitingFilterOn: model.filter.waitingForMe)
+            hasURL: model.detail?.url != nil)
     }
 
     /// Befehl des Controllers an das Board dieses Fensters (WM8-91, Paket 2).
@@ -134,13 +134,9 @@ extension AgentChatsView {
         case .scroll(let lines):
             guard model.triage != nil else { return .nothing }
             return TicketTextScrollRegistry.shared.scroll(lines: lines, in: hostWindow) ? .done : .nothing
-        case .toggleWaitingFilter:
-            model.toggleWaitingFilter()
-            return .done
         case .copyList:
             let title = TicketTeamDirectory.shared.team(of: selectedProject?.id) ?? selectedProject?.name ?? ""
-            model.copyList(title: model.triage?.title ?? (model.filter.waitingForMe
-                ? title + " · " + String(localized: "Waiting for me") : title))
+            model.copyList(title: model.triage?.title ?? model.listTitle(board: title))
             return .done
         case .goToChat(let chatID):
             guard model.chatLines.contains(where: { $0.chatID == chatID }) else { return .rejected }

@@ -169,10 +169,12 @@ extension UISnapshotGallery {
         view: @escaping ((TicketBoardViewModel) -> Void) -> AnyView, comments: TicketComments
     ) -> [Fixture] {
         let ui = ControllerUIModel.shared
-        func place(_ view: ControllerTicketView, chatLine: String? = nil, chats: Bool = false) -> ControllerContext {
+        func place(_ view: ControllerTicketView, chatLine: String? = nil, chats: Bool = false,
+                   onGroup: Bool = false) -> ControllerContext {
             var place = ControllerTicketsPlace(projectID: nil, team: "WM8")
             place.view = view
-            place.hasTicket = true
+            place.hasTicket = !onGroup
+            place.onGroup = onGroup
             place.ticketHasChats = chats
             place.chatLineTitle = chatLine
             return .tickets(ControllerTicketState(
@@ -196,37 +198,47 @@ extension UISnapshotGallery {
         var setup = ControllerMenuSetup()
         setup.ticketsShown = true
         setup.ticket = ControllerTicketMenuInfo(
-            key: "WM8-81", chats: [.init(id: UUID(), title: "Jon")], hasURL: true, waitingFilterOn: false)
+            key: "WM8-81", chats: [.init(id: UUID(), title: "Jon")], hasURL: true)
         let menu = ControllerMenuModel(setup: setup)
         let size = CGSize(width: 1340, height: 900)
         return [
             Fixture(name: "tickets-controller-board", size: size) {
-                screen(place(.board)) { $0.setBoardSpot(.card("WM8-69")) }
+                screen(place(.board)) { $0.mode = .board; $0.setBoardSpot(.card("WM8-69")) }
+            },
+            // WM8-125: Auswahl in der Liste auf einer Zeile und auf dem Kopf einer Gruppe.
+            Fixture(name: "tickets-controller-liste", size: size) {
+                screen(place(.list)) { $0.setListStop("WM8-69") }
+            },
+            Fixture(name: "tickets-controller-liste-gruppe", size: size) {
+                screen(place(.list, onGroup: true)) { $0.setListStop(TicketListStop.group("status:todo")) }
             },
             // Hoch genug, dass „N weitere“ unter den acht Karten zu sehen ist.
             Fixture(name: "tickets-controller-board-weitere", size: CGSize(width: 1340, height: 1760)) {
-                screen(place(.board)) { $0.setBoardSpot(.more(column: "s0")) }
+                screen(place(.board)) { $0.mode = .board; $0.setBoardSpot(.more(column: "s0")) }
             },
-            // Paket 3d: Auswahl im Kopf (Ring am Filter „Mit Agent“), die Liste
-            // der Bereiche unter „Alle Bereiche“ und der Kopf der Triage.
-            Fixture(name: "tickets-controller-kopf-filter", size: size) {
+            // Paket 3d mit Reitern (WM8-125): Ring auf einem Reiter, die Liste
+            // unter „Mehr“ und der Kopf der Triage.
+            Fixture(name: "tickets-controller-kopf-reiter", size: size) {
                 screen(place(.header)) { model in
                     let header = TicketHeaderContext(hasBack: true, hasBoardChat: false)
                     model.enterHeader(header)
-                    for _ in 0..<3 { _ = model.headerMove(.right, header) }
+                    for _ in 0..<2 { _ = model.headerMove(.right, header) }
                 }
             },
-            Fixture(name: "tickets-controller-bereiche-liste", size: size) {
+            Fixture(name: "tickets-controller-mehr-liste", size: size) {
                 screen(place(.headerPicker)) { model in
+                    // Schmale Reiterzeile, damit „Mehr“ erscheint (wie mit breitem Board-Chat).
+                    model.setTabsWidth(560)
                     let header = TicketHeaderContext(hasBack: true, hasBoardChat: false)
                     model.enterHeader(header)
-                    _ = model.headerMove(.right, header)
+                    for _ in 0..<8 { _ = model.headerMove(.right, header) }
                     _ = model.headerActivate(header)
                     _ = model.headerMove(.down, header)
                 }
             },
             Fixture(name: "tickets-controller-kopf-triage", size: size) {
                 screen(place(.header)) { model in
+                    model.mode = .board
                     model.openFromLane("WM8-81")
                     model.setComments(.loaded(comments), ticketID: "id-81")
                     let header = TicketHeaderContext(hasBack: true, hasBoardChat: false)
@@ -236,19 +248,21 @@ extension UISnapshotGallery {
             },
             Fixture(name: "tickets-controller-triage", size: size) {
                 screen(place(.triage, chats: true)) {
+                    $0.mode = .board
                     $0.openFromLane("WM8-81")
                     $0.setComments(.loaded(comments), ticketID: "id-81")
                 }
             },
             Fixture(name: "tickets-controller-chat-zeile", size: size) {
                 screen(place(.chatLine, chatLine: "Jon", chats: true)) {
+                    $0.mode = .board
                     $0.openFromLane("WM8-81")
                     $0.setComments(.loaded(comments), ticketID: "id-81")
                     $0.triageFocus = .chat(0)
                 }
             },
             Fixture(name: "tickets-controller-menue", size: size) {
-                screen(place(.board), menu: menu) { $0.setBoardSpot(.card("WM8-81")) }
+                screen(place(.board), menu: menu) { $0.mode = .board; $0.setBoardSpot(.card("WM8-81")) }
             },
         ]
     }

@@ -11,7 +11,7 @@ struct TicketHeaderContext: Equatable {
 /// Was ein Knopf im Kopf auslöst, das das Modell nicht selbst kann. Das
 /// Fenster führt es aus (`performTicketCommand`).
 enum TicketHeaderActivation: Equatable {
-    /// Erledigt (Filter, Board/Liste, Liste der Bereiche, Triage zu).
+    /// Erledigt (Reiter, Board/Liste, Liste unter „Mehr“, Triage zu).
     case done
     case rejected
     case goBack
@@ -22,15 +22,15 @@ enum TicketHeaderActivation: Equatable {
     case openInLinear
 }
 
-/// Kopf und Filter mit Controller und Tastatur (WM8-91 Paket 3d). Regeln pur
+/// Kopf und Reiter mit Controller und Tastatur (WM8-91 Paket 3d, WM8-125). Regeln pur
 /// in `TicketHeaderSelection`; hier nur angewendet.
 extension TicketBoardViewModel {
     func headerLayout(_ context: TicketHeaderContext) -> TicketHeaderLayout {
         if triage != nil {
             return .triage(hasBack: context.hasBack, hasBoardChat: context.hasBoardChat, hasURL: detail?.url != nil)
         }
-        return .board(hasBack: context.hasBack,
-                      people: presentation.counts.people.map { .person(id: $0.person.id) })
+        let tabs = tabs
+        return .board(hasBack: context.hasBack, tabs: tabs.shown.map(\.id), hasMore: !tabs.more.isEmpty)
     }
 
     /// Knopf, auf dem die Auswahl im Kopf steht; für Ring und Leiste.
@@ -42,26 +42,29 @@ extension TicketBoardViewModel {
     /// gewählten Knopf, falls es ihn dort noch gibt.
     @discardableResult
     func enterHeader(_ context: TicketHeaderContext) -> Bool {
-        guard let spot = headerLayout(context).entry(remembering: lastHeaderItem) else { return false }
-        projectPickerIndex = nil
+        let layout = headerLayout(context)
+        // Zuerst der zuletzt gewählte Knopf der Reiterzeile, sonst der gezeigte Reiter (WM8-125).
+        let preferred = lastHeaderItem.flatMap { layout.rows.last?.contains($0) == true ? $0 : nil }
+            ?? activeViewID.map(TicketHeaderItem.view)
+        guard let spot = layout.entry(remembering: preferred) else { return false }
+        morePickerIndex = nil
         headerFocus = spot
         return true
     }
 
     /// Zurück auf die Karte (▼ unter der untersten Zeile, Kreis).
     func leaveHeader() {
-        projectPickerIndex = nil
+        morePickerIndex = nil
         headerFocus = nil
     }
 
-    /// Stick und Steuerkreuz im Kopf bzw. in der Liste der Bereiche. Bewegen
+    /// Stick und Steuerkreuz im Kopf bzw. in der Liste unter „Mehr“. Bewegen
     /// wählt nur aus; geschaltet wird mit Kreuz.
     func headerMove(_ direction: TicketBoardMove, _ context: TicketHeaderContext) -> ControllerTicketOutcome {
-        if let index = projectPickerIndex {
-            let next = TicketHeaderSelection.projectStep(
-                index, direction, count: TicketHeaderSelection.projectOptions(presentation.projects).count)
+        if let index = morePickerIndex {
+            let next = TicketHeaderSelection.pickerStep(index, direction, count: tabs.more.count)
             guard next != index else { return .nothing }
-            projectPickerIndex = next
+            morePickerIndex = next
             return .done
         }
         guard let spot = headerFocus else { return .nothing }
@@ -79,14 +82,15 @@ extension TicketBoardViewModel {
         }
     }
 
-    /// Kreuz im Kopf: schaltet den Knopf. In der Liste der Bereiche: übernimmt
-    /// den gewählten Bereich und schließt sie.
+    /// Kreuz im Kopf: schaltet den Knopf. In der Liste unter „Mehr“: zeigt
+    /// die gewählte Ansicht und schließt die Liste.
     func headerActivate(_ context: TicketHeaderContext) -> TicketHeaderActivation {
-        if let index = projectPickerIndex {
-            let options = TicketHeaderSelection.projectOptions(presentation.projects)
-            projectPickerIndex = nil
-            guard options.indices.contains(index) else { return .rejected }
-            filter.project = options[index]
+        if let index = morePickerIndex {
+            let more = tabs.more
+            morePickerIndex = nil
+            guard more.indices.contains(index) else { return .rejected }
+            selectView(more[index].id)
+            lastHeaderItem = .view(more[index].id)
             reconcileHeader(context)
             return .done
         }
@@ -104,38 +108,36 @@ extension TicketBoardViewModel {
         case .copyLink: return .copyLink
         case .handOff: return .handOff
         case .openInLinear: return .openInLinear
-        case .waitingForMe: filter.waitingForMe.toggle()
-        case .project:
-            projectPickerIndex = TicketHeaderSelection.projectStart(
-                current: filter.project, options: TicketHeaderSelection.projectOptions(presentation.projects))
-        case .agent(let agent): filter.agent = agent
-        case .person(let person): filter.person = person
+        case .view(let id): selectView(id)
+        case .moreViews:
+            let more = tabs.more
+            guard !more.isEmpty else { return .rejected }
+            morePickerIndex = more.firstIndex { $0.id == activeViewID } ?? 0
         }
         reconcileHeader(context)
         return .done
     }
 
-    /// Mausklick auf einen Eintrag der Liste der Bereiche (WM8-91): übernimmt
-    /// ihn und räumt den Kopf, denn die Maus hat übernommen. Wirkt beim
-    /// Mausdruck und unabhängig davon, ob die Liste in diesem Moment noch als
-    /// offen gilt: Das Räumen nach jedem Klick (`TicketBoardControllers`) kann
-    /// schon gelaufen sein. Ein Filter schreibt nichts nach Linear.
-    func chooseProjectByMouse(_ option: String?) {
-        filter.project = option
+    /// Mausklick auf einen Eintrag unter „Mehr“: zeigt die Ansicht und räumt
+    /// den Kopf, denn die Maus hat übernommen. Wirkt beim Mausdruck (WM8-91):
+    /// Das Räumen nach jedem Klick (`TicketBoardControllers`) kann schon gelaufen
+    /// sein. Ein Reiter schreibt nichts nach Linear.
+    func chooseMoreViewByMouse(_ id: String) {
+        selectView(id)
         leaveHeader()
     }
 
-    /// Kreis: Liste der Bereiche zu (ohne Änderung), sonst zurück auf die Karte.
+    /// Kreis: Liste unter „Mehr“ zu (ohne Änderung), sonst zurück auf die Karte.
     func headerBack() {
-        if projectPickerIndex != nil {
-            projectPickerIndex = nil
+        if morePickerIndex != nil {
+            morePickerIndex = nil
         } else {
             leaveHeader()
         }
     }
 
-    /// Nach einem Filter können Personen wegfallen: Die Auswahl bleibt auf
-    /// demselben Knopf oder rückt in der Zeile nach.
+    /// Nach einem Reiterwechsel kann ein anderer Reiter unter „Mehr“ rutschen:
+    /// Die Auswahl bleibt auf demselben Knopf oder rückt in der Zeile nach.
     private func reconcileHeader(_ context: TicketHeaderContext) {
         guard let spot = headerFocus else { return }
         let layout = headerLayout(context)

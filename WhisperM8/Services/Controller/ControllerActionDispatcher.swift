@@ -856,7 +856,6 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             break
         case .ticketCopyLink: performTicket(.copyLink)
         case .ticketOpenInLinear: performTicket(.openInLinear)
-        case .boardWaitingFilter: performTicket(.toggleWaitingFilter)
         case .boardCopyList: performTicket(.copyList)
         case .boardRefresh: performTicket(.refresh)
         case .redraw:

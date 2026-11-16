@@ -8,19 +8,12 @@ import Observation
 /// Fertig gerechneter Inhalt der Ansicht: Spalten, Backlog-Gruppen, Zahlen für
 /// die Filter. Pur und vergleichbar; die Ansichten zeichnen nur.
 struct TicketBoardPresentation: Equatable {
-    struct Group: Equatable, Identifiable {
-        /// Name des Projekts; `""` für Tickets ohne Projekt.
-        var project: String
-        var entries: [TicketBoardEntry]
-
-        var id: String { project }
-        var agentCount: Int { entries.filter(\.hasAgent).count }
-    }
-
     /// Eine Spalte je Status des Teams.
     var lanes: [TicketBoardLane]
-    /// Liste: alle sichtbaren Tickets nach Projekt.
-    var groups: [Group]
+    /// Liste: die sichtbaren Tickets in den Gruppen der Ansicht (WM8-125).
+    var groups: [TicketListGroup]
+    /// Ansicht, nach der gruppiert ist; `nil` = alle offenen Tickets nach Status.
+    var view: TicketView?
     var counts: TicketFilterCounts
     /// Projekte zur Auswahl, alphabetisch; `""` (ohne Projekt) steht am Ende.
     var projects: [String]
@@ -39,13 +32,12 @@ struct TicketBoardPresentation: Equatable {
         // Erledigte Tickets stehen nur für die Spur „zuletzt an …“ im Abzug.
         let open = model.entries.filter { !$0.ticket.status.kind.isClosed }
         let visible = filter.apply(to: open)
-        var byProject: [String: [TicketBoardEntry]] = [:]
-        for entry in visible { byProject[entry.ticket.project ?? "", default: []].append(entry) }
         let names = Set(open.map { $0.ticket.project ?? "" })
         return TicketBoardPresentation(
             lanes: TicketBoardLanes.make(statuses: model.statuses, open: open, visible: visible, rule: model.rule,
                                          filterActive: filter != .all),
-            groups: sorted(Array(byProject.keys)).map { Group(project: $0, entries: byProject[$0, default: []].sorted(by: TicketBoardLayout.order)) },
+            groups: TicketListGrouping.make(entries: visible, view: model.view, rule: model.rule),
+            view: model.view,
             counts: TicketFilterCounts.make(entries: open, filter: filter),
             projects: sorted(Array(names)),
             looseChats: model.looseChats,
@@ -58,7 +50,7 @@ struct TicketBoardPresentation: Equatable {
     func entry(key: String?) -> TicketBoardEntry? {
         guard let key, let index = indexByKey[key] else { return nil }
         let (group, row) = index
-        return groups[group].entries[row]
+        return groups[group].rows[row].entry
     }
 
     /// Wo ein Ticket in `groups` steht. Die Liste der Triage fragt je Zeile
@@ -72,7 +64,7 @@ struct TicketBoardPresentation: Equatable {
         var copy = self
         var storage: [String: (Int, Int)] = [:]
         for (g, group) in groups.enumerated() {
-            for (r, entry) in group.entries.enumerated() { storage[entry.ticket.key] = (g, r) }
+            for (r, row) in group.rows.enumerated() { storage[row.entry.ticket.key] = (g, r) }
         }
         copy.keyIndex = TicketKeyIndex(storage: storage)
         return copy
@@ -104,14 +96,30 @@ final class TicketBoardViewModel {
         case list
     }
 
-    var mode: Mode = .board {
+    /// Liste ist der Standard (Giuliano, 16.11.2026, WM8-125); das Board bleibt umschaltbar.
+    var mode: Mode = .list {
         didSet { if mode != oldValue { onControllerViewChange?() } }
     }
+    /// Reiter aus Linear (WM8-125); leer, solange nicht geladen oder ohne Ansichten.
+    /// Die vier Werte hier setzt nur `TicketBoardViewModel+Views` (`setViews`,
+    /// `selectView`, `setGroup`); sie stehen dort in einer eigenen Datei.
+    var catalog = TicketViewCatalog.empty
+    /// Gezeigter Reiter; `nil`, solange es keine Ansichten gibt.
+    var activeViewID: String?
+    /// Die gezeigte Ansicht lädt noch (erster Abruf ihrer Tickets).
+    var isViewLoading = false
+    /// Zugeklappte Gruppen, je Ansicht (`<Ansicht>|<Gruppe>`). Gilt je Fenster, nicht gespeichert.
+    var collapsedGroups: Set<String> = []
+    /// Ein anderer Reiter wurde gewählt; der Controller holt seine Tickets.
+    @ObservationIgnored var onSelectView: ((String) -> Void)?
     /// Controller und Tastatur (WM8-91 Paket 3d): Auswahl im Kopf; `nil` =
     /// auf den Karten. Board und Karten behalten ihre Auswahl darunter.
     var headerFocus: TicketHeaderSpot?
-    /// Liste der Bereiche unter „Alle Bereiche“ offen: gewählter Eintrag.
-    var projectPickerIndex: Int?
+    /// Liste unter „Mehr“ offen (WM8-125): gewählter Eintrag.
+    var morePickerIndex: Int?
+    /// Breite der Reiterzeile, von der Ansicht gemessen; daraus folgt, was
+    /// unter „Mehr“ steht. Nur bei echter Änderung gesetzt.
+    var tabsWidth: CGFloat?
     /// Zuletzt gewählter Knopf der Filterzeile: Dort steigt ▲ wieder ein.
     @ObservationIgnored var lastHeaderItem: TicketHeaderItem?
     /// Ansicht gewechselt (Board/Liste, Triage auf/zu), auch per Maus: Die
@@ -119,15 +127,19 @@ final class TicketBoardViewModel {
     @ObservationIgnored var onControllerViewChange: (@MainActor () -> Void)?
     /// Fenster dieser Ansicht; daran hängt der Board-Chat (WM8-113). `nil` in Bildern und Tests.
     @ObservationIgnored var windowID: UUID?
-    var filter = TicketBoardFilter() {
-        didSet { if filter != oldValue { rebuild() } }
-    }
     var selectedKey: String? {
         didSet {
             if selectedKey != oldValue { refreshSelection() }
             // Eine Karte gewählt (Maus, Tastatur, Controller): weg von „N weitere“ (WM8-91).
             if moreColumn != nil, selectedKey != nil { moreColumn = nil }
+            // Und weg vom Kopf einer Gruppe (WM8-125).
+            if selectedGroupID != nil, selectedKey != nil { selectedGroupID = nil }
         }
+    }
+    /// Controller und Pfeiltasten (WM8-125): Die Auswahl steht auf dem Kopf
+    /// dieser Gruppe der Liste; Return oder Kreuz klappt sie auf und zu.
+    var selectedGroupID: String? {
+        didSet { if selectedGroupID != nil, selectedKey != nil { selectedKey = nil } }
     }
     /// Controller (WM8-91): Die Auswahl steht auf „N weitere“ dieser Spalte.
     var moreColumn: String?
@@ -145,7 +157,7 @@ final class TicketBoardViewModel {
             // dort beginnt neu, und die Leiste des Controllers liest neu.
             guard (triage == nil) != (oldValue == nil) else { return }
             headerFocus = nil
-            projectPickerIndex = nil
+            morePickerIndex = nil
             onControllerViewChange?()
         }
     }
@@ -187,19 +199,7 @@ final class TicketBoardViewModel {
         let model = fresh.withoutChatStates
         guard model != self.model else { return }
         self.model = model
-        // Ein Filter auf etwas, das es nicht mehr gibt, würde alles ausblenden.
-        var filter = filter
-        if let project = filter.project, !model.entries.contains(where: { ($0.ticket.project ?? "") == project }) {
-            filter.project = nil
-        }
-        if case .person(let id) = filter.person, !model.entries.contains(where: { $0.ticket.assignee?.id == id }) {
-            filter.person = .all
-        }
-        if filter != self.filter {
-            self.filter = filter   // baut über `didSet` neu
-        } else {
-            rebuild()
-        }
+        rebuild()
         // Ein Ticket, das der Filter ausblendet, bleibt gewählt; eines, das es nicht mehr gibt, nicht.
         if let key = selectedKey, !model.entries.contains(where: { $0.ticket.key == key }) { selectedKey = nil }
     }
@@ -208,14 +208,19 @@ final class TicketBoardViewModel {
     func reset() {
         setTriage(nil)
         selectedKey = nil
-        mode = .board
+        mode = .list
+        catalog = .empty
+        activeViewID = nil
+        isViewLoading = false
+        collapsedGroups = []
         model = TicketBoardModel(entries: [], looseChats: [], supervisors: [])
-        if filter != TicketBoardFilter() { filter = TicketBoardFilter() } else { rebuild() }
+        rebuild()
     }
 
     private func rebuild() {
         rebuilds += 1
-        let fresh = TicketBoardPresentation.make(model: model, filter: filter)
+        // Gefiltert wird bei Linear über die Ansicht (WM8-125); das Board filtert nicht mehr selbst.
+        let fresh = TicketBoardPresentation.make(model: model, filter: .all)
         if fresh != presentation { presentation = fresh }
         if let triage {
             // Neuer Abzug: Liste aus derselben Quelle, das Ticket bleibt, wenn es kann.

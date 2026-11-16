@@ -13,8 +13,12 @@ struct BoardChatProjectPreferences: Codable, Equatable {
     /// Zuletzt automatisch gefundener Jarvis. So findet die Spalte ihn auch
     /// gestoppt und ohne Tab, ohne alle Chats zu durchsuchen.
     var lastJarvisSessionID: UUID?
+    /// Gezogene Breite der Liste links in der Triage (WM8-125); `nil` = Vorgabe.
+    var triageListWidth: Double?
 
-    var isEmpty: Bool { width == nil && isCollapsed == nil && chosenSessionID == nil && lastJarvisSessionID == nil }
+    var isEmpty: Bool {
+        width == nil && isCollapsed == nil && chosenSessionID == nil && lastJarvisSessionID == nil && triageListWidth == nil
+    }
 }
 
 /// Inhalt von `ticket-board-chat.json`.
@@ -125,6 +129,10 @@ final class BoardChatPreferencesStore {
 
     func setWidth(_ width: Double?, for projectID: UUID) {
         update(projectID) { $0.width = width.flatMap(BoardChatRules.clamped) }
+    }
+
+    func setTriageListWidth(_ width: Double?, for projectID: UUID) {
+        update(projectID) { $0.triageListWidth = width }
     }
 
     func setCollapsed(_ collapsed: Bool, for projectID: UUID) {

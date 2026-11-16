@@ -61,6 +61,7 @@ extension AgentChatsView {
             TicketBoardScreen(
                 projectPath: selectedProject?.path,
                 projectName: selectedProject?.name ?? "",
+                projectID: selectedProject?.id,
                 controller: TicketBoardControllers.shared.controller(for: windowID),
                 onDisabled: { [windowStore, windowID] in windowStore.setTicketsMode(false, in: windowID) },
                 back: ticketsBackLink
