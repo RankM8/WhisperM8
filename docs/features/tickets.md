@@ -69,7 +69,8 @@ WhisperM8 selbst gilt, steht hier:
 | Vorhaben | je größerem Thema ein Projekt in Linear, bei Bedarf mit Meilensteinen |
 | Chat-Titel | `WM8-16 Fin · Insel: Tastatur-Entwurf`; ohne offenes Ticket `Ole · Terminal-Tab: …` |
 
-- **Eine Regel für „fertig“:** Der arbeitende Chat hängt sich an sein Ticket, gibt es als „Merge-bereit“ ab
+- **Eine Regel für „fertig“:** Der Supervisor hängt den Chat beim Auftrag an sein Ticket (der Chat holt es nach,
+  falls nicht; WM8-127). Der Chat gibt es als „Merge-bereit“ ab
   (`tickets done <Ticket> --built "…" --commit … --status "Merge-bereit"`) und meldet das dem Supervisor. Nach
   dem Merge steht das Ticket auf „Wartet aufs Ausliefern“, bis die installierte App den Stand hat. Auf „Done“ setzt
   nur der Supervisor, nach Prüfung und Merge. Die Kommandozeile erinnert einen anderen Chat mit einer Absage
