@@ -18,7 +18,8 @@ extension RecordingCoordinator {
         model: TranscriptionModel,
         language: String,
         rawText: String,
-        postProcessingResult: PostProcessingRunResult
+        postProcessingResult: PostProcessingRunResult,
+        toBoardChat: Bool = false
     ) async {
         guard let appState else { return }
         let finalText = postProcessingResult.finalText
@@ -72,7 +73,10 @@ extension RecordingCoordinator {
             // Board-Chat (WM8-113): Bezug aufs Ticket, das beim Start offen war, nur einmal je Ticket.
             let reference = boardChatReferenceAtStart.flatMap { $0.sessionID == sessionID ? $0 : nil }
             boardChatReferenceAtStart = nil
-            if chatWriter.write((reference?.prefix ?? "") + finalText, to: sessionID, submit: submit) {
+            // Steht im Feld schon Text (Entwurf, Sammelauftrag), beginnt das Diktat
+            // auf eigener Zeile; geprüft jetzt, nicht beim Start der Aufnahme.
+            let lead = toBoardChat && !submit ? boardChatLead(sessionID) : ""
+            if chatWriter.write(lead + (reference?.prefix ?? "") + finalText, to: sessionID, submit: submit) {
                 reference?.commit()
                 Logger.paste.info("Dictation written to agent chat submit=\(submit, privacy: .public)")
             } else {

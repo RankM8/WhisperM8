@@ -247,7 +247,8 @@ struct ControllerLegendHost: View {
             ControllerLegendBar(
                 target: .make(context: isThisWindow ? model.context : .otherWindow, chatTitle: model.targetTitle),
                 entries: [],
-                keyboardItems: isThisWindow ? KeyboardLegend.items(dictationKeys: dictationKeys) : []
+                keyboardItems: isThisWindow
+                    ? KeyboardLegend.ticketItems(for: model.context) + KeyboardLegend.items(dictationKeys: dictationKeys) : []
             )
             .onAppear { dictationKeys = KeyboardLegend.dictationKeys() }
         }

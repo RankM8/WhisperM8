@@ -159,6 +159,8 @@ final class RecordingCoordinator {
     var boardChatReference: @MainActor (UUID) -> (prefix: String, commit: () -> Void)? = {
         BoardChatInputs.shared.referenceForDictation(to: $0)
     }
+    /// Umbruch vor dem Diktat, bestimmt beim Ausliefern an den Board-Chat (WM8-124).
+    var boardChatLead: @MainActor (UUID) -> String = { BoardChatInputs.shared.leadForDictation(to: $0) }
     /// Freigabe offen laut Sendeweg der CLI (`chats send`); nur für den Board-Chat.
     var boardChatApprovalPending: @MainActor (UUID) -> Bool = { BoardChatInputs.shared.approvalPending($0) }
     var boardChatShown: @MainActor (UUID) -> Bool = { BoardChatInputs.shared.isShown($0) }

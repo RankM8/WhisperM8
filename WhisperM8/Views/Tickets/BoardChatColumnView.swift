@@ -27,6 +27,10 @@ struct BoardChatColumnState: Equatable {
     /// Knöpfe im Kopf (Teil c): Jarvis, Produkt-Chat, hineingezogener Chat.
     /// Leer: Der Kopf zeigt nur den Titel.
     var choices: [BoardChatChoice] = []
+    /// Erklärung unter dem Chat, nur bis sie einmal dastand (WM8-124).
+    var showsIntro = false
+    /// Breite von Hand gezogen: Der Kopf zeigt dann den Weg zurück zur Vorgabe.
+    var hasCustomWidth = false
 }
 
 /// Knöpfe der Spalte. Alles, was einen Chat verschiebt oder startet, geht nur
@@ -41,6 +45,10 @@ struct BoardChatColumnActions {
     var choose: (UUID) -> Void = { _ in }
     /// Ein Chat wurde auf die Spalte gezogen (ID, Zahl der Chats im Zug); `false` lehnt ab.
     var drop: (UUID, Int) -> Bool = { _, _ in false }
+    /// Die Erklärung wurde gelesen (OK) oder stand beim Schließen schon da.
+    var introSeen: () -> Void = {}
+    /// Zurück zur Vorgabebreite (40 %).
+    var resetWidth: () -> Void = {}
 
     static let none = BoardChatColumnActions()
 }
@@ -65,7 +73,9 @@ struct BoardChatColumnView<StatusDot: View, Terminal: View>: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             // Auch ohne Terminal: Hinweise (etwa „anderes Projekt“) müssen sichtbar sein.
             if let inputBar { inputBar }
-            footer
+            if state.showsIntro, state.title != nil, state.content == .terminal {
+                BoardChatIntro(isAutomatic: state.isAutomatic, done: actions.introSeen)
+            }
         }
         .background(AgentTheme.background)
         // Chat aus Seitenleiste oder Tab-Leiste hierher ziehen (Teil c).
@@ -117,6 +127,11 @@ struct BoardChatColumnView<StatusDot: View, Terminal: View>: View {
                 headerButton(systemImage: "play.fill",
                              help: state.canResume ? String(localized: "Resume") : String(localized: "Start"),
                              action: actions.start)
+            }
+            if state.hasCustomWidth {
+                // Sichtbar, solange eine eigene Breite gilt; Doppelklick auf den Griff tut dasselbe.
+                headerButton(systemImage: "arrow.left.and.right.square",
+                             help: String(localized: "Back to the default width"), action: actions.resetWidth)
             }
             if state.title != nil, state.content == .terminal {
                 headerButton(systemImage: "arrow.up.left.and.arrow.down.right",
@@ -233,23 +248,41 @@ struct BoardChatColumnView<StatusDot: View, Terminal: View>: View {
         }
         .padding(20)
     }
+}
 
-    // MARK: Fuß
+/// Erklärung unter dem Board-Chat, einmal (WM8-124): wer hier steht und was
+/// die Bezug-Marke tut. Danach bleibt unter dem Chat nur die Marke. Gilt als
+/// gelesen nach OK oder sobald sie einmal da war und wieder verschwindet.
+struct BoardChatIntro: View {
+    let isAutomatic: Bool
+    let done: () -> Void
 
-    @ViewBuilder
-    private var footer: some View {
-        if state.title != nil {
-            (state.isAutomatic
-                ? Text("Chosen automatically: this project's Jarvis. Drag another chat here to switch.")
-                : Text("Chosen by you for this project. Drag another chat here to switch."))
-                .font(.system(size: 11))
-                .foregroundStyle(AgentTheme.textTertiary)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 12)
-                .padding(.bottom, 8)
-                .padding(.top, 2)
+    var body: some View {
+        HStack(alignment: .top, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                (isAutomatic
+                    ? Text("Chosen automatically: this project's Jarvis. Drag another chat here to switch.")
+                    : Text("Chosen by you for this project. Drag another chat here to switch."))
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(verbatim: "Re:")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(AgentTheme.accent)
+                    Text("Goes in front of your next dictation: number, title and link.")
+                }
+            }
+            .font(.system(size: 11))
+            .foregroundStyle(AgentTheme.textSecondary)
+            .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button("OK", action: done)
+                .buttonStyle(SettingsButtonStyle.standard)
+                .fixedSize()
         }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(AgentTheme.surface)
+        .overlay(alignment: .top) { Rectangle().fill(AgentTheme.border).frame(height: 1) }
+        .onDisappear(perform: done)
     }
 }
 
@@ -290,6 +323,8 @@ struct BoardChatColumnFrame: ViewModifier {
     let isCollapsed: Bool
     let available: Double
     let setWidth: (Double) -> Void
+    /// Doppelklick auf den Griff: zurück zur Vorgabe (WM8-124).
+    var resetWidth: () -> Void = {}
 
     @State private var dragStart: Double?
     @State private var dragTranslation: Double = 0
@@ -346,7 +381,8 @@ struct BoardChatColumnFrame: ViewModifier {
                         setWidth(BoardChatRules.draggedWidth(from: start, translation: value.translation.width, available: available))
                     }
             )
-            .help(String(localized: "Drag to resize the board chat"))
+            .simultaneousGesture(TapGesture(count: 2).onEnded { resetWidth() })
+            .help(String(localized: "Drag to resize the board chat. Double-click for the default width."))
             .accessibilityHidden(true)
     }
 }

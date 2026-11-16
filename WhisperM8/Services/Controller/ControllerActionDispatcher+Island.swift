@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 
 /// Offene Insel aus Sicht des Ausführers.
 struct ControllerIslandSession: Equatable {
@@ -51,6 +52,21 @@ extension ControllerActionDispatcher {
         }
     }
 
+    /// Halte-Schwelle erreicht (Aktion `islandShow`). Wie `showIsland`, nennt
+    /// aber im Log, warum die Insel nicht aufgeht: Ebene in diesem Halten
+    /// schon verbraucht oder laut Ausführer schon offen. Nur einmal je Halten,
+    /// nie bei Kombinationen (die gehen über `ensureIsland`).
+    func showIslandOnHold(_ layer: ControllerLayer) {
+        if spentLayer == layer || islandState?.model.layer == layer {
+            let reason = spentLayer == layer ? "spent" : "already_open"
+            let revealed = islandState?.revealed ?? false
+            Logger.controller.info(
+                "controller_island_show_ignored reason=\(reason, privacy: .public) layer=\(String(describing: layer), privacy: .public) revealed=\(revealed, privacy: .public)")
+            return
+        }
+        showIsland(layer)
+    }
+
     /// Insel offen halten, damit eine Kombination sie ändern kann. `false`,
     /// wenn sie in diesem Halten schon zu ist.
     @discardableResult
@@ -90,7 +106,18 @@ extension ControllerActionDispatcher {
     /// wirkt. `nil` ohne Agent-Chats-Fenster. `input`: per Tastatur geöffnet
     /// (⌥Tab), dann Tastenkappen in Kopf und Fußzeile.
     func makeIsland(_ layer: ControllerLayer, input: ControllerIslandInput = .controller) -> ControllerIslandSession? {
-        guard let windowID = targetWindowID, let window = chats.snapshot(of: windowID) else { return nil }
+        guard let windowID = targetWindowID else {
+            // Stille Rückwege ins Log (WM8-91, Befund 16.11.): Ohne Fenster
+            // geht die Insel nicht auf, obwohl die Taste ankam.
+            Logger.controller.info(
+                "controller_island_make_skipped reason=no_window layer=\(String(describing: layer), privacy: .public)")
+            return nil
+        }
+        guard let window = chats.snapshot(of: windowID) else {
+            Logger.controller.info(
+                "controller_island_make_skipped reason=no_snapshot layer=\(String(describing: layer), privacy: .public)")
+            return nil
+        }
         let sessionID = window.selectedSessionID
         var target = ControllerIslandTarget(
             title: sessionID.flatMap(titleForSession), status: sessionID.flatMap(islandStatus))

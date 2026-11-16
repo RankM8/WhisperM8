@@ -1,5 +1,67 @@
 import Foundation
 
+/// Eingabefeld für die Sendeprüfung (WM8-123): bei Claude vom lebendigen
+/// Bildschirm gelesen, auch wenn die Ansicht hochgescrollt ist. Steht dort
+/// Text, sperrt er. Ein leeres Feld gibt nur frei, wenn die Ansicht unten
+/// steht (`fieldForRelease`); hochgescrollt lockert nichts.
+struct ComposerFieldReading: Equatable {
+    /// `nil` = kein Feld erkannt (Dialog, offene Ansicht, Codex, nicht ablesbar):
+    /// Dann entscheidet die Schätzung des Trackers.
+    var field: ControllerPromptField?
+    var atBottom: Bool
+    /// Eine Ansicht von Claude statt (oder unter) dem Feld: Transkript,
+    /// `/tasks`, `/workflows`, Zurückspulen, Auswahl in der Fußzeile,
+    /// Agent-Liste, `/config`, Verlaufssuche. Ein Enter träfe dort die
+    /// Ansicht, nicht das Feld.
+    var openView: String? = nil
+
+    static let unreadable = ComposerFieldReading(field: nil, atBottom: false)
+
+    /// Nur unten darf ein sichtbar leeres Feld die Schätzung überstimmen.
+    var fieldForRelease: ControllerPromptField? { atBottom ? field : nil }
+
+    /// Ansichten, die der Controller-Leser nicht kennt, in denen das Enter einer
+    /// Zustellung aber etwas auslöste (WM8-123). Abgelesen an Claude Code
+    /// 2.1.325 am 16.11.2026, erkannt an der Fußzeile:
+    /// - Agent-Liste (← im leeren Feld): unten ein eigenes Feld „describe a task
+    ///   for a new session“, das der Leser für ein leeres Eingabefeld hält; das
+    ///   Enter startete eine neue Hintergrund-Sitzung mit der Meldung. Fußzeile
+    ///   „enter to return · space to reply · ctrl+x to remove“.
+    /// - `/config`: kein Feld unten; das Enter wählte eine Einstellung. Fußzeile
+    ///   „Type to filter · Enter/↓ to select · ↑ to tabs · Esc to clear“ bzw.
+    ///   „Enter/Space to change · / to search · Esc to close“.
+    /// - Verlaufssuche (Ctrl+R): das Feld zeigt einen Treffer, Fußzeile
+    ///   „search prompts:“.
+    ///
+    /// Gesucht wird nur in der Fußzeile: mit Eingabefeld (Agent-Liste,
+    /// Verlaufssuche) in den Zeilen darunter, ohne Feld (`/config`) in den
+    /// untersten zwei nicht leeren Zeilen. Zitiert ein Chat diese Wortlaute in
+    /// seiner Ausgabe über dem Feld, ist das keine Ansicht; sonst stünde seine
+    /// Warteschlange still, bis jemand hineinschreibt (Prüferin zu WM8-123).
+    /// Abgeblendet sind die Fußzeilen nicht (Claude färbt sie grau), deshalb
+    /// zählt die Lage, nicht die Schrift.
+    /// Kosten: ein paar Textvergleiche über die ohnehin gelesenen 16 Zeilen.
+    static func viewWithoutUsableField(_ lines: [String]) -> String? {
+        let footer: [String]
+        if let box = ControllerScreenReading.promptBox(in: lines) {
+            footer = Array(lines[(box.lower + 1)...])
+        } else {
+            footer = Array(lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.suffix(2))
+        }
+        let text = footer.map { $0.lowercased() }.joined(separator: " ")
+            .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
+        if text.contains("space to reply"), text.contains("ctrl+x to remove") || text.contains("enter to return") {
+            return "agentList"
+        }
+        if text.contains("enter/space to change") && text.contains("esc to close")
+            || text.contains("↑ to tabs") && text.contains("esc to clear") {
+            return "config"
+        }
+        if text.contains("search prompts:") { return "historySearch" }
+        return nil
+    }
+}
+
 /// Wurde ein eingefügter Prompt wirklich abgeschickt (WM8-100)?
 ///
 /// Vorfall 14.11.2026: Nach `resume` stand der Auftrag im Eingabefeld, das

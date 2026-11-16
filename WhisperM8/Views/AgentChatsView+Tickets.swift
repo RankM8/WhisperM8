@@ -47,11 +47,39 @@ extension AgentChatsView {
                 projectPath: selectedProject?.path,
                 projectName: selectedProject?.name ?? "",
                 controller: TicketBoardControllers.shared.controller(for: windowID),
-                onDisabled: { [windowStore, windowID] in windowStore.setTicketsMode(false, in: windowID) }
+                onDisabled: { [windowStore, windowID] in windowStore.setTicketsMode(false, in: windowID) },
+                back: ticketsBackLink
             )
             .equatable()
         } column: { available in
             boardChatColumn(available: available)
+        }
+    }
+}
+
+// MARK: - Zurück zu den Chats (WM8-124)
+
+extension AgentChatsView {
+    /// „← Chats · …“ im Kopf des Boards: dasselbe Ziel wie L2 (`backPlace()`),
+    /// sonst was hinter den Tickets steht. Kosten je Auswertung: eine Abfrage
+    /// des Ortsverlaufs und ein, zwei Nachschläge über den Index.
+    var ticketsBackLink: TicketsBackLinkModel {
+        let workspaceEntity = activeGridWorkspaceEntity
+        let behind = ChatPlace.of(
+            selectedSessionID: selectedSessionID, showsGrid: showsGrid, workspaceID: workspaceEntity?.id,
+            isWorkspaceMember: { workspaceEntity?.slotIndex(of: $0) != nil })
+        let destination = TicketsBackLink.destination(previous: backPlace(), behind: behind) { place in
+            switch place {
+            case .chat(let id): return workspaceModel.session(id: id)?.title
+            case .workspace(let id): return windowStore.gridWorkspace(id: id)?.name
+            case .tickets: return nil
+            }
+        }
+        return TicketsBackLinkModel(destination: destination) { [windowStore, windowID] in
+            // L2 prüft den vorigen Ort beim Klick neu; gibt es ihn nicht mehr,
+            // schließen nur die Tickets, und es bleibt, was dahinter steht.
+            if destination.route == .previousPlace, performCommand(.lastChat) { return }
+            windowStore.setTicketsMode(false, in: windowID)
         }
     }
 }

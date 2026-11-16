@@ -33,6 +33,18 @@ enum KeyboardLegend {
         return items
     }
 
+    /// In der Triage des Ticket-Boards zusätzlich die Tasten, die früher
+    /// abgeschnitten im Ticket-Kopf standen (WM8-124): „J K Ticket · ⌘C Link
+    /// kopieren · esc Board“. Sonst nichts.
+    static func ticketItems(for context: ControllerContext?) -> [KeyboardIslandFooter.Item] {
+        guard case .tickets(let state)? = context, state.place.view == .triage || state.place.view == .chatLine else { return [] }
+        return [
+            KeyboardIslandFooter.Item(keys: ["J", "K"], label: String(localized: "Ticket")),
+            KeyboardIslandFooter.Item(keys: ["⌘", "C"], label: String(localized: "Copy link")),
+            KeyboardIslandFooter.Item(keys: ["esc"], label: String(localized: "Board")),
+        ]
+    }
+
     /// Tastenkappen des Diktat-Hotkeys: ab Werk ⌥Leertaste als „⌥ ␣“, sonst
     /// so, wie KeyboardShortcuts ihn beschreibt.
     @MainActor

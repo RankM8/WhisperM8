@@ -18,6 +18,8 @@ enum PromptDeliveryGate {
         case draftPending
         case notReady
         case busy(String)
+        /// Eine Ansicht von Claude ist offen (WM8-123): Enter träfe sie.
+        case viewOpen
     }
 
     /// - Parameter inputPending: im Startfenster fehlt Claudes Eingabefeld
@@ -30,11 +32,13 @@ enum PromptDeliveryGate {
         mayHaveUnsentInput: Bool,
         inputPending: Bool = false,
         visibleDraft: Bool = false,
-        fieldVisiblyEmpty: Bool = false
+        fieldVisiblyEmpty: Bool = false,
+        viewOpen: Bool = false
     ) -> Decision {
         if case .launching = lifecycle { return .notReady }
         if inputPending { return .notReady }
         if let runtime, runtime != .idle { return .busy(runtime.rawValue) }
+        if viewOpen { return .viewOpen }
         if (mayHaveUnsentInput && !fieldVisiblyEmpty) || visibleDraft { return .draftPending }
         return .deliver
     }
@@ -42,6 +46,10 @@ enum PromptDeliveryGate {
     static func sendBlockedByDraft(mayHaveUnsentInput: Bool, force: Bool, fieldVisiblyEmpty: Bool = false) -> Bool {
         mayHaveUnsentInput && !force && !fieldVisiblyEmpty
     }
+
+    static let viewOpenMessage = "Im Ziel-Chat ist eine Ansicht von Claude offen (Transkript, /tasks, /workflows, "
+        + "Zurückspulen, Auswahl in der Fußzeile, Agent-Liste, /config oder Verlaufssuche). Das Enter träfe die Ansicht, nicht das Eingabefeld; auch "
+        + "mit --force nicht. Ausweg: `whisperm8 chats enqueue <ref> \"…\"` (wartet, bis sie zu ist) oder dem User melden."
 
     static func draftMessage(insertedText: Bool) -> String {
         insertedText ? insertedTextMessage : draftMessage

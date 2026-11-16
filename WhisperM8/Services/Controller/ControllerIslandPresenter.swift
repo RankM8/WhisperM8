@@ -1,4 +1,5 @@
 import AppKit
+import OSLog
 import SwiftUI
 
 /// Wert, den die Hosting-View der Insel beobachtet.
@@ -118,7 +119,13 @@ final class ControllerIslandPresenter: ControllerIslandPresenting {
     private var generation = 0
 
     func show(_ model: ControllerIslandModel, screenDisplayID: UInt32?) {
-        guard let screen = Self.screen(displayID: screenDisplayID) else { return }
+        guard let screen = Self.screen(displayID: screenDisplayID) else {
+            // Stiller Rückweg (WM8-91, Befund 16.11.): Ohne Bildschirm zeigt
+            // die Insel nichts; das muss im Log stehen.
+            Logger.controller.info(
+                "controller_island_show_skipped reason=no_screen display=\(screenDisplayID ?? 0, privacy: .public) screens=\(NSScreen.screens.count, privacy: .public)")
+            return
+        }
         var counts: ControllerIslandCounts?
         if let summary = NotchStatusController.shared.visibleSummary(onDisplay: screen.displayID) {
             counts = ControllerIslandCounts(working: summary.working, waiting: summary.waiting)
@@ -141,11 +148,20 @@ final class ControllerIslandPresenter: ControllerIslandPresenting {
             lastFrame = frame
             panel.setFrame(frame, display: true)
         }
-        guard !wasShown else { return }
+        guard !wasShown else {
+            // Gilt als sichtbar, liegt aber nicht auf dem aktiven Space:
+            // Dann sähe man nichts, obwohl der Ausführer die Insel offen hat.
+            if !panel.isOnActiveSpace {
+                Logger.controller.info(
+                    "controller_island_show_skipped reason=shown_elsewhere layer=\(String(describing: model.layer), privacy: .public)")
+            }
+            return
+        }
         panel.sharingType = AppPreferences.shared.isNotchStatusHiddenFromCapture ? .none : .readOnly
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             viewModel.revealed = true
             panel.orderFrontRegardless()
+            logShown(model, screen: screen, frame: frame)
             return
         }
         viewModel.revealed = false
@@ -157,6 +173,22 @@ final class ControllerIslandPresenter: ControllerIslandPresenting {
             withAnimation(.timingCurve(0.2, 0.9, 0.25, 1.05, duration: Self.animationDuration)) {
                 self.viewModel.revealed = true
             }
+        }
+        logShown(model, screen: screen, frame: frame)
+    }
+
+    /// Eine Zeile je Öffnen (nur auf Tastendruck, nie im Takt): wo die Insel
+    /// liegt und ob das Fenster nach dem Aufklappen wirklich zu sehen ist.
+    /// Für den Befund vom 16.11.2026 (Insel geht im Vollbild nicht auf).
+    private func logShown(_ model: ControllerIslandModel, screen: NotchScreenInfo, frame: CGRect) {
+        let current = generation
+        let layer = String(describing: model.layer)
+        let style = screen.hasNotch ? "notch" : "pill"
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.animationDuration + 0.05) { [weak self] in
+            guard let self, let panel = self.panel, self.generation == current else { return }
+            let visible = panel.occlusionState.contains(.visible)
+            Logger.controller.info(
+                "controller_island_shown layer=\(layer, privacy: .public) style=\(style, privacy: .public) display=\(screen.displayID, privacy: .public) frame=\(NSStringFromRect(frame), privacy: .public) screen=\(NSStringFromRect(screen.frame), privacy: .public) isVisible=\(panel.isVisible, privacy: .public) occluded=\(!visible, privacy: .public) activeSpace=\(panel.isOnActiveSpace, privacy: .public) revealed=\(self.viewModel.revealed, privacy: .public)")
         }
     }
 

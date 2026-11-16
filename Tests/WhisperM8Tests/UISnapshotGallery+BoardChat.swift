@@ -114,7 +114,9 @@ extension UISnapshotGallery {
             },
             // Weit gezogen: Das Board behält 420 pt.
             Fixture(name: "tickets-board-chat-weit-gezogen", size: size) {
-                screen("tickets-board", state: jarvis, width: 1400)
+                var state = jarvis
+                state.hasCustomWidth = true                // Knopf zurück zur Vorgabe im Kopf
+                return screen("tickets-board", state: state, width: 1400)
             },
             Fixture(name: "tickets-board-chat-fenster-2", size: size) {
                 screen("tickets-board", state: BoardChatColumnState(title: "Jarvis: Supervisor WhisperM8", isAutomatic: true,
@@ -165,6 +167,30 @@ extension UISnapshotGallery {
                 BoardChatInputs.shared.register(windowID: window, sessionID: UUID(), name: "Jarvis")
                 return screen("tickets-triage-mit-fenster", state: jarvis, triage: true,
                               inputBar: inputBar(notice: BoardChatInputRules.message(.awaitingInput, chatName: "Jarvis")))
+            },
+            // WM8-124 Paket 3: Erklärung einmal beim ersten Öffnen, darunter nur die Bezug-Marke.
+            Fixture(name: "tickets-board-chat-erklaerung", size: size) {
+                var state = jarvis
+                state.showsIntro = true
+                BoardChatInputs.shared.register(windowID: window, sessionID: UUID(), name: "Jarvis")
+                return screen("tickets-triage-mit-fenster", state: state, triage: true, inputBar: inputBar())
+            },
+            // WM8-124 Paket 3: Tasten der Triage in der Leiste unten (per Tastatur bedient).
+            Fixture(name: "tickets-board-chat-tastenleiste", size: CGSize(width: 900, height: 80)) {
+                var place = ControllerTicketsPlace(projectID: UUID(), team: "WM8")
+                place.view = .triage
+                let context = ControllerContext.tickets(ControllerTicketState(place: place))
+                return AnyView(VStack(spacing: 0) {
+                    Spacer()
+                    ControllerLegendBar(
+                        target: .make(context: context, chatTitle: nil), entries: [],
+                        keyboardItems: KeyboardLegend.ticketItems(for: context) + KeyboardLegend.items(dictationKeys: ["⌥", "␣"]))
+                }
+                .background(AppTheme.background))
+            },
+            // WM8-124 Paket 2: „← Chats · WM8 Aktiv“ auch im schmalen Board.
+            Fixture(name: "tickets-board-chat-kopf-board-schmal", size: CGSize(width: 1000, height: 760)) {
+                screen("tickets-board", state: jarvis)
             },
         ]
     }
