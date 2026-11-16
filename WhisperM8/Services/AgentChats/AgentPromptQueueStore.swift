@@ -116,6 +116,20 @@ final class AgentPromptQueueStore: @unchecked Sendable {
         }
     }
 
+    /// Das Enter wurde zurückgehalten (WM8-75): Auftrag bleibt vorgemerkt und
+    /// trägt den Vermerk für den Blick ins Transcript vor der nächsten
+    /// Zustellung (WM8-123).
+    func markEnterWithheld(id: UUID, error: String, text: String, at date: Date) {
+        mutate { prompts in
+            guard let index = prompts.firstIndex(where: { $0.id == id }) else { return }
+            prompts[index].state = .pending
+            prompts[index].lastError = error
+            prompts[index].enterWithheld = true
+            prompts[index].withheldText = text
+            prompts[index].withheldAt = date
+        }
+    }
+
     /// Storniert offene Aufträge. `ids == nil` storniert alle offenen der
     /// Session. Bereits zugestellte bleiben unberührt — Historie wird nicht
     /// umgeschrieben.

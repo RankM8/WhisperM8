@@ -15,12 +15,12 @@ import Foundation
 final class AgentPromptQueueDelivery {
     static let shared = AgentPromptQueueDelivery()
 
-    private let store: AgentPromptQueueStore
+    let store: AgentPromptQueueStore
     /// Kurze Wartezeit zwischen Turn-Ende und Paste: die TUI muss ihren
     /// Prompt wieder anzeigen, sonst landet der Text im Nirgendwo.
     private let settleDelay: TimeInterval
     /// Hinweis am Chat, solange Meldungen wegen des Eingabefelds warten (WM8-123).
-    private let notices: QueueHoldNotices
+    let notices: QueueHoldNotices
     /// Je Chat höchstens ein geplanter neuer Versuch; ein neuer ersetzt ihn.
     private var heldRetryToken: [UUID: UUID] = [:]
     private var lastReturnRetryAt: [UUID: Date] = [:]
@@ -48,7 +48,15 @@ final class AgentPromptQueueDelivery {
     /// Der eigentliche Zustellschritt — Reservierung, Guards und Paste in
     /// einem MainActor-Durchlauf ohne `await` dazwischen (gleiche
     /// TOCTOU-Freiheit wie die Send-Pipeline).
-    func deliverNow(for sessionID: UUID) {
+    func deliverNow(for sessionID: UUID, transcriptChecked: Bool = false) {
+        // Wurde das Enter dieses Auftrags einmal zurückgehalten, kann er
+        // inzwischen raus sein, ohne dass die App es verbuchen konnte: erst
+        // im Transcript nachsehen, abseits des Main Threads (WM8-123).
+        if !transcriptChecked, let next = store.openPrompts(for: sessionID).first,
+           next.state == .pending, next.enterWithheld {
+            checkAlreadySent(next, sessionID: sessionID)
+            return
+        }
         // Fehlt nach dem Start das Eingabefeld, gar nicht erst reservieren:
         // sonst schriebe jeder Versuch die Queue-Datei zweimal (Vic zu WM8-100).
         if AgentSessionStatusCoordinator.shared.startupInputPending(sessionID),
@@ -136,7 +144,7 @@ final class AgentPromptQueueDelivery {
         Task { @MainActor [store] in
             if await AgentTerminalController.enterWasWithheld(
                 sessionID: sessionID, clearedInput: clearedInput, since: sentAt) {
-                store.markFailed(id: reserved.id, error: Self.withheldError, retry: true)
+                store.markEnterWithheld(id: reserved.id, error: Self.withheldError, text: marked, at: sentAt)
                 // Mit der ID: `chats submit` verbucht ihn dann als zugestellt (WM8-123).
                 AgentTerminalRegistry.shared.controller(for: sessionID)?.claimWithheldDelivery(queuedPromptID: reserved.id)
                 Logger.agentStore.notice(
