@@ -404,6 +404,12 @@ final class AgentWorkspaceUIModel {
     private(set) var workspace: AgentWorkspace {
         didSet {
             WorkspaceApplyMeasurement.workspaceChanged()
+            // Läuft bei jeder Workspace-Änderung; neu gebaut wird nur, wenn
+            // sich die ID-Folge geändert hat (neuer, gelöschter, verschobener
+            // Chat). Der Vergleich mit dem alten Stand braucht kein Hashing.
+            if !Self.sameIDs(workspace.sessions, oldValue.sessions) {
+                sessionIndexByID = Self.index(of: workspace.sessions)
+            }
             guard workspace.projects != oldValue.projects else { return }
             let parents = AgentProjectDisplay.parentByProjectID(projects: workspace.projects)
             if parents != projectParents { projectParents = parents }
@@ -412,6 +418,11 @@ final class AgentWorkspaceUIModel {
     /// Arbeitsordner → Haupt-Projekt (WM8-102), einmal je Änderung der
     /// Projekte gebildet statt je Tab, Zeile oder Drop.
     private(set) var projectParents: [UUID: UUID] = [:]
+    /// Chat-ID → Position in `workspace.sessions`, einmal je Änderung gebildet
+    /// (WM8-101). Die Tab-Leiste baute vorher je Tab ein Dictionary über alle
+    /// Chats (rund 5.900) und suchte die Auswahl linear; im Profil eines
+    /// Chatwechsels war das der größte eigene Posten im Fensterbody.
+    private(set) var sessionIndexByID: [UUID: Int] = [:]
     /// `true`, solange der letzte Workspace-Write fehlgeschlagen ist (LR-AK-005).
     private(set) var persistenceFailing = false
     private let store: AgentWorkspaceStore
@@ -444,6 +455,44 @@ final class AgentWorkspaceUIModel {
         // Installation: eine genau dort erfolgte Mutation wird so nachgezogen.
         self.workspace = store.read { $0 }
         self.projectParents = AgentProjectDisplay.parentByProjectID(projects: workspace.projects)
+        self.sessionIndexByID = Self.index(of: workspace.sessions)
+    }
+
+    /// Chat zur ID ohne Suche über alle Chats.
+    /// An der gefundenen Position wird die ID gegengeprüft (Auflage Noa): Eine
+    /// veraltete Position darf nie einen anderen Chat liefern, sonst träfe
+    /// Senden, Schließen oder ein Kontowechsel den falschen. Passt sie nicht,
+    /// gilt die lineare Suche. Steht die ID gar nicht im Index, gibt es den
+    /// Chat nicht (der Index wird synchron im didSet gebaut): dann sofort
+    /// `nil`, sonst liefe für jeden verschwundenen Chat (offener Tab eines
+    /// gelöschten Chats, alte Auswahl) bei jedem Aufruf ein voller Durchlauf.
+    func session(id: UUID) -> AgentChatSession? {
+        guard let index = sessionIndexByID[id] else { return nil }
+        if workspace.sessions.indices.contains(index), workspace.sessions[index].id == id {
+            return workspace.sessions[index]
+        }
+        return workspace.sessions.first { $0.id == id }  // nur bei falscher Fundstelle
+    }
+
+    /// Erste Position je ID (wie `Dictionary(uniquingKeysWith: first)`).
+    nonisolated static func index(of sessions: [AgentChatSession]) -> [UUID: Int] {
+        var result: [UUID: Int] = [:]
+        result.reserveCapacity(sessions.count)
+        for (position, session) in sessions.enumerated() where result[session.id] == nil {
+            result[session.id] = position
+        }
+        return result
+    }
+
+    /// Gleiche ID-Folge? Ein Durchlauf ohne Hashing; bei einer bloßen
+    /// Feldänderung (Titel, Status) ist die Antwort `true`.
+    nonisolated static func sameIDs(_ lhs: [AgentChatSession], _ rhs: [AgentChatSession]) -> Bool {
+        guard lhs.count == rhs.count else { return false }
+        // Über die Indizes, ohne die Chat-Strukturen zu kopieren.
+        for position in lhs.indices where lhs[position].id != rhs[position].id {
+            return false
+        }
+        return true
     }
 }
 

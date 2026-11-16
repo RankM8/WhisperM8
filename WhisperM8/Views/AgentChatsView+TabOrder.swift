@@ -11,7 +11,7 @@ extension AgentChatsView {
     /// Globale Tab-Bar: alle offenen Tabs über alle Projekte, in der
     /// Reihenfolge von `openTabIDs`.
     var headerTabs: [AgentChatSession] {
-        AgentTabOrder.headerTabs(openTabIDs: openTabIDs, sessions: workspace.sessions)
+        AgentTabOrder.headerTabs(openTabIDs: openTabIDs, lookup: workspaceModel.session(id:))
     }
 
     /// Erste Workspace-Zugehörigkeit in der persistierten Sidebar-Reihenfolge.
@@ -63,13 +63,9 @@ extension AgentChatsView {
     /// Benötigt für Cross-Window-Drags, deren Quellfenster eine andere
     /// persistierte Tab-Reihenfolge besitzt.
     func visualTabOrderIDs(for orderedIDs: [UUID]) -> [UUID] {
-        let sessionsByID = Dictionary(
-            workspace.sessions.map { ($0.id, $0) },
-            uniquingKeysWith: { first, _ in first }
-        )
         let parents = tabProjectParents
         let entries = orderedIDs.compactMap { id -> AgentTabGroupingEntry? in
-            guard let session = sessionsByID[id], session.status != .archived else {
+            guard let session = workspaceModel.session(id: id), session.status != .archived else {
                 return nil
             }
             return AgentTabOrder.groupingEntry(
@@ -83,7 +79,7 @@ extension AgentChatsView {
     }
 
     func tabGroupingKey(for sessionID: UUID) -> AgentTabGroupingKey? {
-        guard let session = workspace.sessions.first(where: { $0.id == sessionID }) else {
+        guard let session = workspaceModel.session(id: sessionID) else {
             return nil
         }
         return AgentTabGrouping.key(

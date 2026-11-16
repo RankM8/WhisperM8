@@ -64,7 +64,7 @@ extension AgentChatsView {
     func backPlace() -> ChatPlace? {
         let place = windowStore.previousPlace(in: windowID)
         if case .chat(let id) = place,
-           !workspace.sessions.contains(where: { $0.id == id && $0.status != .archived }) {
+           !(workspaceModel.session(id: id).map { $0.status != .archived } ?? false) {
             return nil
         }
         return place
@@ -74,7 +74,7 @@ extension AgentChatsView {
     private func controllerBackTarget() -> ControllerBackTarget? {
         switch backPlace() {
         case .chat(let id)?:
-            let title = workspace.sessions.first { $0.id == id }?.title ?? String(localized: "Chat")
+            let title = workspaceModel.session(id: id)?.title ?? String(localized: "Chat")
             return ControllerBackTarget(kind: .chat, title: title, id: id)
         case .workspace(let id)?:
             return windowStore.gridWorkspace(id: id).map { ControllerBackTarget(kind: .workspace, title: $0.name, id: id) }
@@ -133,32 +133,32 @@ extension AgentChatsView {
         case .closeListRow(let row):
             return closeListRowFromCommand(row)
         case .renameChat(let sessionID):
-            guard let session = workspace.sessions.first(where: { $0.id == sessionID }) else { return false }
+            guard let session = workspaceModel.session(id: sessionID) else { return false }
             beginRename(session)
             return true
         case .forkChat(let sessionID):
-            guard let session = workspace.sessions.first(where: { $0.id == sessionID }),
+            guard let session = workspaceModel.session(id: sessionID),
                   session.isForkable else { return false }
             forkSession(session)
             return true
         case .setGPTAccount(let sessionID, let profileName):
-            guard let session = workspace.sessions.first(where: { $0.id == sessionID }),
+            guard let session = workspaceModel.session(id: sessionID),
                   canSwitchGPTAccount(session),
                   let profile = AccountProfileStore.shared.gptProfiles.first(where: { $0.name == profileName }),
                   profile.isLoggedIn else { return false }
             setGPTAccount([session], toProfile: profile)
             return true
         case .togglePin(let sessionID):
-            guard workspace.sessions.contains(where: { $0.id == sessionID }) else { return false }
+            guard (workspaceModel.session(id: sessionID) != nil) else { return false }
             togglePin(sessionID)
             return true
         case .archiveChat(let sessionID):
-            guard let session = workspace.sessions.first(where: { $0.id == sessionID }),
+            guard let session = workspaceModel.session(id: sessionID),
                   session.status != .archived else { return false }
             requestArchive([session])
             return true
         case .moveChatToAccount(let sessionID, let profileName):
-            guard let session = workspace.sessions.first(where: { $0.id == sessionID }),
+            guard let session = workspaceModel.session(id: sessionID),
                   canMoveToAccount(session) else { return false }
             requestAccountMove([session], toProfileNamed: profileName)
             return true
@@ -175,12 +175,12 @@ extension AgentChatsView {
         case .startChat(let sessionID):
             return startChatFromCommand(sessionID)
         case .selectSession(let sessionID):
-            guard workspace.sessions.contains(where: { $0.id == sessionID }) else { return false }
+            guard (workspaceModel.session(id: sessionID) != nil) else { return false }
             selectedSessionID = sessionID
             multiSelection = []
             return true
         case .selectWorkspaceChat(let sessionID, let workspaceID):
-            guard workspace.sessions.contains(where: { $0.id == sessionID }),
+            guard (workspaceModel.session(id: sessionID) != nil),
                   let entity = windowStore.gridWorkspace(id: workspaceID) else { return false }
             return openWorkspaceChatRow(sessionID, in: entity, source: .controller)
         case .activateWorkspace(let workspaceID):
@@ -259,11 +259,11 @@ extension AgentChatsView {
     private func closeListRowFromCommand(_ row: SidebarNavigationRow) -> Bool {
         switch row {
         case .chat(let sessionID):
-            guard let session = workspace.sessions.first(where: { $0.id == sessionID }) else { return false }
+            guard let session = workspaceModel.session(id: sessionID) else { return false }
             performSidebarCloseAction([session])
             return true
         case .workspaceChat(let sessionID, let workspaceID):
-            guard let session = workspace.sessions.first(where: { $0.id == sessionID }),
+            guard let session = workspaceModel.session(id: sessionID),
                   let entity = windowStore.gridWorkspace(id: workspaceID) else { return false }
             requestEndSession([session], removingFrom: entity)
             return true

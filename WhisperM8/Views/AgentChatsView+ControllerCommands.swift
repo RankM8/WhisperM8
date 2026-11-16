@@ -89,7 +89,7 @@ extension AgentChatsView {
     func performControllerConfirmed(_ pending: ControllerConfirmations.Pending) {
         switch pending.kind {
         case .backgroundStop:
-            guard let session = workspace.sessions.first(where: { $0.id == pending.sessionID }),
+            guard let session = workspaceModel.session(id: pending.sessionID),
                   session.hasBackgroundShortID else { return }
             performBackgroundLifecycle(.stop, on: session)
         case .stopJob:
@@ -103,7 +103,7 @@ extension AgentChatsView {
     /// Führt eine Kopf-Aktion aus. `false`, wenn sie für den Chat nicht (mehr)
     /// passt — der Controller meldet „geht nicht“.
     func performControllerChatCommand(_ command: AgentChatsCommand) -> Bool {
-        func session(_ id: UUID) -> AgentChatSession? { workspace.sessions.first { $0.id == id } }
+        func session(_ id: UUID) -> AgentChatSession? { workspaceModel.session(id: id) }
         func project(of id: UUID) -> AgentProject? {
             guard let session = session(id) else { return nil }
             return workspace.projects.first { $0.id == session.projectID && !$0.path.isEmpty }
