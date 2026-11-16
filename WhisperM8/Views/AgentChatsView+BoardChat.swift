@@ -47,8 +47,13 @@ extension AgentChatsView {
         }
         let jarvis = BoardChatRules.automaticJarvis(in: candidates, projectID: projectID).flatMap { workspaceModel.session(id: $0) }
         let product = BoardChatRules.automaticProduct(in: candidates, projectID: projectID).flatMap { workspaceModel.session(id: $0) }
-        return BoardChatPickResult(current: chosen ?? jarvis, isAutomatic: chosen == nil, jarvis: jarvis, product: product,
-                                   chosen: chosen)
+        let current = chosen ?? jarvis
+        // Liste „Anderer Chat …“ im Kopf (WM8-126): dieselben Kandidaten,
+        // dieselbe Regel wie beim Hineinziehen.
+        let others = BoardChatHeadSelection.others(candidates, projectID: projectID, current: current?.id,
+                                                   name: BoardChatText.callName)
+        return BoardChatPickResult(current: current, isAutomatic: chosen == nil, jarvis: jarvis, product: product,
+                                   chosen: chosen, others: others)
     }
 
     /// Pur über `BoardChatRules.rejection`; Projekt wie bei Jarvis und Produkt-Chat
@@ -75,7 +80,7 @@ extension AgentChatsView {
                 } else if preferences.isCollapsed == true {
                     BoardChatCollapsedRail(title: pick.current?.title, expand: {
                         preferencesStore.setCollapsed(false, for: projectID)
-                    }) {
+                    }, headFocus: boardChatHeadFocusModel) {
                         if let current = pick.current { boardChatStatusDot(current) }
                     }
                 } else {
@@ -119,12 +124,14 @@ extension AgentChatsView {
                 jarvis: pick.jarvis.map(Self.boardChatChoiceChat), product: pick.product.map(Self.boardChatChoiceChat),
                 chosen: pick.chosen.map(Self.boardChatChoiceChat), current: session?.id),
             showsIntro: !BoardChatPreferencesStore.shared.introSeen,
-            hasCustomWidth: BoardChatPreferencesStore.shared.preferences(for: projectID).width != nil)
+            hasCustomWidth: BoardChatPreferencesStore.shared.preferences(for: projectID).width != nil,
+            others: pick.others)
         BoardChatColumnView(
             state: state,
             actions: boardChatActions(session: session, placement: placement, projectID: projectID,
                                       automaticJarvis: pick.jarvis?.id),
             inputBar: AnyView(BoardChatInputBar(windowID: windowID)),
+            headFocus: boardChatHeadFocusModel,
             statusDot: { if let session { boardChatStatusDot(session) } },
             terminal: {
                 if let session, placement == .here,
@@ -152,7 +159,7 @@ extension AgentChatsView {
         }
     }
 
-    private func boardChatPlacement(of sessionID: UUID) -> BoardChatPlacement {
+    func boardChatPlacement(of sessionID: UUID) -> BoardChatPlacement {
         BoardChatRules.placement(
             windowID: windowID,
             hostWindowID: windowStore.windowID(containingTab: sessionID),
@@ -271,5 +278,7 @@ struct BoardChatPickResult {
     var jarvis: AgentChatSession?
     var product: AgentChatSession?
     var chosen: AgentChatSession?
+    /// Liste „Anderer Chat …“ im Kopf (WM8-126), ohne den Chat in der Spalte.
+    var others: [BoardChatHeadOption] = []
 }
 

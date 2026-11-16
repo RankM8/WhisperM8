@@ -31,6 +31,9 @@ struct BoardChatColumnState: Equatable {
     var showsIntro = false
     /// Breite von Hand gezogen: Der Kopf zeigt dann den Weg zurück zur Vorgabe.
     var hasCustomWidth = false
+    /// Liste unter „Anderer Chat …“ (WM8-126): Chats dieses Projekts, die
+    /// Board-Chat werden können, ohne den, der schon dasteht.
+    var others: [BoardChatHeadOption] = []
 }
 
 /// Knöpfe der Spalte. Alles, was einen Chat verschiebt oder startet, geht nur
@@ -60,6 +63,9 @@ struct BoardChatColumnView<StatusDot: View, Terminal: View>: View {
     let actions: BoardChatColumnActions
     /// Unter dem Terminal: Bezug und Hinweise (Teil b). Nur bei `.terminal`.
     var inputBar: AnyView? = nil
+    /// Board des Fensters: Auswahl von Controller und Tastatur im Kopf
+    /// (WM8-126). Nur Ring und Liste lesen sie, nicht der Kopf selbst.
+    var headFocus: TicketBoardViewModel? = nil
     @ViewBuilder let statusDot: () -> StatusDot
     @ViewBuilder let terminal: () -> Terminal
 
@@ -69,6 +75,9 @@ struct BoardChatColumnView<StatusDot: View, Terminal: View>: View {
         VStack(spacing: 0) {
             header
             Divider().overlay(AgentTheme.border)
+            // Liste „Anderer Chat …“ unter dem Kopf, nicht darüber: Über dem
+            // Terminal (ein NSView) läge sie nicht verlässlich obenauf.
+            BoardChatOtherChatsList(model: headFocus, options: state.others, choose: actions.choose)
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             // Auch ohne Terminal: Hinweise (etwa „anderes Projekt“) müssen sichtbar sein.
@@ -105,7 +114,9 @@ struct BoardChatColumnView<StatusDot: View, Terminal: View>: View {
                 .foregroundStyle(AgentTheme.textTertiary)
                 .fixedSize()
             if !state.choices.isEmpty {
-                ForEach(state.choices) { choice in choiceButton(choice) }
+                ForEach(state.choices) { choice in
+                    choiceButton(choice).boardChatHeadRing(.choice(choice.id), model: headFocus)
+                }
             } else if let title = state.title {
                 HStack(spacing: 6) {
                     statusDot()
@@ -122,6 +133,8 @@ struct BoardChatColumnView<StatusDot: View, Terminal: View>: View {
                 .help(title)
                 .layoutPriority(1)
             }
+            otherChatButton
+                .boardChatHeadRing(.otherChat, model: headFocus)
             Spacer(minLength: 4)
             if state.title != nil, state.content == .terminal, !state.isRunning {
                 headerButton(systemImage: "play.fill",
@@ -136,10 +149,12 @@ struct BoardChatColumnView<StatusDot: View, Terminal: View>: View {
             if state.title != nil, state.content == .terminal {
                 headerButton(systemImage: "arrow.up.left.and.arrow.down.right",
                              help: String(localized: "Open as tab"), action: actions.openAsTab)
+                    .boardChatHeadRing(.openAsTab, model: headFocus, cornerRadius: 6)
             }
             headerButton(systemImage: "sidebar.right", help: String(localized: "Hide board chat")) {
                 actions.setCollapsed(true)
             }
+            .boardChatHeadRing(.hide, model: headFocus, cornerRadius: 6)
         }
         .padding(.horizontal, 8)
         .frame(height: 34)
@@ -169,6 +184,33 @@ struct BoardChatColumnView<StatusDot: View, Terminal: View>: View {
             ? String(localized: "\(choice.title), shown as board chat")
             : String(localized: "Show \(choice.title) as board chat"))
         .layoutPriority(choice.isSelected ? 1 : 0.5)
+    }
+
+    /// „Anderer Chat …“ (WM8-126): öffnet die Liste darunter. Ohne passenden
+    /// Chat steht der Knopf blass da und sagt, warum.
+    private var otherChatButton: some View {
+        let hasOthers = !state.others.isEmpty
+        return Button {
+            headFocus?.openOtherChatsByMouse(hasOptions: hasOthers)
+        } label: {
+            HStack(spacing: 3) {
+                Text("Other chat…")
+                    .font(.system(size: 12))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+            .foregroundStyle(hasOthers ? AgentTheme.textSecondary : AgentTheme.textTertiary)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(AgentTheme.border))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .help(hasOthers ? String(localized: "Show another chat as board chat")
+                        : String(localized: "No other chat of this project is open or running"))
+        .accessibilityLabel(String(localized: "Show another chat as board chat"))
     }
 
     private func headerButton(systemImage: String, help: String, action: @escaping () -> Void) -> some View {
@@ -291,6 +333,8 @@ struct BoardChatIntro: View {
 struct BoardChatCollapsedRail<StatusDot: View>: View {
     let title: String?
     let expand: () -> Void
+    /// Auswahl von Controller und Tastatur (WM8-126): Ring am Knopf.
+    var headFocus: TicketBoardViewModel? = nil
     @ViewBuilder let statusDot: () -> StatusDot
 
     var body: some View {
@@ -306,6 +350,7 @@ struct BoardChatCollapsedRail<StatusDot: View>: View {
             .buttonStyle(.plain)
             .help(String(localized: "Show board chat"))
             .accessibilityLabel(String(localized: "Show board chat"))
+            .boardChatHeadRing(.show, model: headFocus, cornerRadius: 6)
             if title != nil { statusDot() }
             Spacer()
         }

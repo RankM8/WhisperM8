@@ -25734,6 +25734,46 @@
         }
       }
     },
+    "Other chat…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anderer Chat …"
+          }
+        }
+      }
+    },
+    "Show another chat as board chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anderen Chat als Board-Chat zeigen"
+          }
+        }
+      }
+    },
+    "No other chat of this project is open or running": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein anderer Chat dieses Projekts ist offen oder läuft"
+          }
+        }
+      }
+    },
+    "Show as board chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Als Board-Chat zeigen"
+          }
+        }
+      }
+    },
     "View not available. It may have been deleted in Linear.": {
       "localizations": {
         "de": {

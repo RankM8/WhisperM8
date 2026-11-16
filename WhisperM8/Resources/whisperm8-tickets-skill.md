@@ -25,6 +25,8 @@ Hilfe: `whisperm8 tickets --help`.
 | Woran hänge ich | `whisperm8 tickets mine` |
 | Falsch verknüpft | `whisperm8 tickets unlink ABC-12` |
 
+- Meist hat dich der Supervisor beim Auftrag schon angehängt. Prüf es zu Beginn mit `tickets mine`; steht dein
+  Ticket nicht da, häng dich selbst an (`link`). Doppelt schadet nicht.
 - `link` setzt ein Ticket, das noch nicht in Arbeit ist, auf „In Progress“. Mit `--no-status` bleibt der Status.
 - Zwischenstände schreibt der Chat als Kommentar (`comment`). Die Stand-Zeile oben im Ticket
   (`**Stand TT.MM.JJJJ:** …`, ersetzt mit `note`) führt der Supervisor.
@@ -54,7 +56,7 @@ Hilfe: `whisperm8 tickets --help`.
 
 | Ereignis | Wer | Status |
 |---|---|---|
-| Chat beginnt | der Chat, über `link` | In Progress (automatisch) |
+| Chat beginnt | der Supervisor beim Auftrag, sonst der Chat selbst, über `link` | In Progress (automatisch) |
 | Chat ist fertig, Branch steht | der Chat, über `done --built … --status` | Merge-bereit |
 | Branch ist in `main` | der Supervisor | Done, oder ein Zwischenstatus, wenn das Projekt einen für „gemergt, noch nicht ausgeliefert“ führt |
 | Arbeit ohne Merge erledigt (Analyse, Entscheidung) | der Supervisor | Done |
@@ -88,8 +90,14 @@ whisperm8 tickets list --status "Merge-bereit"
   Supervisor-Chats (Titel beginnt mit „Jarvis“) stehen getrennt und brauchen kein Ticket.
 - **Abgegebene Tickets:** Ein Ticket, das ein Chat mit `done` abgegeben hat und das noch in Arbeit steht (etwa
   „Merge-bereit“), zeigt „abgegeben von <Chat>“ und zählt nicht zu `--no-agent`. Es wartet auf dich.
-- **Für einen anderen Chat handeln:** `--chat <Anfang der Chat-ID>` bei `link`, `done`, `unlink`, `mine`
-  (IDs aus `whisperm8 chats list`).
+- **Beim Auftrag selbst anhängen:** direkt nach `chats new` bzw. dem Auftrag an einen laufenden Chat
+  `whisperm8 tickets link ABC-12 --chat <Anfang der Chat-ID>`; das geht auch, bevor die App den neuen Chat
+  gespeichert hat. Verlass dich nicht darauf, dass der Chat es selbst tut. `--chat` gilt ebenso bei `done`,
+  `unlink`, `mine` (IDs aus `whisperm8 chats list`).
+- **Welches System:** Ist ein Team für genau diesen Projektordner eingetragen (`tickets setup` ohne Angaben zeigt
+  „Zuordnung: <Ordner> → <Team>“), gilt dieses Werkzeug, auch wenn Anleitung oder Gedächtnis des Projekts noch ein
+  älteres System nennen. Den alten Hinweis meldest du dem Nutzer zur Korrektur. `tickets board` allein beweist es
+  nicht: Bei nur einem Team nimmt es dieses auch in einem fremden Ordner.
 - **Nach dem Merge:** `whisperm8 tickets status ABC-12 Done`, dann den Chat stoppen (wie oben).
 - **Neue Tickets** legt der Supervisor an:
   `whisperm8 tickets new "Titel" --description @text.md --project "Vorhaben" --priority high --labels <Label>`.
