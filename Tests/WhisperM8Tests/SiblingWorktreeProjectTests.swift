@@ -22,8 +22,8 @@ final class SiblingWorktreeProjectTests: XCTestCase {
                      gitDir: "/r/akquise-ai/.git/worktrees/akquise-ai-kurse"),
             "/r/akquise-ai")
         XCTAssertEqual(
-            mainRepo("/r/ListM8-ds190", root: "/r/ListM8-ds190",
-                     gitDir: "/r/ListM8/.git/worktrees/ListM8-ds190"),
+            mainRepo("/r/ListM8-abc190", root: "/r/ListM8-abc190",
+                     gitDir: "/r/ListM8/.git/worktrees/ListM8-abc190"),
             "/r/ListM8")
     }
 

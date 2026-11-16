@@ -229,7 +229,7 @@ Probe-Subagent:
 whisperm8 agent run --wait --json --cd /pfad/zum/repo \
   --model auto --effort high \
   --playwright-storage-state .qa/auth/akquise-admin.storageState.json \
-  "Browser-QA Preflight. Öffne https://akquise.test/admin/kunden mit Playwright-MCP. Prüfe: keine Weiterleitung zu /login oder auth.akquise.test, Titel AkquiseAI, sichtbarer Auth-Indikator Admin AkquiseAI oder admin@akquise.ai. Schreibe .qa/reports/preflight.md. Keine App-Daten ändern."
+  "Browser-QA Preflight. Öffne https://akquise.test/admin/kunden mit Playwright-MCP. Prüfe: keine Weiterleitung zu /login oder auth.akquise.test, Titel AkquiseAI, sichtbarer Auth-Indikator Admin AkquiseAI oder admin@example.com. Schreibe .qa/reports/preflight.md. Keine App-Daten ändern."
 ```
 
 Subagent-Prompt für Browser-QA:
