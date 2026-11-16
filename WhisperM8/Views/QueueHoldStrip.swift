@@ -29,10 +29,14 @@ struct QueueHoldStrip: View {
             // Nur solange die Pille steht: die Breite des Terminals für das
             // Ausweichen vor der Notizkarte. Leere Flächen nehmen keine Maus an.
             GeometryReader { geometry in
-                QueueHoldStripPlaced(
-                    notice: notice,
-                    insets: QueueHoldPlacement.insets(terminalWidth: geometry.size.width, card: card),
-                    onActivate: onActivate)
+                // Schmale Kachel mit offener Notizkarte: Die Karte zeichnet die
+                // Pille selbst (`QueueHoldCardPill`); sie liegt über dem Terminal.
+                if !QueueHoldPlacement.sitsOnCard(terminalWidth: geometry.size.width, card: card) {
+                    QueueHoldStripPlaced(
+                        notice: notice,
+                        insets: QueueHoldPlacement.insets(terminalWidth: geometry.size.width, card: card),
+                        onActivate: onActivate)
+                }
             }
         }
     }
@@ -120,8 +124,6 @@ enum QueueHoldPlacement {
         var trailing: CGFloat = QueueHoldPlacement.trailingInset
     }
 
-    /// Höhe der Pille (11 pt Schrift, 4 pt Rand oben und unten, Linie).
-    static let pillHeight: CGFloat = 22
     /// Abstand zur Kante der Karte, wenn die Pille in ihr sitzt.
     static let insideCardInset: CGFloat = 6
 
@@ -147,12 +149,43 @@ enum QueueHoldPlacement {
         if terminalWidth - trailingInset - besideLeading >= minimumWidthBesideCard {
             return Insets(top: topInset, leading: besideLeading)
         }
-        // Schmale Kachel: an die Unterkante der Karte heften, rechts und
-        // innerhalb ihrer Fläche. Darunter läge sonst eine weitere Zeile
-        // Terminal oder die Eingabezeile.
-        return Insets(
-            top: max(topInset, cardBottom - pillHeight - insideCardInset),
-            leading: leadingInset,
-            trailing: max(trailingInset, terminalWidth - cardRight + insideCardInset))
+        // Schmale Kachel: Die Karte zeichnet die Pille (`sitsOnCard`).
+        return plain
+    }
+
+    /// Schmale Kachel mit offener Notizkarte: Die Pille sitzt an der
+    /// Unterkante der Karte, rechts und innerhalb ihrer Fläche. Darunter läge
+    /// sonst eine weitere Zeile Terminal oder die Eingabezeile. Gezeichnet
+    /// wird sie dann von der Karte, weil die Karte über dem Terminal liegt.
+    static func sitsOnCard(terminalWidth: CGFloat, card: JarvisNoteCardFootprint?) -> Bool {
+        guard let card else { return false }
+        let cardRight = card.trailingEdge - JarvisNoteCardFootprint.terminalInset
+        let cardBottom = card.bottomEdge - JarvisNoteCardFootprint.terminalInset
+        guard cardRight > 0, cardBottom > 0 else { return false }
+        let besideLeading = max(leadingInset, cardRight + cardGap)
+        return terminalWidth - trailingInset - besideLeading < minimumWidthBesideCard
+    }
+}
+
+/// Pille „Meldung wartet“ in der Jarvis-Notizkarte (schmale Kachel, WM8-123):
+/// rechts an der Unterkante der Karte. Liest nur die Einträge des eigenen
+/// Chats; ohne wartende Meldung zeichnet sie nichts.
+struct QueueHoldCardPill: View {
+    let sessionID: UUID
+    /// Breite der Kachel; das Terminal ist darin auf beiden Seiten eingerückt.
+    let paneWidth: CGFloat
+    var notices: QueueHoldNotices = .shared
+    var noteCards: JarvisNoteCardFootprints = .shared
+
+    var body: some View {
+        let terminalWidth = paneWidth - 2 * JarvisNoteCardFootprint.terminalInset
+        if let notice = notices.notices[sessionID],
+           QueueHoldPlacement.sitsOnCard(terminalWidth: terminalWidth, card: noteCards.footprints[sessionID]) {
+            QueueHoldStripContent(notice: notice, onActivate: { [sessionID] in
+                AgentTerminalRegistry.shared.controller(for: sessionID)?.scrollHistoryToBottom()
+                AgentPromptQueueDelivery.shared.noteReturnedToBottom(sessionID)
+            })
+            .padding(QueueHoldPlacement.insideCardInset)
+        }
     }
 }

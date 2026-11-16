@@ -508,7 +508,9 @@ Terminal ans Ende und lässt die Warteschlange gleich nachsehen
 weicht die Pille der offenen Jarvis-Notizkarte aus: rechts daneben, solange
 dort die Kurzfassung Platz hat (180 pt), sonst an die Unterkante der Karte,
 rechts und innerhalb ihrer Fläche (so verdeckt sie weder eine weitere Zeile
-Terminal noch die Eingabezeile). Die Karte
+Terminal noch die Eingabezeile). Dann zeichnet die Karte sie selbst
+(`QueueHoldCardPill`), weil die Karte über dem Terminal liegt; die Pille im
+Terminal blendet sich aus. Beide entscheiden mit `QueueHoldPlacement.sitsOnCard`. Die Karte
 meldet dafür ihre Größe beim Öffnen, Schließen und Ändern
 (`JarvisNoteCardFootprints`, nur Speicher, gelesen nur von der Pille desselben
 Chats). Bei Codex-Chats

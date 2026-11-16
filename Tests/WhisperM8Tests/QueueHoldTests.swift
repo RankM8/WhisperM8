@@ -153,16 +153,10 @@ final class QueueHoldTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(472 - QueueHoldPlacement.trailingInset - beside.leading,
                                     QueueHoldPlacement.minimumWidthBesideCard)
 
-        // Schmale Kachel: an der Unterkante der Karte, rechts in ihr.
-        let onCard = QueueHoldPlacement.insets(terminalWidth: 262, card: card)
-        let cardRight: CGFloat = 250 - inset
-        let cardBottom: CGFloat = 96 - inset
-        XCTAssertEqual(onCard.leading, QueueHoldPlacement.leadingInset)
-        XCTAssertEqual(onCard.top, cardBottom - QueueHoldPlacement.pillHeight - QueueHoldPlacement.insideCardInset)
-        XCTAssertEqual(onCard.trailing, 262 - cardRight + QueueHoldPlacement.insideCardInset)
-        XCTAssertLessThanOrEqual(onCard.top + QueueHoldPlacement.pillHeight, cardBottom, "bleibt in der Karte")
-        XCTAssertGreaterThanOrEqual(262 - onCard.trailing, 0)
-        XCTAssertLessThanOrEqual(262 - onCard.trailing, cardRight, "rechte Kante in der Karte")
+        // Schmale Kachel: Die Karte zeichnet die Pille an ihrer Unterkante.
+        XCTAssertTrue(QueueHoldPlacement.sitsOnCard(terminalWidth: 262, card: card))
+        XCTAssertFalse(QueueHoldPlacement.sitsOnCard(terminalWidth: 472, card: card), "breit: daneben")
+        XCTAssertFalse(QueueHoldPlacement.sitsOnCard(terminalWidth: 262, card: nil))
 
         // Karte reicht nicht ins Terminal (zugeklappt auf null): wie ohne Karte.
         XCTAssertEqual(QueueHoldPlacement.insets(terminalWidth: 262, card: .init(trailingEdge: 10, bottomEdge: 0)), plain)

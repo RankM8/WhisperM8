@@ -62,6 +62,8 @@ extension UISnapshotGallery {
         let footprint = JarvisNoteCardFootprint(trailingEdge: 10 + card.width, bottomEdge: card.height)
         let terminalWidth = width - 2 * inset
         let insets = QueueHoldPlacement.insets(terminalWidth: terminalWidth, card: footprint)
+        let onCard = QueueHoldPlacement.sitsOnCard(terminalWidth: terminalWidth, card: footprint)
+        let notice = QueueHoldNotices.Notice(count: 1, reason: .textInField)
         return VStack(spacing: 0) {
             HStack {
                 Text(verbatim: "Ben · WM8-123").font(.system(size: 11, weight: .semibold))
@@ -72,7 +74,7 @@ extension UISnapshotGallery {
             .frame(height: header)
             .background(AgentTheme.header)
             queueHoldTerminal(queueHoldLongChat, height: 190)
-                .overlay { QueueHoldStripPlaced(notice: .init(count: 1, reason: .textInField), insets: insets) }
+                .overlay { if !onCard { QueueHoldStripPlaced(notice: notice, insets: insets) } }
                 .padding(.top, inset)
                 .padding(.horizontal, inset)
                 .padding(.bottom, 8)
@@ -87,6 +89,11 @@ extension UISnapshotGallery {
             .padding(8)
             .frame(width: card.width, height: card.height, alignment: .topLeading)
             .background(RoundedRectangle(cornerRadius: 7).fill(AgentTheme.header))
+            .overlay(alignment: .bottomTrailing) {
+                if onCard {
+                    QueueHoldStripContent(notice: notice).padding(QueueHoldPlacement.insideCardInset)
+                }
+            }
             .padding(.leading, 10)
             .padding(.top, header)
         }
