@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<!--
+  Klick-Entwurf zu WM8-125 „Ticket-Board: Linear-Ansichten als Reiter, Liste als Standard, Triage mit
+  gruppierter Liste“. Kein App-Code. Farben und Bausteine aus docs/design/ticket-board-alltag.html und
+  ticket-board-controller.html (dort aus AppTheme.swift).
+  Tickets aus dem Team WM8 (Abzug vom 16.11.2026). Erfunden bzw. angenommen, damit alles einmal vorkommt:
+  die Ansicht „Als Nächstes: Giuliano“ im Team WM8 (legt der Supervisor erst an), einige Zuweisungen und Status,
+  die Eltern-Beziehungen (WM8-111 mit vier Unteraufgaben, WM8-15 unter WM8-91), die Chat-Namen, Daten und der
+  Text im Terminal.
+-->
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ticket-Board Liste</title>
+<style>
+  :root {
+    --bg:#f2f2f4; --panel:#ffffff; --ink:#1c1c1e; --ink2:#5f6064; --ink3:#7d7e83; --line:rgba(0,0,0,.09);
+    --win:#ffffff; --sidebar:#eeeef0; --header:#f2f2f4; --term:#fbfbfc; --border:rgba(0,0,0,.08);
+    --field:#ffffff; --field-line:rgba(0,0,0,.14); --sel:rgba(127,127,127,.14); --hl:rgba(94,106,210,.10);
+    --accent:#5e6ad2; --accent-ink:#ffffff; --working:#3fa873; --awaiting:#b9861c; --error:#d6473d;
+    --warn-bg:rgba(201,150,42,.12); --group:#f6f6f8; --shadow:0 14px 40px rgba(0,0,0,.18);
+    --l-dec:#c9962a; --l-hand:#8b5cf6; --l-feat:#4f8fe8; --l-imp:#3fa873; --l-bug:#d6473d; --l-self:#8e8f94;
+    --s-prog:#d9a520; --s-merge:#3fa873; --s-ship:#4f8fe8; --s-todo:#8e8f94;
+  }
+  :root[data-theme="dark"] {
+    --bg:#17181b; --panel:#1f2023; --ink:#f1f1f3; --ink2:#a4a5ab; --ink3:#86878d; --line:rgba(255,255,255,.09);
+    --win:#0f0f10; --sidebar:#131415; --header:#121213; --term:#0f0f10; --border:rgba(255,255,255,.08);
+    --field:#1c1c1f; --field-line:rgba(255,255,255,.14); --sel:rgba(255,255,255,.08); --hl:rgba(124,132,232,.14);
+    --accent:#7c84e8; --accent-ink:#ffffff; --working:#4cc38a; --awaiting:#e9b949; --error:#e5594f;
+    --warn-bg:rgba(233,185,73,.12); --group:#161719; --shadow:0 14px 40px rgba(0,0,0,.5);
+    --l-dec:#e9b949; --l-hand:#a78bfa; --l-feat:#6ea5f0; --l-imp:#4cc38a; --l-bug:#e5594f; --l-self:#86878d;
+    --s-prog:#e9b949; --s-merge:#4cc38a; --s-ship:#6ea5f0; --s-todo:#86878d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#17181b; --panel:#1f2023; --ink:#f1f1f3; --ink2:#a4a5ab; --ink3:#86878d; --line:rgba(255,255,255,.09);
+      --win:#0f0f10; --sidebar:#131415; --header:#121213; --term:#0f0f10; --border:rgba(255,255,255,.08);
+      --field:#1c1c1f; --field-line:rgba(255,255,255,.14); --sel:rgba(255,255,255,.08); --hl:rgba(124,132,232,.14);
+      --accent:#7c84e8; --accent-ink:#ffffff; --working:#4cc38a; --awaiting:#e9b949; --error:#e5594f;
+      --warn-bg:rgba(233,185,73,.12); --group:#161719; --shadow:0 14px 40px rgba(0,0,0,.5);
+      --l-dec:#e9b949; --l-hand:#a78bfa; --l-feat:#6ea5f0; --l-imp:#4cc38a; --l-bug:#e5594f; --l-self:#86878d;
+      --s-prog:#e9b949; --s-merge:#4cc38a; --s-ship:#6ea5f0; --s-todo:#86878d;
+    }
+  }
+  :root { color-scheme:light; } :root[data-theme="dark"] { color-scheme:dark; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { color-scheme:dark; } }
+  * { box-sizing:border-box; }
+  body { margin:0; font:13px/1.45 -apple-system,"SF Pro Text",system-ui,sans-serif; background:var(--bg); color:var(--ink); }
+  button { font:inherit; color:inherit; }
+  header.page { display:flex; align-items:center; gap:16px; padding:18px 28px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header.page h1 { font-size:16px; margin:0; font-weight:600; }
+  header.page p { margin:0; color:var(--ink2); }
+  header.page .sp { margin-left:auto; }
+  main { padding:20px 28px 80px; max-width:1760px; }
+  h2 { margin:30px 0 10px; font-size:12px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink3); font-weight:600; }
+  .rules { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:14px 18px; color:var(--ink2); }
+  .rules b { color:var(--ink); }
+  .rules ul, .rules ol { margin:6px 0 0; padding-left:20px; } .rules li { margin:5px 0; }
+  .rules .rec { color:var(--accent); font-weight:600; }
+  .cap { color:var(--ink2); max-width:120ch; margin:12px 2px 0; min-height:22px; }
+  .cap b { color:var(--ink); }
+  table.t { border-collapse:collapse; width:100%; font-size:12.5px; }
+  table.t th, table.t td { text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); vertical-align:top; }
+  table.t th { color:var(--ink3); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.05em; }
+
+  .btn { border:1px solid var(--field-line); background:var(--field); color:var(--ink); border-radius:7px; padding:3px 10px; cursor:pointer; font-size:12px; white-space:nowrap; display:inline-flex; align-items:center; gap:6px; }
+  .btn.ghost { border-color:transparent; background:transparent; color:var(--ink2); }
+  .btn.icon { padding:3px 7px; }
+
+  .controls { display:flex; flex-wrap:wrap; gap:12px 26px; margin:0 0 14px; }
+  .ctl { display:flex; flex-direction:column; gap:5px; }
+  .ctl .lab { font-size:11px; color:var(--ink3); text-transform:uppercase; letter-spacing:.05em; font-weight:600; }
+  .seg { display:inline-flex; flex-wrap:wrap; gap:2px; padding:2px; background:var(--sel); border-radius:8px; width:max-content; max-width:100%; }
+  .seg button { border:0; background:transparent; padding:4px 11px; border-radius:6px; font-size:12px; color:var(--ink2); cursor:pointer; font-weight:500; }
+  .seg button.on { background:var(--panel); color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.12); font-weight:600; }
+  .pad { display:flex; gap:4px; flex-wrap:wrap; }
+  .pad button { min-width:30px; }
+
+  /* Fenster */
+  .winwrap { overflow-x:auto; padding-bottom:6px; }
+  .win { position:relative; height:740px; background:var(--win); border:1px solid var(--border); border-radius:11px; box-shadow:var(--shadow); display:grid; grid-template-columns:196px 1fr; grid-template-rows:1fr auto; overflow:hidden; margin:0 auto 0 0; }
+  .side { background:var(--sidebar); border-right:1px solid var(--border); display:flex; flex-direction:column; min-height:0; }
+  .lights { display:flex; gap:7px; padding:12px 12px 6px; }
+  .lights i { width:12px; height:12px; border-radius:50%; background:#ff5f57; } .lights i:nth-child(2){background:#febc2e;} .lights i:nth-child(3){background:#28c840;}
+  .sidelist { flex:1; overflow:hidden; padding:2px 8px 8px; font-size:12px; }
+  .sec { margin:12px 6px 4px; font-size:11px; font-weight:700; letter-spacing:.06em; color:var(--ink3); }
+  .srow { display:flex; align-items:center; gap:7px; height:26px; padding:0 8px; border-radius:6px; white-space:nowrap; }
+  .srow .t { overflow:hidden; text-overflow:ellipsis; flex:1; }
+  .srow.sel { background:var(--sel); font-weight:600; }
+  .content { display:flex; flex-direction:column; min-width:0; min-height:0; }
+  .titlezone { height:36px; background:var(--header); border-bottom:1px solid var(--border); display:flex; align-items:center; gap:6px; padding:0 10px; font-size:11.5px; color:var(--ink2); flex:none; }
+  .tzbtn { width:28px; height:24px; border-radius:6px; border:1px solid transparent; background:transparent; display:flex; align-items:center; justify-content:center; color:var(--ink2); font-size:13px; }
+  .tzbtn.on { background:var(--panel); border-color:var(--border); color:var(--ink); }
+  .ctabs { display:flex; gap:4px; margin-left:8px; overflow:hidden; }
+  .ctab { padding:3px 9px; border-radius:6px; white-space:nowrap; display:flex; align-items:center; gap:6px; }
+  .body { flex:1; min-height:0; display:flex; position:relative; }
+
+  .dot { width:8px; height:8px; border-radius:50%; display:inline-block; flex:none; }
+  .dot.working { background:var(--working); }
+  .dot.awaiting { background:var(--awaiting); }
+  .dot.stopped { background:var(--ink3); opacity:.6; }
+
+  /* Bereich der Tickets */
+  .area { flex:1; min-width:0; display:flex; flex-direction:column; min-height:0; }
+  .bhead { display:flex; align-items:center; gap:8px; padding:8px 14px 4px; flex:none; }
+  .bsp { flex:1; }
+  .back { border:1px solid var(--field-line); background:var(--field); border-radius:7px; padding:3px 9px; font-size:12px; white-space:nowrap; cursor:pointer; }
+  .vtabs { display:flex; align-items:center; gap:2px; min-width:0; overflow:hidden; padding:2px 10px 6px; flex:none; }
+  .vtab { border:0; background:transparent; padding:5px 10px; border-radius:7px; font-size:12.5px; color:var(--ink2); cursor:pointer; white-space:nowrap; display:inline-flex; align-items:center; gap:6px; position:relative; }
+  .vtab .n { color:var(--ink3); font-size:11px; font-variant-numeric:tabular-nums; }
+  .vtab.on { color:var(--ink); font-weight:600; background:var(--sel); }
+  .vtab .star { color:var(--awaiting); font-size:11px; }
+  .vtab.more { color:var(--ink3); }
+  .ring { box-shadow:inset 0 0 0 2px var(--accent) !important; background:var(--hl) !important; }
+  .hsp { display:flex; align-items:center; gap:6px; flex:none; }
+  .mseg { display:inline-flex; gap:2px; padding:2px; background:var(--sel); border-radius:7px; }
+  .mseg button { border:0; background:transparent; padding:2px 10px; border-radius:5px; font-size:12px; color:var(--ink2); cursor:pointer; }
+  .mseg button.on { background:var(--panel); color:var(--ink); font-weight:600; box-shadow:0 1px 2px rgba(0,0,0,.12); }
+  .sync { font-size:11px; color:var(--ink3); white-space:nowrap; }
+  .vinfo { padding:0 16px 7px; font-size:11px; color:var(--ink3); border-bottom:1px solid var(--border); flex:none; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .vinfo b { color:var(--ink2); font-weight:600; }
+  .vinfo a { color:var(--accent); text-decoration:none; }
+  .fchips { display:flex; gap:6px; padding:6px 16px; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+  .chip { border:1px solid var(--field-line); border-radius:999px; padding:1px 9px; font-size:12px; background:var(--field); display:inline-flex; gap:5px; align-items:center; }
+  .chip.me { border-color:var(--awaiting); }
+  .menu { position:absolute; z-index:5; background:var(--panel); border:1px solid var(--border); border-radius:9px; box-shadow:var(--shadow); padding:4px; min-width:220px; }
+  .menu button { display:flex; width:100%; border:0; background:transparent; text-align:left; padding:6px 9px; border-radius:6px; font-size:12.5px; cursor:pointer; gap:8px; }
+  .menu button:hover, .menu button.ring { background:var(--sel); }
+  .menu small { color:var(--ink3); font-size:11px; margin-left:auto; }
+
+  /* Liste */
+  .listwrap { flex:1; min-height:0; overflow:auto; container-type:inline-size; container-name:list; }
+  .ghead { display:flex; align-items:center; gap:8px; height:34px; padding:0 14px; background:var(--group); border-bottom:1px solid var(--border); font-size:12.5px; font-weight:600; cursor:pointer; position:sticky; top:0; z-index:1; }
+  .ghead .chev { width:12px; color:var(--ink3); font-size:10px; }
+  .ghead .n { color:var(--ink3); font-weight:500; font-size:11.5px; }
+  .ghead .why { font-size:11px; color:var(--awaiting); font-weight:600; }
+  .ghead .agents { margin-left:auto; font-size:11px; color:var(--ink3); font-weight:500; }
+  .lrow { display:flex; align-items:center; gap:9px; height:36px; padding:0 14px; border-bottom:1px solid var(--border); cursor:pointer; font-size:12.5px; }
+  .lrow:hover { background:var(--sel); }
+  .lrow.sel { background:var(--sel); }
+  .lrow svg, .tr svg, .ghead svg, .tg svg, .strip svg { flex:none; }
+  .lrow .key { width:58px; flex:none; color:var(--ink3); font-size:11.5px; font-variant-numeric:tabular-nums; }
+  .lrow .title { flex:1 1 auto; min-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .lrow .title .par { color:var(--ink3); font-size:11.5px; margin-right:6px; }
+  .lrow .prog { color:var(--ink3); font-size:11px; margin-left:6px; border:1px solid var(--field-line); border-radius:999px; padding:0 6px; }
+  .lrow .labs { display:flex; gap:4px; flex:none; }
+  .lab2 { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--field-line); border-radius:999px; padding:0 8px; height:21px; font-size:11.5px; color:var(--ink2); white-space:nowrap; }
+  .lab2 i { width:7px; height:7px; border-radius:50%; }
+  .labmore { display:none; }
+  .proj { display:inline-flex; align-items:center; gap:5px; border:1px solid var(--field-line); border-radius:6px; padding:0 7px; height:21px; font-size:11.5px; color:var(--ink2); white-space:nowrap; flex:none; }
+  .links { font-size:11px; color:var(--ink3); flex:none; }
+  .chatcell { width:92px; flex:none; display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; overflow:hidden; white-space:nowrap; }
+  .chatcell .st { font-size:11px; color:var(--ink3); font-weight:400; }
+  .ava { width:22px; height:22px; border-radius:50%; background:var(--sel); color:var(--ink2); font-size:10px; font-weight:700; display:inline-flex; align-items:center; justify-content:center; flex:none; }
+  .ava.none { background:transparent; border:1.5px dashed var(--ink3); }
+  .date { width:42px; flex:none; text-align:right; color:var(--ink3); font-size:11.5px; font-variant-numeric:tabular-nums; }
+  .indent { width:22px; flex:none; align-self:stretch; position:relative; }
+  .indent::before { content:""; position:absolute; left:8px; top:0; bottom:50%; border-left:1.5px solid var(--field-line); border-bottom:1.5px solid var(--field-line); width:9px; border-bottom-left-radius:5px; }
+  .waits { font-size:11px; color:var(--awaiting); font-weight:600; white-space:nowrap; flex:none; }
+  /* Was bei schmaler Breite wegfällt: erst Datum, dann Projekt, dann rücken die Labels zusammen, dann die Person */
+  @container list (max-width: 900px) { .date { display:none; } }
+  @container list (max-width: 780px) { .proj, .links { display:none; } }
+  @container list (max-width: 660px) { .labs .lab2:not(.labmore):nth-child(n+2) { display:none; } .labmore { display:inline-flex; } }
+  @container list (max-width: 560px) { .ava { display:none; } .labs { display:none; } }
+
+  /* Board (nur zum Umschalten angedeutet) */
+  .lanes { flex:1; min-height:0; display:flex; gap:10px; padding:12px 14px; overflow:auto; }
+  .lane { width:240px; flex:none; background:var(--group); border:1px solid var(--border); border-radius:10px; padding:8px; display:flex; flex-direction:column; gap:7px; }
+  .lane h4 { margin:0 2px 2px; font-size:12.5px; display:flex; gap:6px; align-items:center; }
+  .lane h4 .n { color:var(--ink3); font-weight:500; font-size:11.5px; }
+  .card { background:var(--panel); border:1px solid var(--border); border-radius:8px; padding:7px 9px; cursor:pointer; }
+  .card .ct { font-weight:600; font-size:12.5px; line-height:1.3; margin:2px 0; }
+  .card .cm { display:flex; gap:6px; font-size:11px; color:var(--ink3); align-items:center; }
+
+  /* Triage */
+  .tri { flex:1; display:flex; min-width:0; min-height:0; }
+  .tlist { flex:none; display:flex; flex-direction:column; background:var(--sidebar); min-width:0; container-type:inline-size; container-name:tlist; }
+  .tlhead { display:flex; align-items:center; gap:6px; padding:9px 10px 7px 12px; font-size:12.5px; font-weight:600; border-bottom:1px solid var(--border); }
+  .tlhead .n { color:var(--ink3); font-weight:500; font-size:11.5px; }
+  .tlhead .sp { margin-left:auto; display:flex; gap:2px; }
+  .tlscroll { flex:1; overflow:auto; }
+  .tg { display:flex; align-items:center; gap:7px; height:30px; padding:0 10px; font-size:12px; font-weight:600; cursor:pointer; color:var(--ink); position:sticky; top:0; background:var(--sidebar); z-index:1; }
+  .tg .chev { width:10px; color:var(--ink3); font-size:10px; }
+  .tg .n { color:var(--ink3); font-weight:500; font-size:11px; }
+  .tr { display:flex; align-items:center; gap:7px; height:30px; margin:0 5px; padding:0 7px; border-radius:6px; cursor:pointer; font-size:12px; }
+  .tr:hover { background:var(--sel); }
+  .tr.cur { background:var(--hl); box-shadow:inset 3px 0 0 var(--accent); font-weight:600; }
+  .tr .key { color:var(--ink3); font-size:11px; width:56px; white-space:nowrap; flex:none; font-variant-numeric:tabular-nums; }
+  .tr .title { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tr .cn { font-size:11px; color:var(--ink2); white-space:nowrap; display:flex; gap:5px; align-items:center; flex:none; }
+  .tr .ind { width:12px; flex:none; }
+  @container tlist (max-width: 270px) { .tr .key { display:none; } .tr .cn b { display:none; } }
+  .grip { width:7px; flex:none; cursor:col-resize; position:relative; background:transparent; border-left:1px solid var(--border); }
+  .grip::after { content:""; position:absolute; left:2px; top:50%; height:34px; margin-top:-17px; width:3px; border-radius:2px; background:var(--field-line); }
+  .grip:hover::after, .grip.drag::after { background:var(--accent); }
+  .tmain { flex:1; display:flex; flex-direction:column; min-width:0; background:var(--win); }
+  .tmain { container-type:inline-size; container-name:tmain; }
+  .short { display:none; }
+  @container tmain (max-width: 800px) { .long { display:none; } .short { display:inline; } }
+  .tbar { display:flex; align-items:center; gap:5px; padding:8px 12px; border-bottom:1px solid var(--border); white-space:nowrap; overflow:hidden; font-size:12px; color:var(--ink2); }
+  .tbar .pos { font-variant-numeric:tabular-nums; }
+  .tbar .sp { margin-left:auto; display:flex; gap:6px; }
+  .tcoll { display:flex; gap:5px; white-space:nowrap; overflow-x:auto; padding:7px 14px; border-bottom:1px solid var(--border); align-items:center; font-size:11.5px; color:var(--ink3); }
+  .strip { display:flex; flex-wrap:wrap; align-items:center; gap:4px 10px; padding:9px 22px 0; font-size:12px; color:var(--ink2); }
+  .strip .sep { color:var(--ink3); }
+  .strip b { color:var(--ink); }
+  .tscroll { flex:1; overflow:auto; padding:6px 22px 22px; }
+  .tkey { font-size:12px; color:var(--ink3); margin-top:8px; }
+  .ttitle { font-size:20px; font-weight:700; margin:3px 0 10px; line-height:1.25; max-width:62ch; }
+  .tdesc p { margin:0 0 8px; max-width:72ch; }
+  .tdesc h4 { margin:14px 0 6px; font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink3); }
+  .check { display:flex; gap:8px; align-items:flex-start; margin:5px 0; font-size:12.5px; }
+  .check i { width:13px; height:13px; border:1.5px solid var(--ink3); border-radius:3px; flex:none; margin-top:3px; }
+  .stand { background:var(--hl); border-radius:8px; padding:8px 11px; font-size:12.5px; margin-bottom:10px; max-width:72ch; }
+
+  /* Board-Chat */
+  .dock { flex:none; display:flex; flex-direction:column; background:var(--term); min-width:0; border-left:1px solid var(--border); position:relative; }
+  .dock.closed { width:30px !important; }
+  .dock.focus { box-shadow:inset 0 0 0 2px var(--accent); }
+  .dgrip { position:absolute; left:-1px; top:50%; margin-top:-17px; width:3px; height:34px; border-radius:2px; background:var(--field-line); }
+  .dhead { display:flex; align-items:center; gap:6px; padding:6px 8px; background:var(--header); border-bottom:1px solid var(--border); font-size:11.5px; flex-wrap:wrap; }
+  .dhead .lbl { font-size:11px; color:var(--ink3); font-weight:600; text-transform:uppercase; letter-spacing:.05em; }
+  .dhead .sp { margin-left:auto; display:flex; gap:4px; }
+  .term { flex:1; overflow:hidden; padding:10px 12px; font:11.5px/1.6 "SF Mono",ui-monospace,monospace; color:var(--ink2); white-space:pre-wrap; }
+  .term b { color:var(--ink); font-weight:600; } .term .u { color:var(--accent); } .term .ok { color:var(--working); }
+  .dfoot { padding:6px 12px 8px; font-size:11.5px; color:var(--ink3); border-top:1px solid var(--border); }
+  .dfoot b { color:var(--ink); }
+
+  /* Leiste unten */
+  .legend { grid-column:1 / span 2; grid-row:2; min-height:30px; border-top:1px solid var(--border); background:var(--header); display:flex; align-items:center; gap:6px 13px; padding:5px 12px; font-size:11.5px; color:var(--ink2); flex-wrap:wrap; }
+  .legend b { color:var(--ink); font-weight:600; }
+  .legend .k { display:inline-flex; align-items:center; gap:4px; white-space:nowrap; }
+  .legend .new { color:var(--accent); font-weight:600; }
+  .g { display:inline-flex; align-items:center; justify-content:center; height:18px; min-width:18px; padding:0 4px; border-radius:9px; background:var(--panel); border:1px solid var(--field-line); color:var(--ink); font-size:11px; font-weight:700; line-height:1; }
+  .kc { display:inline-flex; align-items:center; justify-content:center; height:18px; min-width:18px; padding:0 4px; border-radius:4px; background:var(--panel); border:1px solid var(--field-line); border-bottom-width:2px; color:var(--ink); font-size:11px; font-weight:600; line-height:1; }
+  .legends { display:grid; gap:8px; }
+  .lgrow { display:grid; grid-template-columns:190px 1fr; gap:10px; align-items:center; }
+  .lgrow .nm { font-size:11.5px; color:var(--ink3); font-weight:600; }
+  .lgrow .legend { grid-column:auto; grid-row:auto; border:1px solid var(--border); border-radius:8px; }
+  .log { font-size:12px; color:var(--ink2); margin-top:8px; min-height:20px; }
+  .log b { color:var(--ink); }
+
+  @media (max-width: 760px) { main { padding:16px; } header.page { padding:14px 16px; } .lgrow { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<header class="page">
+  <h1>Ticket-Board als Liste mit Linear-Ansichten</h1>
+  <p>Klick-Entwurf zu WM8-125 (Linear-Ansichten als Reiter, Liste als Standard, Triage mit gruppierter Liste). Noch kein Bau.</p>
+  <span class="sp"></span>
+  <button class="btn" id="theme">Hell / Dunkel</button>
+</header>
+<main>
+  <div class="rules">
+    <b>So probierst du es aus:</b>
+    <ul>
+      <li>Oben im Board stehen die Ansichten aus Linear als Reiter, „Als Nächstes: Giuliano“ ist der Standard. Klick auf einen Reiter wechselt die Liste; „Gerade in Arbeit“ ist in Linear nach Vorhaben gruppiert und zeigt, wie das aussieht.</li>
+      <li>Gruppenköpfe klappen per Klick auf und zu. Ein Klick auf eine Zeile öffnet die Triage. Links den Griff zwischen Liste und Ticket ziehen.</li>
+      <li>Tastatur geht direkt (erst einmal ins Fenster klicken): ↑ ↓ wählen, ↩ öffnen, Esc zurück, J K in der Triage, ↑ über der ersten Zeile in die Reiter (dort ← →, noch einmal ↑ in die Kopfzeile). Für den Controller die Knöpfe unter „Controller drücken“.</li>
+      <li>„Fensterbreite“ und „Board-Chat“ zeigen, was in der Zeile wegfällt, wenn es eng wird: erst das Datum, dann das Projekt, nie Titel und Chat.</li>
+    </ul>
+  </div>
+
+  <h2>Fenster</h2>
+  <div class="controls">
+    <div class="ctl"><span class="lab">Fensterbreite</span><div class="seg" id="c-width">
+      <button data-v="1720">Breit 1.720</button><button data-v="1440" class="on">Mittel 1.440</button><button data-v="1180">Schmal 1.180</button></div></div>
+    <div class="ctl"><span class="lab">Board-Chat</span><div class="seg" id="c-dock">
+      <button data-v="open" class="on">offen, 40 %</button><button data-v="closed">zugeklappt</button></div></div>
+    <div class="ctl"><span class="lab">Gerät (Leiste unten)</span><div class="seg" id="c-dev">
+      <button data-v="kb" class="on">Tastatur</button><button data-v="ps">PlayStation</button><button data-v="xbox">Xbox</button></div></div>
+    <div class="ctl"><span class="lab">Filterknöpfe (Frage 1)</span><div class="seg" id="c-chips">
+      <button data-v="off" class="on">weg ★</button><button data-v="on">als Zeile darunter</button></div></div>
+    <div class="ctl"><span class="lab">Controller drücken</span><div class="pad" id="pad"></div></div>
+  </div>
+
+  <div class="winwrap"><div class="win" id="win">
+    <aside class="side">
+      <div class="lights"><i></i><i></i><i></i></div>
+      <div class="sidelist">
+        <div class="sec">WORKSPACES</div>
+        <div class="srow"><span class="dot working"></span><span class="t">WM8 Aktiv</span></div>
+        <div class="sec">PROJEKTE</div>
+        <div class="srow sel"><span class="t">whisperm8</span></div>
+        <div class="srow"><span class="dot working"></span><span class="t">Ena · Board-Liste</span></div>
+        <div class="srow"><span class="dot awaiting"></span><span class="t">Jon · Board-Chat</span></div>
+        <div class="srow"><span class="dot working"></span><span class="t">Jarvis</span></div>
+        <div class="srow"><span class="dot stopped"></span><span class="t">Vic · Controller</span></div>
+        <div class="srow"><span class="t">listm8</span></div>
+      </div>
+    </aside>
+    <section class="content">
+      <div class="titlezone">
+        <span class="tzbtn">▤</span><span class="tzbtn on" title="Tickets">☰</span>
+        <div class="ctabs"><span class="ctab"><span class="dot working"></span>Jarvis</span><span class="ctab"><span class="dot working"></span>Ena</span><span class="ctab"><span class="dot awaiting"></span>Jon</span></div>
+      </div>
+      <div class="body" id="body"></div>
+    </section>
+    <div class="legend" id="legend"></div>
+  </div></div>
+  <div class="log" id="log"></div>
+  <p class="cap" id="cap"></p>
+
+  <h2>Was bei schmaler Breite wegfällt</h2>
+  <div class="rules">
+    <table class="t">
+      <tr><th>Breite der Liste</th><th>Zeile</th></tr>
+      <tr><td>ab 900 pt</td><td>Priorität · Nummer · Status · Titel · Labels · Projekt · Verknüpfungen · <b>Chat</b> · Person · Datum</td></tr>
+      <tr><td>780 bis 900 pt</td><td>ohne Datum</td></tr>
+      <tr><td>660 bis 780 pt</td><td>ohne Datum, Projekt und Verknüpfungen</td></tr>
+      <tr><td>560 bis 660 pt</td><td>dazu nur das erste Label, die übrigen als „+1“</td></tr>
+      <tr><td>unter 560 pt</td><td>Priorität · Nummer · Status · Titel · <b>Chat</b>; Labels und Person stehen in der Triage</td></tr>
+    </table>
+    <p class="cap" style="margin-top:8px">Titel und Chat fallen nie weg; der Titel kürzt sich mit „…“, der Chat hat eine feste Spalte (92 pt), damit die Punkte untereinander stehen. In der Triage hat die schmale Liste links nur Priorität, Nummer, Titel und Chat; unter 270 pt fallen Nummer und Chat-Name weg, der Punkt bleibt.</p>
+  </div>
+
+  <h2>Die Leiste unten, je Zustand</h2>
+  <div class="legends" id="legends"></div>
+  <p class="cap">Die Auswahl des Controllers (und der Pfeiltasten) ist der Ring in Akzentfarbe: in der Liste um die Zeile, in den Reitern um den Reiter. Die Leiste nennt den Ort mit der Ansicht, etwa „Tickets · WM8 · Als Nächstes“. Neu gegenüber heute ist blau markiert.</p>
+
+  <h2>Offene Fragen an Giuliano</h2>
+  <div class="rules"><ol>
+    <li><b>Filterknöpfe „Wartet auf mich“, Agent und Person neben den Reitern.</b> Heute stehen sie als Zeile unter dem Kopf. „Wartet auf mich“, „Mit Agent“ und „Ohne Agent“ gibt es im Team WM8 schon als Linear-Ansichten, also als Reiter. <span class="rec">Empfehlung: Die Knöpfe fallen weg, die Ansichten übernehmen.</span> Beides zugleich hieße zwei Filter übereinander, und man wüsste nicht, warum ein Ticket fehlt. Hinweis: Die Linear-Ansicht „Wartet auf mich“ zeigt alles Offene, das dir zugewiesen ist; der heutige Knopf rechnet mit der Regel des Teams (Status „Merge-bereit“, Labels Entscheidung und Handtest). Wer die alte Bedeutung will, passt den Filter der Ansicht in Linear an.</li>
+    <li><b>Eine Linear-Ansicht gruppiert nicht nach Status</b> (etwa „Gerade in Arbeit“ nach Vorhaben). <span class="rec">Empfehlung: Die Liste übernimmt die Gruppierung aus Linear</span>, für Status, Vorhaben, Priorität, Person und Label; die Triage links gruppiert genauso. Gruppierungen, die WhisperM8 nicht kennt (Zyklus, Meilenstein, Team …), werden nach Status gezeigt, mit dem Satz „In Linear nach Zyklus gruppiert“ in der Zeile unter den Reitern.</li>
+    <li><b>Unteraufgaben, deren Eltern-Ticket nicht in der Ansicht steht.</b> <span class="rec">Empfehlung: wie Linear, als eigene Zeile an ihrem Platz, vor dem Titel grau „↳ WM8-91“.</span> Im Beispiel: WM8-15 (Handtests Runde 5) unter „Todo“. Die Alternative, das Eltern-Ticket grau als Kopf dazuzuholen, braucht eine zusätzliche Abfrage bei Linear und zeigt Tickets, die die Ansicht bewusst ausschließt.</li>
+    <li><b>Welche Ansichten werden Reiter, und was gilt bei mehreren Workspaces?</b> <span class="rec">Empfehlung: deine Favoriten aus Linear im Workspace des Projekts, in ihrer Reihenfolge; was nicht in die Zeile passt, steht unter „Mehr“.</span> Standard ist die Ansicht, deren Name mit „Als Nächstes“ beginnt und deinen Vornamen trägt, sonst der erste Favorit. Ein Projekt zeigt nur die Ansichten seines Workspaces (WhisperM8 die aus „WhisperM8“, ListM8 die aus „DealSupply“); ansichtsübergreifende Teams im selben Workspace erscheinen mit ihrem Kürzel an der Nummer. Alternative: alle geteilten Ansichten des Teams, das wären in WM8 heute neun Reiter.</li>
+  </ol></div>
+
+  <h2>Selbst entschieden (leicht zu ändern)</h2>
+  <div class="rules"><ul>
+    <li>Gruppenköpfe sind eine eigene Stelle für Auswahl: ↩ bzw. Kreuz klappt auf und zu, ← klappt zu, → auf. Auf- und Zugeklappt gilt je Ansicht und Fenster, wird nicht gespeichert.</li>
+    <li>J/K und ▲▼ in der Triage gehen nur durch aufgeklappte Gruppen. Eine zugeklappte Gruppe zählt im Kopf mit, wird aber übersprungen.</li>
+    <li>Reiter wechselt man per Klick oder über den Kopf (▲ über der ersten Zeile, dann ◀ ▶ und Kreuz; ▲ noch einmal führt in die Kopfzeile mit „← Chats“, Liste/Board, Kopieren, Aktualisieren). Reiter, die nicht in die Zeile passen, stehen unter „Mehr“; der gewählte bleibt immer sichtbar. L1/R1 bleiben „voriges/nächstes Ticket“, wie heute. Ein eigenes Kürzel für Reiter gibt es vorerst nicht.</li>
+    <li>Die Eigenschaften stehen in der Triage immer als Zeile über dem Titel (bisher nur, wenn es eng wurde); die Spalte rechts fällt weg, dort steht der Board-Chat.</li>
+    <li>Die Breite der Liste in der Triage (ab Werk 320 pt, 220 bis 480 pt) gilt je Projekt und liegt wie die Breite des Board-Chats in <code>ticket-board-chat.json</code>. Doppelklick auf den Griff setzt sie zurück.</li>
+    <li>Board bleibt umschaltbar und zeigt die Tickets der gewählten Ansicht in Status-Spalten wie heute.</li>
+    <li>Unter den Reitern eine Zeile, die sagt, was die Ansicht tut: „Aus Linear · nach Status · nach Priorität · Unteraufgaben an · 19 Tickets · In Linear öffnen“.</li>
+  </ul></div>
+</main>
+
+<script>
+/* ---------- Daten (WM8, Abzug 16.11.2026; Zuweisungen, Eltern und Chats teils angenommen) ---------- */
+const STATUS = ['Merge-bereit','Wartet aufs Ausliefern','In Progress','Todo','Backlog'];
+const STATUS_WAIT = { 'Merge-bereit':'wartet auf dich' };
+const LBL = { Entscheidung:'--l-dec', Handtest:'--l-hand', Feature:'--l-feat', Improvement:'--l-imp', Bug:'--l-bug', 'Selbst erfasst':'--l-self' };
+const PROJ_ICON = { 'Tickets':'▦','Controller':'◎','Agent Chats':'▤','Konten und Zugänge':'⚿','Entwicklung und Release':'⚙','Einstellungen':'☰','App-Hülle und Neustart':'⟳','Chats-CLI, Skills und Jarvis':'⌘' };
+const T = {
+  'WM8-124':{t:'Feinschliff des Ticket-Boards: Platz, Kopf, Board-Chat 40 %',s:'Merge-bereit',p:2,a:'GC',l:['Improvement'],pr:'Tickets',c:['Kai','awaiting'],d:'16.11.',n:2},
+  'WM8-123':{t:'Sendeweg: getippter Entwurf, wartende Meldungen sichtbar, submit nach zurückgehaltenem Enter',s:'Wartet aufs Ausliefern',p:2,a:'GC',l:['Improvement','Selbst erfasst'],pr:'Agent Chats',c:['Max','stopped'],d:'16.11.'},
+  'WM8-65':{t:'Umzug DealSupply: Jira nach Linear',s:'In Progress',p:1,a:'GC',l:['Feature','Entscheidung'],pr:'Tickets',c:['Mia','stopped'],d:'14.11.',n:1},
+  'WM8-20':{t:'make dev und Handtest der Änderungen seit 2.25.0',s:'In Progress',p:2,a:'GC',l:['Handtest'],pr:'Entwicklung und Release',c:['Ole','awaiting'],d:'16.11.'},
+  'WM8-111':{t:'Ticket-Board für den Alltag',s:'In Progress',p:2,a:'GC',l:['Feature'],pr:'Tickets',d:'15.11.',kids:['WM8-113','WM8-125','WM8-114','WM8-115']},
+  'WM8-113':{t:'Ticket-Board Paket 2: Board-Chat neben dem Board, Entscheidungen sammeln',s:'In Progress',p:2,a:'GC',l:['Feature'],pr:'Tickets',c:['Jon','awaiting'],d:'16.11.',par:'WM8-111'},
+  'WM8-125':{t:'Ticket-Board: Linear-Ansichten als Reiter, Liste als Standard, Triage mit gruppierter Liste',s:'In Progress',p:2,a:'GC',l:['Feature'],pr:'Tickets',c:['Ena','working'],d:'16.11.',par:'WM8-111',n:2},
+  'WM8-114':{t:'Ticket-Board Paket 3: Jarvis steuert das Board per Befehl',s:'Todo',p:2,a:'GC',l:['Feature'],pr:'Tickets',d:'15.11.',par:'WM8-111'},
+  'WM8-115':{t:'Ticket-Board Paket 4: „Wartet auf mich“ über alle Teams, Vorrat je Entwickler',s:'Todo',p:2,a:'GC',l:['Feature'],pr:'Tickets',d:'15.11.',par:'WM8-111'},
+  'WM8-23':{t:'Linear zwei Wochen an WhisperM8 testen, dann über den Umzug entscheiden',s:'In Progress',p:3,a:'GC',l:['Entscheidung'],pr:'Tickets',d:'13.11.'},
+  'WM8-91':{t:'Ticket-Board mit dem Controller öffnen und bedienen',s:'In Progress',p:2,a:null,l:['Feature'],pr:'Tickets',c:['Vic','stopped'],d:'16.11.'},
+  'WM8-82':{t:'Linear und Doku spiegeln: Bereiche als Projekte, Vorhaben als Meilensteine',s:'In Progress',p:2,a:null,l:['Improvement'],pr:'Tickets',c:['Lia','working'],d:'15.11.'},
+  'WM8-120':{t:'iPhone-App für WhisperM8: mit Jarvis und den Chats vom Handy arbeiten',s:'In Progress',p:2,a:null,l:['Feature'],pr:'Agent Chats',d:'16.11.'},
+  'WM8-57':{t:'Linear-API-Key ersetzen',s:'Todo',p:2,a:'GC',l:['Entscheidung','Selbst erfasst'],pr:'Konten und Zugänge',d:'14.11.'},
+  'WM8-15':{t:'Handtests nach make dev: Runde 5, Insel und Xbox',s:'Todo',p:3,a:'GC',l:['Handtest'],pr:'Controller',d:'12.11.',par:'WM8-91',orphan:true},
+  'WM8-30':{t:'Variante für die neue Ordnung wählen (A, B oder C)',s:'Todo',p:3,a:'GC',l:['Entscheidung'],pr:'Einstellungen',d:'06.11.'},
+  'WM8-38':{t:'Offene Feldtests sammeln und abhaken',s:'Todo',p:3,a:'GC',l:['Handtest'],pr:'Entwicklung und Release',d:'12.11.'},
+  'WM8-51':{t:'Claude-Einrichtung aufräumen: Plugins, Projekt-Server, Anmeldungen je Konto',s:'Todo',p:3,a:'GC',l:['Entscheidung','Selbst erfasst'],pr:'Konten und Zugänge',d:'13.11.'},
+  'WM8-34':{t:'Punkte 4 und 8 der Auswahl entscheiden',s:'Todo',p:4,a:'GC',l:['Entscheidung'],pr:'Agent Chats',d:'14.11.'},
+  'WM8-61':{t:'Versuch: Was passiert, wenn ein Chat seine Arbeitskopie betritt?',s:'Backlog',p:2,a:null,l:['Improvement','Entscheidung'],pr:'Agent Chats',d:'09.11.'},
+  'WM8-26':{t:'Liste „Verbindungen“ auf der Konten-Seite: Plan schreiben',s:'Backlog',p:3,a:null,l:['Entscheidung'],pr:'Konten und Zugänge',d:'10.11.'},
+  'WM8-14':{t:'Apple-Entwicklerkonto buchen, Übergabe-Geheimnis zurück in den Schlüsselbund',s:'Backlog',p:4,a:'GC',l:['Entscheidung'],pr:'App-Hülle und Neustart',d:'08.11.'},
+  'WM8-54':{t:'Umsortieren mit der Maus soll auch das Raster umsetzen',s:'Backlog',p:4,a:'GC',l:['Entscheidung','Selbst erfasst'],pr:'Agent Chats',d:'11.11.'},
+  'WM8-40':{t:'imap-email-Server reparieren',s:'Backlog',p:4,a:null,l:['Bug','Entscheidung'],pr:'Konten und Zugänge',d:'07.11.'},
+  'WM8-119':{t:'Chats-CLI: dequeue mit Ziffern-Kurz-ID, tickets link direkt nach chats new',s:'In Progress',p:4,a:null,l:['Bug','Selbst erfasst'],pr:'Chats-CLI, Skills und Jarvis',c:['Nox','working'],d:'16.11.'},
+};
+const active = s => s!=='Backlog';
+const has = (k,...ls) => T[k].l.some(x=>ls.includes(x));
+const VIEWS = [
+  {id:'next', name:'Als Nächstes: Giuliano', star:true, group:'status', f:k=>(T[k].a==='GC' && active(T[k].s)) || has(k,'Entscheidung','Handtest'), desc:'dir zugewiesen und aktiv, oder wartet auf dich (Entscheidung, Handtest)'},
+  {id:'wait', name:'Wartet auf mich', group:'status', f:k=>T[k].a==='GC', desc:'alles Offene, das dir zugewiesen ist'},
+  {id:'work', name:'Gerade in Arbeit', group:'project', f:k=>['In Progress','Merge-bereit','Wartet aufs Ausliefern'].includes(T[k].s), desc:'woran gerade gearbeitet wird, je Vorhaben'},
+  {id:'dec', name:'Entscheidungen', group:'status', f:k=>has(k,'Entscheidung'), desc:'geht ohne eine Entscheidung nicht weiter'},
+  {id:'hand', name:'Handtests', group:'status', f:k=>has(k,'Handtest'), desc:'nach einem Neustart an der laufenden App zu prüfen'},
+  {id:'with', name:'Mit Agent', more:true, group:'status', f:k=>!!T[k].c, desc:'Tickets, an denen gerade ein Chat sitzt'},
+  {id:'without', name:'Ohne Agent', more:true, group:'status', f:k=>!T[k].c && T[k].s!=='Backlog', desc:'in Arbeit oder bereit, aber kein Chat daran'},
+];
+
+/* ---------- Zustand ---------- */
+const S = { width:1440, dock:'open', dev:'kb', chips:'off', view:'next', mode:'list', screen:'list', focus:'list',
+  sel:null, head:0, collapsed:{}, triW:320, menu:false, menuIdx:0, cur:null, hidden:[] };
+
+/* ---------- Hilfen ---------- */
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const view = () => VIEWS.find(v=>v.id===S.view);
+const prioRank = p => p===0 ? 9 : p;
+function prioIcon(p) {
+  if (p===1) return '<svg width="14" height="14" viewBox="0 0 14 14"><rect x="1" y="1" width="12" height="12" rx="3" fill="#e5733a"/><rect x="6.2" y="3.4" width="1.6" height="4.6" rx=".8" fill="#fff"/><circle cx="7" cy="10.2" r=".95" fill="#fff"/></svg>';
+  if (p===0) return '<svg width="14" height="14" viewBox="0 0 14 14"><g fill="var(--ink3)"><rect x="2" y="6.3" width="2.4" height="1.4" rx=".6"/><rect x="5.8" y="6.3" width="2.4" height="1.4" rx=".6"/><rect x="9.6" y="6.3" width="2.4" height="1.4" rx=".6"/></g></svg>';
+  const on = {2:3,3:2,4:1}[p];
+  return `<svg width="14" height="14" viewBox="0 0 14 14">${[0,1,2].map(i=>`<rect x="${1.5+i*4}" y="${9-i*3}" width="3" height="${3+i*3}" rx=".8" fill="var(--ink3)" opacity="${i<on?1:.3}"/>`).join('')}</svg>`;
+}
+function statusIcon(s) {
+  const r = 5.2;
+  if (s==='Backlog') return `<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="${r}" fill="none" stroke="var(--ink3)" stroke-width="1.5" stroke-dasharray="2 1.6"/></svg>`;
+  if (s==='Todo') return `<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="${r}" fill="none" stroke="var(--s-todo)" stroke-width="1.5"/></svg>`;
+  if (s==='In Progress') return `<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="${r}" fill="none" stroke="var(--s-prog)" stroke-width="1.5"/><path d="M7 3.6 A3.4 3.4 0 0 1 7 10.4 Z" fill="var(--s-prog)"/></svg>`;
+  const col = s==='Merge-bereit' ? 'var(--s-merge)' : 'var(--s-ship)';
+  return `<svg width="14" height="14" viewBox="0 0 14 14"><circle cx="7" cy="7" r="${r}" fill="none" stroke="${col}" stroke-width="1.5"/><path d="M7 3.6 A3.4 3.4 0 1 1 3.6 7 L7 7 Z" fill="${col}"/></svg>`;
+}
+const stName = st => ({working:'arbeitet', awaiting:'wartet', stopped:'ruht'}[st]);
+const GL = {
+  ps:{cross:'✕',circle:'○',square:'□',triangle:'△',l1:'L1',r1:'R1',l2:'L2',r2:'R2',l3:'L3',r3:'R3',options:'Options'},
+  xbox:{cross:'A',circle:'B',square:'X',triangle:'Y',l1:'LB',r1:'RB',l2:'LT',r2:'RT',l3:'LS',r3:'RS',options:'Menu'},
+};
+const gd = d => d==='xbox' ? 'xbox' : 'ps';
+const G = (d,...ks) => ks.map(k=>`<span class="g">${GL[gd(d)][k]||k}</span>`).join('');
+const KC = (...ks) => ks.map(k=>`<span class="kc">${k}</span>`).join('');
+function log(t) { $('#log').innerHTML = t; }
+
+/* ---------- Gruppen der Ansicht ---------- */
+function groups(v = view()) {
+  const keys = Object.keys(T).filter(v.f);
+  const inView = new Set(keys);
+  // Unteraufgaben stehen unter ihrem Eltern-Ticket, wenn es in der Ansicht ist; sonst als eigene Zeile mit „↳“.
+  const tops = keys.filter(k => !(T[k].par && inView.has(T[k].par)));
+  const by = v.group==='project' ? (k=>T[k].pr) : (k=>T[k].s);
+  const order = v.group==='project' ? [...new Set(tops.map(by))].sort() : STATUS;
+  return order.map(g => {
+    const top = tops.filter(k=>by(k)===g).sort((a,b)=>prioRank(T[a].p)-prioRank(T[b].p) || (+b.split('-')[1]) - (+a.split('-')[1]));
+    const rows = [];
+    top.forEach(k => { rows.push({k, depth:0}); (T[k].kids||[]).filter(c=>inView.has(c)).sort((a,b)=>prioRank(T[a].p)-prioRank(T[b].p)).forEach(c=>rows.push({k:c, depth:1})); });
+    return { id:g, rows, count:rows.length, agents:rows.filter(r=>T[r.k].c).length };
+  }).filter(g=>g.rows.length);
+}
+function stops() {
+  const out = [];
+  groups().forEach(g => { out.push({type:'g', id:g.id}); if (!S.collapsed[S.view+'|'+g.id]) g.rows.forEach(r=>out.push({type:'t', k:r.k})); });
+  return out;
+}
+const ticketStops = () => stops().filter(s=>s.type==='t').map(s=>s.k);
+const total = () => groups().reduce((n,g)=>n+g.count,0);
+
+/* ---------- Kopf ---------- */
+function headItems() {
+  const shown = VIEWS.filter(v=>!v.more && !S.hidden.includes(v.id));
+  return [{id:'back'}, {id:'list'}, {id:'board'}, {id:'copy'}, {id:'refresh'}, ...shown.map(v=>({id:'tab', v:v.id})), {id:'more'}];
+}
+function ringIf(i) { return S.focus==='head' && S.head===i ? 'ring' : ''; }
+function renderHead() {
+  const items = headItems();
+  const inMore = VIEWS.filter(v=>v.more || S.hidden.includes(v.id));
+  const moreView = inMore.find(v=>v.id===S.view);
+  let h = '<div class="bhead">', tabs = '';
+  items.forEach((it,i) => {
+    if (it.id==='back') h += `<button class="back ${ringIf(i)}" data-h="${i}">← Chats · WM8 Aktiv</button><span class="bsp"></span>`;
+    if (it.id==='list') h += `<div class="mseg"><button class="${S.mode==='list'?'on':''} ${ringIf(i)}" data-h="${i}">Liste</button>`;
+    if (it.id==='board') h += `<button class="${S.mode==='board'?'on':''} ${ringIf(i)}" data-h="${i}">Board</button></div>`;
+    if (it.id==='copy') h += `<button class="btn icon ${ringIf(i)}" data-h="${i}" title="Liste kopieren">⧉</button>`;
+    if (it.id==='refresh') h += `<span class="sync">Stand 21:52</span><button class="btn icon ${ringIf(i)}" data-h="${i}" title="Aktualisieren">↻</button>`;
+    if (it.id==='tab') { const v = VIEWS.find(x=>x.id===it.v); const n = Object.keys(T).filter(v.f).length;
+      tabs += `<button class="vtab ${S.view===v.id?'on':''} ${ringIf(i)}" data-h="${i}" data-tab="${v.id}">${v.star?'<span class="star" title="Standard">★</span>':''}${esc(v.name)}<span class="n">${n}</span></button>`; }
+    if (it.id==='more') tabs += `<button class="vtab more ${moreView?'on':''} ${ringIf(i)}" data-h="${i}" id="morebtn">${moreView?esc(moreView.name)+' ▾':'Mehr · '+inMore.length+' ▾'}</button>`;
+  });
+  h += `</div><div class="vtabs" id="vtabs">${tabs}</div>`;
+  const v = view();
+  h += `<div class="vinfo" title="${esc(v.desc)}">Aus Linear · nach ${v.group==='project'?'Vorhaben':'Status'} gruppiert · nach Priorität · Unteraufgaben an · ${total()} Tickets · <a href="#" onclick="return false">In Linear öffnen ↗</a> · ${esc(v.desc)}</div>`;
+  if (S.chips==='on') h += `<div class="fchips"><span class="chip me">Wartet auf mich</span><span class="chip">Alle Bereiche ▾</span><span class="chip">Agent: Alle</span><span class="chip">Mit Agent</span><span class="chip">Ohne Agent</span><span class="chip">Person: Alle</span><span style="font-size:11.5px;color:var(--ink3)">wirken zusätzlich zur Ansicht</span></div>`;
+  return h;
+}
+/* Reiter, die nicht in die Zeile passen, wandern unter „Mehr“; der gewählte bleibt immer stehen. */
+function fitTabs() {
+  const row = $('#vtabs'); if (!row) return false;
+  if (row.scrollWidth <= row.clientWidth + 1) return false;
+  const cand = VIEWS.filter(v=>!v.more && !S.hidden.includes(v.id) && v.id!==S.view).pop();
+  if (!cand) return false;
+  S.hidden.push(cand.id); return true;
+}
+
+/* ---------- Liste ---------- */
+function rowHtml(r) {
+  const t = T[r.k], sel = S.sel===r.k;
+  const ring = sel && S.focus==='list' ? 'ring' : '';
+  const labs = t.l.map(x=>`<span class="lab2"><i style="background:var(${LBL[x]})"></i>${esc(x)}</span>`).join('') + (t.l.length>1?`<span class="lab2 labmore">+${t.l.length-1}</span>`:'');
+  const kids = t.kids ? `<span class="prog">${t.kids.filter(k=>T[k].s==='Merge-bereit').length}/${t.kids.length}</span>` : '';
+  const par = t.orphan ? `<span class="par">↳ ${t.par}</span>` : '';
+  const chat = t.c ? `<span class="dot ${t.c[1]}" title="${stName(t.c[1])}"></span>${esc(t.c[0])}` : '';
+  return `<div class="lrow ${sel?'sel':''} ${ring}" data-k="${r.k}">
+    ${r.depth?'<span class="indent"></span>':''}${prioIcon(t.p)}<span class="key">${r.k}</span>${statusIcon(t.s)}
+    <span class="title">${par}${esc(t.t)}${kids}</span>
+    <span class="labs">${labs}</span>
+    <span class="proj">${PROJ_ICON[t.pr]||'▦'} ${esc(t.pr)}</span>
+    ${t.n?`<span class="links" title="Verknüpfungen">⇄ ${t.n}</span>`:''}
+    <span class="chatcell" title="${t.c?'Chat am Ticket: '+stName(t.c[1]):'kein Chat'}">${chat}</span>
+    <span class="ava ${t.a?'':'none'}" title="${t.a?'Giuliano':'niemand'}">${t.a||''}</span>
+    <span class="date">${t.d}</span></div>`;
+}
+function renderList() {
+  let h = '<div class="listwrap" id="lw">';
+  groups().forEach(g => {
+    const key = S.view+'|'+g.id, closed = !!S.collapsed[key];
+    const ring = S.focus==='list' && S.sel==='g:'+g.id ? 'ring' : '';
+    const icon = view().group==='status' ? statusIcon(g.id) : (PROJ_ICON[g.id]||'▦');
+    h += `<div class="ghead ${ring}" data-g="${esc(g.id)}"><span class="chev">${closed?'▶':'▼'}</span>${icon}<span>${esc(g.id)}</span><span class="n">${g.count}</span>${STATUS_WAIT[g.id]?`<span class="why">${STATUS_WAIT[g.id]}</span>`:''}<span class="agents">${g.agents} mit Chat</span></div>`;
+    if (!closed) g.rows.forEach(r => h += rowHtml(r));
+  });
+  return h + '</div>';
+}
+function renderBoard() {
+  const gs = groups({...view(), group:'status'});
+  return '<div class="lanes">' + gs.map(g=>`<div class="lane"><h4>${statusIcon(g.id)}${esc(g.id)}<span class="n">${g.count}</span></h4>${g.rows.filter(r=>!r.depth).map(r=>{const t=T[r.k];return `<div class="card" data-k="${r.k}"><div class="cm">${prioIcon(t.p)}${r.k}</div><div class="ct">${esc(t.t)}</div>${t.c?`<div class="cm"><span class="dot ${t.c[1]}"></span><b style="color:var(--ink)">${t.c[0]}</b> ${stName(t.c[1])}</div>`:''}</div>`;}).join('')}</div>`).join('') + '</div>';
+}
+
+/* ---------- Triage ---------- */
+function renderTriage() {
+  const ts = ticketStops(), i = Math.max(0, ts.indexOf(S.cur)), t = T[S.cur];
+  let l = `<div class="tlist" id="tlist" style="width:${S.triW}px"><div class="tlhead">${esc(view().name)}<span class="n">${total()}</span><span class="sp"><button class="btn ghost icon" title="Liste kopieren">⧉</button></span></div><div class="tlscroll" id="tls">`;
+  groups().forEach(g => {
+    const key = S.view+'|'+g.id, closed = !!S.collapsed[key];
+    const icon = view().group==='status' ? statusIcon(g.id) : (PROJ_ICON[g.id]||'▦');
+    l += `<div class="tg" data-g="${esc(g.id)}"><span class="chev">${closed?'▶':'▼'}</span>${icon}${esc(g.id)}<span class="n">${g.count}</span>${STATUS_WAIT[g.id]?'<span style="color:var(--awaiting);font-size:11px">für dich</span>':''}</div>`;
+    if (!closed) g.rows.forEach(r => { const x=T[r.k];
+      l += `<div class="tr ${r.k===S.cur?'cur':''}" data-k="${r.k}">${r.depth?'<span class="ind"></span>':''}${prioIcon(x.p)}<span class="key">${r.k}</span><span class="title">${x.orphan?'<span style="color:var(--ink3)">↳ </span>':''}${esc(x.t)}</span>${x.c?`<span class="cn"><span class="dot ${x.c[1]}"></span><b>${x.c[0]}</b></span>`:''}</div>`; });
+  });
+  l += '</div></div><div class="grip" id="grip" title="Breite ziehen · Doppelklick: zurück auf 320 pt"></div>';
+  const chat = t.c ? `<span class="dot ${t.c[1]}"></span><b>${t.c[0]}</b> ${stName(t.c[1])} <button class="btn" style="padding:0 7px;font-size:11.5px">Zum Chat</button>` : '<span>kein Chat</span>';
+  const m = `<div class="tmain">
+    <div class="tbar"><button class="back"><span class="long">← Chats · WM8 Aktiv</span><span class="short">← Chats</span></button><button class="btn" id="toList">‹ Liste</button><button class="btn icon">↑</button><button class="btn icon">↓</button><span class="pos">${i+1} von ${ts.length}</span>
+      <span class="sp"><button class="btn" title="Link kopieren">⧉<span class="long"> Link kopieren</span></button><button class="btn" title="→ Jarvis">→<span class="long"> Jarvis</span></button><button class="btn" title="In Linear öffnen">↗<span class="long"> In Linear öffnen</span></button><button class="btn icon">↻</button></span></div>
+    <div class="tcoll">Für Jarvis sammeln: <button class="btn">Annehmen</button><button class="btn">Zurückfragen</button><button class="btn">Zuweisen…</button><button class="btn">Später</button><button class="btn">Doppelt</button><button class="btn">Ablehnen</button></div>
+    <div class="tscroll">
+      <div class="strip">${statusIcon(t.s)}<b>${t.s}</b><span class="sep">·</span>${prioIcon(t.p)} ${['Keine','Dringend','Hoch','Mittel','Niedrig'][t.p]}<span class="sep">·</span>${t.a?'Giuliano':'Niemand'}<span class="sep">·</span>${t.l.map(x=>`<span class="lab2"><i style="background:var(${LBL[x]})"></i>${x}</span>`).join(' ')}<span class="sep">·</span>${PROJ_ICON[t.pr]||''} ${t.pr}${t.par?`<span class="sep">·</span>Teil von ${t.par}`:''}<span class="sep">·</span>${chat}</div>
+      <div class="tkey">${S.cur}</div>
+      <div class="ttitle">${esc(t.t)}</div>
+      <div class="tdesc">${S.cur==='WM8-125'
+        ? `<div class="stand"><b>Stand 16.11.2026:</b> entschieden, Klick-Entwurf in Arbeit; gebaut wird nach Giulianos Abnahme.</div>
+           <h4>Ziel</h4><p>Im WhisperM8-Board dieselben Ansichten wie in Linear, als Liste und als Standard. Beim groß geöffneten Ticket bleibt die Liste daneben sichtbar.</p>
+           <h4>Fertig, wenn</h4><div class="check"><i></i>Klick-Entwurf (HTML) mit WM8-Beispielen, von Giuliano abgenommen.</div><div class="check"><i></i>WhisperM8 liest die gespeicherten Linear-Ansichten und zeigt sie als Reiter oben im Board.</div><div class="check"><i></i>Die Liste ist die Standard-Ansicht, gruppiert nach Status mit Zahl und Aufklappen.</div><div class="check"><i></i>Ist ein Ticket groß offen, steht links dieselbe Liste schmal mit Status-Gruppen.</div>`
+        : `<p class="cap" style="margin:0 0 8px">Beschreibung und Verlauf wie heute: eine Textansicht (NSTextView), beim Blättern wird nur dieser Text neu gesetzt.</p><h4>Fertig, wenn</h4><div class="check"><i></i>Beispiel-Kästchen aus dem Ticket.</div><div class="check"><i></i>Noch eins.</div><h4>Verlauf</h4><p style="color:var(--ink3)">Kommentare aus Linear, die neuesten 40.</p>`}</div>
+    </div></div>`;
+  return `<div class="tri">${l}${m}</div>`;
+}
+
+/* ---------- Board-Chat ---------- */
+function renderDock() {
+  if (S.dock==='closed') return `<div class="dock closed" title="Board-Chat aufklappen"><div class="dhead" style="justify-content:center;padding:6px 0">›</div></div>`;
+  const ref = S.screen==='triage' ? S.cur : 'kein Ticket';
+  return `<div class="dock ${S.focus==='dock'?'focus':''}" style="width:40%"><span class="dgrip"></span>
+    <div class="dhead"><span class="lbl">Board-Chat</span><span class="dot working"></span><b>Jarvis</b><span style="color:var(--ink3)">arbeitet</span><span class="sp"><button class="btn icon" title="Jarvis">J</button><button class="btn icon" title="Produkt-Chat">P</button><button class="btn icon" title="Zuklappen">‹</button></span></div>
+    <div class="term"><b>❯</b> Stand der Tickets in WM8?
+
+<span class="ok">●</span> 3 Tickets warten auf dich: WM8-124 ist
+  merge-bereit, WM8-57 und WM8-30 brauchen eine
+  Entscheidung. Ena baut den Entwurf zu WM8-125.
+
+<b>❯</b> <span class="u">▌</span></div>
+    <div class="dfoot">Bezug: <b>${ref}</b>${S.screen==='triage'?' ✕':''}</div></div>`;
+}
+
+/* ---------- Leiste unten ---------- */
+function legendState() {
+  if (S.focus==='dock') return 'dock';
+  if (S.focus==='head') return 'head';
+  if (S.screen==='triage') return 'triage';
+  return (S.sel||'').startsWith('g:') ? 'group' : 'list';
+}
+function legendFor(state, d) {
+  const kb = d==='kb', g=(...k)=>G(d,...k), k=(...x)=>KC(...x);
+  const E = (c,kk,t,cls='') => `<span class="k ${cls}">${kb?kk:c}${t}</span>`;
+  const place = `<b>Tickets · WM8 · ${esc(view().name.replace(': Giuliano',''))}</b>`;
+  const jarvis = S.dock==='open' ? E(g('triangle'),k('⌘','J'),' → Jarvis') : '';
+  switch (state) {
+    case 'list': return place + E(g('Stick','✛'),k('↑','↓'),' Auswahl') + E(g('cross'),k('↩'),' Öffnen') + E(g('square'),k('⌘','C'),' Link') +
+      E(g('l1','r1'),k('⌘','⌥','←','→'),' Ticket') + jarvis + E(g('▲'),k('↑'),' ganz oben: Reiter','new') + E(g('l3'),k('⌘','O'),' Linear') + E(g('r3'),k('⌘','R'),' Aktualisieren') + E(g('options'),k('⌘','K'),' Menü') + (kb?'':E(g('l2'),'',' Zurück: <b>Jarvis</b>'));
+    case 'group': return place + E(g('Stick','✛'),k('↑','↓'),' Auswahl') + E(g('cross'),k('↩'),' Zu- und aufklappen','new') + E(g('◀','▶'),k('←','→'),' zu · auf','new') + E(g('▲'),k('↑'),' ganz oben: Reiter','new') + (kb?'':E(g('l2'),'',' Zurück: <b>Jarvis</b>'));
+    case 'head': return place + E(g('◀','▶'),k('←','→'),' Reiter und Knöpfe') + E(g('cross'),k('↩'),' Zeigen') + E(g('▼','circle'),k('↓','esc'),' zurück in die Liste') + (kb?'':E(g('l2'),'',' Zurück: <b>Jarvis</b>'));
+    case 'triage': return place + E(g('Stick'),k('J','K'),' Ticket') + E(g('circle'),k('esc'),' Liste','new') + E(g('square'),k('⌘','C'),' Link') + (kb?'':E(g('l1','r1'),'',' Ticket')) +
+      (kb?'':E(g('R-Stick'),'',' Lesen')) + E(g('▶'),k('→'),' Chats am Ticket') + jarvis + (kb?'':E(g('l2'),'',' Zurück: <b>Jarvis</b>'));
+    case 'dock': return `<b>Board-Chat · Jarvis</b><span>arbeitet</span>` + E(g('cross'),k('↩'),' Senden') + E(g('circle'),k('esc'),' Escape') + E(g('r2'),k('⌥','␣'),' Diktat') + (kb?'':E(g('l1','r1'),'',' Ticket') + E(g('Stick'),'',' ◀ Liste'));
+  }
+  return '';
+}
+function legendsGallery() {
+  const names = {list:'Liste, Zeile gewählt', group:'Liste, Gruppenkopf gewählt', head:'Reiter (Kopf)', triage:'Triage', dock:'Board-Chat'};
+  $('#legends').innerHTML = Object.keys(names).map(st => ['kb','ps'].map(d => `<div class="lgrow"><span class="nm">${names[st]} · ${d==='kb'?'Tastatur':'Controller'}</span><div class="legend">${legendFor(st,d)}</div></div>`).join('')).join('');
+}
+
+/* ---------- Beschreibung unter dem Fenster ---------- */
+function caption() {
+  const lw = $('#lw') ? Math.round($('#lw').clientWidth) : 0;
+  let drop = [];
+  if (lw && lw <= 900) drop.push('Datum'); if (lw && lw <= 780) drop.push('Projekt'); if (lw && lw <= 660) drop.push('weitere Labels'); if (lw && lw <= 560) drop.push('Person');
+  if (S.screen==='triage') return `<b>Triage:</b> links dieselbe Liste schmal (${S.triW} pt) mit den Gruppen der Ansicht, Zahl und Chat-Punkt; <b>${S.cur}</b> ist markiert. In der Mitte die Eigenschaften als Zeile über dem Titel, rechts der Board-Chat mit 40 %. Esc oder „‹ Liste“ führt auf dieselbe Zeile zurück.`;
+  if (S.mode==='board') return '<b>Board:</b> dieselben Tickets der Ansicht in Status-Spalten, wie heute. Die Liste ist der Standard; Board wählt man im Kopf.';
+  return `<b>Liste ${lw} pt breit.</b> ${drop.length?'Weggefallen: '+drop.join(', ')+'.':'Alle Spalten haben Platz.'} Titel und Chat bleiben immer.` + (S.view==='work'?' Diese Ansicht ist in Linear nach Vorhaben gruppiert (Frage 2).':'') + (S.view==='next'?' WM8-15 steht mit „↳ WM8-91“ allein, weil sein Eltern-Ticket nicht in der Ansicht ist (Frage 3).':'');
+}
+
+/* ---------- Zusammensetzen ---------- */
+function render() {
+  $('#win').style.width = S.width + 'px';
+  let area = '<div class="area">' + (S.screen==='triage' ? renderTriage() : renderHead() + (S.mode==='list' ? renderList() : renderBoard())) + '</div>';
+  $('#body').innerHTML = area + renderDock();
+  if (S.screen!=='triage' && !S._fitting) { S._fitting = true; let n = 0; while (fitTabs() && n++ < 8) { render(); } S._fitting = false; }
+  if (S.menu) {
+    const btn = $('#morebtn'), r = btn.getBoundingClientRect(), b = $('#body').getBoundingClientRect();
+    const items = VIEWS.filter(v=>v.more || S.hidden.includes(v.id));
+    const m = document.createElement('div'); m.className='menu'; m.style.left=(r.left-b.left)+'px'; m.style.top=(r.bottom-b.top+4)+'px';
+    m.innerHTML = items.map((v,i)=>`<button data-v="${v.id}" class="${S.menuIdx===i?'ring':''}">${esc(v.name)}<small>${Object.keys(T).filter(v.f).length}</small></button>`).join('') + '<button disabled style="color:var(--ink3)">Weitere Favoriten aus Linear …</button>';
+    $('#body').appendChild(m);
+    m.querySelectorAll('button[data-v]').forEach(x=>x.onclick=()=>{ S.view=x.dataset.v; S.menu=false; S.sel=null; S.hidden=[]; log(`Ansicht <b>${esc(view().name)}</b> aus „Mehr“.`); render(); });
+  }
+  $('#legend').innerHTML = legendFor(legendState(), S.dev);
+  wire();
+  $('#cap').innerHTML = caption();
+  const s = document.querySelector('.lrow.sel, .ghead.ring, .tr.cur'); if (s) s.scrollIntoView({block:'nearest'});
+}
+function wire() {
+  document.querySelectorAll('[data-h]').forEach(b => b.onclick = e => { e.stopPropagation(); S.focus='list'; act(headItems()[+b.dataset.h], +b.dataset.h); });
+  document.querySelectorAll('.lrow, .card, .tr').forEach(r => r.onclick = () => { if (S.screen==='triage') { S.cur=r.dataset.k; log(`<b>${S.cur}</b> in der Triage.`); } else openTriage(r.dataset.k); S.focus='list'; render(); });
+  document.querySelectorAll('.ghead, .tg').forEach(h => h.onclick = () => { toggle(h.dataset.g); render(); });
+  const tl = $('#toList'); if (tl) tl.onclick = () => { S.screen='list'; S.sel=S.cur; render(); };
+  document.querySelectorAll('.dock.closed').forEach(d => d.onclick = () => { S.dock='open'; S.hidden=[]; syncSeg('#c-dock','open'); render(); });
+  const grip = $('#grip');
+  if (grip) {
+    grip.ondblclick = () => { S.triW=320; log('Breite der Liste zurück auf 320 pt.'); render(); };
+    grip.onpointerdown = e => { grip.setPointerCapture(e.pointerId); grip.classList.add('drag'); const x0=e.clientX, w0=S.triW;
+      grip.onpointermove = ev => { S.triW = Math.max(220, Math.min(480, w0 + ev.clientX - x0)); $('#tlist').style.width = S.triW+'px'; };
+      grip.onpointerup = () => { grip.onpointermove=null; grip.classList.remove('drag'); log(`Liste in der Triage jetzt ${S.triW} pt breit (gilt je Projekt).`); render(); }; };
+  }
+}
+function toggle(g) { const key=S.view+'|'+g; S.collapsed[key]=!S.collapsed[key]; log(`Gruppe <b>${esc(g)}</b> ${S.collapsed[key]?'zugeklappt':'aufgeklappt'}.`); }
+function openTriage(k) { S.screen='triage'; S.cur=k; S.sel=k; log(`<b>${k}</b> groß geöffnet. Links bleibt die Liste mit den Gruppen.`); }
+function act(it, i) {
+  S.head = i;
+  if (it.id==='tab') { S.view=it.v; S.sel=null; S.hidden=[]; S.mode=S.mode; log(`Ansicht <b>${esc(view().name)}</b>.`); }
+  if (it.id==='more') { S.menu=!S.menu; S.menuIdx=0; }
+  if (it.id==='list') { S.mode='list'; log('Liste.'); }
+  if (it.id==='board') { S.mode='board'; log('Board.'); }
+  if (it.id==='copy') log('Liste kopiert: je Ticket Nummer, Titel und Adresse, in der Reihenfolge der Gruppen.');
+  if (it.id==='refresh') log('Aktualisiert (Ansichten und Tickets abseits des Main Threads).');
+  if (it.id==='back') log('„← Chats“ führt zurück in den Chat davor (wie heute).');
+  render();
+}
+
+/* ---------- Tasten (Tastatur und Controller teilen die Wege) ---------- */
+function key(k) {
+  if (S.menu) {
+    const items = VIEWS.filter(v=>v.more || S.hidden.includes(v.id));
+    if (k==='down') S.menuIdx=Math.min(items.length-1,S.menuIdx+1);
+    else if (k==='up') S.menuIdx=Math.max(0,S.menuIdx-1);
+    else if (k==='ok') { S.view=items[S.menuIdx].id; S.menu=false; S.sel=null; S.hidden=[]; log(`Ansicht <b>${esc(view().name)}</b>.`); }
+    else if (k==='back') S.menu=false;
+    return render();
+  }
+  if (S.focus==='dock') { if (k==='left') { S.focus='list'; log('Zurück aus dem Board-Chat.'); } else log('Im Board-Chat gelten die Tasten des Chats.'); return render(); }
+  if (S.screen==='triage') {
+    const ts = ticketStops(), i = ts.indexOf(S.cur);
+    if (k==='down' && i<ts.length-1) S.cur=ts[i+1];
+    else if (k==='up' && i>0) S.cur=ts[i-1];
+    else if (k==='back') { S.screen='list'; S.sel=S.cur; log(`Zurück zur Liste, <b>${S.cur}</b> bleibt gewählt.`); }
+    else if (k==='right' && S.dock==='open') { S.focus='dock'; log('Einzelner Druck ▶: in den Board-Chat.'); }
+    return render();
+  }
+  if (S.focus==='head') {
+    const items = headItems();
+    const onTabs = ['tab','more'].includes(items[S.head].id);
+    const firstTab = items.findIndex(x=>x.id==='tab');
+    if (k==='left') S.head = onTabs ? Math.max(firstTab, S.head-1) : Math.max(0, S.head-1);
+    else if (k==='right') S.head = onTabs ? Math.min(items.length-1, S.head+1) : Math.min(firstTab-1, S.head+1);
+    else if (k==='up' && onTabs) { S.head = 0; log('▲ aus den Reitern: in die Kopfzeile.'); }
+    else if (k==='down' && !onTabs) { S.head = Math.max(firstTab, items.findIndex(x=>x.v===S.view)); }
+    else if (k==='ok') return act(items[S.head], S.head);
+    else if (k==='down' || k==='back') { S.focus='list'; log('Zurück in die Liste, auf die Zeile, von der du kamst.'); }
+    return render();
+  }
+  if (S.mode==='board') { if (k==='up') { S.focus='head'; } return render(); }
+  const st = stops(), cur = st.findIndex(s => (s.type==='g' ? 'g:'+s.id : s.k) === S.sel);
+  const id = s => s.type==='g' ? 'g:'+s.id : s.k;
+  if (k==='down') S.sel = id(st[Math.min(st.length-1, cur+1)]);
+  else if (k==='up') { if (cur<=0) { S.focus='head'; S.head = headItems().findIndex(x=>x.v===S.view); if (S.head<0) S.head=headItems().findIndex(x=>x.id==='more'); log('▲ über der ersten Zeile: in die Reiter.'); } else S.sel = id(st[cur-1]); }
+  else if (k==='ok') { if (S.sel && S.sel.startsWith('g:')) toggle(S.sel.slice(2)); else if (S.sel) openTriage(S.sel); }
+  else if (k==='left' && S.sel && S.sel.startsWith('g:')) { S.collapsed[S.view+'|'+S.sel.slice(2)]=true; log('Gruppe zugeklappt.'); }
+  else if (k==='left') log('◀ aus der Liste: in die Seitenleiste (wie heute).');
+  else if (k==='right' && S.sel && S.sel.startsWith('g:')) { S.collapsed[S.view+'|'+S.sel.slice(2)]=false; log('Gruppe aufgeklappt.'); }
+  else if (k==='right' && S.dock==='open') { S.focus='dock'; log('Einzelner Druck ▶: in den Board-Chat (wie heute vom Ende der Liste).'); }
+  if (cur<0 && k==='down') S.sel = id(st[0]);
+  render();
+}
+document.addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const m = {ArrowDown:'down', ArrowUp:'up', ArrowLeft:'left', ArrowRight:'right', Enter:'ok', Escape:'back'};
+  let k = m[e.key];
+  if (S.screen==='triage' && (e.key==='j' || e.key==='J')) k='down';
+  if (S.screen==='triage' && (e.key==='k' || e.key==='K')) k='up';
+  if (!k) return; e.preventDefault(); key(k);
+});
+
+/* ---------- Steuerung oben ---------- */
+function pad() {
+  const d = S.dev==='kb' ? 'ps' : S.dev;
+  $('#pad').innerHTML = [['▲','up'],['▼','down'],['◀','left'],['▶','right'],[GL[gd(d)].cross,'ok'],[GL[gd(d)].circle,'back']].map(([l,k])=>`<button class="btn" data-k="${k}">${l}</button>`).join('');
+  $('#pad').querySelectorAll('button').forEach(b => b.onclick = () => key(b.dataset.k));
+}
+function syncSeg(id, v) { document.querySelectorAll(id+' button').forEach(b=>b.classList.toggle('on', b.dataset.v===v)); }
+[['#c-width','width'],['#c-dock','dock'],['#c-dev','dev'],['#c-chips','chips']].forEach(([id,key]) =>
+  document.querySelectorAll(id+' button').forEach(b => b.onclick = () => { S[key] = key==='width' ? +b.dataset.v : b.dataset.v; S.hidden = []; syncSeg(id, b.dataset.v); pad(); render(); legendsGallery(); }));
+$('#theme').onclick = () => { const r=document.documentElement; const dark = r.dataset.theme ? r.dataset.theme==='dark' : matchMedia('(prefers-color-scheme: dark)').matches; r.dataset.theme = dark ? 'light' : 'dark'; };
+window.addEventListener('resize', () => { $('#cap').innerHTML = caption(); });
+
+S.sel = 'WM8-125';
+pad(); render(); legendsGallery();
+log('Standard: <b>Als Nächstes: Giuliano</b> als Liste. Pfeiltasten oder Controller-Knöpfe probieren.');
+</script>
+</body>
+</html>
