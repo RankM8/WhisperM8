@@ -195,8 +195,17 @@ auslösende Session Teil davon ist. Drag einer Auswahl verschiebt die Gruppe
 innerhalb des Fensters als Block; Cross-Window- und Sidebar-Drops gehen über
 die Drag-Daten mit Quellfenster.
 
+Die Elemente der Leiste hängen an ihrer Gruppe bzw. ihrem Chat, nicht an ihrer
+Position (`AgentTabGrouping.identified`, WM8-101). Wandert ein Tab in eine
+Gruppe, etwa weil sein Chat in einen Workspace kommt, bleiben die übrigen Tabs
+bestehen; neu angelegt wird nur der gewanderte, weil er den Elternteil wechselt.
+`TabStripIdentityTests` prüft das im Gerüst.
+
 Reorder in der Leiste nutzt gemessene Tab-Frames und eine sichtbare
-Einfügelinie. Vertikales Herausziehen beziehungsweise das Kontextmenü lösen
+Einfügelinie. Die Frames liegen in einer `TabFrameBox` statt im SwiftUI-Zustand:
+Eine neue Messung wertet so das Fenster nicht ein zweites Mal aus. Die
+Einfügelinie liest sie im Durchlauf, den ein neuer Einfüge-Index ohnehin
+auslöst, der Drop-Delegate bei jedem Ereignis frisch. Vertikales Herausziehen beziehungsweise das Kontextmenü lösen
 einen Tab oder eine Auswahl in ein neues Fenster ab. Die genaue
 Multi-Window-Mechanik ist in [`multiwindow.md`](multiwindow.md) dokumentiert.
 

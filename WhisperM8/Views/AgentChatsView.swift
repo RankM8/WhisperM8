@@ -150,9 +150,9 @@ struct AgentChatsView: View {
     /// (Muster `windowStore`). internal, da +Subagents es nutzt.
     @State var jobRuntimeModel = AgentJobRuntimeModel.shared
 
-    /// Etappe-0 Tab-Drag: gemessene Tab-Frames (Inhalts-Space) + aktueller
-    /// Einfüge-Index während eines Drags (ephemer, nicht persistiert).
-    @State var tabFrames: [UUID: CGRect] = [:]
+    /// Tab-Drag: gemessene Tab-Frames (Inhalts-Space). Kein Wert-Zustand, eine
+    /// neue Messung wertet das Fenster nicht neu aus (WM8-101, `TabFrameBox`).
+    @State var tabFrameBox = TabFrameBox()
     /// Chrome-artige Herkunftsgruppen im oberen Tab-Strip. Abschaltbar, damit
     /// die exakte manuelle Reihenfolge jederzeit erreichbar bleibt.
     @AppStorage("agentTabGroupingEnabled") var tabGroupingEnabled = true
