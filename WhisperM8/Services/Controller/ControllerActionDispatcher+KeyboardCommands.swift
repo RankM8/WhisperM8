@@ -241,6 +241,22 @@ extension ControllerActionDispatcher {
         }
     }
 
+    /// ⌘K im Ticket-Board (WM8-91 Paket 3c): dieselbe Menü-Karte wie Options
+    /// am Controller, bedient per Tastatur (↑ ↓, Return, Esc). Nur auf Board
+    /// und Triage, nicht im Board-Chat und nicht bei schon offenem Menü.
+    func openKeyboardTicketMenu() -> Bool {
+        let context = ControllerContextResolver.context(for: snapshot())
+        guard case let .tickets(state) = context, state.area == .content, state.boardChat == nil,
+              ui.menu == nil else { return false }
+        performingForKeyboard = true
+        defer { performingForKeyboard = false }
+        if ui.lastInput != .keyboard { ui.lastInput = .keyboard }
+        perform(.menuToggle, in: context)
+        guard ui.menu != nil else { return false }
+        ui.menuByKeyboard = true
+        return true
+    }
+
     // MARK: - Hilfen
 
     /// „Geht nicht“ aus den gemeinsamen Wegen (Vibration am Controller) wird

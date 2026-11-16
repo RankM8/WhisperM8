@@ -64,9 +64,13 @@ extension AgentChatsView {
 
     /// Befehl des Controllers an das Board dieses Fensters (WM8-91, Paket 2).
     /// Liest nur; „Zum Chat“ wechselt sichtbar wie der Knopf am Ticket.
-    func performTicketCommand(_ command: ControllerTicketCommand) -> ControllerTicketOutcome {
+    /// `keepsTerminalFocus`: Die Taste kam per Tastatur aus dem Terminal des
+    /// Board-Chats (⌘⌥←/→, ⌘J, Paket 3c); der Fokus bleibt dort. Sonst holt
+    /// jede Board-Aktion ihn zurück ans Fenster (WM8-113).
+    func performTicketCommand(_ command: ControllerTicketCommand,
+                              keepsTerminalFocus: Bool = false) -> ControllerTicketOutcome {
         guard isTicketsModeActive, TicketBoardControllers.shared.hasController(for: windowID) else { return .rejected }
-        ControllerTicketFocus.prepare(for: command, in: hostWindow)
+        if !keepsTerminalFocus { ControllerTicketFocus.prepare(for: command, in: hostWindow) }
         let controller = TicketBoardControllers.shared.controller(for: windowID)
         let model = controller.viewModel
         if command == .refresh {
@@ -199,7 +203,11 @@ extension AgentChatsView {
     /// Seitenleiste, die Tickets gehen zu. Es wird nichts in ihn geschickt; im
     /// Ziel warten Kreuz und Kreis die Ankunftssperre ab.
     private func openChatFromTicket(_ chatID: UUID) -> ControllerTicketOutcome {
-        performCommand(.selectSession(chatID)) ? .done : .rejected
+        guard performCommand(.selectSession(chatID)) else { return .rejected }
+        // Auch per Tastatur (Return auf der Chat-Zeile): Return und Esc warten
+        // im Ziel-Terminal 1 s (Paket 3c).
+        KeyboardArrivalLock.shared.arrive(at: chatID)
+        return .done
     }
 
     /// Projekt gewechselt: Diktat-Ziel nachziehen und die Leiste neu lesen.

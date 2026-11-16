@@ -91,10 +91,12 @@ final class TicketTriageTests: XCTestCase {
     func testKeys() {
         XCTAssertEqual(TicketBoardKey.resolve(keyCode: 38, characters: "j", modifiers: []), .next)
         XCTAssertEqual(TicketBoardKey.resolve(keyCode: 40, characters: "k", modifiers: []), .previous)
-        XCTAssertEqual(TicketBoardKey.resolve(keyCode: 125, characters: nil, modifiers: []), .next)
-        XCTAssertEqual(TicketBoardKey.resolve(keyCode: 126, characters: nil, modifiers: []), .previous)
+        // ↑↓ bewegen seit WM8-91 Paket 3c wie der Stick; in der Triage ist das
+        // derselbe Schritt durch die Liste.
+        XCTAssertEqual(TicketBoardKey.resolve(keyCode: 125, characters: nil, modifiers: []), .move(.down, isRepeat: false))
+        XCTAssertEqual(TicketBoardKey.resolve(keyCode: 126, characters: nil, modifiers: []), .move(.up, isRepeat: false))
         XCTAssertEqual(TicketBoardKey.resolve(keyCode: 53, characters: "\u{1b}", modifiers: []), .close)
-        XCTAssertNil(TicketBoardKey.resolve(keyCode: 38, characters: "j", modifiers: .command), "⌘J gehört später dem Board-Chat")
+        XCTAssertEqual(TicketBoardKey.resolve(keyCode: 38, characters: "j", modifiers: .command), .handOff, "⌘J: → Jarvis")
         XCTAssertNil(TicketBoardKey.resolve(keyCode: 38, characters: "J", modifiers: .shift))
         XCTAssertNil(TicketBoardKey.resolve(keyCode: 0, characters: "a", modifiers: []))
     }

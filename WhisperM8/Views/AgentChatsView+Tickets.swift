@@ -25,15 +25,24 @@ extension AgentChatsView {
         windowStore.clearSubagentUnread(sessionID)
     }
 
-    /// J/K, ↑↓ und Esc in der Triage. Nur in diesem Fenster, nur bei offenen
-    /// Tickets, und nie, wenn der Fokus in einem Textfeld oder Terminal liegt:
-    /// Dort gehören die Tasten dem Text. Ohne offene Triage geht die Taste weiter.
+    /// Tasten des Boards (Plan „Tastatur“, WM8-91 Paket 3c). Nur in diesem
+    /// Fenster, nur bei offenen Tickets, und nie, wenn der Fokus in einem
+    /// Textfeld oder Terminal liegt: Dort gehören die Tasten dem Text. Einzige
+    /// Ausnahme ist das Terminal des Board-Chats mit ⌘←, ⌘⌥←/→, ⌘⇧←/→ und ⌘J.
+    /// Was das Board nicht nimmt, geht weiter.
     func handleTicketBoardKey(_ event: NSEvent) -> NSEvent? {
         guard let hostWindow, event.window === hostWindow, isTicketsModeActive,
               TicketBoardControllers.shared.hasController(for: windowID) else { return event }
-        return TicketBoardKeyRouting.route(event, firstResponder: hostWindow.firstResponder) {
-            TicketBoardControllers.shared.controller(for: windowID).viewModel.handle($0)
-        }
+        // Menü-Karte per ⌘K offen: Pfeile, Return und Esc gehören ihr
+        // (`KeyboardIslandMonitor`), nicht der Auswahl dahinter.
+        let ui = ControllerUIModel.shared
+        if ui.menuByKeyboard, ui.menu != nil { return event }
+        let boardChatTerminal = BoardChatInputs.shared.boardChat(in: windowID)
+            .flatMap { terminalRegistry.controller(for: $0.sessionID)?.terminal }
+        return TicketBoardKeyRouting.route(
+            event, firstResponder: hostWindow.firstResponder,
+            isBoardChatTerminal: { boardChatTerminal != nil && $0 === boardChatTerminal }
+        ) { performTicketKey($0) }
     }
 
     /// Tickets des Projekts, das in diesem Fenster gewählt ist.
@@ -96,17 +105,24 @@ enum TicketBoardKeyRouting {
     /// im Board-Chat anzukommen (WM8-113).
     @MainActor
     static func route(_ event: NSEvent, firstResponder responder: NSResponder?,
+                      isBoardChatTerminal: (NSResponder?) -> Bool = { _ in false },
                       handle: (TicketBoardKey) -> Bool) -> NSEvent? {
-        guard TabNavShortcut.shouldHandle(firstResponder: responder),
-              !BoardChatFocusRule.isTerminal(responder) else { return event }
         let flags = event.modifierFlags
         var modifiers: TicketBoardKey.ModifierSet = []
         if flags.contains(.command) { modifiers.insert(.command) }
         if flags.contains(.option) { modifiers.insert(.option) }
         if flags.contains(.control) { modifiers.insert(.control) }
         if flags.contains(.shift) { modifiers.insert(.shift) }
-        guard let key = TicketBoardKey.resolve(keyCode: event.keyCode, characters: event.charactersIgnoringModifiers,
-                                               modifiers: modifiers) else { return event }
+        let key = TicketBoardKey.resolve(keyCode: event.keyCode, characters: event.charactersIgnoringModifiers,
+                                         modifiers: modifiers, isRepeat: event.isARepeat)
+        // Terminal des Board-Chats (Paket 3c): nur zurück, Ticket blättern und
+        // → Jarvis; alles andere gehört dem Chat.
+        if isBoardChatTerminal(responder) {
+            guard let key, key.isBoardChatKey else { return event }
+            return handle(key) ? nil : event
+        }
+        guard TabNavShortcut.shouldHandle(firstResponder: responder),
+              !BoardChatFocusRule.isTerminal(responder), let key else { return event }
         // ⌘C mit markiertem Text (etwa in der Beschreibung) kopiert den Text.
         if key == .copyLink, let text = responder as? NSTextView, text.selectedRange().length > 0 { return event }
         return handle(key) ? nil : event

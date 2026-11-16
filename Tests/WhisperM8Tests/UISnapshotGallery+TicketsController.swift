@@ -143,6 +143,21 @@ extension UISnapshotGallery {
                 }
                 .environment(\.controllerFamily, .xbox))
             },
+            // Paket 3c: Board per Tastatur bedient, mit sichtbarem Board-Chat.
+            Fixture(name: "tickets-controller-tastenleiste-board", size: legendSize) {
+                var place = ControllerTicketsPlace(projectID: wm8, team: "WM8")
+                place.view = .board
+                place.boardChatID = UUID()
+                place.boardChatName = "Jarvis"
+                let context = ControllerContext.tickets(ControllerTicketState(place: place))
+                return AnyView(VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    ControllerLegendBar(
+                        target: .make(context: context, chatTitle: nil), entries: [],
+                        keyboardItems: KeyboardLegend.ticketItems(for: context)
+                            + KeyboardLegend.items(dictationKeys: ["⌥", "␣"]))
+                })
+            },
         ]
     }
 

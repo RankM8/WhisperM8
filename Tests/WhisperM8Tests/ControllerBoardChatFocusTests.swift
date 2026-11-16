@@ -403,6 +403,21 @@ final class ControllerBoardChatFocusTests: XCTestCase {
         XCTAssertEqual(haptics.last, .rejected)
     }
 
+    /// Paket 3c: ⌘K öffnet die Menü-Karte am Ticket, bedient per Tastatur;
+    /// im Board-Chat und bei offenem Menü nicht.
+    func testCommandKOpensTheTicketMenuForTheKeyboard() {
+        window.ticketMenu = ControllerTicketMenuInfo(key: "WM8-12", hasURL: true)
+        XCTAssertTrue(dispatcher.openKeyboardTicketMenu())
+        XCTAssertNotNil(ui.menu)
+        XCTAssertTrue(ui.menuByKeyboard)
+        XCTAssertTrue(dispatcher.isKeyboardMenuOpen)
+        XCTAssertFalse(dispatcher.openKeyboardTicketMenu(), "schon offen")
+        ui.menu = nil
+        enterFromTheRightEdge()
+        XCTAssertFalse(dispatcher.openKeyboardTicketMenu(), "nicht aus dem Board-Chat")
+        XCTAssertTrue(terminals.keys.isEmpty)
+    }
+
     /// Hinter den Tickets ohne Fokus im Board-Chat gibt es kein Ziel für Tasten.
     func testNoInputTargetBehindTheTicketsWithoutFocus() {
         XCTAssertNil(dispatcher.chatInputSessionID)
