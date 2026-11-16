@@ -470,6 +470,14 @@ Auswahl am Ring in Akzentfarbe wie an den Karten; die Filterzeile scrollt mit. D
 Regeln liegen pur in `Views/Tickets/TicketBoardHeaderSelection.swift`, angewendet in
 `TicketBoardViewModel+Header.swift`; dieselben Wege nimmt die Tastatur (Paket 3c).
 
+**Maus im Kopf:** Jeder Mausklick räumt Ring und offene Liste in allen Boards, damit ein späteres Kreuz oder
+Return keinen alten Knopf trifft (etwa „← Chats“). Der Beobachter dafür hängt an den Boards
+(`TicketBoardControllers`, angelegt mit dem ersten Board), nicht an der Controller-Laufzeit: Auch die Tastatur
+wählt Knöpfe im Kopf. Geräumt wird direkt nach dem Klick, nicht beim Mausdruck. So wählt ein Klick auf einen
+Eintrag der Liste der Bereiche diesen Bereich (`chooseProjectByMouse`, schon beim Drücken) und schließt die
+Liste; vorher war sie nur Anzeige, ging beim Mausdruck zu, und der Klick landete auf der Karte darunter.
+Kosten je Klick: ein Blick je Fenster mit Board.
+
 **Leiste nach Ortswechsel per Maus:** Wechselt man Ticket-Modus, Projekt, Board/Liste oder öffnet die Triage mit
 Maus oder Tastatur, liest die Leiste des Controllers sofort neu (`controllerLegendMayHaveChanged`). Vorher stand
 dort bis zum nächsten Statuswechsel eines Chats der alte Ort.
@@ -486,6 +494,8 @@ Schritt der Tasten-Kette des Fensters). Der Rahmen um die Spalte steht auch, sol
 Board-Chats den Tastaturfokus hat. Die Leiste zeigt bei Tastatur-Bedienung die Kürzel je Ansicht
 (`KeyboardLegend.ticketItems`). ← am linken Rand bleibt stehen: Die Seitenleiste hat keine Tastatur-Auswahl.
 Den Kopf erreicht ↑ wie am Controller (Paket 3d); dort schaltet Return, Esc führt zurück, „← Chats“ wie ⌥Tab kurz.
+Die Sperre von 1 s gilt nach „← Chats“ im Chat, in den es zurückgeht, in einem Workspace (Raster) in der Kachel
+mit Fokus und ohne vorigen Ort im Chat hinter den Tickets (`KeyboardBackArrival`).
 
 Die erste Bewegung zeigt die Start-Auswahl: die Karte des Tickets, an dem der Chat dahinter hängt, sonst
 die erste Karte der ersten Spalte, in der etwas wartet, sonst die erste Karte. **Options** öffnet die

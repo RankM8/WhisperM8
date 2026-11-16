@@ -193,6 +193,55 @@ final class TicketBoardHeaderTests: XCTestCase {
         XCTAssertEqual(first.headerActivate(context), .rejected, "Kreuz danach schaltet keinen alten Knopf")
     }
 
+    /// Mausklick auf einen Eintrag der offenen Liste der Bereiche (Kommentar
+    /// vom 16.11., 18:00): wählt ihn, statt die Liste zu schließen und
+    /// durchzuklicken. Auch wenn das Räumen nach dem Klick schon gelaufen ist.
+    func testMouseClickOnAListEntryChoosesIt() {
+        let model = viewModel()
+        model.enterHeader(context)
+        _ = model.headerMove(.right, context)
+        _ = model.headerActivate(context)
+        XCTAssertNotNil(model.projectPickerIndex)
+        let wanted = TicketHeaderSelection.projectOptions(model.presentation.projects)[2]
+        model.chooseProjectByMouse(wanted)
+        XCTAssertEqual(model.filter.project, wanted)
+        XCTAssertNil(model.projectPickerIndex, "Liste zu")
+        XCTAssertNil(model.headerFocus, "die Maus hat übernommen: kein Ring mehr")
+        XCTAssertEqual(model.headerActivate(context), .rejected, "ein späteres Kreuz schaltet nichts im Kopf")
+
+        let late = viewModel()
+        late.enterHeader(context)
+        _ = late.headerMove(.right, context)
+        _ = late.headerActivate(context)
+        TicketBoardControllers.leaveHeaders([late])
+        late.chooseProjectByMouse(nil)
+        XCTAssertNil(late.filter.project, "„Alle Bereiche“ gewählt")
+        late.chooseProjectByMouse("A")
+        XCTAssertEqual(late.filter.project, "A", "Räumen lief schon: die Wahl gilt trotzdem")
+    }
+
+    /// „← Chats“ per Tastatur (Kommentar vom 16.11., 18:00): Im Raster wartet
+    /// die Kachel mit Fokus wie ein Chat; bleiben die Tickets offen, keiner.
+    func testKeyboardBackArrivalReachesTheFocusedTile() {
+        let chat = UUID(), tile = UUID(), behind = UUID()
+        XCTAssertEqual(KeyboardBackArrival.chatBefore(.chat(chat)), chat)
+        XCTAssertNil(KeyboardBackArrival.chatBefore(.workspace(UUID())))
+        XCTAssertNil(KeyboardBackArrival.chatBefore(nil))
+
+        XCTAssertEqual(KeyboardBackArrival.shownAfter(placeBefore: .workspace(UUID()), ticketsStillOpen: false,
+                                                      shown: tile), tile)
+        XCTAssertEqual(KeyboardBackArrival.shownAfter(placeBefore: nil, ticketsStillOpen: false, shown: behind),
+                       behind, "kein voriger Ort: der Chat hinter den Tickets")
+        XCTAssertNil(KeyboardBackArrival.shownAfter(placeBefore: .chat(chat), ticketsStillOpen: false, shown: chat),
+                     "Chat ist schon vorher gesperrt")
+        XCTAssertNil(KeyboardBackArrival.shownAfter(placeBefore: .workspace(UUID()), ticketsStillOpen: true,
+                                                    shown: tile), "Weg ging nicht: keine Ankunft")
+        XCTAssertNil(KeyboardBackArrival.shownAfter(placeBefore: .tickets(projectID: nil), ticketsStillOpen: true,
+                                                    shown: tile), "anderes Board")
+        XCTAssertNil(KeyboardBackArrival.shownAfter(placeBefore: .workspace(UUID()), ticketsStillOpen: false,
+                                                    shown: nil))
+    }
+
     // MARK: - Belegung
 
     private func header(_ view: ControllerTicketView) -> ControllerContext {

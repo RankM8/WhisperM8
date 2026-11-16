@@ -68,6 +68,25 @@ final class KeyboardArrivalLock {
     }
 }
 
+/// Wo die Tastatur nach „← Chats“ im Kopf des Boards ankommt (WM8-91). Einen
+/// Chat kennt der Weg vorher (`backPlace()`); in einem Workspace (Raster)
+/// steht die Kachel mit Fokus erst fest, wenn der Store ihn aktiviert hat
+/// (synchron, mit der Kachel, auf der man dort zuletzt war). Dasselbe gilt,
+/// wenn es keinen vorigen Ort gibt und nur die Tickets zugehen: Dann gilt der
+/// Chat, der dahinter steht. Bleiben die Tickets offen (anderes Board oder
+/// der Weg ging nicht), kommt die Tastatur in keinem Chat an. Pur.
+enum KeyboardBackArrival {
+    static func chatBefore(_ place: ChatPlace?) -> UUID? {
+        if case .chat(let id)? = place { return id }
+        return nil
+    }
+
+    static func shownAfter(placeBefore: ChatPlace?, ticketsStillOpen: Bool, shown: UUID?) -> UUID? {
+        guard chatBefore(placeBefore) == nil, !ticketsStillOpen else { return nil }
+        return shown
+    }
+}
+
 // MARK: - Fenster
 
 extension AgentChatsView {
@@ -136,9 +155,15 @@ extension AgentChatsView {
             return true
         case .goBack:
             // „← Chats“ im Kopf (Paket 3d): wie der Knopf. Return und Esc warten
-            // im Ziel-Chat 1 s, wie nach jedem Sprung per Tastatur.
-            if case .chat(let id) = backPlace() { KeyboardArrivalLock.shared.arrive(at: id) }
+            // im Ziel-Chat 1 s, wie nach jedem Sprung per Tastatur; im Raster
+            // in der Kachel mit Fokus (`KeyboardBackArrival`).
+            let place = backPlace()
+            if let id = KeyboardBackArrival.chatBefore(place) { KeyboardArrivalLock.shared.arrive(at: id) }
             ticketsBackLink.go()
+            if let id = KeyboardBackArrival.shownAfter(
+                placeBefore: place, ticketsStillOpen: isTicketsModeActive, shown: selectedSessionID) {
+                KeyboardArrivalLock.shared.arrive(at: id)
+            }
             return true
         case .rejected:
             // Esc außerhalb der Triage gehört dem Fenster (Dialoge, Suche).

@@ -67,7 +67,9 @@ struct TicketProjectPickerAnchorKey: PreferenceKey {
 }
 
 /// Liste der Bereiche (Entscheidung 16.11.2026, „Liste darunter“): ▲ ▼ wählen,
-/// Kreuz übernimmt, Kreis schließt. Steht nur, solange sie offen ist.
+/// Kreuz übernimmt, Kreis schließt. Steht nur, solange sie offen ist. Ein
+/// Mausklick auf einen Eintrag wählt ihn schon beim Drücken (WM8-91): Nach
+/// jedem Klick räumt die App den Kopf, die Liste wäre beim Loslassen weg.
 struct TicketProjectPickerList: View {
     let model: TicketBoardViewModel
     let projects: [String]
@@ -103,6 +105,10 @@ struct TicketProjectPickerList: View {
                                 .strokeBorder(AgentTheme.accent, lineWidth: 2)
                         }
                     }
+                    .contentShape(Rectangle())
+                    .gesture(DragGesture(minimumDistance: 0).onChanged { _ in model.chooseProjectByMouse(option) })
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { model.chooseProjectByMouse(option) }
                 }
             }
             .padding(6)
