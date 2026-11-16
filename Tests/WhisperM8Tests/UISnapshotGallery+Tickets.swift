@@ -186,7 +186,8 @@ extension UISnapshotGallery {
             let model = TicketBoardViewModel(model: board, documents: .immediate)
             configure(model)
             let load = TicketBoardLoad(fetchedAt: snapshot.fetchedAt, problem: problem)
-            return AnyView(TicketBoardView(title: "Tickets · whisperm8", model: model, load: load, source: source, actions: .none))
+            return AnyView(TicketBoardView(title: "Tickets · whisperm8", model: model, load: load, source: source,
+                                           actions: snapshotTicketActions))
         }
         let size = CGSize(width: 1340, height: 860)
         return [
@@ -229,13 +230,20 @@ extension UISnapshotGallery {
             view: { configure in view(configure) }, comments: comments)
     }
 
+    /// Wie in der App: „← Chats · WM8 Aktiv“ links im Kopf (WM8-124).
+    static var snapshotTicketActions: TicketBoardActions {
+        var actions = TicketBoardActions.none
+        actions.back = TicketsBackLinkModel(destination: .init(name: "WM8 Aktiv", route: .previousPlace)) {}
+        return actions
+    }
+
     /// Was die Ansicht zeigt, solange es kein Board gibt.
     @MainActor
     private static func ticketEmptyStateFixtures() -> [Fixture] {
         let size = CGSize(width: 900, height: 520)
         func state(_ name: String, _ kind: TicketBoardEmptyState.Kind) -> Fixture {
             Fixture(name: "tickets-leer-\(name)", size: size) {
-                AnyView(TicketBoardEmptyState(kind: kind, actions: .none).background(AgentTheme.background))
+                AnyView(TicketBoardEmptyState(kind: kind, actions: snapshotTicketActions).background(AgentTheme.background))
             }
         }
         return [

@@ -25,7 +25,7 @@ struct TicketTriageView: View {
                     Rectangle().fill(AgentTheme.border).frame(width: 1)
                 }
                 VStack(spacing: 0) {
-                    TicketTriageBar(model: model, triage: triage, load: load, actions: actions)
+                    TicketTriageBar(model: model, triage: triage, load: load, actions: actions, compact: layout.compactHead)
                         .controllerTicketMenuAnchor(active: true)
                     if let windowID = model.windowID {
                         // Triage-Knöpfe sammeln für den Board-Chat (WM8-113); nur mit sichtbarem Board-Chat.
@@ -69,17 +69,25 @@ struct TicketTriageLayout: Equatable {
     /// dem Ticket mindestens 400 pt).
     static let listFrom: CGFloat = 660
 
+    /// Darunter (Breite der Ticket-Spalte) wird der Kopf knapp: „← Chats“ ohne
+    /// Namen, „Link kopieren“ und „In Linear öffnen“ nur als Symbol (WM8-124).
+    static let fullHeadFrom: CGFloat = 760
+
     var showsList: Bool
     var propertiesInline: Bool
+    var compactHead: Bool
 
-    init(showsList: Bool, propertiesInline: Bool) {
+    init(showsList: Bool, propertiesInline: Bool, compactHead: Bool = false) {
         self.showsList = showsList
         self.propertiesInline = propertiesInline
+        self.compactHead = compactHead
     }
 
     init(width: CGFloat) {
         showsList = width >= Self.listFrom
         propertiesInline = width < Self.propertiesColumnFrom
+        let ticketColumn = width - (showsList ? TicketTriageView.listWidth + 1 : 0)
+        compactHead = ticketColumn < Self.fullHeadFrom
     }
 }
 
@@ -208,9 +216,15 @@ private struct TicketTriageBar: View {
     let triage: TicketTriage
     let load: TicketBoardLoad
     let actions: TicketBoardActions
+    var compact = false
 
     var body: some View {
         HStack(spacing: 8) {
+            if let back = actions.back {
+                // Rückweg zu den Chats (WM8-124), immer ganz zu sehen.
+                TicketsBackLinkButton(link: back, compact: compact)
+                Rectangle().fill(AgentTheme.border).frame(width: 1, height: 16)
+            }
             // Immer sichtbar: Im schmalen Fenster fällt die Liste samt ihrem
             // Schließen-Knopf weg, und Esc wirkt nicht, solange ein Textfeld den Fokus hat.
             Button { model.closeTriage() } label: {
@@ -218,6 +232,7 @@ private struct TicketTriageBar: View {
                     Image(systemName: "chevron.left")
                     Text("Board")
                 }
+                .fixedSize()
             }
             .help(Text("Back to the board (Esc)"))
             .accessibilityLabel(Text("Back to the board"))
@@ -233,10 +248,12 @@ private struct TicketTriageBar: View {
             Text("\(triage.index + 1) of \(triage.keys.count)")
                 .font(.system(size: 11.5).monospacedDigit())
                 .foregroundStyle(AgentTheme.textSecondary)
+                .fixedSize()
             if let content = model.detail {
                 Text(verbatim: content.entry.ticket.key)
                     .font(.system(size: 12, weight: .semibold).monospacedDigit())
                     .foregroundStyle(AgentTheme.textSecondary)
+                    .fixedSize()
                     .padding(.leading, 6)
                 TicketPriorityBars(priority: content.entry.ticket.priority)
             }
@@ -246,15 +263,24 @@ private struct TicketTriageBar: View {
                 .foregroundStyle(AgentTheme.textSecondary)
                 .lineLimit(1)
             if model.detail != nil {
-                TicketCopyButton(kind: .link, copied: model.copied) { model.copyLink() }
+                TicketCopyButton(kind: .link, copied: model.copied, iconOnly: compact) { model.copyLink() }
             }
             if model.detail != nil, let windowID = model.windowID {
                 BoardChatHandOffButton(windowID: windowID)
             }
             if let content = model.detail {
                 if let url = content.url {
-                    Button("Open in Linear") { actions.openURL(url) }
-                        .buttonStyle(SettingsButtonStyle.standard)
+                    Button { actions.openURL(url) } label: {
+                        if compact {
+                            Image(systemName: "arrow.up.right.square")
+                        } else {
+                            Text("Open in Linear")
+                        }
+                    }
+                    .buttonStyle(SettingsButtonStyle.standard)
+                    .fixedSize()
+                    .help(Text("Open in Linear"))
+                    .accessibilityLabel(Text("Open in Linear"))
                 }
             }
             Button { actions.refresh(); model.reloadComments() } label: {

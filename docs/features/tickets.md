@@ -352,6 +352,14 @@ in [`../design/ticket-board/`](../design/ticket-board/).
   Seitenleiste und Tabs bleiben stehen. Ist der Schalter aus, gibt es den Knopf nicht.
 - **Welches Projekt:** das im Fenster gewählte. Ein Klick auf ein Projekt in der Seitenleiste wechselt das
   Board; Filter und Auswahl gehören zum Projekt und werden dabei verworfen.
+- **Platz:** Im Ticket-Modus fällt die Zeile unter den Tabs weg (Workspace mit Belegung, „Notizen zu“ und
+  Raster-Auswahl bzw. der Kopf des Chats); Board und Board-Chat reichen bis an die Tabs (WM8-124). In den Chats
+  bleibt sie, wie sie ist.
+- **„← Chats · WM8 Aktiv“:** links im Kopf des Boards, in der Triage vor „‹ Board“ und in den Leerzuständen oben,
+  immer sichtbar. Er führt dorthin, wohin L2 führt (`backPlace()`): zum vorigen Chat oder Workspace. Gibt es den
+  nicht, oder ist der vorige Ort ein anderes Board, schließt er nur die Tickets und nennt, was dahinter steht. Die
+  Regel ist pur (`TicketsBackLink`). Der Knopf wird nie gekürzt; Namen über 24 Zeichen enden mit „…“. Ist die Ticket-Spalte der Triage schmaler als 760 pt, steht im Kopf nur „← Chats“
+  (der Name in der Hilfe), und „Link kopieren“ und „In Linear öffnen“ zeigen nur ihr Symbol.
 - **Zurück zu den Chats:** derselbe Knopf, ⌘W, oder alles, womit der Nutzer einen Chat oder Workspace wählt
   (Klick in Seitenleiste oder Tab-Leiste, ⌘1 bis ⌘9, Ctrl+Tab, Controller, „Zum Chat“ am Ticket, ein Workspace,
   eine Mitteilung). Rückt die Auswahl nur nach, weil ein Tab geschlossen oder ein Chat archiviert wurde, bleiben

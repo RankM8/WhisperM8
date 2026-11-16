@@ -9,6 +9,8 @@ struct TicketBoardActions {
     var openURL: (URL) -> Void
     /// Zur Seite „Tickets“ der Einstellungen.
     var openSettings: () -> Void = {}
+    /// „← Chats · …“ links im Kopf (WM8-124); `nil` in Bildern ohne Fenster.
+    var back: TicketsBackLinkModel? = nil
 
     static let none = TicketBoardActions(refresh: {}, openChat: { _ in }, openURL: { _ in })
 }
@@ -58,7 +60,7 @@ struct TicketBoardView: View {
             } else {
                 // „Liste kopieren“ steht im Kopf: Die Filterzeile braucht die ganze
                 // Breite, sobald rechts der Board-Chat steht (WM8-113).
-                TicketBoardHeader(title: title, mode: $model.mode, load: load, refresh: actions.refresh) {
+                TicketBoardHeader(title: title, mode: $model.mode, load: load, back: actions.back, refresh: actions.refresh) {
                     if model.copied == .link {
                         // ⌘C auf dem Board: Dort gibt es keinen Link-Knopf, der „Kopiert“ zeigen könnte.
                         Label("Link copied", systemImage: "checkmark")
@@ -106,6 +108,8 @@ struct TicketBoardView: View {
 struct TicketCopyButton: View {
     let kind: TicketCopyFeedback
     let copied: TicketCopyFeedback?
+    /// Enger Kopf der Triage (WM8-124): nur das Symbol, der Text steht in Hilfe und Bedienungshilfen.
+    var iconOnly = false
     let action: () -> Void
 
     var body: some View {
@@ -113,24 +117,23 @@ struct TicketCopyButton: View {
             HStack(spacing: 5) {
                 Image(systemName: copied == kind ? "checkmark" : "doc.on.doc")
                     .font(.system(size: 11, weight: .medium))
-                label
+                if !iconOnly { label }
             }
             .font(.system(size: 12, weight: .medium))
         }
         .buttonStyle(SettingsButtonStyle.standard)
         .fixedSize()
         .help(help)
+        .accessibilityLabel(labelText)
     }
 
-    @ViewBuilder
-    private var label: some View {
-        if copied == kind {
-            Text("Copied")
-        } else {
-            switch kind {
-            case .link: Text("Copy link")
-            case .list: Text("Copy list")
-            }
+    private var label: some View { labelText }
+
+    private var labelText: Text {
+        if copied == kind { return Text("Copied") }
+        switch kind {
+        case .link: return Text("Copy link")
+        case .list: return Text("Copy list")
         }
     }
 
@@ -148,11 +151,15 @@ private struct TicketBoardHeader<Trailing: View>: View {
     let title: String
     @Binding var mode: TicketBoardViewModel.Mode
     let load: TicketBoardLoad
+    let back: TicketsBackLinkModel?
     let refresh: () -> Void
     @ViewBuilder let trailing: () -> Trailing
 
     var body: some View {
         HStack(spacing: 12) {
+            if let back {
+                TicketsBackLinkButton(link: back)
+            }
             Text(verbatim: title)
                 .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(AgentTheme.textPrimary)

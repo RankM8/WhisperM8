@@ -208,11 +208,23 @@ final class BoardChatRulesTests: XCTestCase {
     // MARK: Triage
 
     func testTriageMovesPropertiesFirstThenDropsTheList() {
-        XCTAssertEqual(TicketTriageLayout(width: 1200), TicketTriageLayout(showsList: true, propertiesInline: false))
-        XCTAssertEqual(TicketTriageLayout(width: 960), TicketTriageLayout(showsList: true, propertiesInline: false))
-        XCTAssertEqual(TicketTriageLayout(width: 959), TicketTriageLayout(showsList: true, propertiesInline: true))
-        XCTAssertEqual(TicketTriageLayout(width: 660), TicketTriageLayout(showsList: true, propertiesInline: true))
-        XCTAssertEqual(TicketTriageLayout(width: 659), TicketTriageLayout(showsList: false, propertiesInline: true))
+        func columns(_ width: CGFloat) -> [Bool] {
+            let layout = TicketTriageLayout(width: width)
+            return [layout.showsList, layout.propertiesInline]
+        }
+        XCTAssertEqual(columns(1200), [true, false])
+        XCTAssertEqual(columns(960), [true, false])
+        XCTAssertEqual(columns(959), [true, true])
+        XCTAssertEqual(columns(660), [true, true])
+        XCTAssertEqual(columns(659), [false, true])
+    }
+
+    /// Der Kopf wird knapp, wenn die Ticket-Spalte (ohne Liste) schmal ist.
+    func testHeadGetsCompactInANarrowTicketColumn() {
+        XCTAssertFalse(TicketTriageLayout(width: 1100).compactHead, "Ticket-Spalte 839 pt")
+        XCTAssertTrue(TicketTriageLayout(width: 900).compactHead, "Ticket-Spalte 639 pt")
+        XCTAssertFalse(TicketTriageLayout(width: 659).showsList)
+        XCTAssertTrue(TicketTriageLayout(width: 659).compactHead, "ohne Liste, 659 pt")
     }
 
     /// Der Board-Chat ab Werk lässt in üblichen Fenstern Liste und Ticket stehen.

@@ -2771,6 +2771,16 @@
         }
       }
     },
+    "Back to %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück zu %@"
+          }
+        }
+      }
+    },
     "Back to chats": {
       "localizations": {
         "de": {
@@ -3747,6 +3757,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Chats starten ohne die Hook-Konfiguration. Der Live-Status kommt weiterhin aus Claudes eigener Sitzungs-Registry, aber WhisperM8 kann einen Chat nicht mehr automatisch mit seiner Claude-Sitzung verknüpfen, und Hintergrund-Agents verlieren ihren Live-Status."
+          }
+        }
+      }
+    },
+    "Chats · %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats · %@"
           }
         }
       }

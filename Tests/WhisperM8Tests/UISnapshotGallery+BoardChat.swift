@@ -166,6 +166,10 @@ extension UISnapshotGallery {
                 return screen("tickets-triage-mit-fenster", state: jarvis, triage: true,
                               inputBar: inputBar(notice: BoardChatInputRules.message(.awaitingInput, chatName: "Jarvis")))
             },
+            // WM8-124 Paket 2: „← Chats · WM8 Aktiv“ auch im schmalen Board.
+            Fixture(name: "tickets-board-chat-kopf-board-schmal", size: CGSize(width: 1000, height: 760)) {
+                screen("tickets-board", state: jarvis)
+            },
         ]
     }
 }
