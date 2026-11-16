@@ -208,9 +208,11 @@ final class InsertedTextQueueGateTests: XCTestCase {
         guard case .refused(let code, let message) = decision else { return XCTFail("muss ablehnen") }
         XCTAssertEqual(code, .conflict)
         XCTAssertEqual(message, AgentControlRequestHandler.submitRefusedInsertedMessage)
-        XCTAssertFalse(message.contains("getippt"), message)
+        XCTAssertFalse(message.contains("Entwurf des Users (getippt"), message)
         XCTAssertTrue(message.contains("zurückgehalten"), message)
         XCTAssertTrue(message.contains("chats interrupt <ref> --clear-input --force"), message)
+        XCTAssertTrue(message.contains("nie ohne Rückfrage beim User"), message)
+        XCTAssertTrue(message.contains("chats dequeue"), message)   // Enter bei vorgemerktem Auftrag nur nach dequeue
 
         var typed = TerminalComposerDraftTracker()
         typed.recordTerminalKey(keyCode: 0, modifiers: [], status: .idle, restoresPromptOnInterrupt: true, now: Date())

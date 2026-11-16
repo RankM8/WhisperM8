@@ -392,10 +392,13 @@ unterbrochen.
    `send`, der Text stehe im Eingabefeld (`detail.reason: inInputField`),
    **nie noch einmal senden oder vormerken**: `submit <ref>` schickt ihn ab.
    Lehnt `submit` ab, weil die App den Text eingefügt hat (Diktat, „→ Jarvis“,
-   oder dein Auftrag, dessen Enter eine Freigabe zurückhielt), nie das Feld
-   leeren, ohne sicher zu sein, dass nur dein Auftrag drinsteht: dem User
-   melden. Nur dann `interrupt <ref> --clear-input --force` und neu senden; ein
-   vorgemerkter Auftrag geht danach von selbst raus.
+   oder dein Auftrag, dessen Enter eine Freigabe zurückhielt): Was im Feld
+   steht, kannst du nicht prüfen, der User kann weitergetippt haben. Direkt
+   gesendeter Auftrag: dem User melden, er schickt ihn mit Enter ab.
+   Vorgemerkter Auftrag (steht noch in `chats queue <ref>`): erst `dequeue`
+   (Kurz-ID), dann Enter durch den User, sonst kommt er doppelt; oder
+   `interrupt <ref> --clear-input --force`, dann geht er von selbst neu raus.
+   `--force` nur nach Rückfrage beim User, wie in Regel 8.
    **Nach Exit 5 oder 6 nie blind wiederholen.** Exit 6 („Ausgang unklar“)
    heißt: angefragt, aber keine Antwort in der Frist; die App hat es vielleicht
    schon ausgeführt. Erst `chats queue <ref>` bzw. `tail <ref>` prüfen, erst

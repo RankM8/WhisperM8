@@ -69,10 +69,12 @@ extension AgentControlRequestHandler {
     static let submitRefusedInsertedMessage = "Im Eingabefeld steht Text, den die App eingefügt und niemand "
         + "abgeschickt hat: ein Diktat ohne Senden, „→ Jarvis“, `send --no-submit` oder ein Auftrag, dessen Enter "
         + "wegen einer Freigabe zurückgehalten wurde. submit schickt ihn nicht ab, weil die App nicht unterscheiden "
-        + "kann, ob er dem User gehört. Nichts abgeschickt. Ausweg: Der User schickt ihn im Chat mit Enter ab. Ist "
-        + "es sicher dein eigener zurückgehaltener Auftrag: `whisperm8 chats interrupt <ref> --clear-input --force` "
-        + "leert das Feld (alles darin ist dann weg), danach mit `send` neu senden. Ein Auftrag aus der "
-        + "Warteschlange steht dort noch und geht danach von selbst raus (`chats queue <ref>`), nicht neu senden."
+        + "kann, ob er dem User gehört. Nichts abgeschickt. Was im Feld steht, zeigt kein chats-Befehl; der User "
+        + "kann nach der Freigabe weitergetippt oder diktiert haben. Deshalb: Direkt gesendeter Auftrag: Der User "
+        + "schickt ihn im Chat mit Enter ab. Vorgemerkter Auftrag (steht noch in `chats queue <ref>`): erst "
+        + "`chats dequeue <ref> <Kurz-ID>`, dann Enter durch den User, sonst kommt er doppelt; oder nach "
+        + "Rückfrage beim User `whisperm8 chats interrupt <ref> --clear-input --force` (leert das ganze Feld), "
+        + "dann geht er von selbst neu raus. Leeren mit --force nie ohne Rückfrage beim User."
 
     enum SubmitDecision: Equatable {
         case allowed

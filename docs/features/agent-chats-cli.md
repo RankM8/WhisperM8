@@ -810,10 +810,14 @@ Warteschlange nach dem Start zustellte. Deshalb:
   Seit WM8-121 gilt das auch für von der App eingefügten Text, über einen
   Turn-Start hinweg, und damit auch für einen Auftrag, dessen Enter wegen einer
   Freigabe zurückgehalten wurde: Die App kann ihn nicht von einem Diktat ohne
-  Senden unterscheiden. Die Ablehnung sagt dann „eingefügt“ und nennt den Weg,
-  der geht: Der User drückt im Chat Enter, oder, wenn es sicher der eigene
-  Auftrag ist, `interrupt <ref> --clear-input --force` und danach neu senden
-  (ein Auftrag aus der Warteschlange geht nach dem Leeren von selbst raus).
+  Senden unterscheiden. Die Ablehnung sagt dann „eingefügt“ und nennt die
+  Wege, die gehen. Direkt gesendeter Auftrag: Der User drückt im Chat Enter.
+  Vorgemerkter Auftrag (die Warteschlange lässt ihn nach dem zurückgehaltenen
+  Enter vorgemerkt): entweder erst `dequeue`, dann Enter durch den User,
+  sonst kommt er beim nächsten Turn-Ende ein zweites Mal; oder
+  `interrupt <ref> --clear-input --force`, danach geht er von selbst neu raus.
+  Leeren mit `--force` nur nach Rückfrage beim User: Kein chats-Befehl zeigt
+  das Feld, und der User kann nach der Freigabe weitergetippt haben.
   Nach einem Enter, das raus ist, aber im Feld stehen blieb (`inInputField`),
   vermutet die App keinen Entwurf; dort schickt `submit` ab.
 - **`chats resume <ref> --prompt "…"`** (oder `-- "…"`) merkt den Auftrag nach
