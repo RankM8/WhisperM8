@@ -20,6 +20,9 @@ final class TicketSourceStub: TicketSource, @unchecked Sendable {
     var onProjects: (String) async throws -> [String] = { _ in [] }
     var onUpload: (Data, String, String) async throws -> String = { _, name, _ in "https://uploads.linear.app/test/\(name)" }
     var onComments: (String) async throws -> TicketComments = { _ in TicketComments(items: [], hasMore: false) }
+    /// Reiter (WM8-125); ab Werk keine, wie eine Quelle ohne Ansichten.
+    var onViews: () async throws -> TicketViewCatalog = { .empty }
+    var onViewTickets: (String) async throws -> [Ticket] = { _ in [] }
     /// Fehler für alle schreibenden Operationen (`nil` = gelingt).
     var writeError: TicketSourceError?
     /// Nur Schreibaufrufe, die so beginnen, scheitern (z. B. `saveLink`).
@@ -61,6 +64,9 @@ final class TicketSourceStub: TicketSource, @unchecked Sendable {
     func account() async throws -> TicketAccount { note("account"); return try await onAccount() }
     func teams() async throws -> [String] { note("teams"); return try await onTeams() }
     func projects(team: String) async throws -> [String] { note("projects \(team)"); return try await onProjects(team) }
+    func views() async throws -> TicketViewCatalog { note("views"); return try await onViews() }
+    func tickets(inView viewID: String) async throws -> [Ticket] { note("view \(viewID)"); return try await onViewTickets(viewID) }
+
     func uploadImage(_ data: Data, fileName: String, contentType: String) async throws -> String {
         try write("upload \(fileName) \(contentType) \(data.count)")
         return try await onUpload(data, fileName, contentType)
@@ -84,11 +90,18 @@ enum TicketFixtures {
     static func ticket(_ number: Int, status: String = "Todo", title: String? = nil, description: String = "",
                        priority: Int = 3, assignee: TicketPerson? = nil, project: String? = "Neustart",
                        labels: [String] = [], links: [TicketChatLink] = [], blocked: Bool = false,
-                       updatedAt: Date? = nil) -> Ticket {
+                       updatedAt: Date? = nil, parent: Int? = nil) -> Ticket {
         Ticket(id: "id-\(number)", key: "WM8-\(number)", title: title ?? "Ticket \(number)", description: description,
                priority: priority, status: self.status(status), project: project, milestone: nil, assignee: assignee,
                labels: labels, links: links, isBlocked: blocked, url: "https://linear.app/x/issue/WM8-\(number)",
-               updatedAt: updatedAt)
+               updatedAt: updatedAt, parentKey: parent.map { "WM8-\($0)" })
+    }
+
+    /// Ansicht für Tests, ab Werk nach Status gruppiert.
+    static func view(_ id: String, _ name: String? = nil, grouping: TicketViewGrouping = .status,
+                     subIssues: Bool = true) -> TicketView {
+        TicketView(id: id, name: name ?? "Ansicht \(id)", teamKey: "WM8", grouping: grouping, ordering: .priority,
+                   showsSubIssues: subIssues, url: "https://linear.app/x/view/\(id)")
     }
 
     static func link(_ chat: UUID, active: Bool = true, id: String? = nil) -> TicketChatLink {
