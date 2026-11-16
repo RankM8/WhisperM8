@@ -4,8 +4,8 @@
   gruppierter Liste“. Kein App-Code. Farben und Bausteine aus docs/design/ticket-board-alltag.html und
   ticket-board-controller.html (dort aus AppTheme.swift).
   Tickets aus dem Team WM8 (Abzug vom 16.11.2026). Erfunden bzw. angenommen, damit alles einmal vorkommt:
-  die Ansicht „Als Nächstes: Giuliano“ im Team WM8 (legt der Supervisor erst an), einige Zuweisungen und Status,
-  die Eltern-Beziehungen (WM8-111 mit vier Unteraufgaben, WM8-15 unter WM8-91), die Chat-Namen, Daten und der
+  einige Zuweisungen und Status,
+  die Eltern-Beziehungen (WM8-111 mit vier Unteraufgaben, WM8-15 unter WM8-91), „Blockiert“ an WM8-114, die Chat-Namen, Daten und der
   Text im Terminal.
 -->
 <html lang="de">
@@ -255,7 +255,7 @@
   <div class="rules">
     <b>So probierst du es aus:</b>
     <ul>
-      <li>Oben im Board stehen die Ansichten aus Linear als Reiter, „Als Nächstes: Giuliano“ ist der Standard. Klick auf einen Reiter wechselt die Liste; „Gerade in Arbeit“ ist in Linear nach Vorhaben gruppiert und zeigt, wie das aussieht.</li>
+      <li>Oben im Board stehen die Ansichten aus Linear als Reiter, „Als Nächstes: Giuliano“ ist der Standard. Klick auf einen Reiter wechselt die Liste; „Wartet auf mich“ und „Gerade in Arbeit“ sind in Linear nach Vorhaben gruppiert, „Als Nächstes“ (unter „Mehr“) nach Priorität.</li>
       <li>Gruppenköpfe klappen per Klick auf und zu. Ein Klick auf eine Zeile öffnet die Triage. Links den Griff zwischen Liste und Ticket ziehen.</li>
       <li>Tastatur geht direkt (erst einmal ins Fenster klicken): ↑ ↓ wählen, ↩ öffnen, Esc zurück, J K in der Triage, ↑ über der ersten Zeile in die Reiter (dort ← →, noch einmal ↑ in die Kopfzeile). Für den Controller die Knöpfe unter „Controller drücken“.</li>
       <li>„Fensterbreite“ und „Board-Chat“ zeigen, was in der Zeile wegfällt, wenn es eng wird: erst das Datum, dann das Projekt, nie Titel und Chat.</li>
@@ -321,10 +321,10 @@
 
   <h2>Offene Fragen an Giuliano</h2>
   <div class="rules"><ol>
-    <li><b>Filterknöpfe „Wartet auf mich“, Agent und Person neben den Reitern.</b> Heute stehen sie als Zeile unter dem Kopf. „Wartet auf mich“, „Mit Agent“ und „Ohne Agent“ gibt es im Team WM8 schon als Linear-Ansichten, also als Reiter. <span class="rec">Empfehlung: Die Knöpfe fallen weg, die Ansichten übernehmen.</span> Beides zugleich hieße zwei Filter übereinander, und man wüsste nicht, warum ein Ticket fehlt. Hinweis: Die Linear-Ansicht „Wartet auf mich“ zeigt alles Offene, das dir zugewiesen ist; der heutige Knopf rechnet mit der Regel des Teams (Status „Merge-bereit“, Labels Entscheidung und Handtest). Wer die alte Bedeutung will, passt den Filter der Ansicht in Linear an.</li>
-    <li><b>Eine Linear-Ansicht gruppiert nicht nach Status</b> (etwa „Gerade in Arbeit“ nach Vorhaben). <span class="rec">Empfehlung: Die Liste übernimmt die Gruppierung aus Linear</span>, für Status, Vorhaben, Priorität, Person und Label; die Triage links gruppiert genauso. Gruppierungen, die WhisperM8 nicht kennt (Zyklus, Meilenstein, Team …), werden nach Status gezeigt, mit dem Satz „In Linear nach Zyklus gruppiert“ in der Zeile unter den Reitern.</li>
+    <li><b>Filterknöpfe „Wartet auf mich“, Agent und Person neben den Reitern.</b> Heute stehen sie als Zeile unter dem Kopf. „Wartet auf mich“, „Mit Agent“ und „Ohne Agent“ gibt es im Team WM8 schon als Linear-Ansichten, also als Reiter. <span class="rec">Empfehlung: Die Knöpfe fallen weg, die Ansichten übernehmen.</span> Beides zugleich hieße zwei Filter übereinander, und man wüsste nicht, warum ein Ticket fehlt. Hinweis: Die Linear-Ansicht „Wartet auf mich“ zeigt alles Offene, das dir zugewiesen ist, nach Vorhaben gruppiert; der heutige Knopf rechnet mit der Regel des Teams (Status „Merge-bereit“, Labels Entscheidung und Handtest). Wer die alte Bedeutung will, passt den Filter der Ansicht in Linear an.</li>
+    <li><b>Eine Linear-Ansicht gruppiert nicht nach Status.</b> Im Team WM8 gruppieren „Wartet auf mich“ und „Gerade in Arbeit“ nach Vorhaben, „Als Nächstes“ nach Priorität (im Entwurf anklickbar). <span class="rec">Empfehlung: Die Liste übernimmt die Gruppierung aus Linear</span>, für Status, Vorhaben, Priorität, Person und Label; die Triage links gruppiert genauso. Gruppierungen, die WhisperM8 nicht kennt (Zyklus, Meilenstein, Team …), werden nach Status gezeigt, mit dem Satz „In Linear nach Zyklus gruppiert“ in der Zeile unter den Reitern.</li>
     <li><b>Unteraufgaben, deren Eltern-Ticket nicht in der Ansicht steht.</b> <span class="rec">Empfehlung: wie Linear, als eigene Zeile an ihrem Platz, vor dem Titel grau „↳ WM8-91“.</span> Im Beispiel: WM8-15 (Handtests Runde 5) unter „Todo“. Die Alternative, das Eltern-Ticket grau als Kopf dazuzuholen, braucht eine zusätzliche Abfrage bei Linear und zeigt Tickets, die die Ansicht bewusst ausschließt.</li>
-    <li><b>Welche Ansichten werden Reiter, und was gilt bei mehreren Workspaces?</b> <span class="rec">Empfehlung: deine Favoriten aus Linear im Workspace des Projekts, in ihrer Reihenfolge; was nicht in die Zeile passt, steht unter „Mehr“.</span> Standard ist die Ansicht, deren Name mit „Als Nächstes“ beginnt und deinen Vornamen trägt, sonst der erste Favorit. Ein Projekt zeigt nur die Ansichten seines Workspaces (WhisperM8 die aus „WhisperM8“, ListM8 die aus „DealSupply“); ansichtsübergreifende Teams im selben Workspace erscheinen mit ihrem Kürzel an der Nummer. Alternative: alle geteilten Ansichten des Teams, das wären in WM8 heute neun Reiter.</li>
+    <li><b>Welche Ansichten werden Reiter, und was gilt bei mehreren Workspaces?</b> <span class="rec">Empfehlung: deine Favoriten aus Linear im Workspace des Projekts, in ihrer Reihenfolge; was nicht in die Zeile passt, steht unter „Mehr“.</span> Standard ist die Ansicht, deren Name mit „Als Nächstes“ beginnt und deinen Vornamen trägt, sonst der erste Favorit. Ein Projekt zeigt nur die Ansichten seines Workspaces (WhisperM8 die aus „WhisperM8“, ListM8 die aus „DealSupply“); ansichtsübergreifende Teams im selben Workspace erscheinen mit ihrem Kürzel an der Nummer. Alternative: alle geteilten Ansichten des Teams, das wären in WM8 heute zehn Reiter (im Entwurf zu sehen: was nicht passt, steht unter „Mehr“). „Laufende Vorhaben“ zeigt in Linear Vorhaben statt Tickets und wird in keinem Fall ein Reiter.</li>
   </ol></div>
 
   <h2>Selbst entschieden (leicht zu ändern)</h2>
@@ -353,7 +353,7 @@ const T = {
   'WM8-111':{t:'Ticket-Board für den Alltag',s:'In Progress',p:2,a:'GC',l:['Feature'],pr:'Tickets',d:'15.11.',kids:['WM8-113','WM8-125','WM8-114','WM8-115']},
   'WM8-113':{t:'Ticket-Board Paket 2: Board-Chat neben dem Board, Entscheidungen sammeln',s:'In Progress',p:2,a:'GC',l:['Feature'],pr:'Tickets',c:['Jon','awaiting'],d:'16.11.',par:'WM8-111'},
   'WM8-125':{t:'Ticket-Board: Linear-Ansichten als Reiter, Liste als Standard, Triage mit gruppierter Liste',s:'In Progress',p:2,a:'GC',l:['Feature'],pr:'Tickets',c:['Ena','working'],d:'16.11.',par:'WM8-111',n:2},
-  'WM8-114':{t:'Ticket-Board Paket 3: Jarvis steuert das Board per Befehl',s:'Todo',p:2,a:'GC',l:['Feature'],pr:'Tickets',d:'15.11.',par:'WM8-111'},
+  'WM8-114':{t:'Ticket-Board Paket 3: Jarvis steuert das Board per Befehl',s:'Todo',p:2,a:'GC',b:true,l:['Feature'],pr:'Tickets',d:'15.11.',par:'WM8-111'},
   'WM8-115':{t:'Ticket-Board Paket 4: „Wartet auf mich“ über alle Teams, Vorrat je Entwickler',s:'Todo',p:2,a:'GC',l:['Feature'],pr:'Tickets',d:'15.11.',par:'WM8-111'},
   'WM8-23':{t:'Linear zwei Wochen an WhisperM8 testen, dann über den Umzug entscheiden',s:'In Progress',p:3,a:'GC',l:['Entscheidung'],pr:'Tickets',d:'13.11.'},
   'WM8-91':{t:'Ticket-Board mit dem Controller öffnen und bedienen',s:'In Progress',p:2,a:null,l:['Feature'],pr:'Tickets',c:['Vic','stopped'],d:'16.11.'},
@@ -374,15 +374,21 @@ const T = {
 };
 const active = s => s!=='Backlog';
 const has = (k,...ls) => T[k].l.some(x=>ls.includes(x));
+const PRIO_NAME = ['Keine Priorität','Dringend','Hoch','Mittel','Niedrig'];
 const VIEWS = [
-  {id:'next', name:'Als Nächstes: Giuliano', star:true, group:'status', f:k=>(T[k].a==='GC' && active(T[k].s)) || has(k,'Entscheidung','Handtest'), desc:'dir zugewiesen und aktiv, oder wartet auf dich (Entscheidung, Handtest)'},
-  {id:'wait', name:'Wartet auf mich', group:'status', f:k=>T[k].a==='GC', desc:'alles Offene, das dir zugewiesen ist'},
-  {id:'work', name:'Gerade in Arbeit', group:'project', f:k=>['In Progress','Merge-bereit','Wartet aufs Ausliefern'].includes(T[k].s), desc:'woran gerade gearbeitet wird, je Vorhaben'},
+  // Namen, Filter und Gruppierung wie die Ansichten im Team WM8 (Stand 16.11.2026, laut Supervisor).
+  {id:'next', name:'Als Nächstes: Giuliano', star:true, group:'status', f:k=>(T[k].a==='GC' && ['Todo','In Progress'].includes(T[k].s)) || has(k,'Entscheidung','Handtest'), desc:'dir zugewiesen und Todo oder In Progress, oder mit Label Entscheidung oder Handtest'},
+  {id:'wait', name:'Wartet auf mich', group:'project', f:k=>T[k].a==='GC', desc:'dir zugewiesen, offen'},
   {id:'dec', name:'Entscheidungen', group:'status', f:k=>has(k,'Entscheidung'), desc:'geht ohne eine Entscheidung nicht weiter'},
   {id:'hand', name:'Handtests', group:'status', f:k=>has(k,'Handtest'), desc:'nach einem Neustart an der laufenden App zu prüfen'},
-  {id:'with', name:'Mit Agent', more:true, group:'status', f:k=>!!T[k].c, desc:'Tickets, an denen gerade ein Chat sitzt'},
-  {id:'without', name:'Ohne Agent', more:true, group:'status', f:k=>!T[k].c && T[k].s!=='Backlog', desc:'in Arbeit oder bereit, aber kein Chat daran'},
+  {id:'work', name:'Gerade in Arbeit', group:'project', f:k=>['In Progress','Merge-bereit','Wartet aufs Ausliefern'].includes(T[k].s), desc:'woran gerade gearbeitet wird, je Vorhaben'},
+  {id:'ready', name:'Als Nächstes', group:'priority', f:k=>T[k].s==='Todo', desc:'bereit, nach Priorität'},
+  {id:'blocked', name:'Blockiert', group:'status', f:k=>!!T[k].b, desc:'wartet auf ein anderes Ticket'},
+  {id:'with', name:'Mit Agent', group:'status', f:k=>!!T[k].c, desc:'Tickets, an denen gerade ein Chat sitzt'},
+  {id:'without', name:'Ohne Agent', group:'status', f:k=>!T[k].c && T[k].s!=='Backlog', desc:'in Arbeit oder bereit, aber kein Chat daran'},
+  {id:'all', name:'All issues', group:'status', f:k=>true, desc:'alle offenen Tickets des Teams'},
 ];
+// „Laufende Vorhaben“ ist in Linear eine Ansicht über Vorhaben, nicht über Tickets; sie wird kein Reiter.
 
 /* ---------- Zustand ---------- */
 const S = { width:1440, dock:'open', dev:'kb', chips:'off', view:'next', mode:'list', screen:'list', focus:'list',
@@ -417,14 +423,20 @@ const G = (d,...ks) => ks.map(k=>`<span class="g">${GL[gd(d)][k]||k}</span>`).jo
 const KC = (...ks) => ks.map(k=>`<span class="kc">${k}</span>`).join('');
 function log(t) { $('#log').innerHTML = t; }
 
+function groupIcon(id) {
+  const gr = view().group;
+  if (gr==='status') return statusIcon(id);
+  if (gr==='priority') return prioIcon(PRIO_NAME.indexOf(id));
+  return PROJ_ICON[id]||'▦';
+}
 /* ---------- Gruppen der Ansicht ---------- */
 function groups(v = view()) {
   const keys = Object.keys(T).filter(v.f);
   const inView = new Set(keys);
   // Unteraufgaben stehen unter ihrem Eltern-Ticket, wenn es in der Ansicht ist; sonst als eigene Zeile mit „↳“.
   const tops = keys.filter(k => !(T[k].par && inView.has(T[k].par)));
-  const by = v.group==='project' ? (k=>T[k].pr) : (k=>T[k].s);
-  const order = v.group==='project' ? [...new Set(tops.map(by))].sort() : STATUS;
+  const by = v.group==='project' ? (k=>T[k].pr) : v.group==='priority' ? (k=>PRIO_NAME[T[k].p]) : (k=>T[k].s);
+  const order = v.group==='project' ? [...new Set(tops.map(by))].sort() : v.group==='priority' ? [1,2,3,4,0].map(p=>PRIO_NAME[p]) : STATUS;
   return order.map(g => {
     const top = tops.filter(k=>by(k)===g).sort((a,b)=>prioRank(T[a].p)-prioRank(T[b].p) || (+b.split('-')[1]) - (+a.split('-')[1]));
     const rows = [];
@@ -463,7 +475,7 @@ function renderHead() {
   });
   h += `</div><div class="vtabs" id="vtabs">${tabs}</div>`;
   const v = view();
-  h += `<div class="vinfo" title="${esc(v.desc)}">Aus Linear · nach ${v.group==='project'?'Vorhaben':'Status'} gruppiert · nach Priorität · Unteraufgaben an · ${total()} Tickets · <a href="#" onclick="return false">In Linear öffnen ↗</a> · ${esc(v.desc)}</div>`;
+  h += `<div class="vinfo" title="${esc(v.desc)}">Aus Linear · nach ${({project:'Vorhaben',priority:'Priorität',status:'Status'})[v.group]} gruppiert · nach Priorität · Unteraufgaben an · ${total()} Tickets · <a href="#" onclick="return false">In Linear öffnen ↗</a> · ${esc(v.desc)}</div>`;
   if (S.chips==='on') h += `<div class="fchips"><span class="chip me">Wartet auf mich</span><span class="chip">Alle Bereiche ▾</span><span class="chip">Agent: Alle</span><span class="chip">Mit Agent</span><span class="chip">Ohne Agent</span><span class="chip">Person: Alle</span><span style="font-size:11.5px;color:var(--ink3)">wirken zusätzlich zur Ansicht</span></div>`;
   return h;
 }
@@ -499,7 +511,7 @@ function renderList() {
   groups().forEach(g => {
     const key = S.view+'|'+g.id, closed = !!S.collapsed[key];
     const ring = S.focus==='list' && S.sel==='g:'+g.id ? 'ring' : '';
-    const icon = view().group==='status' ? statusIcon(g.id) : (PROJ_ICON[g.id]||'▦');
+    const icon = groupIcon(g.id);
     h += `<div class="ghead ${ring}" data-g="${esc(g.id)}"><span class="chev">${closed?'▶':'▼'}</span>${icon}<span>${esc(g.id)}</span><span class="n">${g.count}</span>${STATUS_WAIT[g.id]?`<span class="why">${STATUS_WAIT[g.id]}</span>`:''}<span class="agents">${g.agents} mit Chat</span></div>`;
     if (!closed) g.rows.forEach(r => h += rowHtml(r));
   });
@@ -516,7 +528,7 @@ function renderTriage() {
   let l = `<div class="tlist" id="tlist" style="width:${S.triW}px"><div class="tlhead">${esc(view().name)}<span class="n">${total()}</span><span class="sp"><button class="btn ghost icon" title="Liste kopieren">⧉</button></span></div><div class="tlscroll" id="tls">`;
   groups().forEach(g => {
     const key = S.view+'|'+g.id, closed = !!S.collapsed[key];
-    const icon = view().group==='status' ? statusIcon(g.id) : (PROJ_ICON[g.id]||'▦');
+    const icon = groupIcon(g.id);
     l += `<div class="tg" data-g="${esc(g.id)}"><span class="chev">${closed?'▶':'▼'}</span>${icon}${esc(g.id)}<span class="n">${g.count}</span>${STATUS_WAIT[g.id]?'<span style="color:var(--awaiting);font-size:11px">für dich</span>':''}</div>`;
     if (!closed) g.rows.forEach(r => { const x=T[r.k];
       l += `<div class="tr ${r.k===S.cur?'cur':''}" data-k="${r.k}">${r.depth?'<span class="ind"></span>':''}${prioIcon(x.p)}<span class="key">${r.k}</span><span class="title">${x.orphan?'<span style="color:var(--ink3)">↳ </span>':''}${esc(x.t)}</span>${x.c?`<span class="cn"><span class="dot ${x.c[1]}"></span><b>${x.c[0]}</b></span>`:''}</div>`; });
@@ -591,7 +603,7 @@ function caption() {
   if (lw && lw <= 900) drop.push('Datum'); if (lw && lw <= 780) drop.push('Projekt'); if (lw && lw <= 660) drop.push('weitere Labels'); if (lw && lw <= 560) drop.push('Person');
   if (S.screen==='triage') return `<b>Triage:</b> links dieselbe Liste schmal (${S.triW} pt) mit den Gruppen der Ansicht, Zahl und Chat-Punkt; <b>${S.cur}</b> ist markiert. In der Mitte die Eigenschaften als Zeile über dem Titel, rechts der Board-Chat mit 40 %. Esc oder „‹ Liste“ führt auf dieselbe Zeile zurück.`;
   if (S.mode==='board') return '<b>Board:</b> dieselben Tickets der Ansicht in Status-Spalten, wie heute. Die Liste ist der Standard; Board wählt man im Kopf.';
-  return `<b>Liste ${lw} pt breit.</b> ${drop.length?'Weggefallen: '+drop.join(', ')+'.':'Alle Spalten haben Platz.'} Titel und Chat bleiben immer.` + (S.view==='work'?' Diese Ansicht ist in Linear nach Vorhaben gruppiert (Frage 2).':'') + (S.view==='next'?' WM8-15 steht mit „↳ WM8-91“ allein, weil sein Eltern-Ticket nicht in der Ansicht ist (Frage 3).':'');
+  return `<b>Liste ${lw} pt breit.</b> ${drop.length?'Weggefallen: '+drop.join(', ')+'.':'Alle Spalten haben Platz.'} Titel und Chat bleiben immer.` + (['work','wait'].includes(S.view)?' Diese Ansicht ist in Linear nach Vorhaben gruppiert (Frage 2).':'') + (S.view==='ready'?' Diese Ansicht ist in Linear nach Priorität gruppiert (Frage 2).':'') + (S.view==='next'?' WM8-15 steht mit „↳ WM8-91“ allein, weil sein Eltern-Ticket nicht in der Ansicht ist (Frage 3).':'');
 }
 
 /* ---------- Zusammensetzen ---------- */
@@ -604,7 +616,7 @@ function render() {
     const btn = $('#morebtn'), r = btn.getBoundingClientRect(), b = $('#body').getBoundingClientRect();
     const items = VIEWS.filter(v=>v.more || S.hidden.includes(v.id));
     const m = document.createElement('div'); m.className='menu'; m.style.left=(r.left-b.left)+'px'; m.style.top=(r.bottom-b.top+4)+'px';
-    m.innerHTML = items.map((v,i)=>`<button data-v="${v.id}" class="${S.menuIdx===i?'ring':''}">${esc(v.name)}<small>${Object.keys(T).filter(v.f).length}</small></button>`).join('') + '<button disabled style="color:var(--ink3)">Weitere Favoriten aus Linear …</button>';
+    m.innerHTML = items.map((v,i)=>`<button data-v="${v.id}" class="${S.menuIdx===i?'ring':''}">${esc(v.name)}<small>${Object.keys(T).filter(v.f).length}</small></button>`).join('') + '<button disabled style="color:var(--ink3)">Laufende Vorhaben · Ansicht über Vorhaben, kein Reiter</button>';
     $('#body').appendChild(m);
     m.querySelectorAll('button[data-v]').forEach(x=>x.onclick=()=>{ S.view=x.dataset.v; S.menu=false; S.sel=null; S.hidden=[]; log(`Ansicht <b>${esc(view().name)}</b> aus „Mehr“.`); render(); });
   }
