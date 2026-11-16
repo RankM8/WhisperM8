@@ -16,6 +16,7 @@ extension AgentChatsView {
     func ticketsModeChanged(_ active: Bool) {
         syncActiveAgentChat()
         if active { refreshTicketTeams() }
+        controllerLegendMayHaveChanged()
         guard !active, let sessionID = selectedSessionID else { return }
         if let session = workspaceModel.session(id: sessionID),
            selectedProjectID != session.projectID {

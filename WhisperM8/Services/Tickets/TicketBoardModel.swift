@@ -182,7 +182,7 @@ enum TicketAgentFilter: String, Equatable, CaseIterable {
     case withoutAgent
 }
 
-enum TicketPersonFilter: Equatable {
+enum TicketPersonFilter: Hashable {
     case all
     case unassigned
     case person(id: String)

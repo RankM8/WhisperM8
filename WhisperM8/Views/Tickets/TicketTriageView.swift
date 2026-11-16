@@ -223,6 +223,7 @@ private struct TicketTriageBar: View {
             if let back = actions.back {
                 // Rückweg zu den Chats (WM8-124), immer ganz zu sehen.
                 TicketsBackLinkButton(link: back, compact: compact)
+                    .ticketHeaderRing(.back, model: model)
                 Rectangle().fill(AgentTheme.border).frame(width: 1, height: 16)
             }
             // Immer sichtbar: Im schmalen Fenster fällt die Liste samt ihrem
@@ -236,6 +237,7 @@ private struct TicketTriageBar: View {
             }
             .help(Text("Back to the board (Esc)"))
             .accessibilityLabel(Text("Back to the board"))
+            .ticketHeaderRing(.closeTriage, model: model)
             Rectangle().fill(AgentTheme.border).frame(width: 1, height: 16)
             Button { model.previousInTriage() } label: { Image(systemName: "chevron.up") }
                 .disabled(!triage.hasPrevious)
@@ -262,9 +264,11 @@ private struct TicketTriageBar: View {
             Spacer(minLength: 8)
             if model.detail != nil {
                 TicketCopyButton(kind: .link, copied: model.copied, iconOnly: compact) { model.copyLink() }
+                    .ticketHeaderRing(.copyLink, model: model)
             }
             if model.detail != nil, let windowID = model.windowID {
                 BoardChatHandOffButton(windowID: windowID)
+                    .ticketHeaderRing(.handOff, model: model)
             }
             if let content = model.detail {
                 if let url = content.url {
@@ -279,6 +283,7 @@ private struct TicketTriageBar: View {
                     .fixedSize()
                     .help(Text("Open in Linear"))
                     .accessibilityLabel(Text("Open in Linear"))
+                    .ticketHeaderRing(.openInLinear, model: model)
                 }
             }
             Button { actions.refresh(); model.reloadComments() } label: {
@@ -287,6 +292,7 @@ private struct TicketTriageBar: View {
             .disabled(load.isLoading)
             .help(Text("Refresh"))
             .accessibilityLabel(Text("Refresh"))
+            .ticketHeaderRing(.refresh, model: model)
         }
         .buttonStyle(.plain)
         .font(.system(size: 12, weight: .medium))

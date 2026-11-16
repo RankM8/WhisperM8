@@ -74,8 +74,15 @@ extension AgentChatsView {
             if model.triage != nil { model.reloadComments() }
             return .done
         }
+        // Kopf und Filter (Paket 3d): Bewegen wählt nur, Kreuz schaltet, Kreis zurück.
+        let header = TicketHeaderContext(hasBack: true, hasBoardChat: BoardChatInputs.shared.boardChat(in: windowID) != nil)
+        if model.headerFocus != nil, let outcome = performHeaderCommand(command, model: model, header: header) {
+            return outcome
+        }
         guard controller.phase == .ready else {
             if case .move(.left) = command { return .leftEdge }
+            // Auch ohne Stand: ▲ in den Kopf (Filter, Aktualisieren).
+            if case .move(.up) = command { return model.enterHeader(header) ? .done : .rejected }
             return .rejected
         }
         // Erster Druck ohne Auswahl: die Start-Auswahl zeigen, noch nicht bewegen.
@@ -84,11 +91,20 @@ extension AgentChatsView {
         case .move(let direction), .repeatMove(let direction):
             if !hadSpot, direction != .left {
                 model.ensureControllerSelection(preferringChat: selectedSessionID)
-                return controllerHasSelection(model) ? .done : .nothing
+                if controllerHasSelection(model) { return .done }
+                // Leeres Board (etwa durch Filter): ▲ führt trotzdem in den Kopf,
+                // sonst käme man an die Filter nicht mehr heran.
+                if direction == .up, case .move = command { return model.enterHeader(header) ? .done : .nothing }
+                return .nothing
             }
             let outcome = model.controllerMove(TicketBoardMove(direction))
-            // Gehalten rutscht die Auswahl nie über den Rand in den Board-Chat.
+            // Gehalten rutscht die Auswahl nie über den Rand in den Board-Chat
+            // und nie in den Kopf.
             if case .repeatMove = command, outcome == .rightEdge { return .nothing }
+            if outcome == .topEdge {
+                if case .move = command { return model.enterHeader(header) ? .done : .nothing }
+                return .nothing
+            }
             return outcome
         case .open:
             if model.triage != nil {
@@ -146,6 +162,32 @@ extension AgentChatsView {
         }
     }
 
+    /// Befehle, solange die Auswahl im Kopf steht. `nil`: wie sonst auch
+    /// (L1/R1, Link, Linear …).
+    private func performHeaderCommand(_ command: ControllerTicketCommand, model: TicketBoardViewModel,
+                                      header: TicketHeaderContext) -> ControllerTicketOutcome? {
+        switch command {
+        case .move(let direction), .repeatMove(let direction):
+            return model.headerMove(TicketBoardMove(direction), header)
+        case .open:
+            switch model.headerActivate(header) {
+            case .done: return .done
+            case .rejected: return .rejected
+            case .goBack: return .goBack
+            case .copyList: return performTicketCommand(.copyList)
+            case .refresh: return performTicketCommand(.refresh)
+            case .copyLink: return performTicketCommand(.copyLink)
+            case .handOff: return performTicketCommand(.handOff)
+            case .openInLinear: return performTicketCommand(.openInLinear)
+            }
+        case .back:
+            model.headerBack()
+            return .done
+        default:
+            return nil
+        }
+    }
+
     private func controllerHasSelection(_ model: TicketBoardViewModel) -> Bool {
         switch model.mode {
         case .board: return TicketBoardSelection.place(of: model.boardSpot, in: model.boardColumns) != nil
@@ -158,6 +200,27 @@ extension AgentChatsView {
     /// Ziel warten Kreuz und Kreis die Ankunftssperre ab.
     private func openChatFromTicket(_ chatID: UUID) -> ControllerTicketOutcome {
         performCommand(.selectSession(chatID)) ? .done : .rejected
+    }
+
+    /// Projekt gewechselt: Diktat-Ziel nachziehen und die Leiste neu lesen.
+    func selectedProjectChanged() {
+        syncActiveAgentChat()
+        controllerLegendMayHaveChanged()
+    }
+
+    /// Ort per Maus oder Tastatur gewechselt (Ticket-Modus, Projekt, Board/
+    /// Liste, Triage auf oder zu): Die Leiste des Controllers liest neu. Sonst
+    /// stand dort bis zum nächsten Statuswechsel eines Chats der alte Ort
+    /// (WM8-91, Bild vom 16.11.2026: das Team eines anderen Boards unter diesem).
+    /// Kosten: ein Schnappschuss des Fensters je Wechsel, nie im Takt.
+    func controllerLegendMayHaveChanged() {
+        guard let feedback = ControllerRuntime.shared.feedback else { return }
+        if isTicketsModeActive {
+            TicketBoardControllers.shared.controller(for: windowID).viewModel.onControllerViewChange = { [weak feedback] in
+                feedback?.refresh()
+            }
+        }
+        feedback.refresh()
     }
 
     /// Zeilen des Reiters „Tickets“. Die Zahl „wartet auf dich“ steht nur

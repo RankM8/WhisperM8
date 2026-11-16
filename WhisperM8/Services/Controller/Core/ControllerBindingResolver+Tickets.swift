@@ -33,13 +33,19 @@ extension ControllerBindingResolver {
         if let chat = state.boardChat { return ticketsBoardChat(gesture, chat: chat) }
         switch state.place.view {
         case .empty:
-            // Kein Stand zum Bedienen: ◀ führt in die Seitenleiste, der Rest ruht.
+            // Kein Stand zum Bedienen: ◀ führt in die Seitenleiste, ▲ in den
+            // Kopf (Filter zurücksetzen, Aktualisieren, Paket 3d), der Rest ruht.
             if case .move(.left, _, false) = gesture { return .enterList(step: 0) }
+            if case .move(.up, _, false) = gesture { return .ticket(.move(.up)) }
             return nil
         case .board, .list:
             return ticketsBoard(gesture, state: state)
         case .triage, .chatLine:
             return ticketsTriage(gesture, state: state)
+        case .header:
+            return ticketsHeader(gesture, state: state)
+        case .headerPicker:
+            return ticketsHeaderPicker(gesture)
         }
     }
 
@@ -47,9 +53,11 @@ extension ControllerBindingResolver {
     private static func ticketsBoard(_ gesture: ControllerGesture, state: ControllerTicketState) -> ControllerAction? {
         if let shared = ticketsShared(gesture, state: state) { return shared }
         switch gesture {
-        // Gehalten seitwärts: bewegt, rutscht am rechten Rand aber nie in den
-        // Board-Chat (Paket 3a). Hinein nur mit einem einzelnen Druck.
-        case let .move(direction, _, true) where direction == .right: return .ticket(.repeatMove(direction))
+        // Gehalten nach rechts oder oben: bewegt, rutscht am Rand aber nie in
+        // den Board-Chat (Paket 3a) oder den Kopf (Paket 3d). Hinein nur mit
+        // einem einzelnen Druck.
+        case let .move(direction, _, true) where direction == .right || direction == .up:
+            return .ticket(.repeatMove(direction))
         case let .move(direction, _, _): return .ticket(.move(direction))
         case .press(.cross): return state.place.hasTicket ? .ticket(.open) : .ticket(.move(.down))
         // Kreis tut auf dem Board nichts (zweimal Kreis aus der Triage wirft
@@ -68,6 +76,8 @@ extension ControllerBindingResolver {
         case let .move(direction, _, isRepeat):
             // Seitwärts ein Druck, ein Schritt: Halten springt nicht durch Liste und Chats.
             if isRepeat, direction == .left || direction == .right { return nil }
+            // Gehalten nach oben: durch die Liste, aber nie in den Kopf (Paket 3d).
+            if isRepeat, direction == .up { return .ticket(.repeatMove(.up)) }
             return .ticket(.move(direction))
         case .press(.cross):
             guard onChatLine else { return .rejected }
@@ -110,6 +120,32 @@ extension ControllerBindingResolver {
             // Chat starten (über den Kopf der Spalte), Chatwechsel, Liste,
             // Raster, Kachel groß: nicht aus dem Board-Chat heraus.
             return nil
+        }
+    }
+
+    /// Paket 3d: Auswahl im Kopf. Stick und Steuerkreuz wählen nur (auch
+    /// gehalten), Kreuz schaltet, Kreis zurück auf die Karte. L1/R1, Link,
+    /// Linear, Aktualisieren und → Jarvis wie auf dem Board.
+    private static func ticketsHeader(_ gesture: ControllerGesture, state: ControllerTicketState) -> ControllerAction? {
+        if let shared = ticketsShared(gesture, state: state) { return shared }
+        switch gesture {
+        case let .move(direction, _, _): return .ticket(.move(direction))
+        case .press(.cross): return .ticket(.open)
+        case .tap(.circle): return .ticket(.back)
+        case .holdBegan(.circle): return .rejected
+        default: return nil
+        }
+    }
+
+    /// Paket 3d, Liste der Bereiche (Entscheidung 16.11.2026): ▲ ▼ wählen,
+    /// Kreuz übernimmt, Kreis schließt ohne Änderung. Sonst nichts.
+    private static func ticketsHeaderPicker(_ gesture: ControllerGesture) -> ControllerAction? {
+        switch gesture {
+        case let .move(direction, _, _) where direction == .up || direction == .down: return .ticket(.move(direction))
+        case .press(.cross): return .ticket(.open)
+        case .tap(.circle): return .ticket(.back)
+        case .holdBegan(.circle): return .rejected
+        default: return nil
         }
     }
 

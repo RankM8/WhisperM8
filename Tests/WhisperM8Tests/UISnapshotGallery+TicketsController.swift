@@ -114,6 +114,35 @@ extension UISnapshotGallery {
             Fixture(name: "tickets-controller-leiste-chat-zurueck", size: legendSize) { chatLegend() },
             Fixture(name: "tickets-controller-leiste-board-mit-chat", size: legendSize) { boardChatLegend(focused: false) },
             Fixture(name: "tickets-controller-leiste-board-chat", size: legendSize) { boardChatLegend(focused: true) },
+            // Paket 3d: Auswahl im Kopf; dazu Bild vom 16.11.2026 nachgestellt:
+            // Board mit Board-Chat, Xbox-Tasten, schmale Leiste.
+            Fixture(name: "tickets-controller-leiste-kopf", size: legendSize) {
+                var place = ControllerTicketsPlace(projectID: wm8, team: "WM8")
+                place.view = .header
+                let context = ControllerContext.tickets(ControllerTicketState(
+                    place: place, backTarget: ControllerBackTarget(kind: .chat, title: "Jarvis: Supervisor WhisperM8")))
+                return AnyView(VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    ControllerLegendBar(target: .make(context: context, chatTitle: nil),
+                                        entries: ControllerLegend.entries(for: context))
+                })
+            },
+            Fixture(name: "tickets-controller-leiste-xbox-schmal", size: CGSize(width: 900, height: 60)) {
+                var place = ControllerTicketsPlace(projectID: wm8, team: "WM8")
+                place.view = .board
+                place.hasTicket = true
+                place.boardChatID = UUID()
+                place.boardChatName = "Jarvis"
+                let context = ControllerContext.tickets(ControllerTicketState(
+                    place: place, backTarget: ControllerBackTarget(kind: .workspace, title: "WM8 Aktiv")))
+                let traits = ControllerInputTraits(family: .xbox)
+                return AnyView(VStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    ControllerLegendBar(target: .make(context: context, chatTitle: nil),
+                                        entries: ControllerLegend.entries(for: context, traits: traits))
+                }
+                .environment(\.controllerFamily, .xbox))
+            },
         ]
     }
 
@@ -162,6 +191,33 @@ extension UISnapshotGallery {
             // Hoch genug, dass „N weitere“ unter den acht Karten zu sehen ist.
             Fixture(name: "tickets-controller-board-weitere", size: CGSize(width: 1340, height: 1760)) {
                 screen(place(.board)) { $0.setBoardSpot(.more(column: "s0")) }
+            },
+            // Paket 3d: Auswahl im Kopf (Ring am Filter „Mit Agent“), die Liste
+            // der Bereiche unter „Alle Bereiche“ und der Kopf der Triage.
+            Fixture(name: "tickets-controller-kopf-filter", size: size) {
+                screen(place(.header)) { model in
+                    let header = TicketHeaderContext(hasBack: true, hasBoardChat: false)
+                    model.enterHeader(header)
+                    for _ in 0..<3 { _ = model.headerMove(.right, header) }
+                }
+            },
+            Fixture(name: "tickets-controller-bereiche-liste", size: size) {
+                screen(place(.headerPicker)) { model in
+                    let header = TicketHeaderContext(hasBack: true, hasBoardChat: false)
+                    model.enterHeader(header)
+                    _ = model.headerMove(.right, header)
+                    _ = model.headerActivate(header)
+                    _ = model.headerMove(.down, header)
+                }
+            },
+            Fixture(name: "tickets-controller-kopf-triage", size: size) {
+                screen(place(.header)) { model in
+                    model.openFromLane("WM8-81")
+                    model.setComments(.loaded(comments), ticketID: "id-81")
+                    let header = TicketHeaderContext(hasBack: true, hasBoardChat: false)
+                    model.enterHeader(header)
+                    _ = model.headerMove(.right, header)
+                }
             },
             Fixture(name: "tickets-controller-triage", size: size) {
                 screen(place(.triage, chats: true)) {

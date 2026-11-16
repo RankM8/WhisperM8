@@ -84,7 +84,8 @@ extension TicketBoardViewModel {
             case .ticket(let step):
                 guard let triage else { return .nothing }
                 let moved = step > 0 ? TicketBoardSelection.next(triage) : TicketBoardSelection.previous(triage)
-                guard moved != triage else { return .nothing }
+                // ▲ auf dem ersten Ticket der Liste: in den Kopf (Paket 3d).
+                guard moved != triage else { return step < 0 ? .topEdge : .nothing }
                 setTriage(moved)
                 return .done
             case .focus(let focus):
@@ -105,6 +106,7 @@ extension TicketBoardViewModel {
             let step = TicketBoardSelection.step(boardSpot, direction, in: boardColumns)
             if step.edge == .left { return .leftEdge }
             if step.edge == .right { return .rightEdge }
+            if step.edge == .top { return .topEdge }
             guard step.spot != boardSpot else { return .nothing }
             setBoardSpot(step.spot)
             return .done
@@ -112,6 +114,7 @@ extension TicketBoardViewModel {
             let step = TicketBoardSelection.stepInList(selectedKey, direction, keys: listKeys)
             if step.edge == .left { return .leftEdge }
             if step.edge == .right { return .rightEdge }
+            if step.edge == .top { return .topEdge }
             guard step.key != selectedKey else { return .nothing }
             selectedKey = step.key
             return .done
@@ -187,6 +190,8 @@ extension TicketBoardViewModel {
 
     /// Was der Controller über die Ansicht wissen muss.
     func controllerView(isReady: Bool) -> ControllerTicketView {
+        // Der Kopf geht vor, auch bevor ein Stand da ist (Aktualisieren, Filter).
+        if headerFocus != nil { return projectPickerIndex == nil ? .header : .headerPicker }
         guard isReady else { return .empty }
         if triage != nil { return focusedChatLine == nil ? .triage : .chatLine }
         switch mode {

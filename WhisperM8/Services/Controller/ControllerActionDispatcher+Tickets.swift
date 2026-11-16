@@ -43,6 +43,13 @@ extension ControllerActionDispatcher {
             perform(.enterList(step: 0), in: ui.context)
         case .rightEdge:
             enterBoardChat()
+        case .topEdge:
+            // Wandelt das Fenster selbst in den Einstieg in den Kopf um.
+            break
+        case .goBack:
+            // „← Chats“ im Kopf (Paket 3d): derselbe Weg wie L2 getippt, mit
+            // Ankunftssperre im Ziel-Chat.
+            perform(.lastChat, in: ui.context)
         }
     }
 

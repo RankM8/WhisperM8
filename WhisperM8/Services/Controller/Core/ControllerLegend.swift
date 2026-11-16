@@ -40,6 +40,8 @@ enum ControllerLegendLabel: String, CaseIterable, Sendable {
     case backToTicketList, chooseChat, openChatLeavesTickets, backIntoBoard
     // Board-Chat (WM8-91 Paket 3a): ▶ am rechten Rand hinein, Stick ◀ zurück aufs Ticket.
     case intoBoardChat, leaveBoardChat
+    /// ▲ in den Kopf des Boards: Filter, Board/Liste, „← Chats“ (Paket 3d).
+    case boardFilters
     /// Dreieck „→ Jarvis“ (Paket 3b): Name in `ControllerLegendEntry.name`.
     case handOffToBoardChat
 }
@@ -358,12 +360,29 @@ enum ControllerLegend {
             entry: ControllerLegendEntry(inputs: [.button(.dpadRight)], label: .intoBoardChat,
                                          name: state.place.boardChatName),
             probes: [.move(.right, source: .dpad, isRepeat: false)])]
+        // ▲ in den Kopf (Paket 3d): Filter, Board/Liste, „← Chats“.
+        let filters = candidate(.button(.dpadUp), .boardFilters, [.move(.up, source: .dpad, isRepeat: false)])
         switch state.place.view {
         case .empty:
-            return [menu, candidate(.button(.r3), .refresh, [.tap(.r3)])] + back + [layers]
+            return [filters, menu, candidate(.button(.r3), .refresh, [.tap(.r3)])] + back + [layers]
         case .board, .list:
-            return [stick, candidate(.button(.cross), .open, [.press(.cross)])] + intoChat + toBoardChat
+            return [stick, candidate(.button(.cross), .open, [.press(.cross)]), filters] + intoChat + toBoardChat
                 + [link, bumpers, linear, refresh, menu] + back + [layers]
+        case .header:
+            return [
+                ControllerLegend.Candidate(
+                    entry: ControllerLegendEntry(inputs: [.leftStick, .dpad], label: .move),
+                    probes: ControllerDirection.allCases.map { .move($0, source: .leftStick, isRepeat: false) }),
+                candidate(.button(.cross), .select, [.press(.cross)]),
+                candidate(.button(.circle), .back, [.tap(.circle)]),
+            ] + toBoardChat + [bumpers] + back + [layers]
+        case .headerPicker:
+            return [
+                ControllerLegend.Candidate(
+                    entry: ControllerLegendEntry(inputs: [.leftStick, .dpad], label: .move), probes: verticalMoves),
+                candidate(.button(.cross), .select, [.press(.cross)]),
+                candidate(.button(.circle), .close, [.tap(.circle)]),
+            ]
         case .triage:
             let chats: [Candidate] = state.place.ticketHasChats
                 ? [candidate(.button(.dpadRight), .chatsOnTicket, [.move(.right, source: .dpad, isRepeat: false)])] : []

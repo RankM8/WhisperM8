@@ -859,7 +859,7 @@ struct AgentChatsView: View {
         }
         .onChange(of: isTicketsModeActive) { _, active in ticketsModeChanged(active) }
         .onChange(of: selectedProjectID) { _, _ in
-            syncActiveAgentChat()
+            selectedProjectChanged()
         }
         .onChange(of: workspace) { _, _ in
             // Laeuft bei JEDER Workspace-Aenderung, pro offenem Fenster, und
