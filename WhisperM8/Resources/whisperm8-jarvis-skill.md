@@ -651,9 +651,12 @@ Hat das Projekt ein Ticket-System, ist es die Übersicht, in der der User
 nachsieht, was läuft und was auf ihn wartet. Das Board (6) zeigt die Chats,
 die Tickets zeigen die Arbeit. Du hältst beides deckungsgleich.
 
-- **Welches System: zuerst die App fragen.** Zeigt `whisperm8 tickets board`
-  (ohne `--team`) ein Team für den Projektordner, ist das das Ticket-System
-  des Projekts, und `whisperm8 tickets` (Skill `tickets`) ist das Werkzeug.
+- **Welches System: zuerst die App fragen.** Ist ein Team für genau diesen
+  Projektordner eingetragen (`whisperm8 tickets setup` ohne Angaben zeigt
+  „Zuordnung: <Ordner> → <Team>“), ist das das Ticket-System des Projekts,
+  und `whisperm8 tickets` (Skill `tickets`) ist das Werkzeug. `tickets board`
+  allein beweist das nicht: Gibt es nur ein Team, nimmt es dieses auch in
+  einem fremden Ordner.
   Nennen Projekt-Anleitung oder Gedächtnis etwas anderes (altes System,
   anderer Befehl zum Verknüpfen), ist das veraltet: Du folgst der App und
   meldest den Hinweis dem User zur Korrektur. Nur wenn die App kein Team

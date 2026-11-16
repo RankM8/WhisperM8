@@ -94,9 +94,10 @@ whisperm8 tickets list --status "Merge-bereit"
   `whisperm8 tickets link ABC-12 --chat <Anfang der Chat-ID>`; das geht auch, bevor die App den neuen Chat
   gespeichert hat. Verlass dich nicht darauf, dass der Chat es selbst tut. `--chat` gilt ebenso bei `done`,
   `unlink`, `mine` (IDs aus `whisperm8 chats list`).
-- **Welches System:** Kennt die App ein Team für den Projektordner (`tickets board` ohne `--team`), gilt dieses
-  Werkzeug, auch wenn Anleitung oder Gedächtnis des Projekts noch ein älteres System nennen. Den alten Hinweis
-  meldest du dem Nutzer zur Korrektur.
+- **Welches System:** Ist ein Team für genau diesen Projektordner eingetragen (`tickets setup` ohne Angaben zeigt
+  „Zuordnung: <Ordner> → <Team>“), gilt dieses Werkzeug, auch wenn Anleitung oder Gedächtnis des Projekts noch ein
+  älteres System nennen. Den alten Hinweis meldest du dem Nutzer zur Korrektur. `tickets board` allein beweist es
+  nicht: Bei nur einem Team nimmt es dieses auch in einem fremden Ordner.
 - **Nach dem Merge:** `whisperm8 tickets status ABC-12 Done`, dann den Chat stoppen (wie oben).
 - **Neue Tickets** legt der Supervisor an:
   `whisperm8 tickets new "Titel" --description @text.md --project "Vorhaben" --priority high --labels <Label>`.
