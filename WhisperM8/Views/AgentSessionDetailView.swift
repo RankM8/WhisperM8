@@ -192,11 +192,13 @@ struct AgentSessionDetailView: View {
                     // rechts als Überlagerung, damit sich die Höhe des Terminals
                     // nie ändert und Claudes Feld links frei bleibt; eigene
                     // Ansicht, damit nur sie auf den Hinweis reagiert.
-                    .overlay(alignment: .topTrailing) {
-                        QueueHoldStrip(sessionID: session.id)
-                            .padding(.top, QueueHoldStripContent.topInset)
-                            .padding(.trailing, QueueHoldStripContent.trailingInset)
-                            .padding(.leading, QueueHoldStripContent.leadingInset)
+                    // Ein Klick auf die Pille springt ans Ende des Terminals und
+                    // lässt die Warteschlange gleich neu nachsehen.
+                    .overlay {
+                        QueueHoldStrip(sessionID: session.id, onActivate: { [weak controller] in
+                            controller?.scrollHistoryToBottom()
+                            AgentPromptQueueDelivery.shared.noteReturnedToBottom(session.id)
+                        })
                     }
             } else if session.isTerminal {
                 // Terminal ohne laufenden Controller (App-Neustart oder Tab

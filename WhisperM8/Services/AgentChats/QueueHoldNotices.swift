@@ -68,6 +68,26 @@ final class QueueHoldNotices {
         }
     }
 
+    /// Kurzfassung für enge Stellen (Board-Spalte, schmale Kachel), z. B.
+    /// „1 wartet · Text im Feld“: Der Grund bleibt lesbar.
+    nonisolated static func shortText(for notice: Notice) -> String {
+        switch (notice.reason, notice.count == 1) {
+        case (.textInField, true):
+            return String(localized: "1 waiting · text in field")
+        case (.textInField, false):
+            return String(localized: "\(notice.count) waiting · text in field")
+        case (.viewOpen, true):
+            return String(localized: "1 waiting · view open")
+        case (.viewOpen, false):
+            return String(localized: "\(notice.count) waiting · view open")
+        }
+    }
+
+    /// Was ein Klick auf die Pille tut (Tooltip und Bedienungshilfe).
+    nonisolated static var clickHint: String {
+        String(localized: "Click to jump to the end of the terminal.")
+    }
+
     /// Zweite Zeile: was die Meldung frei macht.
     nonisolated static func hint(for notice: Notice) -> String {
         switch (notice.reason, notice.fieldReadable) {
