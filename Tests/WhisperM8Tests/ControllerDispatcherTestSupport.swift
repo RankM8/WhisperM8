@@ -43,6 +43,9 @@ final class ControllerTerminalSpy: ControllerTerminalControlling {
         texts.append((text, submit))
         return true
     }
+    /// Offene Ansicht je Chat, wie `composerFieldForSendCheck` sie meldet (WM8-123).
+    var openViews: [UUID: String] = [:]
+    func openViewForSending(in sessionID: UUID) -> String? { openViews[sessionID] }
     private(set) var questionTexts: [String] = []
     var questionTextSucceeds = true
     func sendQuestionText(_ text: String, to sessionID: UUID) -> Bool {

@@ -97,6 +97,12 @@ protocol ControllerTerminalControlling: AnyObject {
     @discardableResult func sendQuestionText(_ text: String, to sessionID: UUID) -> Bool
     /// Der eben gesendete Menü-Befehl öffnet eine Auswahlliste der CLI.
     func noteChoiceListOpened(in sessionID: UUID)
+    /// Offene Ansicht von Claude statt des Eingabefelds, abgelesen wie bei
+    /// `send` und Warteschlange (`composerFieldForSendCheck`, WM8-123): die
+    /// Ansichten des Controller-Lesers und dazu Agent-Liste, `/config`,
+    /// Verlaufssuche. Liest den Bildschirm: nur im Moment einer Aktion, die
+    /// Text oder Enter schickt, nie je Schnappschuss. `nil` bei Codex und Shell.
+    func openViewForSending(in sessionID: UUID) -> String?
 }
 
 @MainActor

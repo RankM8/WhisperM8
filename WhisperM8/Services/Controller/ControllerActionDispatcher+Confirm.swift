@@ -26,7 +26,9 @@ extension ControllerActionDispatcher {
     private func finishSettledConfirm(_ sessionID: UUID) {
         guard chatInputSessionID == sessionID,
               let state = Self.inputChatState(ControllerContextResolver.context(for: snapshot())),
-              state.acceptsKeys, ControllerBindingResolver.claudePromptVisible(state)
+              state.acceptsKeys, ControllerBindingResolver.claudePromptVisible(state),
+              // Die Agent-Liste hält der Controller-Leser für ein leeres Feld (WM8-123).
+              !unknownViewBlocksKey(.enter, to: sessionID)
         else { return playHaptic(.rejected) }
         _ = terminals.sendKey(.enter, to: sessionID)
     }

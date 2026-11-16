@@ -92,6 +92,10 @@ final class LiveControllerTerminals: ControllerTerminalControlling {
         controller(for: sessionID)?.sendQuestionText(text) ?? false
     }
 
+    func openViewForSending(in sessionID: UUID) -> String? {
+        controller(for: sessionID)?.composerFieldForSendCheck().openView
+    }
+
     func noteChoiceListOpened(in sessionID: UUID) {
         controller(for: sessionID)?.noteControllerChoiceListOpened(
             status: AgentSessionStatusCoordinator.shared.statusStore.status(for: sessionID))

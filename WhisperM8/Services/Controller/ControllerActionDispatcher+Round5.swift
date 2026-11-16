@@ -17,6 +17,10 @@ extension ControllerActionDispatcher {
               let clip = clipboard.newest() else {
             return playHaptic(.rejected)
         }
+        // Offene Ansicht (WM8-123): Der Text landete in ihr, nicht im Feld
+        // (in `/config` etwa im Filter, in der Agent-Liste im Feld für eine
+        // neue Hintergrund-Sitzung).
+        if openViewBlocksSending(to: sessionID) { return playHaptic(.rejected) }
         if terminal.status == .awaitingInput {
             guard case .text = clip.kind else { return playHaptic(.rejected) }
             clipboard.loadText(clip.id) { [weak self] text in
