@@ -14,9 +14,9 @@ struct TicketBoardPresentation: Equatable {
     var groups: [TicketListGroup]
     /// Ansicht, nach der gruppiert ist; `nil` = alle offenen Tickets nach Status.
     var view: TicketView?
-    var counts: TicketFilterCounts
-    /// Projekte zur Auswahl, alphabetisch; `""` (ohne Projekt) steht am Ende.
-    var projects: [String]
+    /// Wie viele offene Tickets des ganzen Teams auf den Nutzer warten, gleich
+    /// welche Ansicht gezeigt wird (Board-Wahl des Controllers).
+    var teamWaitingCount: Int
     var looseChats: [TicketLooseChat]
     var supervisors: [TicketChat]
     var visibleCount: Int
@@ -26,23 +26,20 @@ struct TicketBoardPresentation: Equatable {
     var keyIndex = TicketKeyIndex()
 
     /// Ohne Abzug: drei leere Spalten, keine Gruppen.
-    static let empty = make(model: TicketBoardModel(entries: [], looseChats: [], supervisors: []), filter: .all)
+    static let empty = make(model: TicketBoardModel(entries: [], looseChats: [], supervisors: []))
 
-    static func make(model: TicketBoardModel, filter: TicketBoardFilter) -> TicketBoardPresentation {
+    /// Gefiltert wird bei Linear über die Ansicht (WM8-125); das Board filtert nicht selbst.
+    static func make(model: TicketBoardModel) -> TicketBoardPresentation {
         // Erledigte Tickets stehen nur für die Spur „zuletzt an …“ im Abzug.
         let open = model.entries.filter { !$0.ticket.status.kind.isClosed }
-        let visible = filter.apply(to: open)
-        let names = Set(open.map { $0.ticket.project ?? "" })
         return TicketBoardPresentation(
-            lanes: TicketBoardLanes.make(statuses: model.statuses, open: open, visible: visible, rule: model.rule,
-                                         filterActive: filter != .all),
-            groups: TicketListGrouping.make(entries: visible, view: model.view, rule: model.rule),
+            lanes: TicketBoardLanes.make(statuses: model.statuses, open: open, visible: open, rule: model.rule),
+            groups: TicketListGrouping.make(entries: open, view: model.view, rule: model.rule),
             view: model.view,
-            counts: TicketFilterCounts.make(entries: open, filter: filter),
-            projects: sorted(Array(names)),
+            teamWaitingCount: model.teamWaitingCount,
             looseChats: model.looseChats,
             supervisors: model.supervisors,
-            visibleCount: visible.count,
+            visibleCount: open.count,
             rule: model.rule)
             .indexed()
     }
@@ -68,13 +65,6 @@ struct TicketBoardPresentation: Equatable {
         }
         copy.keyIndex = TicketKeyIndex(storage: storage)
         return copy
-    }
-
-    private static func sorted(_ projects: [String]) -> [String] {
-        projects.sorted { lhs, rhs in
-            if lhs.isEmpty != rhs.isEmpty { return rhs.isEmpty }
-            return lhs.localizedStandardCompare(rhs) == .orderedAscending
-        }
     }
 }
 
@@ -108,6 +98,9 @@ final class TicketBoardViewModel {
     var activeViewID: String?
     /// Die gezeigte Ansicht lädt noch (erster Abruf ihrer Tickets).
     var isViewLoading = false
+    /// Die gezeigte Ansicht kam nicht und es gibt keinen gespeicherten Stand
+    /// (etwa in Linear gelöscht): „Ansicht nicht verfügbar“ statt „lädt“.
+    var isViewUnavailable = false
     /// Zugeklappte Gruppen, je Ansicht (`<Ansicht>|<Gruppe>`). Gilt je Fenster, nicht gespeichert.
     var collapsedGroups: Set<String> = []
     /// Ein anderer Reiter wurde gewählt; der Controller holt seine Tickets.
@@ -222,6 +215,7 @@ final class TicketBoardViewModel {
         catalog = .empty
         activeViewID = nil
         isViewLoading = false
+        isViewUnavailable = false
         collapsedGroups = []
         model = TicketBoardModel(entries: [], looseChats: [], supervisors: [])
         rebuild()
@@ -229,8 +223,7 @@ final class TicketBoardViewModel {
 
     private func rebuild() {
         rebuilds += 1
-        // Gefiltert wird bei Linear über die Ansicht (WM8-125); das Board filtert nicht mehr selbst.
-        let fresh = TicketBoardPresentation.make(model: model, filter: .all)
+        let fresh = TicketBoardPresentation.make(model: model)
         if fresh != presentation { presentation = fresh }
         if let triage {
             // Neuer Abzug: Liste aus derselben Quelle, das Ticket bleibt, wenn es kann.

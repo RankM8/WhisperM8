@@ -60,7 +60,13 @@ struct TicketListView: View {
                         }
                         if presentation.groups.isEmpty {
                             Group {
-                                if model.isViewLoading { Text("Loading view…") } else { Text("No tickets in this view.") }
+                                if model.isViewUnavailable {
+                                    Text("View not available. It may have been deleted in Linear.")
+                                } else if model.isViewLoading {
+                                    Text("Loading view…")
+                                } else {
+                                    Text("No tickets in this view.")
+                                }
                             }
                             .font(.system(size: 11.5))
                             .foregroundStyle(AgentTheme.textSecondary)

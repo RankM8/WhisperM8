@@ -495,7 +495,11 @@ Idee 3.
   Board die Tickets der gezeigten Ansicht (eine Anfrage, WM8-125); die Reiter selbst höchstens alle zehn Minuten
   (`TicketBoardStore.catalogLifetime`), mit dem Knopf sofort. Ein anderer Reiter holt seine Tickets nur, wenn der
   Zwischenspeicher älter als ein Takt ist. Scheitert das Holen der Ansichten, bleibt das Board stehen und die Zeile
-  unter den Reitern nennt den Grund. Ist das Fenster verdeckt,
+  unter den Reitern nennt den Grund. Fehler der Reiter und Fehler je Ansicht führt der Store getrennt
+  (`catalogError`, `viewErrors`); ein gelungener Abruf des einen löscht den Fehler des anderen nicht. Kommt eine
+  Ansicht ohne gespeicherten Stand nicht, steht „Ansicht nicht verfügbar“ statt „Ansicht lädt“. Meldet Linear sie
+  als nicht gefunden (in Linear gelöscht), holt der nächste Takt die Reiter neu, und das Board springt von selbst auf
+  den Standard. Ist das Fenster verdeckt,
   minimiert oder geschlossen, zeigt es Chats, oder ist der Schalter aus, gibt es keinen Abruf.
 - Meldet Linear „Rate limited“, ruht der Takt 15 Minuten (`TicketBoardStore.rateLimitPause`), auch über
   Verdecken und Zeigen hinweg. Der Knopf fragt trotzdem, einmal je Druck.

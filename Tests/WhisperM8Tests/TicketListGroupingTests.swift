@@ -84,7 +84,7 @@ final class TicketListGroupingTests: XCTestCase {
     func testWithoutViewEverythingIsGroupedByStatus() {
         let model = TicketBoardModel(entries: [entry(TicketFixtures.ticket(1)), entry(TicketFixtures.ticket(2, status: "In Progress"))],
                                      looseChats: [], supervisors: [])
-        let presentation = TicketBoardPresentation.make(model: model, filter: .all)
+        let presentation = TicketBoardPresentation.make(model: model)
         XCTAssertNil(presentation.view)
         XCTAssertEqual(presentation.groups.map(\.title), ["In Progress", "Todo"])
         XCTAssertEqual(presentation.entry(key: "WM8-1")?.ticket.key, "WM8-1")
@@ -172,5 +172,16 @@ final class TicketListGroupingTests: XCTestCase {
         let plain = TicketBoardBuilder.build(snapshot: snapshot, chats: chats, projectPath: "/w", rule: TicketTeamRule(),
                                              view: nil, viewTickets: nil)
         XCTAssertEqual(plain.entries.count, 2)
+
+        // Die Zahl „wartet“ gilt fürs ganze Team, nicht nur für die gezeigte Ansicht.
+        let me = TicketPerson(id: "me", name: "Giuliano Costa")
+        var waiting = TicketFixtures.snapshot([TicketFixtures.ticket(1, assignee: me), TicketFixtures.ticket(2, assignee: me),
+                                               TicketFixtures.ticket(3)])
+        waiting.viewerID = "me"
+        let onlyOne = TicketBoardBuilder.build(snapshot: waiting, chats: [], projectPath: "/w", rule: TicketTeamRule(),
+                                               view: TicketFixtures.view("n"),
+                                               viewTickets: TicketViewTickets(tickets: [TicketFixtures.ticket(3)], fetchedAt: .distantPast))
+        XCTAssertEqual(onlyOne.entries.map(\.ticket.key), ["WM8-3"])
+        XCTAssertEqual(onlyOne.teamWaitingCount, 2)
     }
 }

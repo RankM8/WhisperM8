@@ -6,10 +6,11 @@ import Foundation
 extension TicketBoardViewModel {
     /// Neue Reiter oder ein anderer gezeigter Reiter (vom Controller). Ändert
     /// nur, was sich wirklich geändert hat: Jede Zuweisung zeichnet den Kopf neu.
-    func setViews(_ fresh: TicketViewCatalog, active: String?, isLoading: Bool) {
+    func setViews(_ fresh: TicketViewCatalog, active: String?, isLoading: Bool, isUnavailable: Bool = false) {
         if fresh != catalog { catalog = fresh }
         if active != activeViewID { activeViewID = active }
         if isLoading != isViewLoading { isViewLoading = isLoading }
+        if isUnavailable != isViewUnavailable { isViewUnavailable = isUnavailable }
     }
 
     /// Klick auf einen Reiter (oder Kreuz/Return im Kopf). Triage und Auswahl
