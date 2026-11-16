@@ -665,7 +665,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     }
 
     /// Enter eines Auftrags zurückgehalten; `claimWithheldDelivery` sagt, wem er gehört (WM8-123).
-    func noteDeliveryWithheld() { composerDraft.recordDeliveryWithheld() }
+    func noteDeliveryWithheld(text: String) { composerDraft.recordDeliveryWithheld(text: text) }
     @discardableResult
     func claimWithheldDelivery(queuedPromptID: UUID?) -> Bool {
         composerDraft.claimWithheldDelivery(queuedPromptID: queuedPromptID)

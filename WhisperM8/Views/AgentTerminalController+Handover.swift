@@ -107,7 +107,7 @@ extension AgentTerminalController {
         -> TerminalComposerDraftTracker.WithheldDelivery? {
         guard manifest.composerWithheldDelivery == true else { return nil }
         return .init(fromSender: true, queuedPromptID: manifest.composerWithheldQueueID.flatMap(UUID.init(uuidString:)),
-                     untouched: true)
+                     untouched: true, text: manifest.composerWithheldText)
     }
 
     /// Chat endete in der Lücke: letztes Bild zeigen, Status „beendet“.

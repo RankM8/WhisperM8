@@ -231,6 +231,10 @@ struct HandoverManifest: Codable, Equatable {
     var composerWithheldDelivery: Bool?
     /// Vorgemerkter Auftrag dazu (UUID), damit `submit` ihn als zugestellt verbucht.
     var composerWithheldQueueID: String?
+    /// Text dieses Auftrags, wie er eingefügt wurde: `submit` schickt nur ab,
+    /// wenn genau er im Feld steht (WM8-123). `nil` bei älteren Manifesten:
+    /// dann lehnt `submit` ab.
+    var composerWithheldText: String?
     /// Vorgemerkter Kontowechsel nach dem Turn (Entscheidung 9), undurchsichtig.
     var pendingAccountSwitch: HandoverJSONValue?
     var accountProfile: String?

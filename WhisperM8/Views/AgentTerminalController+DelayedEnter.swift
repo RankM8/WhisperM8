@@ -58,8 +58,9 @@ extension AgentTerminalController {
         }
         Self.lastWithheldEnterAt[sessionID] = Date()
         // Eingefügter Text; `chats send` und die Warteschlange beanspruchen
-        // ihn danach als ihren Auftrag, ein Diktat nicht (WM8-123).
-        noteDeliveryWithheld()
+        // ihn danach als ihren Auftrag, ein Diktat nicht (WM8-123). Der Text
+        // bleibt am Vermerk: `submit` schickt nur ab, wenn genau er im Feld steht.
+        noteDeliveryWithheld(text: text)
         Logger.agentStore.notice(
             "delayed_enter_withheld session=\(self.sessionID.uuidString, privacy: .public) status=\(statusNow.map { String(describing: $0) } ?? "none", privacy: .public)")
         Self.onDelayedEnterWithheld?(sessionID)
