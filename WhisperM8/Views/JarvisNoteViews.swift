@@ -192,6 +192,10 @@ struct JarvisNoteCardOverlay: View {
                             .onChange(of: card.size) { _, size in reportFootprint(size) }
                     })
                     .onDisappear { JarvisNoteCardFootprints.shared.set(nil, for: sessionID) }
+                    // Schmale Kachel: Die Pille „Meldung wartet“ sitzt in der Karte (WM8-123).
+                    .overlay(alignment: .bottomTrailing) {
+                        QueueHoldCardPill(sessionID: sessionID, paneWidth: geometry.size.width)
+                    }
                     .padding(.leading, Self.leadingInset)
                     .padding(.top, headerHeight)
                     .transition(reduceMotion ? .opacity : .asymmetric(

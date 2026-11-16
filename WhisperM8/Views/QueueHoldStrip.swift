@@ -29,10 +29,14 @@ struct QueueHoldStrip: View {
             // Nur solange die Pille steht: die Breite des Terminals für das
             // Ausweichen vor der Notizkarte. Leere Flächen nehmen keine Maus an.
             GeometryReader { geometry in
-                QueueHoldStripPlaced(
-                    notice: notice,
-                    insets: QueueHoldPlacement.insets(terminalWidth: geometry.size.width, card: card),
-                    onActivate: onActivate)
+                // Schmale Kachel mit offener Notizkarte: Die Karte zeichnet die
+                // Pille selbst (`QueueHoldCardPill`); sie liegt über dem Terminal.
+                if !QueueHoldPlacement.sitsOnCard(terminalWidth: geometry.size.width, card: card) {
+                    QueueHoldStripPlaced(
+                        notice: notice,
+                        insets: QueueHoldPlacement.insets(terminalWidth: geometry.size.width, card: card),
+                        onActivate: onActivate)
+                }
             }
         }
     }
@@ -49,7 +53,7 @@ struct QueueHoldStripPlaced: View {
         QueueHoldStripContent(notice: notice, onActivate: onActivate, fixedTexts: fixedTexts)
             .padding(.top, insets.top)
             .padding(.leading, insets.leading)
-            .padding(.trailing, QueueHoldPlacement.trailingInset)
+            .padding(.trailing, insets.trailing)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
     }
 }
@@ -117,7 +121,11 @@ enum QueueHoldPlacement {
     struct Insets: Equatable {
         var top: CGFloat
         var leading: CGFloat
+        var trailing: CGFloat = QueueHoldPlacement.trailingInset
     }
+
+    /// Abstand zur Kante der Karte, wenn die Pille in ihr sitzt.
+    static let insideCardInset: CGFloat = 6
 
     /// Abstand zur Ecke des Terminals; rechts mehr, damit der Scroller frei bleibt.
     static let topInset: CGFloat = 6
@@ -141,6 +149,43 @@ enum QueueHoldPlacement {
         if terminalWidth - trailingInset - besideLeading >= minimumWidthBesideCard {
             return Insets(top: topInset, leading: besideLeading)
         }
-        return Insets(top: cardBottom + cardGap, leading: leadingInset)
+        // Schmale Kachel: Die Karte zeichnet die Pille (`sitsOnCard`).
+        return plain
+    }
+
+    /// Schmale Kachel mit offener Notizkarte: Die Pille sitzt an der
+    /// Unterkante der Karte, rechts und innerhalb ihrer Fläche. Darunter läge
+    /// sonst eine weitere Zeile Terminal oder die Eingabezeile. Gezeichnet
+    /// wird sie dann von der Karte, weil die Karte über dem Terminal liegt.
+    static func sitsOnCard(terminalWidth: CGFloat, card: JarvisNoteCardFootprint?) -> Bool {
+        guard let card else { return false }
+        let cardRight = card.trailingEdge - JarvisNoteCardFootprint.terminalInset
+        let cardBottom = card.bottomEdge - JarvisNoteCardFootprint.terminalInset
+        guard cardRight > 0, cardBottom > 0 else { return false }
+        let besideLeading = max(leadingInset, cardRight + cardGap)
+        return terminalWidth - trailingInset - besideLeading < minimumWidthBesideCard
+    }
+}
+
+/// Pille „Meldung wartet“ in der Jarvis-Notizkarte (schmale Kachel, WM8-123):
+/// rechts an der Unterkante der Karte. Liest nur die Einträge des eigenen
+/// Chats; ohne wartende Meldung zeichnet sie nichts.
+struct QueueHoldCardPill: View {
+    let sessionID: UUID
+    /// Breite der Kachel; das Terminal ist darin auf beiden Seiten eingerückt.
+    let paneWidth: CGFloat
+    var notices: QueueHoldNotices = .shared
+    var noteCards: JarvisNoteCardFootprints = .shared
+
+    var body: some View {
+        let terminalWidth = paneWidth - 2 * JarvisNoteCardFootprint.terminalInset
+        if let notice = notices.notices[sessionID],
+           QueueHoldPlacement.sitsOnCard(terminalWidth: terminalWidth, card: noteCards.footprints[sessionID]) {
+            QueueHoldStripContent(notice: notice, onActivate: { [sessionID] in
+                AgentTerminalRegistry.shared.controller(for: sessionID)?.scrollHistoryToBottom()
+                AgentPromptQueueDelivery.shared.noteReturnedToBottom(sessionID)
+            })
+            .padding(QueueHoldPlacement.insideCardInset)
+        }
     }
 }
