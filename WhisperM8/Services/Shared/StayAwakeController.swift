@@ -42,6 +42,8 @@ final class StayAwakeController: ObservableObject {
     private let marker: URL
     private let now: () -> Date
     private let queue = DispatchQueue(label: "com.whisperm8.stay-awake", qos: .utility)
+    /// Dieser Prozess als Besitzer des Merkers (WM8-122).
+    private let owner: StayAwakeMarker
 
     private(set) var conditions = StayAwakeConditions(anyChatWorking: false, onACPower: true, batteryPercent: nil, thermalState: .nominal)
     private var lastWorkingAt: Date?
@@ -61,8 +63,10 @@ final class StayAwakeController: ObservableObject {
             .appendingPathComponent("WhisperM8", isDirectory: true)
             .appendingPathComponent("stay-awake.active"),
         now: @escaping () -> Date = Date.init,
-        isAvailable: Bool = !AppInstance.isTestInstance
+        isAvailable: Bool = !AppInstance.isTestInstance,
+        owner: StayAwakeMarker = StayAwakeMarker(pid: getpid(), startMicros: ProcessStartTime.microseconds(pid: getpid()))
     ) {
+        self.owner = owner
         self.system = system
         self.preferences = preferences
         self.marker = marker
@@ -90,14 +94,21 @@ final class StayAwakeController: ObservableObject {
         }
         let system = self.system
         let marker = self.marker
+        let owner = self.owner
         queue.async { [weak self] in
             let installed = system.isPermissionInstalled()
             // Merker von einem Absturz: Die Wache hat den Ruhezustand in der
-            // Regel schon zurückgesetzt, sicher ist sicher.
+            // Regel schon zurückgesetzt, sicher ist sicher. Gehört er einer
+            // anderen App, die noch lebt (Übergabe, zweite App), bleibt alles
+            // stehen (WM8-122).
             if FileManager.default.fileExists(atPath: marker.path) {
-                if installed { _ = system.setSleepDisabled(false) }
-                try? FileManager.default.removeItem(at: marker)
-                Logger.stayAwake.info("stay_awake_stale_marker_reset installed=\(installed, privacy: .public)")
+                if Self.mayRelease(marker: marker, owner: owner, system: system) {
+                    if installed { _ = system.setSleepDisabled(false) }
+                    try? FileManager.default.removeItem(at: marker)
+                    Logger.stayAwake.info("stay_awake_stale_marker_reset installed=\(installed, privacy: .public)")
+                } else {
+                    Logger.stayAwake.info("stay_awake_marker_other_owner at=start")
+                }
             }
             Task { @MainActor [weak self] in
                 guard let self else { return }
@@ -298,29 +309,53 @@ final class StayAwakeController: ObservableObject {
         applied = desired
         let system = self.system
         let marker = self.marker
+        let owner = self.owner
         let startWatchdog = desired && !watchdogStarted
         if startWatchdog { watchdogStarted = true }
         queue.async { [weak self] in
             if desired {
-                FileManager.default.createFile(atPath: marker.path, contents: Data())
-                if startWatchdog { system.startWatchdog(appPID: getpid(), marker: marker) }
+                // Dieser Prozess ist jetzt Besitzer; eine ältere App lässt den
+                // Ruhezustand beim Beenden dann in Ruhe.
+                FileManager.default.createFile(atPath: marker.path, contents: Data(owner.fileContents.utf8))
+                if startWatchdog { system.startWatchdog(appPID: owner.pid, marker: marker) }
             }
-            let ok = system.setSleepDisabled(desired)
-            if !desired { try? FileManager.default.removeItem(at: marker) }
+            // Ausschalten nur, wenn keine andere lebende App den Mac wach hält.
+            let mayRelease = desired || Self.mayRelease(marker: marker, owner: owner, system: system)
+            let ok = mayRelease ? system.setSleepDisabled(desired) : true
+            if !desired, mayRelease { try? FileManager.default.removeItem(at: marker) }
             let actual = system.isSleepDisabled() ?? desired
-            Logger.stayAwake.info("stay_awake_applied disabled=\(desired, privacy: .public) ok=\(ok, privacy: .public) actual=\(actual, privacy: .public)")
+            if mayRelease {
+                Logger.stayAwake.info("stay_awake_applied disabled=\(desired, privacy: .public) ok=\(ok, privacy: .public) actual=\(actual, privacy: .public)")
+            } else {
+                Logger.stayAwake.info("stay_awake_marker_other_owner at=release")
+            }
             Task { @MainActor [weak self] in
-                self?.isHoldingAwake = actual
+                // Hält eine andere App wach, hält diese nicht.
+                self?.isHoldingAwake = mayRelease ? actual : false
                 if !ok { self?.applied = nil }
             }
         }
     }
 
     /// Beim Beenden synchron: Danach läuft kein Code mehr, der aufräumen könnte.
-    private func releaseForTermination() {
+    func releaseForTermination() {
         guard isAvailable, applied == true else { return }
         applied = false
+        // Hat die neue App schon übernommen (Neustart mit Übergabe), bleibt
+        // der Mac wach und ihr Merker stehen (WM8-122).
+        guard Self.mayRelease(marker: marker, owner: owner, system: system) else {
+            Logger.stayAwake.info("stay_awake_marker_other_owner at=terminate")
+            return
+        }
         _ = system.setSleepDisabled(false)
         try? FileManager.default.removeItem(at: marker)
+    }
+
+    /// Liest den Merker und fragt die Regel (`StayAwakeMarker.mayRelease`).
+    /// Blockierend (Datei, `sysctl`): nur auf der eigenen Queue oder beim Beenden.
+    nonisolated static func mayRelease(marker: URL, owner: StayAwakeMarker, system: StayAwakeSystem) -> Bool {
+        let exists = FileManager.default.fileExists(atPath: marker.path)
+        let parsed = exists ? (try? String(contentsOf: marker, encoding: .utf8)).flatMap(StayAwakeMarker.parse) : nil
+        return StayAwakeMarker.mayRelease(marker: parsed, markerExists: exists, own: owner, isAlive: system.isAlive)
     }
 }

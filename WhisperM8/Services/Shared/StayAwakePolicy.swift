@@ -145,10 +145,17 @@ enum SleepDisablePermission {
     }
 
     /// Wache für Abstürze, läuft als eigener Prozess des Users. Stirbt die App
-    /// und steht die Merker-Datei noch, schaltet sie den Ruhezustand wieder ein.
+    /// und steht in der Merker-Datei noch ihre PID, schaltet sie den
+    /// Ruhezustand wieder ein. Hat inzwischen eine andere App den Merker
+    /// übernommen (Neustart mit Übergabe), lässt sie ihn stehen (WM8-122).
     /// `$1` = PID der App, `$2` = Merker-Datei.
-    static let watchdogScript = """
-    while /bin/kill -0 "$1" 2>/dev/null; do /bin/sleep 2; done
-    if [ -e "$2" ]; then /usr/bin/sudo -n \(pmset) -a disablesleep 0 && /bin/rm -f "$2"; fi
-    """
+    static let watchdogScript = watchdogScript(resetCommand: "/usr/bin/sudo -n \(pmset) -a disablesleep 0")
+
+    /// Wie `watchdogScript`, mit eigenem Befehl zum Zurücksetzen (Tests).
+    static func watchdogScript(resetCommand: String) -> String {
+        """
+        while /bin/kill -0 "$1" 2>/dev/null; do /bin/sleep 2; done
+        if [ -e "$2" ] && [ "$(/usr/bin/head -n 1 "$2" 2>/dev/null)" = "$1" ]; then \(resetCommand) && /bin/rm -f "$2"; fi
+        """
+    }
 }
