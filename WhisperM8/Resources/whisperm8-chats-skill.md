@@ -391,6 +391,11 @@ unterbrochen.
    lehnt ab („Chat lädt noch“, Exit 4), bis das Eingabefeld steht. Meldet
    `send`, der Text stehe im Eingabefeld (`detail.reason: inInputField`),
    **nie noch einmal senden oder vormerken**: `submit <ref>` schickt ihn ab.
+   Lehnt `submit` ab, weil die App den Text eingefügt hat (Diktat, „→ Jarvis“,
+   oder dein Auftrag, dessen Enter eine Freigabe zurückhielt), nie das Feld
+   leeren, ohne sicher zu sein, dass nur dein Auftrag drinsteht: dem User
+   melden. Nur dann `interrupt <ref> --clear-input --force` und neu senden; ein
+   vorgemerkter Auftrag geht danach von selbst raus.
    **Nach Exit 5 oder 6 nie blind wiederholen.** Exit 6 („Ausgang unklar“)
    heißt: angefragt, aber keine Antwort in der Frist; die App hat es vielleicht
    schon ausgeführt. Erst `chats queue <ref>` bzw. `tail <ref>` prüfen, erst

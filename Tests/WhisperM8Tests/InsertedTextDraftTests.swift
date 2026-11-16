@@ -196,6 +196,44 @@ final class InsertedTextQueueGateTests: XCTestCase {
         XCTAssertEqual(PromptDeliveryGate.draftMessage(insertedText: false), PromptDeliveryGate.draftMessage)
     }
 
+    /// `chats submit` lehnt eingefügten Text ab und sagt es so (Auflage zu
+    /// WM8-121): kein „getippt“, dafür der Weg, der wirklich geht.
+    func testSubmitRefusalNamesInsertedTextAndAWayOut() {
+        let field = InsertedTextScreen.field(text: "Weiter mit WM8-12")
+        XCTAssertEqual(field?.hasText, true)
+        let decision = AgentControlRequestHandler.submitCheck(
+            profile: .claudeCodeChat, status: .idle, approvalPending: false,
+            userDraft: insertedThenTurn.mayHaveUnsentInput, insertedText: insertedThenTurn.mayHoldInsertedText,
+            field: field, screenReadable: true)
+        guard case .refused(let code, let message) = decision else { return XCTFail("muss ablehnen") }
+        XCTAssertEqual(code, .conflict)
+        XCTAssertEqual(message, AgentControlRequestHandler.submitRefusedInsertedMessage)
+        XCTAssertFalse(message.contains("getippt"), message)
+        XCTAssertTrue(message.contains("zurückgehalten"), message)
+        XCTAssertTrue(message.contains("chats interrupt <ref> --clear-input --force"), message)
+
+        var typed = TerminalComposerDraftTracker()
+        typed.recordTerminalKey(keyCode: 0, modifiers: [], status: .idle, restoresPromptOnInterrupt: true, now: Date())
+        guard case .refused(_, let typedMessage) = AgentControlRequestHandler.submitCheck(
+            profile: .claudeCodeChat, status: .idle, approvalPending: false,
+            userDraft: typed.mayHaveUnsentInput, insertedText: typed.mayHoldInsertedText,
+            field: field, screenReadable: true) else { return XCTFail("muss ablehnen") }
+        XCTAssertEqual(typedMessage, AgentControlRequestHandler.submitRefusedTypedMessage)
+    }
+
+    /// Wo `stuckMessage` und `visibleDraftMessage` `submit` empfehlen, vermutet
+    /// die App keinen Entwurf: Ein Enter, das raus ist, aber im Feld stehen
+    /// blieb, gilt als abgeschickt, und `submit` schickt ab.
+    func testSubmitStillWorksWhereTheMessagesRecommendIt() {
+        var stuck = TerminalComposerDraftTracker()
+        stuck.recordSubmitted(programmaticAt: Date())   // Enter ging raus, Text blieb stehen
+        stuck.recordSubmittedByTurnStart()
+        XCTAssertEqual(AgentControlRequestHandler.submitCheck(
+            profile: .claudeCodeChat, status: .idle, approvalPending: false,
+            userDraft: stuck.mayHaveUnsentInput, insertedText: stuck.mayHoldInsertedText,
+            field: InsertedTextScreen.field(text: "Weiter mit WM8-12"), screenReadable: true), .allowed)
+    }
+
     func testQueueListShowsWhyAPromptWaits() {
         var prompt = QueuedPrompt(sessionID: UUID(), prompt: "Meldung an Jarvis", enqueuedAt: Date(),
                                   enqueuedBy: "Chat Ole")

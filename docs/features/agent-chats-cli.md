@@ -411,7 +411,8 @@ Eingabefeld stehen könnte (`TerminalComposerDraftTracker`, pur getestet):
   (bis 330 ms) und antwortet dann ebenfalls `approvalPending` statt
   `delivered` (Audit `withheld`, `detail.textInField: true`,
   `detail.resend: false`): Der Text steht im Eingabefeld — nicht neu senden,
-  auch nicht per `enqueue`. Die Idempotenz wird erst danach abgeschlossen; ein
+  auch nicht per `enqueue`. `chats submit` schickt ihn nicht ab (er gilt als
+  eingefügter Text, WM8-121); Wege siehe `chats submit` unten. Die Idempotenz wird erst danach abgeschlossen; ein
   Wiederholen mit derselben requestID bekommt nie „duplicate“ als Erfolg. Die
   Warteschlange verbucht einen Auftrag erst nach dem Enter als zugestellt;
   zurückgehalten bleibt er vorgemerkt (`queue_withheld`), und eine offene
@@ -805,7 +806,16 @@ Warteschlange nach dem Start zustellte. Deshalb:
 - **`chats submit <ref>`** schickt den Text ab, der im Feld eines ruhenden
   Claude-Chats steht, ohne neuen Text: nur das Enter, nie in eine Freigabe,
   danach dasselbe Nachsehen. Leeres Feld, kein Feld oder nicht ablesbar: Exit 4,
-  nichts gesendet.
+  nichts gesendet. Vermutet die App einen Entwurf, lehnt `submit` ebenfalls ab.
+  Seit WM8-121 gilt das auch für von der App eingefügten Text, über einen
+  Turn-Start hinweg, und damit auch für einen Auftrag, dessen Enter wegen einer
+  Freigabe zurückgehalten wurde: Die App kann ihn nicht von einem Diktat ohne
+  Senden unterscheiden. Die Ablehnung sagt dann „eingefügt“ und nennt den Weg,
+  der geht: Der User drückt im Chat Enter, oder, wenn es sicher der eigene
+  Auftrag ist, `interrupt <ref> --clear-input --force` und danach neu senden
+  (ein Auftrag aus der Warteschlange geht nach dem Leeren von selbst raus).
+  Nach einem Enter, das raus ist, aber im Feld stehen blieb (`inInputField`),
+  vermutet die App keinen Entwurf; dort schickt `submit` ab.
 - **`chats resume <ref> --prompt "…"`** (oder `-- "…"`) merkt den Auftrag nach
   dem Start vor; er geht raus, sobald das Feld steht.
 
