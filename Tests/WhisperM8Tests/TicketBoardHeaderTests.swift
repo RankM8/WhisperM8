@@ -174,6 +174,25 @@ final class TicketBoardHeaderTests: XCTestCase {
         XCTAssertEqual(changes, 3)
     }
 
+    /// Folgepunkt der Prüferin zu 3d: Ein Mausklick räumt Kopf und offene
+    /// Liste der Bereiche in jedem Board; ein späteres Kreuz trifft keinen
+    /// alten Knopf mehr.
+    func testMouseClearsTheHeaderInEveryBoard() {
+        let first = viewModel(), second = viewModel(), idle = viewModel()
+        first.enterHeader(context)
+        second.enterHeader(context)
+        _ = second.headerMove(.right, context)
+        _ = second.headerActivate(context)   // Liste der Bereiche offen
+        XCTAssertNotNil(second.projectPickerIndex)
+        TicketBoardControllers.leaveHeaders([first, second, idle])
+        XCTAssertNil(first.headerFocus)
+        XCTAssertNil(second.headerFocus)
+        XCTAssertNil(second.projectPickerIndex)
+        XCTAssertNil(idle.headerFocus)
+        XCTAssertNotEqual(first.controllerView(isReady: true), .header)
+        XCTAssertEqual(first.headerActivate(context), .rejected, "Kreuz danach schaltet keinen alten Knopf")
+    }
+
     // MARK: - Belegung
 
     private func header(_ view: ControllerTicketView) -> ControllerContext {
