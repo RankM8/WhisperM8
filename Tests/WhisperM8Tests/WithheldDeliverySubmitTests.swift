@@ -179,7 +179,7 @@ final class WithheldDeliveryTrackerTests: XCTestCase {
         manifest.composerWithheldQueueID = id.uuidString
         let decoded = try JSONDecoder().decode(HandoverManifest.self, from: JSONEncoder().encode(manifest))
         let restored = AgentTerminalController.withheldDelivery(from: decoded)
-        XCTAssertEqual(restored, .init(fromSender: true, queuedPromptID: id, untouched: true))
+        XCTAssertEqual(restored, .init(fromSender: true, queuedPromptID: id, untouched: true, text: nil))
 
         var tracker = TerminalComposerDraftTracker()
         tracker.recordDraftAdopted(insertedText: true, withheldDelivery: restored)
@@ -193,13 +193,14 @@ final class WithheldDeliveryTrackerTests: XCTestCase {
 }
 
 final class WithheldDeliverySubmitCheckTests: XCTestCase {
-    private let field = InsertedTextScreen.field(text: "[via whisperm8 chats · von Test · 12:00] WM8-Doku prüfen")
+    private let text = "[via whisperm8 chats · von Test · 12:00] WM8-Doku prüfen"
+    private lazy var field = InsertedTextScreen.field(text: text)
 
     private func check(approval: Bool = false, status: AgentSessionRuntimeStatus? = .idle,
                        withheld: Bool, field: ControllerPromptField?? = nil) -> AgentControlRequestHandler.SubmitDecision {
         AgentControlRequestHandler.submitCheck(
             profile: .claudeCodeChat, status: status, approvalPending: approval,
-            userDraft: true, insertedText: true, withheldDelivery: withheld,
+            userDraft: true, insertedText: true, withheldDelivery: withheld, withheldText: text,
             field: field ?? self.field, screenReadable: true)
     }
 

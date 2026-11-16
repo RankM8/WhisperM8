@@ -906,9 +906,17 @@ Warteschlange nach dem Start zustellte. Deshalb:
   Antwort aber noch nach, landen sie schon im Feld. Deshalb lassen dort nur
   typische Antworten den Auftrag unberührt (Enter, ESC, Tab, Leertaste,
   Pfeile, Ziffern, y, n, Kürzel außer Cmd+V); jede andere Taste macht ihn zum
-  Text des Users. Restlücke: Wer nach der Freigabe sofort nur Ziffern, y oder n
-  tippt, bevor der Status nachzieht. Die Antwort trägt `withheldDelivery:
-  true`. War er vorgemerkt, verbucht die Warteschlange ihn als zugestellt
+  Text des Users. Wer nach der Freigabe sofort nur Ziffern, y oder n tippt,
+  bevor der Status nachzieht, den sieht der Tracker nicht; deshalb vergleicht
+  `submit` zusätzlich das Feld (seit 16.11.2026 abends): Der Vermerk trägt den
+  eingefügten Text, und `submit` schickt nur ab, wenn das abgelesene Feld genau
+  ihm entspricht (`WithheldFieldMatch`, verglichen ohne Leerraum, weil Claude
+  umbricht und einrückt) oder nur aus einem Platzhalter „[Pasted text …]“
+  besteht, wie Claude ihn für lange Pastes zeigt. Ein Zeichen davor oder
+  dahinter, ein zweiter Platzhalter, kein abgelesenes Feld oder ein Vermerk
+  ohne Text (Manifest eines älteren Builds) lehnen ab, mit Grund. Kosten: ein
+  paar Zeichenfolgen-Vergleiche je `submit`. Die Antwort trägt
+  `withheldDelivery: true`. War er vorgemerkt, verbucht die Warteschlange ihn als zugestellt
   (`queue_delivered_by_submit`), sobald ein Enter ihn abschickt: `submit`, das
   Enter des Users auf der Tastatur oder am Controller, auch nach Bearbeiten
   (er ist ja raus). Sonst stellte die Warteschlange ihn beim nächsten
@@ -933,7 +941,8 @@ Warteschlange nach dem Start zustellte. Deshalb:
   oder eine frühere gleiche Meldung zählen nicht. Im Zweifel kommt der Auftrag
   lieber noch einmal, als nie anzukommen. Kosten: dieses Lesen nur bei solchen
   Aufträgen, je Zustellversuch einmal. Ein Neustart ohne Chatverlust trägt den Vermerk
-  im Manifest weiter (`composerWithheldDelivery`, `composerWithheldQueueID`).
+  im Manifest weiter (`composerWithheldDelivery`, `composerWithheldQueueID`,
+  `composerWithheldText`).
   Hat jemand am Text weitergeschrieben, gehört er (auch) dem User; dann lehnt
   `submit` ab, sagt „eingefügt“ und nennt die Wege, die gehen. Direkt
   gesendeter Auftrag: Der User drückt im Chat Enter.

@@ -70,6 +70,18 @@ struct ControllerPromptField: Equatable, Sendable {
     /// (kein grauer Vorschlag, kein abgeblendeter Platzhalter). Nur das zählt
     /// für „sichtbar leer“, das den Sendeweg lockert (WM8-64).
     var isBlank: Bool = false
+    /// Was im Feld steht, auch Abgeblendetes, ohne Prompt-Zeichen; Zeilen mit
+    /// Leerzeichen verbunden, Rahmen und Einrückung bleiben stehen. Nur für
+    /// den Vergleich mit einem zurückgehaltenen Auftrag (`WithheldFieldMatch`,
+    /// WM8-123), nie für „leer“ oder „Text“.
+    var text: String = ""
+
+    /// Dasselbe Feld ohne Text, für den Zusammenhang des Controllers.
+    var withoutText: ControllerPromptField {
+        var copy = self
+        copy.text = ""
+        return copy
+    }
 
     /// Sicher Text im Feld: Text steht da, und der Cursor steht nicht am
     /// Anfang eines einzeiligen Felds. Ein grauer Platzhalter, der nicht als
@@ -395,6 +407,6 @@ enum ControllerScreenReading {
             cursorAtStart = cursorRow == 0 && cursor.col <= start
         }
         return ControllerPromptField(rows: rows, cursorRow: cursorRow, cursorAtStart: cursorAtStart, isEmpty: isEmpty,
-                                     isBlank: isBlank)
+                                     isBlank: isBlank, text: full)
     }
 }

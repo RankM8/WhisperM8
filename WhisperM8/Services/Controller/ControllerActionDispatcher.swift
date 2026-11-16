@@ -211,7 +211,9 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             shellAtPrompt: terminal.shellAtPrompt,
             backTarget: window.backTarget,
             openView: terminal.screen?.openView,
-            promptField: terminal.screen?.promptField,
+            // Ohne Feldtext: Der Zusammenhang der Leiste bliebe sonst nach jeder
+            // Textänderung „neu“, und der Text gehört nicht ins UI-Modell (WM8-123).
+            promptField: terminal.screen?.promptField?.withoutText,
             onlyRecalledPrompt: terminal.onlyRecalledPrompt,
             questionAcceptsText: terminal.questionAcceptsText,
             scrolledBack: terminal.scrolledBack,

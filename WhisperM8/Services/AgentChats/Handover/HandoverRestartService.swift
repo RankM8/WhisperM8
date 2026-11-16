@@ -212,6 +212,7 @@ enum HandoverManifestFactory {
         if let withheld = controller.composerDraft.submittableWithheldDelivery {
             manifest.composerWithheldDelivery = true
             manifest.composerWithheldQueueID = withheld.queuedPromptID?.uuidString
+            manifest.composerWithheldText = withheld.text
         }
         // „Arbeitet seit“ (Review Paket 4, Befund 7): Arbeitet der Chat, zählt
         // die neue App ab der Abgabe weiter; bis dahin zählt die alte App.

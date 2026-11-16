@@ -62,6 +62,53 @@ struct ComposerFieldReading: Equatable {
     }
 }
 
+/// Steht im Feld genau der Auftrag, dessen Enter zurückgehalten wurde
+/// (WM8-123)? Der Tracker sieht Tasten, die kurz nach einer Freigabe noch als
+/// Dialog-Antwort zählen (Ziffern, y, n), während sie schon im Feld landen.
+/// Deshalb schickt `chats submit` erst ab, wenn das abgelesene Feld genau dem
+/// gemerkten Text entspricht.
+///
+/// Verglichen wird ohne Leerraum: Claude bricht lange Zeilen um und rückt
+/// Folgezeilen ein, die Ablesung verbindet Zeilen mit Leerzeichen. Was so
+/// verloren geht, sind nur Leerzeichen und Zeilenumbrüche; ein angehängtes
+/// Zeichen fällt immer auf. Den Auftrag bereinigt derselbe Schritt wie beim
+/// Einfügen (`TerminalPasteSanitizer`). Einen langen Paste zeigt Claude als
+/// Platzhalter „[Pasted text #1 +12 lines]“; steht genau ein solcher
+/// Platzhalter und sonst nichts im Feld, gilt er als der Auftrag. Nummer und
+/// Zeilenzahl werden nicht verglichen (Claudes Zählung ist nicht vermessen);
+/// ein zweiter Paste oder Text davor oder dahinter lehnt ab.
+/// Pur; Kosten: ein paar Zeichenfolgen-Durchläufe, nur bei `submit`.
+enum WithheldFieldMatch: Equatable {
+    case matches
+    /// Im Feld steht etwas anderes als der Auftrag (etwa eine angehängte Ziffer).
+    case differs
+    /// Kein gemerkter Text (Vermerk aus einem älteren Manifest).
+    case textUnknown
+
+    static func check(expected: String?, fieldText: String) -> WithheldFieldMatch {
+        guard let expected else { return .textUnknown }
+        let wanted = compact(TerminalPasteSanitizer.sanitize(expected))
+        let seen = compact(fieldText)
+        guard !wanted.isEmpty, !seen.isEmpty else { return .differs }
+        if seen == wanted { return .matches }
+        return isPlaceholder(seen) ? .matches : .differs
+    }
+
+    /// Ohne Leerraum, Rahmenzeichen des alten Felds und Steuerzeichen.
+    static func compact(_ text: String) -> String {
+        String(String.UnicodeScalarView(text.unicodeScalars.filter { scalar in
+            !CharacterSet.whitespacesAndNewlines.contains(scalar)
+                && !CharacterSet.controlCharacters.contains(scalar)
+                && scalar != "│"
+        }))
+    }
+
+    /// „[Pasted text #3 +12 lines]“ bzw. „[Pasted text #3]“, ohne Leerraum.
+    static func isPlaceholder(_ compacted: String) -> Bool {
+        compacted.range(of: #"^\[Pastedtext#\d+(?:\+\d+lines?)?\]$"#, options: .regularExpression) != nil
+    }
+}
+
 /// Wurde ein eingefügter Prompt wirklich abgeschickt (WM8-100)?
 ///
 /// Vorfall 14.11.2026: Nach `resume` stand der Auftrag im Eingabefeld, das

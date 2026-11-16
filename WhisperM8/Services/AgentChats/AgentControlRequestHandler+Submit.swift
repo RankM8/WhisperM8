@@ -36,7 +36,7 @@ extension AgentControlRequestHandler {
                                     approvalPending: Self.approvalPending(targetID, controller),
                                     userDraft: controller.composerDraft.mayHaveUnsentInput,
                                     insertedText: controller.composerDraft.mayHoldInsertedText,
-                                    withheldDelivery: withheld != nil,
+                                    withheldDelivery: withheld != nil, withheldText: withheld?.text,
                                     field: screen?.promptField, screenReadable: screen != nil) {
             case .allowed:
                 // Verbucht einen vorgemerkten Auftrag zugleich als zugestellt
@@ -110,10 +110,12 @@ extension AgentControlRequestHandler {
     /// zurückgehalten wurde; die Meldung nennt deshalb den Weg, der dann geht.
     /// `withheldDelivery`: Der eingefügte Text ist ein beanspruchter,
     /// unberührter Auftrag, dessen Enter zurückgehalten wurde (WM8-123). Er
-    /// stammt vom Absender, nicht vom User, und darf raus.
+    /// stammt vom Absender, nicht vom User, und darf raus, aber nur, wenn das
+    /// abgelesene Feld genau `withheldText` zeigt (`WithheldFieldMatch`): Tasten
+    /// kurz nach der Freigabe zählt der Tracker noch als Dialog-Antwort.
     static func submitCheck(profile: TerminalKeyboardProfile, status: AgentSessionRuntimeStatus?,
                             approvalPending: Bool, userDraft: Bool, insertedText: Bool = false,
-                            withheldDelivery: Bool = false,
+                            withheldDelivery: Bool = false, withheldText: String? = nil,
                             field: ControllerPromptField?, screenReadable: Bool) -> SubmitDecision {
         guard profile == .claudeCodeChat else {
             return .refused(.unsupported, "`chats submit` gibt es nur für Claude-Chats")
@@ -136,6 +138,25 @@ extension AgentControlRequestHandler {
         guard field.hasText else {
             return .refused(.conflict, "Im Eingabefeld steht nichts — es gibt nichts abzuschicken.")
         }
+        // Freigegeben nur über den Vermerk: Dann muss das Feld genau den Auftrag zeigen.
+        if userDraft {
+            switch WithheldFieldMatch.check(expected: withheldText, fieldText: field.text) {
+            case .matches: break
+            case .differs: return .refused(.conflict, submitRefusedFieldDiffersMessage)
+            case .textUnknown: return .refused(.conflict, submitRefusedTextUnknownMessage)
+            }
+        }
         return .allowed
     }
+
+    static let submitRefusedFieldDiffersMessage = "Im Eingabefeld steht nicht genau der Auftrag, dessen Enter "
+        + "zurückgehalten wurde: Seit der Freigabe ist etwas dazugekommen oder weggefallen, vermutlich vom User "
+        + "getippt (etwa eine Ziffer oder ein y, das nicht mehr an den Dialog ging). submit schickt Text des "
+        + "Users nie ab. Nichts abgeschickt. Der User schickt den Auftrag im Chat selbst mit Enter ab; ein "
+        + "vorgemerkter Auftrag gilt dann als zugestellt. Leeren nur nach Rückfrage beim User: "
+        + "`whisperm8 chats interrupt <ref> --clear-input --force`."
+
+    static let submitRefusedTextUnknownMessage = "Der zurückgehaltene Auftrag stammt aus der Zeit vor einem "
+        + "App-Neustart, sein Text ist nicht bekannt. Ohne Vergleich mit dem Eingabefeld schickt submit nichts ab. "
+        + "Nichts abgeschickt. Der User schickt ihn im Chat selbst mit Enter ab."
 }

@@ -67,6 +67,12 @@ struct TerminalComposerDraftTracker: Equatable {
         var queuedPromptID: UUID?
         /// Seit dem Zurueckhalten weder getippt noch eingefuegt oder geholt.
         var untouched = true
+        /// Der eingefuegte Text, wie ihn `pastePrompt` geschickt hat. `submit`
+        /// vergleicht ihn mit dem abgelesenen Feld (`WithheldFieldMatch`):
+        /// Tasten kurz nach der Freigabe zaehlen hier noch als Dialog-Antwort,
+        /// koennen aber schon im Feld stehen. `nil` (aelteres Manifest): Dann
+        /// schickt `submit` nichts ab.
+        var text: String?
     }
     private(set) var withheldDelivery: WithheldDelivery?
     /// Ein Enter (Tastatur, Controller, programmatisch) hat einen vorgemerkten
@@ -396,9 +402,9 @@ struct TerminalComposerDraftTracker: Equatable {
     /// Das Enter eines Auftrags wurde zurueckgehalten (WM8-75): Der Text steht
     /// als eingefuegter Text im Feld. Wem er gehoert, sagt erst
     /// `claimWithheldDelivery` (WM8-123).
-    mutating func recordDeliveryWithheld() {
+    mutating func recordDeliveryWithheld(text: String? = nil) {
         recordTextInserted()
-        withheldDelivery = WithheldDelivery()
+        withheldDelivery = WithheldDelivery(text: text)
     }
 
     /// `chats send` oder die Warteschlange: Der zurueckgehaltene Text ist ihr
