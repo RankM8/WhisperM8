@@ -371,4 +371,36 @@ final class TypedDraftLiveFieldTests: XCTestCase {
         XCTAssertNil(controller.composerFieldForSendCheck().openView)
         XCTAssertEqual(f.queueDecision(), .deliver)
     }
+
+    /// Zitiert ein Chat die Wortlaute der Ansichten in seiner Ausgabe über dem
+    /// Feld (etwa aus einem Commit oder einem Prüfurteil), ist das keine
+    /// Ansicht: Die Warteschlange stellt zu (Prüferin zu WM8-123).
+    func testQuotedViewWordsAboveTheFieldAreNoView() {
+        let quoted = [
+            "  Fußzeile der Agent-Liste: „enter to return · space to reply · ctrl+x to remove“",
+            "  Verlaufssuche: „search prompts:“, Einstellungen: „Enter/Space to change · Esc to close“",
+            "  sowie „Type to filter · Enter/↓ to select · ↑ to tabs · Esc to clear“",
+        ].joined(separator: "\r\n")
+        f.draw(bottom: quoted + "\r\n" + field("", below: ["  ⏵⏵ auto mode on (shift+tab to cycle) · ← for agents"]),
+               spare: 6)
+        XCTAssertNil(controller.composerFieldForSendCheck().openView)
+        XCTAssertEqual(f.queueDecision(), .deliver)
+        f.scrollUp()
+        XCTAssertNil(controller.composerFieldForSendCheck().openView, "hochgescrollt ebenso")
+        XCTAssertEqual(f.queueDecision(), .deliver)
+    }
+
+    /// Ohne Feld zählen nur die untersten zwei Zeilen: Wortlaute weiter oben
+    /// in der Ausgabe machen keine Ansicht.
+    func testWithoutFieldOnlyTheLastTwoLinesCount() {
+        XCTAssertNil(ComposerFieldReading.viewWithoutUsableField([
+            "  Type to filter · Enter/↓ to select · ↑ to tabs · Esc to clear",
+            "  noch eine Zeile Ausgabe",
+            "  und die letzte Zeile",
+        ]))
+        XCTAssertEqual(ComposerFieldReading.viewWithoutUsableField([
+            "  ❯ Auto-compact        true",
+            "  Enter/Space to change · / to search · Esc to close",
+        ]), "config")
+    }
 }

@@ -476,7 +476,9 @@ Zurückspulen, Auswahl in der Fußzeile, dazu Agent-Liste (ihr Feld „describe 
 task for a new session“ sieht wie ein leeres Eingabefeld aus; das Enter
 startete eine neue Hintergrund-Sitzung), `/config` (das Enter wählte eine
 Einstellung) und Verlaufssuche mit Ctrl+R. Erkannt an der Fußzeile, abgelesen
-an Claude Code 2.1.325.
+an Claude Code 2.1.325; gesucht wird nur dort (mit Feld darunter, ohne Feld in
+den untersten zwei Zeilen), damit ein Chat, der diese Wortlaute zitiert,
+seine Warteschlange nicht anhält.
 
 **Sichtbar leer schlägt die Schätzung (WM8-64, 15.11.2026):** Ist das Feld
 eines Claude-Chats am Bildschirm abzulesen und leer, gilt kein Entwurf, auch

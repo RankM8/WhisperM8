@@ -32,9 +32,23 @@ struct ComposerFieldReading: Equatable {
     ///   „Enter/Space to change · / to search · Esc to close“.
     /// - Verlaufssuche (Ctrl+R): das Feld zeigt einen Treffer, Fußzeile
     ///   „search prompts:“.
+    ///
+    /// Gesucht wird nur in der Fußzeile: mit Eingabefeld (Agent-Liste,
+    /// Verlaufssuche) in den Zeilen darunter, ohne Feld (`/config`) in den
+    /// untersten zwei nicht leeren Zeilen. Zitiert ein Chat diese Wortlaute in
+    /// seiner Ausgabe über dem Feld, ist das keine Ansicht; sonst stünde seine
+    /// Warteschlange still, bis jemand hineinschreibt (Prüferin zu WM8-123).
+    /// Abgeblendet sind die Fußzeilen nicht (Claude färbt sie grau), deshalb
+    /// zählt die Lage, nicht die Schrift.
     /// Kosten: ein paar Textvergleiche über die ohnehin gelesenen 16 Zeilen.
     static func viewWithoutUsableField(_ lines: [String]) -> String? {
-        let text = lines.map { $0.lowercased() }.joined(separator: " ")
+        let footer: [String]
+        if let box = ControllerScreenReading.promptBox(in: lines) {
+            footer = Array(lines[(box.lower + 1)...])
+        } else {
+            footer = Array(lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.suffix(2))
+        }
+        let text = footer.map { $0.lowercased() }.joined(separator: " ")
             .replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression)
         if text.contains("space to reply"), text.contains("ctrl+x to remove") || text.contains("enter to return") {
             return "agentList"
