@@ -360,7 +360,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             if ui.menu?.back() != true { ui.menu = nil }
 
         // Insel (L1, R1, L2 gehalten)
-        case let .islandShow(layer): showIsland(layer)
+        case let .islandShow(layer): showIslandOnHold(layer)
         case .islandClose:
             closeIsland()
             spentLayer = nil
