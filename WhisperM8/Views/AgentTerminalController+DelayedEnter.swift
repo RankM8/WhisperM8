@@ -17,6 +17,11 @@ extension AgentTerminalController {
     /// (WM8-119). Gesetzt beim Einfügen, gelöscht, sobald das Enter entschieden ist.
     @MainActor static var pendingEnterSince: [UUID: Date] = [:]
 
+    /// Wartet bei diesem Chat ein Enter auf seinen Text? (`DelayedEnterLanding.enterPending`)
+    @MainActor static func enterPending(for sessionID: UUID, now: Date = Date()) -> Bool {
+        DelayedEnterLanding.enterPending(since: pendingEnterSince[sessionID], now: now)
+    }
+
     /// Wartet, bis das verzögerte Enter entschieden ist (80 ms, nach einem
     /// Leeren 230 ms, plus Luft; wartet es auf den Text im Feld, bis zu 3 s
     /// länger), und meldet, ob es zurückgehalten wurde.

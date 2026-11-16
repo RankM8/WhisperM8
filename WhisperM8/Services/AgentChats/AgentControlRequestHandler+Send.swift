@@ -95,6 +95,12 @@ extension AgentControlRequestHandler {
                 usageWarning = AgentUsageLimit.isSlashCommand(prompt) ? nil
                     : session.usageLimitWarning(in: workspace.sessions).map(ChatsSendReadinessGuard.creditsWarning)
                 let runtime = AgentSessionStatusCoordinator.shared.statusStore.status(for: targetID)
+                // Ein Enter wartet noch auf den Text davor (WM8-119): Jetzt
+                // eingefügt, verschmölzen beide zu einer Meldung. Auch mit
+                // --force nicht; `notReady` lässt die CLI vormerken.
+                if AgentTerminalController.enterPending(for: targetID) {
+                    return .failure(.notReady, DelayedEnterLanding.enterPendingMessage)
+                }
                 if Self.approvalPending(targetID, controller) { return .failure(.approvalPending, Self.approvalPendingMessage) } // WM8-75, auch mit --force
                 // Status-Guard (--if-status). --force überstimmt ihn (nie den
                 // Selbst-Send-Schutz).

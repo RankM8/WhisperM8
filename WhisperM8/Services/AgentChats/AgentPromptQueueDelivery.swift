@@ -64,6 +64,13 @@ final class AgentPromptQueueDelivery {
             retryAfterStartup(sessionID)
             return
         }
+        // Ein Enter wartet noch auf den Text davor (WM8-119, etwa eine
+        // Meldung mit Bildpfaden): gleich wieder nachsehen, nicht reservieren.
+        // Danach arbeitet der Chat meist, dann stellt das Turn-Ende zu.
+        if AgentTerminalController.enterPending(for: sessionID), !store.openPrompts(for: sessionID).isEmpty {
+            retryAfterPendingEnter(sessionID)
+            return
+        }
         guard let reserved = store.reserveNext(for: sessionID) else { return }
 
         let workspace = AgentWorkspaceUIModel.shared.workspace
@@ -353,6 +360,15 @@ final class AgentPromptQueueDelivery {
             + "Eingabefeld und wurde nicht abgeschickt. "
             + "Nicht noch einmal senden: `whisperm8 chats submit \(ChatsOutput.shortID(targetID))` schickt ihn ab, "
             + "`whisperm8 chats tail \(ChatsOutput.shortID(targetID))` zeigt den Stand."
+    }
+
+    /// Neuer Versuch, sobald das wartende Enter entschieden sein kann
+    /// (höchstens 3 s, alle 0,5 s nachsehen; nur ein Nachschlagen im Speicher).
+    private func retryAfterPendingEnter(_ sessionID: UUID) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            self.deliverNow(for: sessionID)
+        }
     }
 
     /// Neuer Versuch eine Sekunde später, solange das Eingabefeld nach dem
