@@ -17,24 +17,6 @@ enum AgentTabGroupingItem: Equatable {
     case group(key: AgentTabGroupingKey, sessionIDs: [UUID])
 }
 
-/// Stabile Identität eines Elements der Tab-Leiste (WM8-101). Eine Gruppe
-/// ist über ihre Herkunft bestimmt, ein Einzel-Tab über seinen Chat. Vorher
-/// hingen die Elemente an ihrer Position: Wanderte ein Tab in eine Gruppe,
-/// rückten alle folgenden Elemente auf, und SwiftUI legte sie neu an.
-///
-/// `occurrence` zählt nur Doppelte mit; die gibt es in der Leiste nicht, die
-/// IDs bleiben dann trotzdem eindeutig, wie `ForEach` es verlangt.
-enum AgentTabStripItemID: Hashable {
-    case single(UUID, occurrence: Int)
-    case group(AgentTabGroupingKey, occurrence: Int)
-}
-
-/// Ein Element der Tab-Leiste mit seiner stabilen Identität.
-struct AgentTabStripIdentifiedItem: Identifiable, Equatable {
-    let id: AgentTabStripItemID
-    let item: AgentTabGroupingItem
-}
-
 /// Eine Drop-EINHEIT der Tab-Leiste. Die Leiste besteht beim Ziehen nicht aus
 /// Tabs, sondern aus Slots — nur so hat eine eingeklappte Gruppe eine eigene
 /// Einfügeposition, obwohl ihre Mitglieder unsichtbar sind:
@@ -124,25 +106,6 @@ enum AgentTabGrouping {
         }
 
         return result
-    }
-
-    /// Versieht die Elemente der Leiste mit ihrer stabilen Identität, in
-    /// unveränderter Reihenfolge. Kosten: ein Durchlauf über die Tabs.
-    static func identified(_ items: [AgentTabGroupingItem]) -> [AgentTabStripIdentifiedItem] {
-        var singleCounts: [UUID: Int] = [:]
-        var groupCounts: [AgentTabGroupingKey: Int] = [:]
-        return items.map { item in
-            switch item {
-            case .single(let id):
-                let occurrence = singleCounts[id, default: 0]
-                singleCounts[id] = occurrence + 1
-                return AgentTabStripIdentifiedItem(id: .single(id, occurrence: occurrence), item: item)
-            case .group(let key, _):
-                let occurrence = groupCounts[key, default: 0]
-                groupCounts[key] = occurrence + 1
-                return AgentTabStripIdentifiedItem(id: .group(key, occurrence: occurrence), item: item)
-            }
-        }
     }
 
     /// Zerlegt die Anzeige in Drop-Slots. Eine eingeklappte Gruppe wird zu

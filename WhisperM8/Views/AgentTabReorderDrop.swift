@@ -71,16 +71,6 @@ struct TabFramePreferenceKey: PreferenceKey {
     }
 }
 
-/// Letzte gemessene Tab-Rahmen, außerhalb des SwiftUI-Zustands (WM8-101).
-/// Als `@State` hat jede neue Messung das ganze Fenster ein zweites Mal
-/// ausgewertet, sobald sich Tabs verschoben (Umgruppierung, neue Breiten).
-/// Gebraucht werden die Rahmen nur beim Ziehen: Die Einfügelinie liest sie in
-/// dem Durchlauf, den ein neuer Einfüge-Index ohnehin auslöst, der
-/// Drop-Delegate liest sie bei jedem Ereignis frisch.
-final class TabFrameBox {
-    var frames: [UUID: CGRect] = [:]
-}
-
 // MARK: - Drop-Delegate (Move-Semantik + kontinuierliche Einfüge-Position)
 
 /// `DropDelegate` für die Tab-Leiste. Liefert über `dropUpdated` kontinuierlich
@@ -93,8 +83,7 @@ final class TabFrameBox {
 /// Einfügeposition, ohne aufgeklappt werden zu müssen.
 struct TabReorderDropDelegate: DropDelegate {
     let orderedIDs: [UUID]
-    /// Liest die Rahmen bei jedem Ereignis frisch (`TabFrameBox`).
-    let frames: () -> [UUID: CGRect]
+    let frames: [UUID: CGRect]
     @Binding var insertionIndex: Int?
     @Binding var droppedSession: DraggableSession?
     /// Zählt jeden Strip-Eintritt hoch. Das Dekodieren des Payloads ist
@@ -191,7 +180,7 @@ struct TabReorderDropDelegate: DropDelegate {
     }
 
     private func rawInsertionIndex(atX x: CGFloat) -> Int {
-        TabReorderGeometry.insertionIndex(atX: x, orderedIDs: orderedIDs, frames: frames())
+        TabReorderGeometry.insertionIndex(atX: x, orderedIDs: orderedIDs, frames: frames)
     }
 }
 

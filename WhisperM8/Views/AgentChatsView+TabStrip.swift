@@ -20,10 +20,8 @@ extension AgentChatsView {
         // zIndex hebt das Element mit dem aktiven Tab an, damit dessen
         // Chrome-Füße (7pt über die eigene Breite hinaus) über den
         // Nachbar-Tabs statt darunter gezeichnet werden.
-        // Identität über Gruppe bzw. Chat, nicht über die Position (WM8-101):
-        // Wandert ein Tab in eine Gruppe, bleiben die übrigen Tabs bestehen.
-        ForEach(AgentTabGrouping.identified(items)) { entry in
-            switch entry.item {
+        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+            switch item {
             case .single(let sessionID):
                 if let session = tabsByID[sessionID] {
                     chromeTab(session, groupColor: nil, layout: layout)
@@ -250,9 +248,7 @@ extension AgentChatsView {
                             // aktivem Tab und Chat-Header sichtbar.
                             .frame(height: 34, alignment: .bottom)
                             .coordinateSpace(.named(Self.tabStripContentSpace))
-                            // Ohne Zustandsänderung: eine neue Messung wertet das Fenster
-                            // nicht neu aus (WM8-101, `TabFrameBox`).
-                            .onPreferenceChange(TabFramePreferenceKey.self) { tabFrameBox.frames = $0 }
+                            .onPreferenceChange(TabFramePreferenceKey.self) { tabFrames = $0 }
                             // Stale IDs aus der Multi-Auswahl entfernen, wenn sich die offenen Tabs ändern.
                             .onChange(of: headerTabs.map(\.id)) { _, _ in
                                 // Gegen ALLE Sessions prunen (nicht nur offene Tabs) — die
@@ -268,7 +264,7 @@ extension AgentChatsView {
                                    let x = TabReorderGeometry.insertionX(
                                     forIndex: index,
                                     orderedIDs: slotOrderIDs,
-                                    frames: tabFrameBox.frames,
+                                    frames: tabFrames,
                                     spacing: 0
                                    ) {
                                     TabInsertionIndicator()
@@ -284,7 +280,7 @@ extension AgentChatsView {
                             // Open laufen weiter über windowStore.moveTab in dropTab.
                             .onDrop(of: [.agentChatSession], delegate: TabReorderDropDelegate(
                                 orderedIDs: slotOrderIDs,
-                                frames: { [tabFrameBox] in tabFrameBox.frames },
+                                frames: tabFrames,
                                 insertionIndex: $tabInsertionIndex,
                                 droppedSession: $tabDropSession,
                                 dragGeneration: $tabDragGeneration,

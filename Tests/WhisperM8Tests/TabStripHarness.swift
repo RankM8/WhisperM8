@@ -11,10 +11,6 @@ final class TabStripProbe {
     var areaWidths: [CGFloat] = []
     var stripWidths: [CGFloat] = []
     var chipMeasurements = 0
-    /// Auswertungen des Gerüsts; im Fenster entspricht das `body.window`.
-    var bodyEvaluations = 0
-    /// Neu angelegte Tabs; im Fenster entspricht das `appear.tab`.
-    var tabAppears = 0
 }
 
 struct TabStripHarness: View {
@@ -29,10 +25,8 @@ struct TabStripHarness: View {
     @State private var areaWidth: CGFloat = 0
     @State private var trailingWidth: CGFloat = 0
     @State private var chipWidths: [AgentTabGroupingKey: CGFloat] = [:]
-    @State private var tabFrameBox = TabFrameBox()
 
     var body: some View {
-        probe.bodyEvaluations += 1
         let viewport = AgentTabWidthResolver.stripViewportWidth(areaWidth: areaWidth, trailingWidth: trailingWidth)
         var chips: [AgentTabGroupingKey: CGFloat] = [:]
         for case .group(let key, let ids) in items {
@@ -58,16 +52,12 @@ struct TabStripHarness: View {
             ) {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(alignment: .bottom, spacing: 6) {
-                        // Dieselbe Identität wie in der Leiste des Fensters (WM8-101).
-                        ForEach(AgentTabGrouping.identified(items)) { entry in
-                            itemView(entry.item, layout: layout)
+                        ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                            itemView(item, layout: layout)
                         }
                     }
                     .padding(.horizontal, 8)
                     .frame(height: 34, alignment: .bottom)
-                    .coordinateSpace(.named(AgentChatsView.tabStripContentSpace))
-                    .onPreferenceChange(TabFramePreferenceKey.self) { tabFrameBox.frames = $0 }
-                    .overlay(alignment: .leading) { Color.clear.frame(width: tabFrameBox.frames.isEmpty ? 0 : 1) }
                 }
                 .background(GeometryReader { geo in
                     Color.clear.onAppear { probe.stripWidths.append(geo.size.width) }
@@ -117,14 +107,6 @@ struct TabStripHarness: View {
             isMultiSelected: false, statusStore: store, groupColor: color,
             width: layout.widthByID[id], isNarrow: layout.narrowIDs.contains(id),
             onSelect: {}, onClose: {})
-        .onAppear { probe.tabAppears += 1 }
-        // Rahmen je Tab für die Einfügelinie, wie in der Leiste des Fensters.
-        .background(GeometryReader { geo in
-            Color.clear.preference(
-                key: TabFramePreferenceKey.self,
-                value: [id: geo.frame(in: .named(AgentChatsView.tabStripContentSpace))])
-        })
-        .id(id)
     }
 
     private func fixedButton(_ symbol: String, width: CGFloat) -> some View {
@@ -137,29 +119,9 @@ struct TabStripHarness: View {
     /// 18 Tabs wie im Zwilling: zwei Gruppen und viele Einzel-Tabs.
     @MainActor
     static func sample(probe: TabStripProbe) -> TabStripHarness {
-        let fixture = TabStripFixture()
-        return fixture.harness(items: fixture.items, probe: probe)
-    }
-}
-
-/// Feste Chats für das Gerüst. Dieselben IDs in mehreren Aufbauten, damit ein
-/// Test eine Umgruppierung nachstellen kann (WM8-101).
-@MainActor
-struct TabStripFixture {
-    let store: AgentSessionRuntimeStatusStore
-    let sessions: [UUID: AgentChatSession]
-    let projects: [UUID: AgentProject]
-    let active: [UUID]
-    let deal: [UUID]
-    let singles: [UUID]
-    let wsActive = AgentTabGroupingKey.workspace(UUID())
-    let wsDeal = AgentTabGroupingKey.workspace(UUID())
-
-    init() {
+        let store = AgentSessionRuntimeStatusStore()
         let wm8 = AgentProject(name: "whisperm8", path: "/tmp/whisperm8", color: "#3D6DF2", createdManually: true)
         let lm8 = AgentProject(name: "ListM8", path: "/tmp/ListM8", color: "#E8590C", createdManually: true)
-        let store = AgentSessionRuntimeStatusStore()
-        self.store = store
         func chat(_ title: String, _ project: AgentProject, _ status: AgentSessionRuntimeStatus) -> AgentChatSession {
             let session = AgentChatSession(provider: .claude, projectID: project.id, title: title)
             store.setStatus(status, for: session.id)
@@ -173,35 +135,17 @@ struct TabStripFixture {
                     chat("3 Kit · Kurs: Übersicht", lm8, .idle), chat("4 Ben · Fix: Exportierte Leads", lm8, .idle),
                     chat("5 Max · MCP: Kampagnen", lm8, .idle)]
         let singles = (1...9).map { chat("WM8-\($0 + 80) Tab\($0) · Einzelner Chat Nummer \($0)", wm8, .idle) }
-        self.sessions = Dictionary(uniqueKeysWithValues: (active + deal + singles).map { ($0.id, $0) })
-        self.projects = [wm8.id: wm8, lm8.id: lm8]
-        self.active = active.map(\.id)
-        self.deal = deal.map(\.id)
-        self.singles = singles.map(\.id)
-    }
-
-    var selected: UUID { active[3] }
-
-    var items: [AgentTabGroupingItem] {
-        [.group(key: wsActive, sessionIDs: active), .group(key: wsDeal, sessionIDs: deal)]
-            + singles.map { .single($0) }
-    }
-
-    /// Wie nach `chats workspace add`: Der dritte Einzel-Tab liegt jetzt im
-    /// Workspace „WM8 Aktiv“ und wandert in dessen Gruppe.
-    var regroupedItems: [AgentTabGroupingItem] {
-        let moved = singles[2]
-        return [.group(key: wsActive, sessionIDs: active + [moved]), .group(key: wsDeal, sessionIDs: deal)]
-            + singles.filter { $0 != moved }.map { .single($0) }
-    }
-
-    func harness(items: [AgentTabGroupingItem], probe: TabStripProbe) -> TabStripHarness {
-        TabStripHarness(
+        let wsActive = AgentTabGroupingKey.workspace(UUID())
+        let wsDeal = AgentTabGroupingKey.workspace(UUID())
+        let items: [AgentTabGroupingItem] = [.group(key: wsActive, sessionIDs: active.map(\.id)),
+                                             .group(key: wsDeal, sessionIDs: deal.map(\.id))]
+            + singles.map { .single($0.id) }
+        return TabStripHarness(
             items: items,
-            sessions: sessions,
-            projects: projects,
+            sessions: Dictionary(uniqueKeysWithValues: (active + deal + singles).map { ($0.id, $0) }),
+            projects: [wm8.id: wm8, lm8.id: lm8],
             groupMeta: [wsActive: ("WM8 Aktiv", "#7C5CFF"), wsDeal: ("DealSupply", "#9E73F2")],
-            selected: selected,
+            selected: active[3].id,
             store: store,
             probe: probe)
     }
