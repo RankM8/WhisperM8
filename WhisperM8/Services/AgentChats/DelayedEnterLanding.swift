@@ -54,6 +54,19 @@ enum DelayedEnterLanding {
         return elapsed < maxWaitSeconds ? .wait : .send
     }
 
+    /// Wartet gerade ein Enter auf seinen Text im Feld (WM8-119)? Dann gilt das
+    /// Feld für `send` und die Warteschlange nicht als frei: Ein zweiter Text
+    /// verschmölze mit dem ersten zu einer Meldung. Ein Eintrag, der älter ist
+    /// als die Frist plus Luft, zählt nicht mehr (etwa ein geschlossener Tab,
+    /// dessen Versuch nie lief); sonst bliebe der Chat gesperrt.
+    static func enterPending(since: Date?, now: Date = Date()) -> Bool {
+        guard let since else { return false }
+        return now.timeIntervalSince(since) < maxWaitSeconds + 2
+    }
+
+    static let enterPendingMessage = "Gerade wird ein anderer Auftrag zugestellt: Sein Enter wartet, bis der "
+        + "Text im Feld steht (höchstens 3 s). Vorgemerkt geht dieser hier danach raus (`enqueue`)."
+
     /// Das Feld sieht aus wie vor dem Einfügen: eine Zeile, Cursor ganz am
     /// Anfang, kein Text (ein grauer Vorschlag zählt nicht). Steht der Cursor
     /// nicht im Feld, ist das unklar; dann nicht warten.

@@ -979,6 +979,13 @@ landed=…`). Codex, Terminals, offene Rückfragen und ein nicht ablesbares Feld
 bleiben beim festen Enter nach 80 ms. Die Prüfung auf eine aufgehende Freigabe
 (WM8-75) läuft wie bisher direkt vor dem Enter.
 
+Solange ein Enter so wartet, gilt das Feld nicht als frei (Prüferin zu
+WM8-119): `send` lehnt mit `notReady` ab („Gerade wird ein anderer Auftrag
+zugestellt“), die CLI merkt den Auftrag dann vor; die Warteschlange reserviert
+nicht und sieht alle 0,5 s wieder nach. Sonst verschmölze ein zweiter Text mit
+dem ersten zu einer Meldung. Ein Eintrag älter als 5 s zählt nicht mehr
+(`DelayedEnterLanding.enterPending`), damit ein geschlossener Tab nichts sperrt.
+
 `send` und die Warteschlange werten erst aus, wenn das Enter entschieden ist;
 ein noch leeres Feld hieße sonst „abgeschickt“. `enqueue` an einen ruhenden
 Chat wartet deshalb bis zu 8 s auf das Ergebnis (vorher 6 s). Kosten: wie
