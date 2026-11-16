@@ -62,6 +62,8 @@ enum ControllerBindingResolver {
             return list(gesture)
         case let .chat(state):
             return chat(gesture, state: state)
+        case let .tickets(state):
+            return tickets(gesture, state: state)
         }
     }
 
@@ -289,7 +291,7 @@ enum ControllerBindingResolver {
 
     // MARK: - Liste links
 
-    private static func list(_ gesture: ControllerGesture) -> ControllerAction? {
+    static func list(_ gesture: ControllerGesture) -> ControllerAction? {
         switch gesture {
         case .move(.up, _, _): return .listMove(step: -1)
         case .move(.down, _, _): return .listMove(step: 1)

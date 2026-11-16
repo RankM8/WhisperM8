@@ -288,7 +288,32 @@ enum ControllerLegend {
             ]
         case let .chat(state):
             return chatCandidates(state)
+        case let .tickets(state):
+            return ticketsCandidates(state)
         }
+    }
+
+    /// Ticket-Modus (WM8-91, Paket 1): Bis Paket 2 das Board bedient, stehen
+    /// hier die Tasten der Liste links, dazu Menü, der Rückweg mit dem Namen
+    /// des Ziels und die Ebenen. R2 fehlt: Es tut ohne Board-Chat nichts.
+    private static func ticketsCandidates(_ state: ControllerTicketState) -> [Candidate] {
+        let back: [Candidate] = state.backTarget.map { target in
+            [Candidate(entry: ControllerLegendEntry(inputs: [.button(.l2)], label: .lastChat, backTarget: target),
+                       probes: [.tap(.l2)])]
+        } ?? []
+        return [
+            ControllerLegend.Candidate(
+                entry: ControllerLegendEntry(inputs: [.leftStick, .dpad], label: .move),
+                probes: verticalMoves
+            ),
+            candidate(.button(.cross), .open, [.press(.cross)]),
+            candidate(.button(.options), .menu, [.press(.options)]),
+            candidate(.button(.create), .newChat, [.press(.create)]),
+        ] + back + [
+            Candidate(
+                entry: ControllerLegendEntry(inputs: [.button(.r1), .button(.l2)], label: .layersHold),
+                probes: [.layerBegan(.quickDraw), .layerBegan(.whereTo)]),
+        ]
     }
 
     private static func chatCandidates(_ state: ControllerChatState) -> [Candidate] {

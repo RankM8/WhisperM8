@@ -24343,6 +24343,126 @@
           }
         }
       }
+    },
+    "Back: tickets %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück: Tickets %@"
+          }
+        }
+      }
+    },
+    "Ticket board %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ticket-Board %@"
+          }
+        }
+      }
+    },
+    "Ticket board": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ticket-Board"
+          }
+        }
+      }
+    },
+    "In the ticket board these work on the board chat, which is not here yet.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Ticket-Board wirken diese auf den Board-Chat, den es noch nicht gibt."
+          }
+        }
+      }
+    },
+    "No team set up · Settings › Tickets": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Team eingerichtet · Einstellungen › Tickets"
+          }
+        }
+      }
+    },
+    "%@ has no team · Settings › Tickets": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ hat kein Team · Einstellungen › Tickets"
+          }
+        }
+      }
+    },
+    "“here” is the board of your chat's project. Releasing opens it, even without moving.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„hier“ ist das Board des Projekts deines Chats. Loslassen öffnet es, auch ohne Bewegung."
+          }
+        }
+      }
+    },
+    "here": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hier"
+          }
+        }
+      }
+    },
+    "1 waiting for you": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 wartet auf dich"
+          }
+        }
+      }
+    },
+    "release: open": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "loslassen: öffnen"
+          }
+        }
+      }
+    },
+    "go + dictate (with board chat)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "hin + diktieren (mit Board-Chat)"
+          }
+        }
+      }
+    },
+    "Not loaded": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht geladen"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

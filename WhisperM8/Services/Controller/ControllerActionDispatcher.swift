@@ -139,10 +139,15 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         let listHasFocus = ui.area == .list && ui.listWindowID == windowID && window.isSidebarVisible
         snapshot.area = listHasFocus ? .list : .content
         snapshot.chat = chatState(in: window)
+        // Tickets statt Chats (WM8-91): eigener Zusammenhang, kein Chat-Ziel.
+        if let place = window.tickets {
+            snapshot.tickets = ControllerTicketState(place: place, backTarget: window.backTarget)
+        }
         // Während eines gebundenen Diktats nennt die Legende dessen Ziel, nicht
         // die Auswahl: Die darf wechseln, der Text geht trotzdem dorthin.
         let titleSession = snapshot.recordingTargetBound ? dictation.targetSessionID : window.selectedSessionID
-        let title = titleSession.flatMap(titleForSession)
+        var title = titleSession.flatMap(titleForSession)
+        if title == nil, let place = window.tickets { title = ControllerTicketsText.placeTitle(place.label) }
         if ui.targetTitle != title { ui.targetTitle = title }
         publish(snapshot)
         return snapshot
@@ -350,7 +355,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             // inzwischen etwas anderes die Eingaben (Aufnahme per Hotkey,
             // Dialog, Sheet), nur schließen.
             switch context {
-            case .chat, .recording(_, _, .some):
+            case .chat, .tickets, .recording(_, _, .some):
                 releaseWhereTo()
             default:
                 closeIsland()
@@ -651,6 +656,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         }
         var target: SidebarNavigationRow? = selectedSessionID.map { .chat($0) }
         if case .list = context, let marked = ui.markedRow, marked.sessionID != nil { target = marked }
+        // Im Ticket-Modus wirkt das Menü nur mit der Liste im Fokus auf eine
+        // Chat-Zeile; auf dem Board gibt es keinen Chat (WM8-91).
+        if case let .tickets(state) = context, state.area == .list, let marked = ui.markedRow,
+           marked.sessionID != nil { target = marked }
         let setup = menuSetup(for: target)
         ui.menuDialogOpen = setup.dialogOpen
         ui.menu = ControllerMenuModel(setup: setup)
@@ -677,7 +686,13 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         }
         // Während eines Diktats geht nichts ins Feld (Runde 5, Punkt 9).
         setup.dictationRunning = dictation.phase != nil
-        setup.archiveModeActive = targetWindowID.flatMap { chats.snapshot(of: $0) }?.isArchiveMode == true
+        let window = targetWindowID.flatMap { chats.snapshot(of: $0) }
+        setup.archiveModeActive = window?.isArchiveMode == true
+        // Ticket-Board (WM8-91): „Ticket-Board WM8“ am Chat, „Zu den Chats“ im Board.
+        setup.ticketsShown = window?.tickets != nil
+        if !setup.ticketsShown, let sessionID = setup.sessionID {
+            setup.ticketBoard = chats.ticketBoardTarget(for: sessionID, in: targetWindowID)
+        }
         return setup
     }
 
@@ -793,6 +808,11 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             }
         case .archiveMode:
             command(.toggleArchiveMode, orReject: true)
+        case .ticketBoard:
+            guard let board = setup.ticketBoard else { return playHaptic(.rejected) }
+            if command(.showTickets(projectID: board.projectID), orReject: true) { refreshContext() }
+        case .backToChats:
+            if command(.showChats, orReject: true) { refreshContext() }
         case .clipboardHistory:
             environment.toggleClipboardPanel()
         case .showBindings:

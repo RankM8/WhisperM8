@@ -34,6 +34,9 @@ struct ControllerLegendTarget: Equatable {
             return .init(title: String(localized: "Dialog"), detail: nil, tone: .neutral)
         case .list:
             return .init(title: String(localized: "List"), detail: nil, tone: .neutral)
+        case let .tickets(state):
+            // Statt des Chats der Ort (WM8-91): „Tickets · WM8“.
+            return .init(title: ControllerTicketsText.placeTitle(state.place.label), detail: nil, tone: .neutral)
         case let .chat(state):
             switch state.status {
             case .working: return .init(title: title, detail: String(localized: "working"), tone: .working)

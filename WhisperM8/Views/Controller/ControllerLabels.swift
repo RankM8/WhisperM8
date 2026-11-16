@@ -145,6 +145,7 @@ extension ControllerLegendEntry {
         switch backTarget.kind {
         case .chat: return String(localized: "Back: chat \(name)")
         case .workspace: return String(localized: "Back: workspace \(name)")
+        case .tickets: return String(localized: "Back: tickets \(name)")
         }
     }
 }

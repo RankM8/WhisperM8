@@ -932,6 +932,8 @@ final class AgentWindowStore {
     /// Orte je Fenster für L2 am Controller (`AgentWindowStore+PlaceHistory`).
     /// Flüchtig und nicht beobachtet, wie die Kachel je Workspace.
     @ObservationIgnored var placeHistories: [UUID: ChatPlaceHistory] = [:]
+    /// Board als Ort für L2 (WM8-91, `AgentWindowStore+Tickets`).
+    @ObservationIgnored var ticketPlaces = TicketPlaceMemory()
 
     /// Einzelansicht öffnen/selektieren — die Workspace-Referenz UND der
     /// gemerkte Pane-Fokus bleiben („Zurück zum Workspace" stellt exakt

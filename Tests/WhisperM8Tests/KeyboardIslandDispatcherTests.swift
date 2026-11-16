@@ -217,6 +217,35 @@ final class KeyboardIslandDispatcherTests: XCTestCase {
         XCTAssertEqual(window.commands.filter { $0 == .lastChat }.count, 1, "Loslassen danach wechselt nicht noch mal")
     }
 
+    /// Ticket-Board (WM8-91): Im Reiter „Tickets“ diktiert die Leertaste
+    /// nicht — weder „hier“ im Board (kein Chat sichtbar) noch in ein anderes
+    /// Board. Warnton, kein Diktat, kein Zeichen in den Chat dahinter.
+    func testSpaceInTheTicketBoardDoesNotDictate() {
+        window.tickets = ControllerTicketsPlace(projectID: UUID(), team: "WM8")
+        let here = ControllerTicketBoardChoice(
+            id: UUID(), team: "WM8", projectName: "whisperm8", colorHex: "#5E6AD2",
+            waitingCount: nil, isHere: true, isCurrent: true)
+        window.ticketBoards = ControllerTicketBoards(rows: [here], inTickets: true)
+        press(K.tab)
+        XCTAssertEqual(dispatcher.islandState?.model.whereTo?.tab, .tickets)
+        press(K.space)
+        XCTAssertTrue(dictation.started.isEmpty)
+        XCTAssertTrue(terminals.keys.isEmpty && terminals.texts.isEmpty)
+        XCTAssertEqual(beeps, 1)
+
+        var other = here
+        other.id = UUID()
+        other.team = "KUN"
+        other.isHere = false
+        other.isCurrent = false
+        window.ticketBoards = ControllerTicketBoards(rows: [here, other], inTickets: true)
+        releaseOption()
+        press(K.tab)
+        press(K.space)
+        XCTAssertTrue(dictation.started.isEmpty, "hin und diktieren an ein Board erst mit dem Board-Chat")
+        XCTAssertEqual(beeps, 2)
+    }
+
     /// Der Diktat-Hotkey (⌥Leertaste über Carbon) kommt nie als keyDown an:
     /// Bei offener Insel heißt er „hin und diktieren“, sein Loslassen beendet
     /// die neue Aufnahme nicht.

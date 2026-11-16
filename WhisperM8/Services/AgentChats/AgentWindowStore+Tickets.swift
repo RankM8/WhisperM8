@@ -1,5 +1,17 @@
 import Foundation
 
+/// Was der Store über das Ticket-Board als Ort weiß (WM8-91): das zuletzt
+/// gezeigte Board je Fenster und ob die Ticket-Ansicht eingeschaltet ist.
+/// Flüchtig und nicht beobachtet.
+struct TicketPlaceMemory {
+    /// Zuletzt gezeigtes Board je Fenster (Projekt), für „vorher“ im Reiter
+    /// „Tickets“ der Insel.
+    var lastProjectIDs: [UUID: UUID] = [:]
+    /// Ist die Ticket-Ansicht eingeschaltet? Sonst ist das Board kein Ziel
+    /// für L2. Tests ersetzen das.
+    var isBoardEnabled: () -> Bool = { UserDefaults.standard.bool(forKey: PreferenceKeys.ticketBoardEnabled) }
+}
+
 /// Ticket-Ansicht je Fenster: Chats oder Tickets. Flüchtig, nur für diesen
 /// App-Start; nach einem Neustart zeigt jedes Fenster wieder seine Chats.
 ///
@@ -24,6 +36,24 @@ extension AgentWindowStore {
         // Nur schreiben, wenn sich etwas ändert: Sonst wertete jede
         // Navigation die Ansichten neu aus, die den Modus lesen.
         guard ticketsModeWindowIDs.contains(windowID) != active else { return }
+        // Ein Ortswechsel für L2 (WM8-91): Board ↔ Chat bzw. Workspace dahinter.
+        // Erst der Ort davor (stand nach einer Navigation ohne Änderung des
+        // Zustands noch „kein Ort“), dann der neue.
+        recordPlace(of: windowID)
+        setTicketsModeFlag(active, in: windowID)
+        recordPlace(of: windowID)
+    }
+
+    /// Eine Navigation will einen Chat oder Workspace zeigen.
+    func leaveTicketsForNavigation(in windowID: UUID) {
+        guard ticketsModeHoldDepth == 0, ticketsModeWindowIDs.contains(windowID) else { return }
+        setTicketsModeFlag(false, in: windowID)
+        // Der neue Ort kommt mit der Navigation; bis dahin bleibt das Board
+        // das Rücksprungziel (nicht der Chat dahinter).
+        recordLeavingTickets(in: windowID)
+    }
+
+    private func setTicketsModeFlag(_ active: Bool, in windowID: UUID) {
         if active {
             ticketsModeWindowIDs.insert(windowID)
         } else {
@@ -31,16 +61,11 @@ extension AgentWindowStore {
         }
     }
 
-    /// Eine Navigation will einen Chat oder Workspace zeigen.
-    func leaveTicketsForNavigation(in windowID: UUID) {
-        guard ticketsModeHoldDepth == 0 else { return }
-        setTicketsMode(false, in: windowID)
-    }
-
     /// Das Fenster ist geschlossen: Modus und Controller der Ticket-Ansicht
     /// (samt letztem Abzug) werden freigegeben.
     func forgetTickets(of windowID: UUID) {
         ticketsModeWindowIDs.remove(windowID)
+        ticketPlaces.lastProjectIDs[windowID] = nil
         TicketBoardControllers.shared.forget(windowID)
     }
 

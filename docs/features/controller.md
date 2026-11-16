@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-11-15
+updated: 2026-11-16
 description: Controller-Steuerung — WhisperM8 mit einem Gamepad (PS5 DualSense, Xbox-Controller samt Paddles des Elite) bedienen; Belegung, Aufbau, Schalter, Prüfwege und Grenzen.
 ---
 
@@ -398,6 +398,50 @@ Fokus. In Dialogen des Agent-Chats-Fensters bewegt auch der linke Stick hoch/run
 (`isNewChatPickerOpen`, `isConfirmationOpen`); das Fenster bleibt Ziel, auch wenn das Popover selbst Key
 wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
 
+## Ticket-Board
+
+Das Ticket-Board ist ein Ort wie ein Chat oder ein Workspace (WM8-91, Plan
+[`../plans/ticket-board-controller.md`](../plans/ticket-board-controller.md), Entwurf
+[`../design/ticket-board-controller.html`](../design/ticket-board-controller.html)). Gebaut ist Paket 1
+„Öffnen und Umschalten“; das Bedienen des Boards (Auswahl, Triage, Tasten Nr. 8 bis 29) folgt mit Paket 2.
+Alles nur bei eingeschalteter Ticket-Ansicht (`ticketBoardEnabled`).
+
+- **Hin:** L2 halten, Reiter **„Tickets“** rechts von „Workspaces & Projekte“ (◀ ▶ gehen jetzt Schritt für
+  Schritt, ohne Umlauf). Je eingerichtetem Team mit Projekt eine Zeile: Farbe, Kürzel, Projekt, rechts die
+  Zahl „wartet auf dich“ (nur, wenn das Fenster den Stand dieses Boards schon geladen hat, sonst „–“;
+  dafür wird nichts abgerufen). Das Team des aktuellen Projekts steht oben, trägt „hier“ und ist markiert: Außerhalb
+  des Boards ist es ein Ziel, L2 halten, ▶ ▶, loslassen öffnet es. Im Board heißt die Zeile „jetzt“ und
+  Loslassen ohne Bewegung tut nichts; das zuletzt gezeigte Board trägt „vorher“. Hat das Projekt kein
+  Team, steht darunter „… hat kein Team · Einstellungen › Tickets“ und nichts ist markiert. R2 („hin und
+  diktieren“) geht im Reiter „Tickets“ nicht; das kommt mit dem Board-Chat (WM8-113).
+- **Zurück:** L2 getippt führt vom Board in den Chat davor und vom Chat ins Board, so wie es verlassen
+  wurde (Ansicht und Auswahl hält der `TicketBoardController` je Fenster). Die Leiste nennt das Ziel
+  („Zurück: Tickets WM8“). Auch der Ticket-Knopf, „Zu den Chats“ und ein Klick auf einen Chat sind
+  Ortswechsel; eine Auswahl aus dem Steuerkanal hinter den Tickets nicht.
+- **Options:** Am Chat steht in der Gruppe „Steuerung“ **„Ticket-Board WM8“** (Board des Projekts dieses
+  Chats, nur mit Team); im Board **„Zu den Chats“**.
+- **Kopf und Leiste** nennen statt des Chats den Ort: „Tickets · WM8“.
+
+**Belegung im Ticket-Modus** (Zusammenhang `tickets`, Vorrang nach Menü und Dialog, vor Liste und Chat):
+L2 getippt und gehalten wie im Chat, Options, Create, Touchpad, L1 + R1 wie überall. R1 gehalten zeigt nur
+die App-Raute; die Chat-Raute ist aus („wirkt auf den Board-Chat, den es noch nicht gibt“). L1 gehalten
+gibt es nicht. R2 tut nichts, mit „geht nicht“ (Entscheidung E4). Bis Paket 2 das Board bedient, führt
+dort nur ◀ in die Seitenleiste; die Tasten der Liste gelten erst mit ihrem Fokus, wo ihre Markierung zu
+sehen ist (eine stehen gebliebene Markierung wird nie ungesehen geöffnet, gestartet oder geschlossen).
+Paddles wie in der Liste: Sprünge verlassen das Board, Eingaben in einen Chat „geht nicht“.
+
+**Schutz:** Hinter den Tickets kommt in keinem Chat etwas an — kein Enter, kein Escape, keine Taste, kein
+Diktat, auch nicht über die Insel (L2 + R2 auf „hier“ im Board) oder per Tastatur (Leertaste in ⌥Tab).
+`ControllerTicketsSafetyTests` prüft das für jede Geste, jede Ebene und jede Paddle-Belegung und spielt
+alle Tasten an einem Chat mit offener Freigabe durch. Das Board schreibt nichts nach Linear.
+
+**Woher das Team kommt:** `TicketTeamDirectory` hält „Projekt → Team“ aus `tickets.json` im Speicher.
+Gelesen wird abseits des Main Threads beim Erscheinen eines Fensters, beim Umschalten auf die Tickets und
+beim Öffnen von „Wohin“ (eine kleine Datei, je Projekt höchstens ein Blick in `.git`). Leiste, Kopf und
+Menü lesen nur den Speicher; bis zum ersten Ergebnis steht dort „Tickets“ ohne Kürzel. Der Schnappschuss
+je Eingabe bekommt im Ticket-Modus einen kleinen Wert dazu (Projekt, Kürzel), außerhalb nichts; den Verlauf
+der Orte liest er nur. Nachgezogen wird er beim Umschalten und nach einer Navigation aus den Tickets.
+
 ## Xbox-Controller und Paddles
 
 Plan und Entscheidungen: [`../plans/controller-xbox-paddles.md`](../plans/controller-xbox-paddles.md).
@@ -749,6 +793,10 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
   Ausführer; `--filter ControllerFamily` Tastennamen und Legende ohne Touchpad; `--filter XboxHID` das
   Bündeln der HID-Berichte und den Debug-Schritt `hid:`; `--filter ControllerManagerHID` HID-Quelle,
   Notbremse und Belegung im Manager.
+- `swift test --filter ControllerTickets` und `--filter AgentWindowStoreTicketsPlace` — Ticket-Board
+  (WM8-91): kein Weg in einen verdeckten Chat, Reiter „Tickets“, Rückweg mit L2, Menü-Einträge, Teams aus
+  der Einrichtung. `make snapshots ONLY=tickets-controller` zeigt „Wohin“ mit dem Reiter (aus einem Chat,
+  im Board, ohne Team, als Pille), R1 im Board und die Leiste im Ticket-Modus.
 - `swift test --filter ControllerScroll` — Tempo-Anstieg, Bündelung, Blättern mit R1, Kreis „Ans Ende“
   samt Legende und Ausführer (WM8-116).
 - `swift test --filter Controller` — Kern, Ausführer, Manager, Debug-Kanal; die Ebenen in

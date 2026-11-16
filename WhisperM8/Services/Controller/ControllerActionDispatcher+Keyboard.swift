@@ -25,7 +25,8 @@ extension ControllerActionDispatcher {
     func keyboardIslandAllowed() -> Bool {
         guard let windowID = targetWindowID, chats.snapshot(of: windowID)?.isSwitcherOpen != true else { return false }
         switch ControllerContextResolver.context(for: snapshot()) {
-        case .chat, .list: return true
+        // Im Ticket-Modus wie in der Liste (WM8-91): ⌥Tab führt auch vom Board weg.
+        case .chat, .list, .tickets: return true
         case let .recording(_, _, navigation): return navigation != nil
         default: return false
         }
@@ -131,7 +132,11 @@ extension ControllerActionDispatcher {
         let destination = whereTo.destination
         switch destination {
         case .workspace, .project: return keyboardRejected()
-        case .stay, .chat: break
+        // Board: hin und diktieren erst mit dem Board-Chat (WM8-113, E4).
+        case .tickets: return keyboardRejected()
+        case .stay, .chat:
+            // Im Board gibt es keinen Chat, in den „hier“ diktiert würde.
+            if destination == .stay, whereTo.ticketBoards?.inTickets == true { return keyboardRejected() }
         }
         closeIsland()
         let switched = go(to: destination, previous: whereTo.previous)

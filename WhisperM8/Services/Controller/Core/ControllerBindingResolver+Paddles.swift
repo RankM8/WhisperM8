@@ -39,7 +39,9 @@ extension ControllerBindingResolver {
         case .menu, .modal, .otherWindow, .quickAction:
             // Schnellaktion wie Menü: L1 + R1 pausiert dort auch.
             return binding == .pause ? action : rejected
-        case .list:
+        case .list, .tickets:
+            // Im Ticket-Modus wie in der Liste: Sprünge verlassen das Board,
+            // Eingaben in einen Chat gibt es dort nicht (WM8-91, Nr. 22).
             return binding.needsChat ? rejected : action
         case let .chat(state):
             switch binding {

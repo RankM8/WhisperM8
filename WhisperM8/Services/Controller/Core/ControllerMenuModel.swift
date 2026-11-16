@@ -59,6 +59,11 @@ enum ControllerMenuItem: String, CaseIterable, Sendable {
     /// unten (Insel-Paket: von R1 + ▼ hierher gewandert).
     case archiveMode
     // Steuerung
+    /// Ticket-Board des Projekts dieses Chats öffnen (WM8-91), nur außerhalb
+    /// der Tickets und nur, wenn das Projekt ein Team hat.
+    case ticketBoard
+    /// Im Ticket-Modus: zurück zu den Chats (WM8-91).
+    case backToChats
     /// Zwischenablage-Verlauf öffnen (wie Touchpad bzw. L2 + Touchpad).
     case clipboardHistory
     case showBindings, pause
@@ -78,7 +83,8 @@ enum ControllerMenuItem: String, CaseIterable, Sendable {
         case .removeFromWorkspace, .addToWorkspace, .toggleTileNote, .moveToNewWindow,
              .renameWorkspace, .gridCapacity: return .workspace
         case .restart, .backgroundLogs, .backgroundStop, .backgroundRestart, .stopJob: return .lifecycle
-        case .toggleNotes, .archiveMode, .clipboardHistory, .showBindings, .pause: return .controller
+        case .toggleNotes, .archiveMode, .ticketBoard, .backToChats, .clipboardHistory, .showBindings, .pause:
+            return .controller
         }
     }
 
@@ -253,6 +259,11 @@ struct ControllerMenuSetup: Equatable, Sendable {
     var dictationRunning = false
     /// Das Fenster zeigt gerade das Archiv der Seitenleiste.
     var archiveModeActive = false
+    /// Board des Projekts, aus dem das Menü geöffnet wurde (WM8-91); `nil`
+    /// ohne Team oder ohne eingeschaltete Ticket-Ansicht.
+    var ticketBoard: ControllerTicketBoardTarget?
+    /// Das Fenster zeigt die Tickets (WM8-91).
+    var ticketsShown = false
 }
 
 /// Das Options-Menü mit zweiter Ebene (Befehle, Konten, Workspaces). Pur.
@@ -359,6 +370,8 @@ struct ControllerMenuModel: Equatable, Sendable {
         case .restart: return chat?.canRestart == true
         case .backgroundLogs, .backgroundStop, .backgroundRestart: return chat?.isBackgroundChat == true
         case .stopJob: return chat?.canStopJob == true
+        case .ticketBoard: return setup.ticketBoard != nil && !setup.ticketsShown
+        case .backToChats: return setup.ticketsShown
         case .archiveMode, .clipboardHistory, .showBindings, .pause: return true
         }
     }
@@ -373,7 +386,9 @@ struct ControllerMenuModel: Equatable, Sendable {
             if item == .redraw { return setup.profile == .claude }
             return !(item.needsRestingChat && setup.chatBusy)
         }
-        guard item.group != .controller else { return true }
+        guard item.group != .controller else {
+            return item == .ticketBoard || item == .backToChats ? isVisible(item, setup: setup) : true
+        }
         guard let chat = setup.chat, setup.sessionID != nil else { return false }
         switch item {
         case .switchAccount:

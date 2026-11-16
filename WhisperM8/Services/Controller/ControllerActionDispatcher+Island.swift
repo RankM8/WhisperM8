@@ -94,6 +94,10 @@ extension ControllerActionDispatcher {
         let sessionID = window.selectedSessionID
         var target = ControllerIslandTarget(
             title: sessionID.flatMap(titleForSession), status: sessionID.flatMap(islandStatus))
+        // Im Ticket-Modus nennt der Kopf den Ort (WM8-91): „Tickets · WM8“.
+        if let tickets = window.tickets {
+            target = ControllerIslandTarget(title: ControllerTicketsText.placeTitle(tickets.label), status: nil)
+        }
         // Während eines Diktats nennt der Kopf dessen Ziel (Runde 5, Punkt 9).
         if dictation.phase != nil, let dictationTarget = dictation.targetSessionID {
             let title = titleForSession(dictationTarget) ?? String(localized: "Chat")
@@ -111,6 +115,8 @@ extension ControllerActionDispatcher {
             setup = menuSetup
             var slots = ControllerQuickDrawSlots(setup: menuSetup)
             slots.app = environment.appToggles
+            // Im Board wirkt die Chat-Raute erst auf den Board-Chat (WM8-113).
+            if window.tickets != nil, dictation.phase == nil { slots.note = .noBoardChat }
             // Der Kopf nennt während eines Diktats dessen Ziel, also auch dessen Konto.
             // Einmal hier bestimmt und in der Sitzung gemerkt: Neue Zahlen
             // ziehen Kopf und Karte nach, wechseln aber nie das Konto.
@@ -132,7 +138,7 @@ extension ControllerActionDispatcher {
             var whereTo = ControllerWhereToState(
                 chats: islandChatRows(order, sessionID), currentChatID: sessionID,
                 workspaces: chats.workspaceChoices(of: windowID), gridActive: window.isGridActive,
-                previous: previous)
+                previous: previous, tickets: chats.ticketBoards(of: windowID))
             whereTo.reopenTitle = closedChats.nextTitle()
             content = .whereTo(whereTo)
         }
@@ -150,6 +156,7 @@ extension ControllerActionDispatcher {
         switch target.kind {
         case .chat: return .chat(id)
         case .workspace: return .workspace(id)
+        case .tickets: return .tickets(id)
         }
     }
 
@@ -220,8 +227,13 @@ extension ControllerActionDispatcher {
         switch destination {
         case .workspace, .project:
             if dictate { return playHaptic(.rejected) }
+        case .tickets:
+            // Hin und diktieren an den Board-Chat kommt mit WM8-113; bis dahin
+            // „geht nicht“, die Insel bleibt (E4).
+            if dictate { return playHaptic(.rejected) }
         case .stay, .chat:
-            break
+            // Im Board gibt es keinen Chat, in den „hier“ diktiert würde.
+            if dictate, destination == .stay, whereTo?.ticketBoards?.inTickets == true { return playHaptic(.rejected) }
         }
         spendIsland(.whereTo)
         let switched = go(to: destination, previous: whereTo?.previous ?? .stay)
@@ -265,6 +277,7 @@ extension ControllerActionDispatcher {
         case let .chat(sessionID): return command(.selectSession(sessionID), orReject: false)
         case let .workspace(workspaceID): return command(.switchToWorkspace(workspaceID), orReject: false)
         case let .project(projectID): return command(.switchToProject(projectID), orReject: false)
+        case let .tickets(projectID): return command(.showTickets(projectID: projectID), orReject: false)
         }
     }
 

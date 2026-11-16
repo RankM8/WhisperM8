@@ -6,7 +6,8 @@ import Foundation
 
 extension ControllerBindingResolver {
     /// Gesten, die eine Ebene betreffen. Die Ebenen gelten nur im Chat (auch
-    /// im Raster, dort für den Chat der fokussierten Kachel). In jedem anderen
+    /// im Raster, dort für den Chat der fokussierten Kachel) und im Ticket-Modus
+    /// (L2 und die App-Raute unter R1, WM8-91). In jedem anderen
     /// Zusammenhang — Liste, Verlauf, Menü, Dialog, Aufnahme — wirken die
     /// Tasten darin wie ohne Ebene. Das Ende einer Ebene schließt die Insel
     /// überall (außer in der Pause, die sie ohnehin schließt): Sie könnte
@@ -21,6 +22,7 @@ extension ControllerBindingResolver {
         if case let .recording(phase, targetIsChat, navigation?) = context {
             return recordingLayer(gesture, phase: phase, targetIsChat: targetIsChat, navigation: navigation)
         }
+        if case let .tickets(state) = context { return ticketsLayer(gesture, state: state) }
         guard case let .chat(state) = context else {
             if case let .inLayer(_, inner) = gesture { return action(for: inner, in: context) }
             return nil
@@ -181,7 +183,7 @@ extension ControllerBindingResolver {
     /// Zweite Raute unter R1 (Insel-Paket): Das Steuerkreuz schaltet die App,
     /// ein Druck je Stufe (Wiederholungen beim Halten zählen nicht, außer ▲ ▼
     /// zum Scrollen der Limits-Karte). Der linke Stick scrollt die Karte.
-    private static func appDiamond(_ gesture: ControllerGesture) -> ControllerAction? {
+    static func appDiamond(_ gesture: ControllerGesture) -> ControllerAction? {
         guard case let .move(direction, source, isRepeat) = gesture else { return nil }
         let vertical = direction == .up || direction == .down
         let step = direction == .up ? -1 : 1
@@ -201,7 +203,7 @@ extension ControllerBindingResolver {
     /// Das Touchpad öffnet den Zwischenablage-Verlauf — überall, auch wenn die
     /// Insel offen ist (außerhalb des Chats kommt das schon über die Tasten
     /// ohne Ebene).
-    private static func whereToLayer(_ gesture: ControllerGesture) -> ControllerAction? {
+    static func whereToLayer(_ gesture: ControllerGesture) -> ControllerAction? {
         switch gesture {
         case .move(.up, _, _): return .islandMove(step: -1)
         case .move(.down, _, _): return .islandMove(step: 1)
