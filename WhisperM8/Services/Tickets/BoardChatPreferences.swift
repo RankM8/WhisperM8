@@ -115,7 +115,7 @@ final class BoardChatPreferencesStore {
     // MARK: Ändern
 
     func setWidth(_ width: Double?, for projectID: UUID) {
-        update(projectID) { $0.width = width.map(BoardChatRules.clamped) }
+        update(projectID) { $0.width = width.flatMap(BoardChatRules.clamped) }
     }
 
     func setCollapsed(_ collapsed: Bool, for projectID: UUID) {

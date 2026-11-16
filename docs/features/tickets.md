@@ -413,9 +413,11 @@ Idee 3.
   (`BoardChatFocusGuard`, Regel pur in `BoardChatFocusRule`). Sonst blieben J/K, Esc und ⌘C nach einem Klick ins
   Terminal dort, und Esc bräche den laufenden Turn ab. Wege ohne Maus (Controller) rufen
   `BoardChatFocusRule.releaseTerminalFocus(in:)`.
-- **Breite und Zuklappen:** Ziehen am linken Rand; die Breite ändert sich beim Loslassen, vorher zeigt eine Linie
-  die neue Kante (sonst bekäme die TUI bei jedem Mausschritt eine neue Größe). 280 bis 720 pt, Vorgabe 380; das
-  Board behält mindestens 420 pt. In der Triage höchstens 330 pt. Zugeklappt bleibt eine schmale Leiste mit
+- **Breite und Zuklappen:** Ab Werk 40 % des Bereichs aus Board und Spalte (WM8-124, Giuliano 16.11.2026),
+  mindestens 280 pt. Gezogen wird am Griff auf der linken Kante (ein senkrechter Strich, immer sichtbar); die
+  Breite ändert sich beim Loslassen, vorher zeigt eine Linie die neue Kante (sonst bekäme die TUI bei jedem
+  Mausschritt eine neue Größe). Eine Obergrenze gibt es nicht, nur das Board behält mindestens 420 pt; die gezogene
+  Breite gilt in Board und Triage gleich. Zugeklappt bleibt eine schmale Leiste mit
   Knopf. Breite, Zuklappen und Wahl gelten je Projekt und liegen in `ticket-board-chat.json`
   (`BoardChatPreferencesStore`), nicht im UI-Zustand der Fenster: Eine Änderung dort ließe alle Fenster samt
   Seitenleiste neu auswerten.
@@ -455,9 +457,9 @@ Idee 3.
 - **Kosten:** Öffnen der Tickets hängt das Terminal einmal um (`pane.attach`, gemessen rund 70 ms auf ruhigem
   Rechner), Schließen einmal zurück; im Raster hängt das Schließen wie bisher alle Kacheln wieder ein. Je
   Auswertung des Fensters: Nachschlagen weniger Dutzend Chats über den Index des Workspace (WM8-101). Die Triage beobachtet allein der Breiten-Modifier
-  (`BoardChatColumnFrame`), J/K wertet weder Fenster noch Terminal neu aus. Ein Wechsel zwischen Board und Triage
-  ändert die Breite des Terminals (wenn sie über 330 pt liegt): Die TUI zeichnet dann einmal neu, wie beim Wechsel
-  zwischen Kachel und Einzelansicht.
+  (`BoardChatColumnFrame`) hängt nicht mehr an der Triage: J/K und der Wechsel zwischen Board und Triage werten
+  weder Fenster noch Terminal neu aus, die Breite des Terminals bleibt gleich (bis WM8-124 zeichnete die TUI beim
+  Wechsel einmal neu, weil die Triage die Spalte auf 330 pt deckelte).
 
 ### Abruf
 
@@ -564,7 +566,10 @@ gezeigten Stands.
   „Zum Chat“). Oben links „‹ Board“ (immer sichtbar, auch im schmalen Fenster), voriges/nächstes, „3 von 5“, „In Linear
   öffnen“ und Aktualisieren. Beim Blättern steht in der Mitte nur der Text des gezeigten Tickets. J/K oder ↑↓ wechseln das
   Ticket, Esc führt zurück zum Board auf dieselbe Karte; das wirkt nur, wenn der Fokus nicht in einem Textfeld oder
-  Terminal liegt. Unter 820 pt Breite fällt die Liste links weg. Knöpfe, die in Linear etwas ändern, gibt es nicht
+  Terminal liegt. Wird es eng (unter 960 pt für die Triage, etwa mit breitem Board-Chat), rücken Status, Priorität,
+  Zugewiesen, „Fertig, wenn“ und Labels als Zeile in den Kopf des Tickets, darunter die Chats am Ticket mit „Zum
+  Chat“; Bereich und Meilenstein stehen dann nur auf der Karte. Erst unter 660 pt fällt die Liste links weg
+  (`TicketTriageLayout`, pur und getestet). Knöpfe, die in Linear etwas ändern, gibt es nicht
   (Entscheidung E1 vom 15.11.2026: Das Board schreibt nicht nach Linear; die Triage-Knöpfe kommen mit dem
   Board-Chat, WM8-113). Die Auswahl-Logik ist pur (`TicketBoardSelection`), damit Controller und Tastatur-Insel
   (WM8-91) dieselben Funktionen nutzen: auf dem Board `columns(lanes)`, `start`, `move(key, .up/.down/.left/.right)`
