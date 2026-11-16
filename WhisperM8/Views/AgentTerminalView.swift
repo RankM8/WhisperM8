@@ -740,14 +740,11 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         }
         composerDraft.recordSubmitted(programmaticAt: Date())
         bookSubmittedWithheldDelivery()
-        // 80 ms Delay, damit die TUI den Paste-Block verarbeitet hat, bevor das
-        // Return kommt. Davor neu prüfen: keine Freigabe aufgegangen (WM8-75).
-        let (statusAtPaste, questionAtPaste) = (statusForDelayedEnter, questionOpenForDelayedEnter)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) { [weak self] in
-            guard let self, self.isRunning,
-                  self.delayedEnterAllowed(statusAtPaste: statusAtPaste, questionAtPaste: questionAtPaste, text: text) else { return }
-            self.terminal.send([0x0D])
-        }
+        // Return 80 ms später, damit die TUI den Paste-Block verarbeitet hat; bei
+        // Claude erst, wenn der Text im Feld steht (Bildpfade, WM8-119). Davor
+        // neu prüfen: keine Freigabe aufgegangen (WM8-75).
+        scheduleDelayedEnter(statusAtPaste: statusForDelayedEnter, questionAtPaste: questionOpenForDelayedEnter,
+                             text: text)
     }
 
     /// Sendet ein einzelnes ESC an die laufende TUI — Claude/Codex-Abbruch des

@@ -5,8 +5,10 @@ import Foundation
 
 extension AgentControlRequestHandler {
     /// Längstens so lange wartet `enqueue` auf das Ergebnis einer sofortigen
-    /// Zustellung (Nachsehen nach dem Enter: höchstens 4 s).
-    static let enqueueSettleSeconds: TimeInterval = 6
+    /// Zustellung: Das Enter wartet bis zu 3 s auf den Text im Feld (WM8-119),
+    /// das Nachsehen danach höchstens 4 s, zusammen gut 7 s. Bleibt unter der
+    /// Frist des Handlers (10 s, `ChatsControlProtocol.handlerTimeoutSeconds`).
+    static let enqueueSettleSeconds: TimeInterval = 8
 
     // MARK: queue.enqueue / queue.cancel
 

@@ -604,7 +604,8 @@ legen (so ist es beim Nutzer); die Weiche beurteilt diese Tasten wie die Gesicht
   Freigabe-Dialog „alle Änderungen erlauben“. `sendKey` verweigert dort Tab und Shift+Tab.
 - **Kein Enter in eine gerade aufgehende Freigabe (WM8-75, 14.11.2026):** Text mit Senden (Diktat, Kreuz
   während der Aufnahme, `chats send`, Warteschlange) geht als Einfüge-Block raus, das Enter 80 ms später
-  (`AgentTerminalController.pastePrompt`). Direkt davor prüft `DelayedEnterGuard` neu: Kam die
+  (`AgentTerminalController.pastePrompt`), bei einem ruhenden Claude-Chat erst, wenn der Text im Feld
+  steht (Bildpfade, WM8-119, [agent-chats-cli.md](agent-chats-cli.md)). Direkt davor prüft `DelayedEnterGuard` neu: Kam die
   Rückfrage erst nach dem Einfügen, oder steht bei Claude unten statt des Eingabefelds ein Dialog
   (`ControllerScreenSnapshot.dialogVisible`, unterste 8 Zeilen), bleibt das Enter aus, und die Pille sagt
   „Nicht gesendet: Der Chat fragt nach einer Entscheidung“ (nicht während einer Aufnahme). Der Text steht
