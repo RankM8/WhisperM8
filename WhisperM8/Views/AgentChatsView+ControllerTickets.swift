@@ -29,7 +29,8 @@ extension AgentChatsView {
         let project = selectedProject
         var place = ControllerTicketsPlace(
             projectID: project?.id, team: TicketTeamDirectory.shared.team(of: project?.id), projectName: project?.name)
-        place.chatBehind = selectedSessionID
+        // Was „Zu den Chats“ zeigt: die sichtbare Auswahl (fällt auf den ersten Tab zurück).
+        place.chatBehind = selectedSession?.id
         guard TicketBoardControllers.shared.hasController(for: windowID) else { return place }
         let controller = TicketBoardControllers.shared.controller(for: windowID)
         let model = controller.viewModel
