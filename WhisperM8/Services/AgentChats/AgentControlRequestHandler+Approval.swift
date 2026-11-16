@@ -19,7 +19,7 @@ extension AgentControlRequestHandler {
         return DelayedEnterGuard.approvalPending(
             status: coordinator.statusStore.status(for: targetID),
             lifecycle: coordinator.lifecycleState(for: targetID),
-            screen: controller.controllerScreenSnapshot())
+            screen: controller.sendCheckScreen().snapshot)   // auch hochgescrollt (WM8-123)
     }
 
     /// Antwort, wenn das Enter nach dem Einfügen zurückgehalten wurde: kein
