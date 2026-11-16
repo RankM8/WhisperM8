@@ -411,8 +411,9 @@ Eingabefeld stehen könnte (`TerminalComposerDraftTracker`, pur getestet):
   (bis 330 ms) und antwortet dann ebenfalls `approvalPending` statt
   `delivered` (Audit `withheld`, `detail.textInField: true`,
   `detail.resend: false`): Der Text steht im Eingabefeld — nicht neu senden,
-  auch nicht per `enqueue`. `chats submit` schickt ihn nicht ab (er gilt als
-  eingefügter Text, WM8-121); Wege siehe `chats submit` unten. Die Idempotenz wird erst danach abgeschlossen; ein
+  auch nicht per `enqueue`. Nach der Freigabe schickt `chats submit` ihn ab,
+  solange im Feld niemand weitergeschrieben hat (WM8-123); Einzelheiten siehe
+  `chats submit` unten. Die Idempotenz wird erst danach abgeschlossen; ein
   Wiederholen mit derselben requestID bekommt nie „duplicate“ als Erfolg. Die
   Warteschlange verbucht einen Auftrag erst nach dem Enter als zugestellt;
   zurückgehalten bleibt er vorgemerkt (`queue_withheld`), und eine offene
@@ -534,9 +535,15 @@ nicht abgeschickt, danach ein Turn, ohne dass jemand Enter oder Ctrl+C
 gedrückt hat“. Dann lehnt `send` ab, statt anzuhängen, und die Warteschlange
 wartet, statt anzuhängen, solange das Feld nicht sichtbar leer ist. Bei
 Codex-Chats liest die App das Feld nie ab; dort gibt nur Enter, Ctrl+C oder
-ein Absenden den Vermerk frei. Dieselbe Schätzung nutzen `move-account
---stop-and-resume` und der Kontowechsel nach dem Turn: Auch sie behandeln den
-eingefügten Text nach einem selbst begonnenen Turn weiter als Entwurf.
+ein Absenden den Vermerk frei. `move-account --stop-and-resume` und der
+Kontowechsel nach dem Turn behandeln den eingefügten Text nach einem selbst
+begonnenen Turn ebenfalls als Entwurf, lesen aber seit WM8-123 das Feld wie die
+Warteschlange (`ComposerDraftOnScreen`, `mayHaveUnsentInputForAccountSwitch`):
+Sichtbar leer bei unten stehender Ansicht gibt frei, sichtbarer Text hält auch
+hochgescrollt, sonst gilt die Schätzung. Vorher hielt ein Diktat ohne Senden,
+das Giuliano mit der Rücktaste wieder gelöscht hatte, den Wechsel bis zum
+nächsten Enter auf (höchstens 30 Minuten). Gelesen wird nur bei einem
+ruhenden Chat, also höchstens alle 2 s je vorgemerktem Wechsel 16 Zeilen.
 
 **Grenze:** Drückt der User selbst Enter auf einen zurückgelegten Prompt,
 läuft dieser erneut — das ist eine bewusste Eingabe im Terminal, die App
@@ -854,10 +861,23 @@ Warteschlange nach dem Start zustellte. Deshalb:
   danach dasselbe Nachsehen. Leeres Feld, kein Feld oder nicht ablesbar: Exit 4,
   nichts gesendet. Vermutet die App einen Entwurf, lehnt `submit` ebenfalls ab.
   Seit WM8-121 gilt das auch für von der App eingefügten Text, über einen
-  Turn-Start hinweg, und damit auch für einen Auftrag, dessen Enter wegen einer
-  Freigabe zurückgehalten wurde: Die App kann ihn nicht von einem Diktat ohne
-  Senden unterscheiden. Die Ablehnung sagt dann „eingefügt“ und nennt die
-  Wege, die gehen. Direkt gesendeter Auftrag: Der User drückt im Chat Enter.
+  Turn-Start hinweg (Diktat ohne Senden, „→ Jarvis“, `send --no-submit`).
+  **Ausnahme seit WM8-123 (16.11.2026):** Ein Auftrag von `send` oder der
+  Warteschlange, dessen Enter wegen einer Freigabe zurückgehalten wurde, stammt
+  vom Absender, nicht vom User. Die App vermerkt ihn eigens
+  (`TerminalComposerDraftTracker.withheldDelivery`, beansprucht von `send` bzw.
+  der Warteschlange nach dem Zurückhalten; ein Diktat mit Senden beansprucht
+  nie). `submit` schickt ihn ab, wenn der Chat ruht, keine Freigabe offen ist
+  und seitdem niemand im Feld getippt, gelöscht, eingefügt oder etwas geholt hat
+  (ESC und Pfeile zählen nicht, Tasten im Freigabe-Dialog auch nicht). Die
+  Antwort trägt `withheldDelivery: true`. War er vorgemerkt, verbucht die
+  Warteschlange ihn mit diesem Enter als zugestellt (`queue_delivered_by_submit`),
+  sonst käme er beim nächsten Turn-Ende ein zweites Mal; ein per `dequeue`
+  stornierter bleibt storniert. Ein Neustart ohne Chatverlust trägt den Vermerk
+  im Manifest weiter (`composerWithheldDelivery`, `composerWithheldQueueID`).
+  Hat jemand am Text weitergeschrieben, gehört er (auch) dem User; dann lehnt
+  `submit` ab, sagt „eingefügt“ und nennt die Wege, die gehen. Direkt
+  gesendeter Auftrag: Der User drückt im Chat Enter.
   Vorgemerkter Auftrag (die Warteschlange lässt ihn nach dem zurückgehaltenen
   Enter vorgemerkt): entweder erst `dequeue`, dann Enter durch den User,
   sonst kommt er beim nächsten Turn-Ende ein zweites Mal; oder

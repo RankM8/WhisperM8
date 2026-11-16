@@ -8,7 +8,7 @@ extension AgentControlRequestHandler {
     static let approvalPendingMessage =
         "Im Ziel ist eine Freigabe oder ein Dialog offen — send bestätigt keine Freigaben, sie gehen an den User. Später erneut oder `enqueue`."
     static let enterWithheldMessage =
-        "Text eingefügt, aber nicht abgeschickt: Zwischen Einfügen und Enter ging eine Freigabe auf. Der Text steht im Eingabefeld — nicht neu senden (auch nicht per enqueue); die Freigabe geht an den User."
+        "Text eingefügt, aber nicht abgeschickt: Zwischen Einfügen und Enter ging eine Freigabe auf. Der Text steht im Eingabefeld — nicht neu senden (auch nicht per enqueue); die Freigabe geht an den User. Danach schickt `chats submit <ref>` ihn ab, solange im Feld niemand weitergeschrieben hat."
 
     /// Vor dem Einfügen: Wartet das Ziel auf eine Freigabe, ist die Art
     /// unklar, oder steht bei Claude statt des Eingabefelds ein Dialog? Gilt

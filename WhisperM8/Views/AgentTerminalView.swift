@@ -659,8 +659,16 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     }
 
     /// Übernahme nach dem Neustart: Das Manifest meldet einen Entwurf.
-    func noteComposerDraftAdopted(insertedText: Bool) {
-        composerDraft.recordDraftAdopted(insertedText: insertedText)
+    func noteComposerDraftAdopted(insertedText: Bool,
+                                  withheldDelivery: TerminalComposerDraftTracker.WithheldDelivery? = nil) {
+        composerDraft.recordDraftAdopted(insertedText: insertedText, withheldDelivery: withheldDelivery)
+    }
+
+    /// Enter eines Auftrags zurückgehalten; `claimWithheldDelivery` sagt, wem er gehört (WM8-123).
+    func noteDeliveryWithheld() { composerDraft.recordDeliveryWithheld() }
+    @discardableResult
+    func claimWithheldDelivery(queuedPromptID: UUID?) -> Bool {
+        composerDraft.claimWithheldDelivery(queuedPromptID: queuedPromptID)
     }
 
     /// Sendet einen Prompt über den Control-Socket (`whisperm8 chats send`) in

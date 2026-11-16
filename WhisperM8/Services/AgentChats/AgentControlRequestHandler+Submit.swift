@@ -15,31 +15,37 @@ extension AgentControlRequestHandler {
         }
         let actorID = request.actor.sessionID.flatMap(UUID.init(uuidString:))
 
-        let outcome: SendOutcome = await MainActor.run {
-            if request.isExpired() { return .failure(.expired, Self.expiredMessage) }
+        // Zweiter Wert: abgeschickt wurde ein Auftrag, dessen Enter zurückgehalten war (WM8-123).
+        let (outcome, releasedWithheld): (SendOutcome, Bool) = await MainActor.run {
+            if request.isExpired() { return (.failure(.expired, Self.expiredMessage), false) }
             let workspace = AgentWorkspaceUIModel.shared.workspace
             guard let session = workspace.sessions.first(where: { $0.id == targetID }),
                   session.status != .archived else {
-                return .failure(.notFound, "Session nicht gefunden oder archiviert")
+                return (.failure(.notFound, "Session nicht gefunden oder archiviert"), false)
             }
             if let actorID, actorID == targetID {
-                return .failure(.selfSend, "Den eigenen Entwurf abzuschicken ist nicht erlaubt (Endlosschleife)")
+                return (.failure(.selfSend, "Den eigenen Entwurf abzuschicken ist nicht erlaubt (Endlosschleife)"), false)
             }
             guard let controller = AgentTerminalRegistry.shared.controller(for: targetID), controller.isRunning else {
-                return .failure(.noPty, "Keine laufende PTY — Tab mit `chats resume` starten")
+                return (.failure(.noPty, "Keine laufende PTY — Tab mit `chats resume` starten"), false)
             }
             let screen = controller.controllerScreenSnapshot()
             let status = AgentSessionStatusCoordinator.shared.statusStore.status(for: targetID)
+            let withheld = controller.composerDraft.submittableWithheldDelivery
             switch Self.submitCheck(profile: controller.command.keyboardProfile, status: status,
                                     approvalPending: Self.approvalPending(targetID, controller),
                                     userDraft: controller.composerDraft.mayHaveUnsentInput,
                                     insertedText: controller.composerDraft.mayHoldInsertedText,
+                                    withheldDelivery: withheld != nil,
                                     field: screen?.promptField, screenReadable: screen != nil) {
             case .allowed:
                 controller.submitComposer()
-                return .success(session)
+                if let id = withheld?.queuedPromptID {
+                    Self.markWithheldQueueEntryDelivered(id, sessionID: targetID)
+                }
+                return (.success(session), withheld != nil)
             case .refused(let code, let message):
-                return .failure(code, message)
+                return (.failure(code, message), false)
             }
         }
 
@@ -59,6 +65,8 @@ extension AgentControlRequestHandler {
                 "ack": "submitted",
                 "target": ["id": session.id.uuidString, "title": session.title],
                 "submitCheck": verdict.rawValue,
+                // Abgeschickt wurde ein Auftrag, dessen Enter zurückgehalten war (WM8-123).
+                "withheldDelivery": releasedWithheld,
             ]))
         }
     }
@@ -67,14 +75,27 @@ extension AgentControlRequestHandler {
         + "abgeschickt). submit schickt nur liegengebliebene Aufträge ab, nie Text des Users. Nichts abgeschickt."
 
     static let submitRefusedInsertedMessage = "Im Eingabefeld steht Text, den die App eingefügt und niemand "
-        + "abgeschickt hat: ein Diktat ohne Senden, „→ Jarvis“, `send --no-submit` oder ein Auftrag, dessen Enter "
-        + "wegen einer Freigabe zurückgehalten wurde. submit schickt ihn nicht ab, weil die App nicht unterscheiden "
-        + "kann, ob er dem User gehört. Nichts abgeschickt. Was im Feld steht, zeigt kein chats-Befehl; der User "
-        + "kann nach der Freigabe weitergetippt oder diktiert haben. Deshalb: Direkt gesendeter Auftrag: Der User "
-        + "schickt ihn im Chat mit Enter ab. Vorgemerkter Auftrag (steht noch in `chats queue <ref>`): erst "
+        + "abgeschickt hat: ein Diktat ohne Senden, „→ Jarvis“, `send --no-submit`, oder ein Auftrag, dessen Enter "
+        + "wegen einer Freigabe zurückgehalten wurde und an dem seither jemand getippt, diktiert oder eingefügt hat. "
+        + "submit schickt ihn nicht ab, weil er dann (auch) dem User gehört. Nichts abgeschickt. Was im Feld "
+        + "steht, zeigt kein chats-Befehl. Deshalb: Direkt gesendeter Auftrag: Der User schickt ihn im Chat mit "
+        + "Enter ab. Vorgemerkter Auftrag (steht noch in `chats queue <ref>`): erst "
         + "`chats dequeue <ref> <Kurz-ID>`, dann Enter durch den User, sonst kommt er doppelt; oder nach "
         + "Rückfrage beim User `whisperm8 chats interrupt <ref> --clear-input --force` (leert das ganze Feld), "
         + "dann geht er von selbst neu raus. Leeren mit --force nie ohne Rückfrage beim User."
+
+    /// Ein vorgemerkter Auftrag, dessen Enter zurückgehalten war, ist mit dem
+    /// Enter von `submit` zugestellt (höchstens einmal, wie die Warteschlange
+    /// selbst). Nur, solange er noch offen ist: Ein per `dequeue` storniertes
+    /// bleibt storniert.
+    @MainActor
+    static func markWithheldQueueEntryDelivered(_ id: UUID, sessionID: UUID,
+                                                store: AgentPromptQueueStore = .shared) {
+        guard store.openPrompts(for: sessionID).contains(where: { $0.id == id }) else { return }
+        store.markDelivered(id: id)
+        Logger.agentStore.notice(
+            "queue_delivered_by_submit session=\(sessionID.uuidString, privacy: .public) id=\(id.uuidString, privacy: .public)")
+    }
 
     enum SubmitDecision: Equatable {
         case allowed
@@ -88,14 +109,18 @@ extension AgentControlRequestHandler {
     /// `insertedText`: Der Entwurf ist von der App eingefügter Text (WM8-121).
     /// Dazu gehört auch ein Auftrag, dessen Enter wegen einer Freigabe
     /// zurückgehalten wurde; die Meldung nennt deshalb den Weg, der dann geht.
+    /// `withheldDelivery`: Der eingefügte Text ist ein beanspruchter,
+    /// unberührter Auftrag, dessen Enter zurückgehalten wurde (WM8-123). Er
+    /// stammt vom Absender, nicht vom User, und darf raus.
     static func submitCheck(profile: TerminalKeyboardProfile, status: AgentSessionRuntimeStatus?,
                             approvalPending: Bool, userDraft: Bool, insertedText: Bool = false,
+                            withheldDelivery: Bool = false,
                             field: ControllerPromptField?, screenReadable: Bool) -> SubmitDecision {
         guard profile == .claudeCodeChat else {
             return .refused(.unsupported, "`chats submit` gibt es nur für Claude-Chats")
         }
         if approvalPending { return .refused(.approvalPending, approvalPendingMessage) }
-        if userDraft {
+        if userDraft, !(withheldDelivery && insertedText) {
             return .refused(.conflict, insertedText ? submitRefusedInsertedMessage : submitRefusedTypedMessage)
         }
         if let status, status != .idle {

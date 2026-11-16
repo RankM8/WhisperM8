@@ -52,6 +52,31 @@ struct TerminalComposerDraftTracker: Equatable {
     /// Steht vielleicht ein nicht abgeschickter Entwurf im Feld, getippt oder
     /// eingefuegt? Diese Frage stellen Schutz, `send` und Warteschlange.
     var mayHaveUnsentInput: Bool { mayHaveTypedInput || mayHoldInsertedText }
+
+    /// Ein Auftrag steht im Feld, weil sein Enter wegen einer Freigabe
+    /// zurueckgehalten wurde (WM8-75). Er gilt als eingefuegter Text
+    /// (`mayHoldInsertedText`). Beanspruchen ihn `chats send` oder die
+    /// Warteschlange als ihren Auftrag, darf `chats submit` ihn abschicken,
+    /// solange seitdem nichts getippt, eingefuegt oder geholt wurde (WM8-123).
+    /// Ein Diktat mit Senden beansprucht ihn nie: Dessen Text gehoert dem User.
+    struct WithheldDelivery: Equatable {
+        /// Von `chats send` oder der Warteschlange beansprucht.
+        var fromSender = false
+        /// Vorgemerkter Auftrag der Warteschlange; `submit` verbucht ihn als
+        /// zugestellt, sonst kaeme er beim naechsten Turn-Ende ein zweites Mal.
+        var queuedPromptID: UUID?
+        /// Seit dem Zurueckhalten weder getippt noch eingefuegt oder geholt.
+        var untouched = true
+    }
+    private(set) var withheldDelivery: WithheldDelivery?
+
+    /// Den Auftrag darf `chats submit` abschicken: beansprucht, unberuehrt, und
+    /// er ist das Einzige, was der Tracker im Feld vermutet.
+    var submittableWithheldDelivery: WithheldDelivery? {
+        guard let withheldDelivery, withheldDelivery.fromSender, withheldDelivery.untouched,
+              mayHoldInsertedText, !mayHaveTypedInput else { return nil }
+        return withheldDelivery
+    }
     /// Ein Turn wurde abgebrochen (ESC, Ctrl+C, `chats interrupt`) oder ein
     /// Rewind hat eine alte Nachricht ins Feld gelegt. Ein programmatischer
     /// Versand haengte seinen Text daran an, und der abgebrochene Auftrag
@@ -143,6 +168,7 @@ struct TerminalComposerDraftTracker: Equatable {
     /// in Claude den grauen Vorschlag ins Feld.
     mutating func recordSuggestionAccepted() {
         mayShowAcceptedSuggestion = true
+        withheldDelivery?.untouched = false
     }
 
     /// Eingefuegter Text bleibt stehen (`mayHoldInsertedText`, WM8-121).
@@ -223,11 +249,19 @@ struct TerminalComposerDraftTracker: Equatable {
 
     /// Pfeile, Bild, Pos1/Ende: Bewegen in der Rewind-Liste, kein Text.
     private static let navigationKeyCodes: Set<UInt16> = [115, 116, 119, 121, 123, 124, 125, 126]
+    /// ESC und Navigation: aendern keinen Text im Feld.
+    private static let textNeutralKeyCodes: Set<UInt16> = navigationKeyCodes.union([53])
 
     /// Tastendruck, der an die Terminal-View ging — nur die Text-Schaetzung,
     /// ohne Abbruch-Logik (siehe `recordTerminalKey`).
     mutating func recordKeyDown(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) {
         let flags = modifiers.intersection(.deviceIndependentFlagsMask)
+        // Jede Taste ausser ESC und Navigation kann den zurueckgehaltenen
+        // Auftrag veraendert haben (Tippen, Loeschen, Tab, Einfuegen). Enter
+        // und Ctrl+C raeumen ihn unten ohnehin.
+        if !Self.textNeutralKeyCodes.contains(keyCode) {
+            withheldDelivery?.untouched = false
+        }
         switch keyCode {
         case 36, 76:
             // Return/Enter schickt ab; mit Shift/Option ist es ein Zeilenumbruch
@@ -285,6 +319,7 @@ struct TerminalComposerDraftTracker: Equatable {
     /// - Parameter fieldVisiblyEmpty: Das Feld war vor dem ↑ am Bildschirm
     ///   sichtbar leer (`ControllerScreenReading`); `nil`, wenn nicht ablesbar.
     mutating func recordHistoryRecall(isClaude: Bool, fieldVisiblyEmpty: Bool? = nil) {
+        withheldDelivery?.untouched = false
         if isClaude {
             mayHoldRestoredPrompt = true
         } else {
@@ -309,10 +344,30 @@ struct TerminalComposerDraftTracker: Equatable {
     /// Datei-Drop, Report-Routing, `chats send --no-submit`). Bleibt ueber
     /// einen Turn-Start hinweg stehen (`mayHoldInsertedText`).
     mutating func recordTextInserted() {
+        withheldDelivery?.untouched = false
         mayHoldInsertedText = true
         mayHoldRecalledCodexPrompt = false
         mayHaveEmptiedField = false
         programmaticWrites += 1
+    }
+
+    /// Das Enter eines Auftrags wurde zurueckgehalten (WM8-75): Der Text steht
+    /// als eingefuegter Text im Feld. Wem er gehoert, sagt erst
+    /// `claimWithheldDelivery` (WM8-123).
+    mutating func recordDeliveryWithheld() {
+        recordTextInserted()
+        withheldDelivery = WithheldDelivery()
+    }
+
+    /// `chats send` oder die Warteschlange: Der zurueckgehaltene Text ist ihr
+    /// Auftrag. Nur, solange er unberuehrt ist; sonst bleibt er Text, den
+    /// `submit` nicht abschickt. - Returns: beansprucht?
+    @discardableResult
+    mutating func claimWithheldDelivery(queuedPromptID: UUID?) -> Bool {
+        guard withheldDelivery?.untouched == true, mayHoldInsertedText else { return false }
+        withheldDelivery?.fromSender = true
+        withheldDelivery?.queuedPromptID = queuedPromptID
+        return true
     }
 
     /// Programmatisch abgeschickt (`chats send`, Queue-Zustellung) oder
@@ -333,9 +388,11 @@ struct TerminalComposerDraftTracker: Equatable {
     /// Nach einem Neustart ohne Chatverlust: Das Manifest meldet einen
     /// Entwurf. Eingefuegter Text bleibt eingefuegt; was die alte App nicht
     /// unterschied (aeltere Manifeste), gilt wie bisher als getippt.
-    mutating func recordDraftAdopted(insertedText: Bool) {
+    mutating func recordDraftAdopted(insertedText: Bool, withheldDelivery: WithheldDelivery? = nil) {
         if insertedText {
             recordTextInserted()
+            // Ein beanspruchter, unberuehrter Auftrag bleibt es ueber den Neustart.
+            self.withheldDelivery = withheldDelivery
         } else {
             mayHaveTypedInput = true
             programmaticWrites += 1
@@ -347,6 +404,7 @@ struct TerminalComposerDraftTracker: Equatable {
     private mutating func clearDraft() {
         mayHaveTypedInput = false
         mayHoldInsertedText = false
+        withheldDelivery = nil
         fieldResets &+= 1
     }
 }

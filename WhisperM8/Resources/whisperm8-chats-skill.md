@@ -78,7 +78,10 @@ whisperm8 chats interrupt <ref> [--force] [--clear-input]
                                                      # auch User-Entwürfe, deshalb opt-in
 whisperm8 chats submit <ref>                         # Text, der im Eingabefeld eines ruhenden Claude-Chats
                                                      # liegengeblieben ist, abschicken (nur Enter, kein neuer
-                                                     # Text). Statt noch einmal zu senden — das verdoppelte ihn
+                                                     # Text). Statt noch einmal zu senden — das verdoppelte ihn.
+                                                     # Auch nach approvalPending mit textInField: Nach der
+                                                     # Freigabe schickt submit den eigenen Auftrag ab, solange
+                                                     # niemand im Feld weitergeschrieben hat
 whisperm8 chats open <ref>                           # Tab fokussieren (startet NICHT neu)
 whisperm8 chats close <ref> [<ref>…]                 # NUR den UI-Tab schließen (nicht destruktiv)
 whisperm8 chats close <ref> --stop [--force]         # Tab zu + Agent beenden (kein Archiv, Verlauf bleibt);
