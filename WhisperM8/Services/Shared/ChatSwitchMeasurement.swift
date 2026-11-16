@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Führt einen Block einmal aus, nachdem der laufende Runloop-Durchgang des
 /// Main Threads fertig ist — also nach dem Commit von Core Animation, in dem
@@ -74,9 +75,18 @@ enum WorkspaceApplyMeasurement {
         guard pending == nil, PerfBudgets.workspaceApply.isActive else { return }
         let token = PerfBudgets.workspaceApply.begin()
         pending = token
+        let startedAt = ProcessInfo.processInfo.systemUptime
         MainRunLoopCommit.afterNextCommit {
             PerfBudgets.workspaceApply.end(token)
             pending = nil
+            // Wer hat in diesem Durchgang geändert? Abgeholt wird immer, damit
+            // die Liste nicht in den nächsten Durchgang wandert (WM8-101).
+            let sources = WorkspaceMutationSources.shared.drain()
+            let duration = ProcessInfo.processInfo.systemUptime - startedAt
+            guard duration > PerfBudgets.workspaceApply.budget else { return }
+            Logger.agentPerformance.notice(
+                "workspace_apply_sources durationMs=\(Int(duration * 1000), privacy: .public) sources=\(WorkspaceMutationSources.describe(sources), privacy: .public)"
+            )
         }
     }
 }
