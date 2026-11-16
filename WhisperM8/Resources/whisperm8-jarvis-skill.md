@@ -167,7 +167,9 @@ alles, was gerade läuft, und nur das.
   11) und legst ihn mit `workspace add` hinein. Beides gehört zum Starten.
 - **Stopp:** Direkt nach `close --stop` nimmst du ihn mit `workspace remove`
   heraus. Das gilt auch für einen Prüfer, der zwischen zwei Paketen ruht:
-  gestoppt heißt draußen, beim Fortsetzen kommt er wieder hinein.
+  gestoppt heißt draußen, beim Fortsetzen kommt er wieder hinein. Ein
+  fertiger Chat hat sein Ticket vorher mit `tickets done` abgegeben, nie mit
+  `tickets unlink` gelöst (Abschnitt 11).
 - **Nach jedem Umbau** `workspace open <Name>`, damit der User die
   aktuelle Belegung sieht.
 - **Bei jedem Lagebild** vergleichst du einmal Soll und Ist:
@@ -701,7 +703,10 @@ die Tickets zeigen die Arbeit. Du hältst beides deckungsgleich.
 - **Vor dem Schließen dokumentieren:** Bevor du einen fertigen Chat schließt,
   lässt du dir die Reste nennen, die weder erledigt noch erfasst sind, und
   hängst sie an das Sammel-Ticket. Erst dann stoppst du ihn (Abschnitt 3:
-  `close --stop`, `workspace remove`, `workspace open`).
+  `close --stop`, `workspace remove`, `workspace open`). Sein Ticket gibt er
+  mit `whisperm8 tickets done` ab (oder du für ihn mit `--chat`);
+  `tickets unlink` nur bei falscher Verknüpfung, sonst zeigt das Board das
+  Ticket später als „kein Agent“, obwohl daran gearbeitet wurde.
 - **Mehr als eine Handvoll Tickets oder Änderungen auf einmal: erst die
   Liste zeigen.** Vor dem Anlegen suchen (Duplikate), nach größeren
   Änderungen einmal nachlesen, was wirklich im Ticket steht.
