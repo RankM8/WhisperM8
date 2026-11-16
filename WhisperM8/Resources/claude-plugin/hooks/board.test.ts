@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
-import { areaOf, BACKGROUND_NET_MS, clean, dueBackgroundWaits, holdWake, ownerStatusOf, WAKE_MAX_HOLD_MS, WAKE_UNKNOWN_HOLD_MS, WAKE_URGENT_MAX_HOLD_MS, WAKE_YIELD_MS, countWord, groups, HEAD_JOIN, HEAD_LEFT, HEAD_NAME, isBefore, layoutBox, nextGenerationStart, planRows, restCounts, sameBoard, shortName, summaryLine, titleParts, waitingHead, waitingLines, waitingText, wakeReason, withStatus } from './register'
+import { areaOf, BACKGROUND_NET_MS, clean, dueBackgroundWaits, freshWakes, holdWake, ownerStatusOf, WAKE_MAX_HOLD_MS, WAKE_UNKNOWN_HOLD_MS, WAKE_URGENT_MAX_HOLD_MS, WAKE_YIELD_MS, countWord, groups, HEAD_JOIN, HEAD_LEFT, HEAD_NAME, isBefore, layoutBox, nextGenerationStart, planRows, restCounts, sameBoard, shortName, summaryLine, titleParts, waitingHead, waitingLines, waitingText, wakeReason, withStatus } from './register'
 
 // Tests der Board-Mod (`claude plugin test` auf den abgelegten Plugin-Ordner
 // oder diesen Ressourcen-Ordner samt Manifest). Werden nicht ausgeliefert.
@@ -794,6 +794,87 @@ describe('Wecken bei Hintergrund-Läufen (WM8-105)', () => {
 // WM8-64: Das Turn-Ende des Supervisors gehört zuerst der Warteschlange der
 // App. Ein Weck-Prompt während eines Turns hängte Claude direkt an dessen
 // Ende, Jarvis ruhte nie, vorgemerkte Meldungen lagen bis zu 22 Minuten.
+describe('Weck-Zeilen beim Ausliefern neu prüfen (WM8-119)', () => {
+  const LEAD = 'CE45D000-0000-0000-0000-000000000003'
+  const change = (from: string, to: string, extra: Record<string, unknown> = {}) =>
+    ({ kind: 'conversation', sessionID: LEAD, from, to, at: minutesAgo(0), schema: 'wm8.changes/1', ...extra })
+  const turnEnd = minutesAgo(2)
+  const item = (over: Record<string, unknown> = {}) => ({
+    id: LEAD, key: `${LEAD}:idle`, line: '[Board] „WM8-12 Kim · Beispiel“ (ce45d000): fertig – prüfen', at: 0, urgent: false,
+    state: 'idle', since: turnEnd, ...over,
+  })
+  const resting = (over: Record<string, unknown> = {}) =>
+    entry({ ref: 'ce45d000', sessionID: LEAD, title: 'WM8-12 Kim · Beispiel', status: 'idle', statusSince: turnEnd, updatedAt: minutesAgo(10), ...over })
+
+  test('freshWakes: bleibt, solange Karte und Zustand unverändert sind', () => {
+    expect(freshWakes([item()], [resting()]).length).toBe(1)
+    // Karte vor dem Turn-Ende geändert: zählt nicht.
+    expect(freshWakes([item()], [resting({ updatedAt: minutesAgo(3) })]).length).toBe(1)
+  })
+
+  test('freshWakes: fällt weg bei geparkt, vom Board genommen, gestoppt oder abgestürzt', () => {
+    expect(freshWakes([item()], [resting({ light: 'parked' })])).toEqual([])
+    expect(freshWakes([item()], [])).toEqual([])
+    expect(freshWakes([item()], [resting({ status: 'stopped' })])).toEqual([])
+    expect(freshWakes([item()], [resting({ status: 'errored' })])).toEqual([])
+    // Ein nachhinkender Status beim Neulesen verschluckt nichts; „arbeitet
+    // wieder“ räumt schon das Ereignis selbst ab.
+    expect(freshWakes([item()], [resting({ status: 'working' })]).length).toBe(1)
+  })
+
+  test('freshWakes: Karte nach dem Turn-Ende nachgeführt, dann kennt Jarvis den Stand; „wartet auf dich“ bleibt', () => {
+    expect(freshWakes([item()], [resting({ updatedAt: minutesAgo(1), light: 'done' })])).toEqual([])
+    const waiting = item({ key: `${LEAD}:awaitingInput`, urgent: true, state: 'awaitingInput' })
+    expect(freshWakes([waiting], [resting({ status: 'awaitingInput', updatedAt: minutesAgo(1), light: 'needsYou' })]).length).toBe(1)
+  })
+
+  test('freshWakes: Zeilen von vor dem Feld (ohne Zustand und Zeitpunkt) bleiben', () => {
+    const old = { id: LEAD, key: `${LEAD}:idle`, line: 'x', at: 0, urgent: false }
+    expect(freshWakes([old], [resting({ status: 'stopped', updatedAt: minutesAgo(0) })]).length).toBe(1)
+  })
+
+  test('wakeReason: kein „fertig“ für eine kurze Antwort an Jarvis oder wenn der Chat ihm schon schrieb', () => {
+    expect(wakeReason(change('working', 'idle', { backgroundTasks: 0, repliedTo: SID }), SID)).toBeNull()
+    expect(wakeReason(change('working', 'idle', { messaged: ['B7C1E000-0000-0000-0000-000000000002', SID.toLowerCase()] }), SID)).toBeNull()
+    // Ein anderer Absender oder ein anderes Ziel: weckt wie bisher.
+    expect(wakeReason(change('working', 'idle', { repliedTo: 'B7C1E000-0000-0000-0000-000000000002' }), SID)).toBe('fertig – prüfen')
+    expect(wakeReason(change('working', 'idle', { messaged: ['B7C1E000-0000-0000-0000-000000000002'] }), SID)).toBe('fertig – prüfen')
+    // Ohne bekannten Besitzer wie bisher; „wartet auf dich“ immer.
+    expect(wakeReason(change('working', 'idle', { repliedTo: SID }))).toBe('fertig – prüfen')
+    expect(wakeReason(change('working', 'awaitingInput', { repliedTo: SID }), SID)).toBe('wartet auf dich')
+  })
+
+  test('Antwort auf eine Nachricht von Jarvis: kein Prompt', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    const calls = world(on, { watch: [
+      { event: 'started', cursor: '1:10' },
+      change('working', 'idle', { backgroundTasks: 0, repliedTo: SID }),
+    ] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(6_000)
+    await clock.settle()
+    expect(calls.prompts).toEqual([])
+  })
+
+  test('Turn-Ende, dann stoppt Jarvis den Chat: kein Hinweis und kein Prompt', async ($, on) => {
+    const clock = mock.clock(on, { now: NOW })
+    // Das Neulesen nach dem Ende des Stroms liefert den echten Stand: gestoppt.
+    const stopped = { ...BOARD, entries: BOARD.entries.map(e => (e.sessionID === LEAD ? { ...e, status: 'stopped' } : e)) }
+    const calls = world(on, { board: stopped, watch: [
+      { event: 'started', cursor: '1:10' },
+      change('working', 'idle', { backgroundTasks: 0 }),
+      change('idle', 'stopped'),
+    ] })
+    await $.session.start({ cwd: '/tmp', surface: 'terminal', isInteractive: true })
+    await clock.settle()
+    await clock.advance(6_000)
+    await clock.settle()
+    expect(calls.prompts).toEqual([])
+    expect(calls.toasts).toEqual([])
+  })
+})
+
 describe('Wecken lässt der Warteschlange den Vortritt (WM8-64)', () => {
   const own = (from: string, to: string) =>
     ({ kind: 'conversation', sessionID: SID, from, to, at: minutesAgo(0), schema: 'wm8.changes/1' })

@@ -88,6 +88,11 @@ extension AgentControlRequestHandler {
             return .failure(requestID: request.requestID, code: .internalError,
                             message: "Folgeauftrag konnte nicht gespeichert werden: \(error.localizedDescription)")
         }
+        // Der Absender hat sich gemeldet: Sein Turn-Ende braucht kein „fertig“
+        // auf dem Board des Ziels (WM8-119).
+        await MainActor.run {
+            TurnContactLedger.shared.noteMessaged(from: enqueuedVerified ? actorID : nil, to: targetID)
+        }
         let open = store.openPrompts(for: targetID)
         let position = (open.firstIndex { $0.id == entry.id }).map { $0 + 1 } ?? open.count
 

@@ -1154,6 +1154,11 @@ final class AgentSessionStatusCoordinator {
         // Turn-Ende: Läuft noch ein Hintergrund-Befehl, ist der Chat nicht
         // fertig, Claude macht nach dessen Ende von selbst weiter (WM8-105).
         let turnEnded = oldState.runtimeStatus == .working && transition.state.runtimeStatus == .idle
+        // Kurze Antwort an wen, und wen schrieb der Chat an (WM8-119): nur zwei
+        // Nachschlagen im Speicher, nur beim Turn-Ende.
+        let contacts: (repliedTo: UUID?, messaged: [UUID]) = turnEnded
+            ? TurnContactLedger.shared.turnContext(for: sessionID, turnStartedAt: turnStartedAt[sessionID], endedAt: now())
+            : (nil, [])
         ChatsStatusJournal.shared.append(
             sessionID: sessionID,
             from: oldState.runtimeStatus?.rawValue,
@@ -1162,7 +1167,8 @@ final class AgentSessionStatusCoordinator {
             source: registryLiveSessions.contains(sessionID)
                 ? "registry"
                 : hookLiveSessions.contains(sessionID) ? "hook" : "transcript",
-            backgroundTasks: turnEnded ? backgroundTaskCount(sessionID, turnStartedAt[sessionID]) : nil)
+            backgroundTasks: turnEnded ? backgroundTaskCount(sessionID, turnStartedAt[sessionID]) : nil,
+            repliedTo: contacts.repliedTo, messaged: contacts.messaged)
 
         for effect in transition.effects {
             perform(effect, sessionID: sessionID)

@@ -39,6 +39,10 @@ extension AgentControlRequestHandler {
 
         let actorID = request.actor.sessionID.flatMap(UUID.init(uuidString:))
         let markerActor = await auditActorLabel(request.actor)
+        // Nur ein geprüfter Absender zählt für Board-Hinweise (WM8-119).
+        let verifiedActor = actorID.flatMap {
+            AgentSessionTokenRegistry.shared.verify(sessionID: $0, token: request.actor.token) ? $0 : nil
+        }
 
         let sentAt = Date()
         // ATOMARER MainActor-Block: Guards + Paste ohne await dazwischen.
@@ -123,6 +127,11 @@ extension AgentControlRequestHandler {
                 // Marker-Zeile voranstellen (Kennzeichnung + Ein-Hop) — nur bei Agent-Chats, nie in eine Shell.
                 let marked = Self.deliveredPrompt(prompt, actor: markerActor, toShell: controller.command.keyboardProfile == .plainShell)
                 clearedInput = controller.sendPrompt(marked, submit: submit)
+                if submit {
+                    // Wer wen anstößt, für das Turn-Ende im Journal (WM8-119).
+                    TurnContactLedger.shared.noteDelivered(to: targetID, from: verifiedActor, at: sentAt)
+                    TurnContactLedger.shared.noteMessaged(from: verifiedActor, to: targetID, at: sentAt)
+                }
                 return .success(session)
             }()
             return (outcome, clearedInput, usageWarning, verify)

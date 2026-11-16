@@ -176,6 +176,26 @@ mehreren Boards stehen (`otherOwners`).
   und nach jedem Neulesen des Boards. Fehlt das Feld (ältere App, Codex,
   unbekannt), weckt das Turn-Ende wie vorher. Vorher kamen an einem Tag rund
   25 solche Fehlalarme.
+- **Kein „fertig“ für Antworten und Doppel (WM8-119, Entscheidung Giuliano
+  16.11.2026):** War der Turn eine kurze Antwort auf eine Nachricht von
+  Jarvis selbst (`repliedTo` im Strom, nur bei Turns bis 2 Minuten, etwa
+  „Verstanden, ich warte auf die Bahn“; längere Arbeit weckt am Ende
+  weiter), oder hat der Chat Jarvis in den letzten 2 Minuten des Turns
+  geschrieben (`messaged`, die Schlussmeldung kommt über die Warteschlange;
+  eine frühe Zwischenmeldung zählt nicht), weckt das Turn-Ende nicht. Am
+  16.11.2026 waren das 37 von 55 Hinweisen „fertig – prüfen“. Eine Antwort auf
+  eine Frage von Jarvis sieht er nur noch, wenn er nachsieht oder der Chat sie
+  per Warteschlange schickt. „Wartet auf dich“ weckt weiter immer.
+- **Beim Ausliefern neu prüfen (WM8-119):** Eine zurückgehaltene Zeile geht
+  nur raus, wenn sie noch stimmt: Der Chat steht auf dem Board, ist nicht
+  geparkt, läuft noch (nicht gestoppt oder abgestürzt; „arbeitet wieder“
+  räumt schon das Ereignis selbst ab), und Jarvis hat seine Karte seit dem Zustandswechsel nicht
+  geändert (eine Sekunde Spiel; gilt nicht für „wartet auf dich“ und nicht für
+  die 30-Minuten-Wache). Am 16.11.2026 waren 17 von 55 „fertig – prüfen“
+  solche Fälle: Jarvis hatte den Chat Sekunden vorher gestoppt, geparkt oder
+  vom Board genommen, während die Zeile auf sein Ruhen wartete. Geprüft wird
+  gegen das Board, das die Mod ohnehin hält (`freshWakes`, rein, ohne Prozess).
+  Zeilen von vor dem Feld (`state`, `since` in `wakePending`) gehen wie bisher.
 - **Vortritt für die Warteschlange (seit WM8-64):** Arbeitet Jarvis gerade,
   hält die Mod ihren Weck-Prompt zurück und schickt ihn erst, wenn Jarvis
   seit 5 s ruht; den eigenen Status liest sie aus demselben `chats watch`.
