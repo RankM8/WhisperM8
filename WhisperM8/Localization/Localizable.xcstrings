@@ -25163,6 +25163,66 @@
           }
         }
       }
+    },
+    "1 message waiting: text in input field": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 Meldung wartet: Text im Eingabefeld"
+          }
+        }
+      }
+    },
+    "%lld messages waiting: text in input field": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Meldungen warten: Text im Eingabefeld"
+          }
+        }
+      }
+    },
+    "1 message waiting: a Claude view is open": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 Meldung wartet: Eine Ansicht von Claude ist offen"
+          }
+        }
+      }
+    },
+    "%lld messages waiting: a Claude view is open": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Meldungen warten: Eine Ansicht von Claude ist offen"
+          }
+        }
+      }
+    },
+    "Sent once the text is submitted or cleared and the terminal is scrolled to the bottom.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geht raus, sobald der Text abgeschickt oder gelöscht ist und das Terminal ganz unten steht."
+          }
+        }
+      }
+    },
+    "Sent once the view is closed.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geht raus, sobald die Ansicht geschlossen ist."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

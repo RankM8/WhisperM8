@@ -890,6 +890,11 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         }
         terminal.terminalDelegate = interceptor
         linkInterceptor = interceptor
+        // Wieder unten: wartende Meldungen gleich neu versuchen (WM8-123).
+        interceptor.onScrolled = { [weak self] position in
+            guard let self, position >= 1 else { return }
+            AgentPromptQueueDelivery.shared.noteReturnedToBottom(self.sessionID)
+        }
 
         // Initial-Theme an die aktuelle ColorScheme koppeln. Wird bei jedem
         // macOS-Erscheinungsbild-Wechsel oder User-Override-Toggle aktualisiert.

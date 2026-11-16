@@ -19,10 +19,21 @@ final class AgentPromptQueueDelivery {
     /// Kurze Wartezeit zwischen Turn-Ende und Paste: die TUI muss ihren
     /// Prompt wieder anzeigen, sonst landet der Text im Nirgendwo.
     private let settleDelay: TimeInterval
+    /// Hinweis am Chat, solange Meldungen wegen des Eingabefelds warten (WM8-123).
+    private let notices: QueueHoldNotices
+    /// Je Chat höchstens ein geplanter neuer Versuch; ein neuer ersetzt ihn.
+    private var heldRetryToken: [UUID: UUID] = [:]
+    private var lastReturnRetryAt: [UUID: Date] = [:]
+    /// So oft sieht die Warteschlange nach, solange eine Meldung wegen Text im
+    /// Feld oder einer offenen Ansicht wartet. Sonst stieß nur das nächste
+    /// Turn-Ende an, und das kommt bei einem ruhenden Chat nie.
+    static let heldRetrySeconds: TimeInterval = 30
 
-    init(store: AgentPromptQueueStore = .shared, settleDelay: TimeInterval = 0.6) {
+    init(store: AgentPromptQueueStore = .shared, settleDelay: TimeInterval = 0.6,
+         notices: QueueHoldNotices = .shared) {
         self.store = store
         self.settleDelay = settleDelay
+        self.notices = notices
     }
 
     /// Stellt den nächsten offenen Auftrag der Session zu, falls einer wartet.
@@ -58,6 +69,7 @@ final class AgentPromptQueueDelivery {
             // Kein Prozess mehr: zurück in die Warteschlange. Der Auftrag
             // bleibt sichtbar und geht nicht verloren — nach `resume` läuft
             // er beim nächsten Turn-Ende an.
+            notices.clear(sessionID)
             store.markFailed(id: reserved.id, error: "Keine laufende PTY — wartet auf Start", retry: true)
             return
         }
@@ -73,20 +85,15 @@ final class AgentPromptQueueDelivery {
         let runtime = coordinator.statusStore.status(for: sessionID)
         let profile = controller.command.keyboardProfile
         let inputPending = coordinator.startupInputPending(sessionID)
-        switch Self.gateDecision(
-            draft: controller.composerDraft,
-            reading: controller.composerFieldForSendCheck(),
-            profile: profile,
-            runtime: runtime,
-            lifecycle: coordinator.lifecycleState(for: sessionID),
-            inputPending: inputPending
-        ) {
+        switch currentDecision(sessionID, controller) {
         case .deliver:
-            break
+            notices.clear(sessionID)
         case .busy(let runtime):
+            notices.clear(sessionID)
             store.markFailed(id: reserved.id, error: "Ziel ist \(runtime) — wartet, bis der Chat fertig ist", retry: true)
             return
         case .notReady:
+            notices.clear(sessionID)
             store.markFailed(id: reserved.id, error: "Chat startet noch — Zustellung, sobald er bereit ist", retry: true)
             // Gilt der Chat schon als bereit, fehlt aber das Eingabefeld, stößt
             // kein Zustandswechsel mehr an: selbst nachsehen (WM8-100). Endet
@@ -96,9 +103,11 @@ final class AgentPromptQueueDelivery {
             return
         case .draftPending:
             store.markFailed(id: reserved.id, error: Self.draftPendingError(controller.composerDraft), retry: true)
+            hold(sessionID, reason: .textInField)
             return
         case .viewOpen:
             store.markFailed(id: reserved.id, error: Self.viewOpenError, retry: true)
+            hold(sessionID, reason: .viewOpen)
             return
         }
         // Freigabe oder Dialog statt des Eingabefelds (Status hinkt hinterher):
@@ -146,6 +155,91 @@ final class AgentPromptQueueDelivery {
             Logger.agentStore.notice(
                 "queue_delivered session=\(sessionID.uuidString, privacy: .public) id=\(reserved.id.uuidString, privacy: .public) clearedInput=\(clearedInput, privacy: .public)")
         }
+    }
+
+    // MARK: Warten wegen des Eingabefelds (WM8-123)
+
+    private func currentDecision(_ sessionID: UUID, _ controller: AgentTerminalController) -> PromptDeliveryGate.Decision {
+        let coordinator = AgentSessionStatusCoordinator.shared
+        return Self.gateDecision(
+            draft: controller.composerDraft,
+            reading: controller.composerFieldForSendCheck(),
+            profile: controller.command.keyboardProfile,
+            runtime: coordinator.statusStore.status(for: sessionID),
+            lifecycle: coordinator.lifecycleState(for: sessionID),
+            inputPending: coordinator.startupInputPending(sessionID))
+    }
+
+    /// Meldung wartet wegen Text im Feld oder einer Ansicht: Hinweis am Chat
+    /// zeigen und in 30 s wieder nachsehen.
+    private func hold(_ sessionID: UUID, reason: QueueHoldNotices.Reason) {
+        notices.set(.init(count: store.openPrompts(for: sessionID).count, reason: reason), for: sessionID)
+        scheduleHeldRetry(sessionID, after: Self.heldRetrySeconds)
+    }
+
+    private func scheduleHeldRetry(_ sessionID: UUID, after seconds: TimeInterval) {
+        let token = UUID()
+        heldRetryToken[sessionID] = token
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+            guard let self, self.heldRetryToken[sessionID] == token else { return }
+            self.retryHeld(sessionID)
+        }
+    }
+
+    /// Neuer Versuch für eine wartende Meldung. Sieht erst nach, ohne zu
+    /// reservieren: Wartet sie weiter, wird die Queue-Datei nicht geschrieben,
+    /// nur der Hinweis nachgeführt. Arbeitet der Chat oder startet er noch,
+    /// übernehmen die üblichen Anstöße (Turn-Ende, bereit).
+    private func retryHeld(_ sessionID: UUID) {
+        heldRetryToken[sessionID] = nil
+        let controller = AgentTerminalRegistry.shared.controller(for: sessionID)
+        let running = controller?.isRunning == true
+        let decision = running ? controller.map { currentDecision(sessionID, $0) } : nil
+        switch Self.retryAction(openCount: store.openPrompts(for: sessionID).count, decision: decision) {
+        case .deliver:
+            deliverNow(for: sessionID)
+        case .hold(let reason):
+            hold(sessionID, reason: reason)
+        case .stop:
+            notices.clear(sessionID)
+        }
+    }
+
+    enum HeldRetryAction: Equatable {
+        case deliver
+        case hold(QueueHoldNotices.Reason)
+        /// Nichts mehr offen, kein Prozess, oder der Chat arbeitet bzw.
+        /// startet: Dann übernehmen die üblichen Anstöße.
+        case stop
+    }
+
+    /// Pur: Was ein neuer Versuch für eine wartende Meldung tut. `decision`
+    /// ist `nil` ohne laufenden Prozess.
+    nonisolated static func retryAction(openCount: Int, decision: PromptDeliveryGate.Decision?) -> HeldRetryAction {
+        guard openCount > 0, let decision else { return .stop }
+        switch decision {
+        case .deliver: return .deliver
+        case .draftPending: return .hold(.textInField)
+        case .viewOpen: return .hold(.viewOpen)
+        case .busy, .notReady: return .stop
+        }
+    }
+
+    /// Das Terminal steht wieder unten (Scroll-Ereignis der Ansicht): Jetzt ist
+    /// ein leeres Feld ablesbar. Wartet eine Meldung, gleich nachsehen statt
+    /// erst nach 30 s. Höchstens einmal je Sekunde; ohne wartende Meldung nur
+    /// ein Nachschlagen im Speicher.
+    func noteReturnedToBottom(_ sessionID: UUID, now: Date = Date()) {
+        guard notices.notices[sessionID] != nil,
+              Self.returnRetryAllowed(last: lastReturnRetryAt[sessionID], now: now) else { return }
+        lastReturnRetryAt[sessionID] = now
+        scheduleHeldRetry(sessionID, after: settleDelay)
+    }
+
+    nonisolated static func returnRetryAllowed(last: Date?, now: Date) -> Bool {
+        guard let last else { return true }
+        return now.timeIntervalSince(last) >= 1
     }
 
     /// Entscheidung der Warteschlange aus Status, Entwurfs-Schätzung und dem

@@ -186,6 +186,9 @@ struct AgentSessionDetailView: View {
             if let missingCLI, controller == nil {
                 AgentCLIMissingView(cli: missingCLI, onInstalled: { self.missingCLI = nil })
             } else if let controller {
+                // Meldungen warten wegen des Eingabefelds (WM8-123); eigene
+                // Ansicht, damit nur sie auf den Hinweis reagiert.
+                QueueHoldStrip(sessionID: session.id)
                 AgentTerminalView(controller: controller)
                     .background(AgentTheme.background)
             } else if session.isTerminal {
