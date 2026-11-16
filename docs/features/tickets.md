@@ -395,7 +395,12 @@ Idee 3.
   „Produkt“ oder „Product“ und ist kein Jarvis), dazu ein von Hand hineingezogener Chat. Ein Chat lässt sich aus
   Seitenleiste oder Tab-Leiste auf die Spalte ziehen. Die Wahl gilt je Projekt und bleibt gespeichert
   (`chosenSessionID`); ein Klick auf den Jarvis-Knopf löscht sie, dann übernimmt wieder der automatische Jarvis.
-  Ein archivierter Chat wird nicht angenommen. Steht der gewählte Chat in einem anderen Fenster, gilt der Hinweis
+  Angenommen werden nur echte Agent-Chats (Claude, Codex, einzelne Hintergrund-Agents) dieses Projekts, einzeln:
+  Ein Terminal-Tab, `claude agents`, ein Subagent-Job, ein archivierter Chat, ein Chat eines anderen Projekts oder
+  eine Tab-Gruppe werden mit einem sichtbaren Satz abgelehnt (`BoardChatRules.rejection`). Dieselbe Prüfung gilt
+  beim Lesen der gespeicherten Wahl und für den automatischen Jarvis und Produkt-Chat: In einer Shell gingen die
+  Zeilenumbrüche aus Bezug und Triage als Return hinaus. Produkt-Chat heißt „Produkt“ oder „Product“ als ganzes
+  Wort („Produktion“ zählt nicht). Steht der gewählte Chat in einem anderen Fenster, gilt der Hinweis
   „Läuft in Fenster 2“.
 - **Welcher Chat:** von Hand gewählt (`chosenSessionID`), sonst der Jarvis des Projekts:
   Titel beginnt mit „Jarvis“ (dieselbe Regel wie `tickets board` und `tickets status`), Projekt des Boards samt
@@ -422,7 +427,8 @@ Idee 3.
   ein ausdrückliches Ziel (Controller, Insel) bleibt. Das Ziel ist ein eigenes, `.boardChat`: Es geht nie mit
   Senden hinaus (auch nicht bei einem Stopp mit Kreuz; die Legende bietet kein Senden an, Kreuz tut nichts), und es
   prüft wie „→ Jarvis“ (`BoardChatInputRules`): offene Frage, auch mit Textfeld, Freigabe laut Sendeweg der CLI,
-  Hochfahren oder Limit heißt nur Zwischenablage. Pille und Insel nennen den Board-Chat. Der Board-Chat ist im Ticket-Modus auch Kontext des
+  Hochfahren oder Limit heißt nur Zwischenablage, ebenso wenn der Board-Chat beim Ausliefern in keiner
+  Spalte mehr steht. Pille und Insel nennen den Board-Chat. Der Board-Chat ist im Ticket-Modus auch Kontext des
   Diktats. Tastatur geht nur bei Fokus im Terminal an ihn; J/K, ⌘C und Esc im Board bleiben beim Board.
 - **Bezug:** Unter dem Terminal steht „Bezug: WM8-81 ✕“ für das Ticket der Triage. Das nächste Diktat an den
   Board-Chat beginnt mit einer Zeile „Bezug: WM8-81 „Titel“ <Adresse>“, danach gilt der Bezug für dieses Ticket als

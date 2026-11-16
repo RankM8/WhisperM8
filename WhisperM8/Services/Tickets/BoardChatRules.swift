@@ -10,6 +10,20 @@ struct BoardChatCandidate: Equatable {
     var isRunning: Bool
     var lastActivityAt: Date
     var isArchived: Bool
+    /// Nur echte Agent-Chats kommen in Frage (`BoardChatRules.acceptsKind`).
+    var kind: AgentSessionKind = .chat
+}
+
+/// Warum ein Chat nicht Board-Chat werden kann.
+enum BoardChatRejection: Equatable {
+    /// Terminal-Tab, `claude agents`, Subagent-Job: In eine Shell gingen
+    /// Zeilenumbrüche aus Bezug und Triage als Return, Ticket-Text liefe als Befehl.
+    case notAgentChat
+    case archived
+    /// Arbeitet in einem anderen Projekt als das Board.
+    case otherProject
+    /// Gruppe aus der Tab-Leiste statt eines einzelnen Chats.
+    case group
 }
 
 /// Wo der Board-Chat gerade lebt, von diesem Fenster aus gesehen. Ein Chat
@@ -38,12 +52,29 @@ enum BoardChatRules {
         TicketBoardBuilder.isSupervisor(title: title)
     }
 
+    /// Nur interaktive Agent-Chats (Claude, Codex) und einzelne Hintergrund-
+    /// Agents, die in einer Agent-TUI laufen.
+    static func acceptsKind(_ kind: AgentSessionKind) -> Bool {
+        kind == .chat || kind == .backgroundChat
+    }
+
+    /// Darf dieser Chat Board-Chat des Projekts sein? Gilt beim Hineinziehen
+    /// und beim Lesen einer gespeicherten Wahl (die Datei kann eine alte enthalten).
+    static func rejection(kind: AgentSessionKind, isArchived: Bool, projectID: UUID, boardProjectID: UUID,
+                          groupSize: Int = 1) -> BoardChatRejection? {
+        if groupSize > 1 { return .group }
+        if !acceptsKind(kind) { return .notAgentChat }
+        if isArchived { return .archived }
+        if projectID != boardProjectID { return .otherProject }
+        return nil
+    }
+
     /// Automatisch gewählter Board-Chat: der Jarvis des Projekts. Laufende
     /// vor ruhenden, dann der zuletzt aktive; bei Gleichstand entscheidet die
     /// ID, damit die Wahl nicht zwischen zwei Chats springt.
     static func automaticJarvis(in candidates: [BoardChatCandidate], projectID: UUID) -> UUID? {
         candidates
-            .filter { $0.projectID == projectID && !$0.isArchived && isJarvis(title: $0.title) }
+            .filter { $0.projectID == projectID && !$0.isArchived && acceptsKind($0.kind) && isJarvis(title: $0.title) }
             .min(by: ranksBefore)?
             .id
     }
@@ -52,13 +83,13 @@ enum BoardChatRules {
     /// kein Jarvis. Er steht als zweiter Knopf im Kopf der Spalte.
     static func isProduct(title: String) -> Bool {
         guard !isJarvis(title: title) else { return false }
-        let lower = title.lowercased()
-        return lower.contains("produkt") || lower.contains("product")
+        // Ganzes Wort: „Produktion“ und „Production-Fix“ sind keine Produkt-Chats.
+        return title.range(of: #"\b(produkt|product)\b"#, options: [.regularExpression, .caseInsensitive]) != nil
     }
 
     static func automaticProduct(in candidates: [BoardChatCandidate], projectID: UUID) -> UUID? {
         candidates
-            .filter { $0.projectID == projectID && !$0.isArchived && isProduct(title: $0.title) }
+            .filter { $0.projectID == projectID && !$0.isArchived && acceptsKind($0.kind) && isProduct(title: $0.title) }
             .min(by: ranksBefore)?
             .id
     }

@@ -27,9 +27,11 @@ extension AgentChatsView {
     /// den Index des Workspace (`session(id:)`), nie über alle Chats.
     func boardChatPick(projectID: UUID) -> BoardChatPickResult {
         let preferences = BoardChatPreferencesStore.shared.preferences(for: projectID)
+        // Eine gespeicherte Wahl zählt nur, wenn sie noch erlaubt ist: Die
+        // Datei kann einen alten Shell-Tab oder einen Chat eines anderen Projekts enthalten.
         let chosen = preferences.chosenSessionID
             .flatMap { workspaceModel.session(id: $0) }
-            .flatMap { $0.status == .archived ? nil : $0 }
+            .flatMap { boardChatRejection(of: $0, projectID: projectID) == nil ? $0 : nil }
         var ids = Set(windowStore.state.windows.flatMap(\.openTabIDs))
         ids.formUnion(terminalRegistry.activeSessionIDs)
         // Der zuletzt gefundene Jarvis zählt mit, auch gestoppt und ohne Tab.
@@ -41,12 +43,21 @@ extension AgentChatsView {
                 id: session.id, title: session.title,
                 projectID: AgentProjectDisplay.displayProjectID(session.projectID, parents: projectParents),
                 isRunning: running.contains(session.id), lastActivityAt: session.lastActivityAt,
-                isArchived: session.status == .archived)
+                isArchived: session.status == .archived, kind: session.effectiveKind)
         }
         let jarvis = BoardChatRules.automaticJarvis(in: candidates, projectID: projectID).flatMap { workspaceModel.session(id: $0) }
         let product = BoardChatRules.automaticProduct(in: candidates, projectID: projectID).flatMap { workspaceModel.session(id: $0) }
         return BoardChatPickResult(current: chosen ?? jarvis, isAutomatic: chosen == nil, jarvis: jarvis, product: product,
                                    chosen: chosen)
+    }
+
+    /// Pur über `BoardChatRules.rejection`; Projekt wie bei Jarvis und Produkt-Chat
+    /// nach dem Haupt-Projekt (Arbeitsordner zählen dazu).
+    func boardChatRejection(of session: AgentChatSession, projectID: UUID, groupSize: Int = 1) -> BoardChatRejection? {
+        BoardChatRules.rejection(
+            kind: session.effectiveKind, isArchived: session.status == .archived,
+            projectID: AgentProjectDisplay.displayProjectID(session.projectID, parents: projectParents),
+            boardProjectID: projectID, groupSize: groupSize)
     }
 
     /// Spalte samt Breite. `available`: Breite von Board und Spalte zusammen.
@@ -164,9 +175,15 @@ extension AgentChatsView {
             preferencesStore.setChosenSession(BoardChatRules.storedChoice(after: id, automaticJarvis: automaticJarvis), for: projectID)
         }
         actions.choose = choose
-        actions.drop = { [workspaceModel = AgentWorkspaceUIModel.shared] id in
-            guard let dropped = workspaceModel.session(id: id),
-                  dropped.status != .archived else { return false }
+        let projectName = selectedProject?.name ?? ""
+        actions.drop = { [workspaceModel, windowID] id, groupSize in
+            guard let dropped = workspaceModel.session(id: id) else { return false }
+            // Nur echte Agent-Chats dieses Projekts, einzeln; sonst sichtbar sagen, warum nicht.
+            if let rejection = boardChatRejection(of: dropped, projectID: projectID, groupSize: groupSize) {
+                BoardChatInputs.shared.showNotice(
+                    BoardChatInputRules.message(rejection, chatName: dropped.title, projectName: projectName), in: windowID)
+                return false
+            }
             choose(id)
             return true
         }

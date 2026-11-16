@@ -39,8 +39,8 @@ struct BoardChatColumnActions {
     var setCollapsed: (Bool) -> Void = { _ in }
     /// Klick auf einen Knopf im Kopf.
     var choose: (UUID) -> Void = { _ in }
-    /// Ein Chat wurde auf die Spalte gezogen; `false` lehnt ab.
-    var drop: (UUID) -> Bool = { _ in false }
+    /// Ein Chat wurde auf die Spalte gezogen (ID, Zahl der Chats im Zug); `false` lehnt ab.
+    var drop: (UUID, Int) -> Bool = { _, _ in false }
 
     static let none = BoardChatColumnActions()
 }
@@ -63,14 +63,15 @@ struct BoardChatColumnView<StatusDot: View, Terminal: View>: View {
             Divider().overlay(AgentTheme.border)
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            if state.content == .terminal, let inputBar { inputBar }
+            // Auch ohne Terminal: Hinweise (etwa „anderes Projekt“) müssen sichtbar sein.
+            if let inputBar { inputBar }
             footer
         }
         .background(AgentTheme.background)
         // Chat aus Seitenleiste oder Tab-Leiste hierher ziehen (Teil c).
         .dropDestination(for: DraggableSession.self) { items, _ in
             guard let item = items.first else { return false }
-            return actions.drop(item.sessionID)
+            return actions.drop(item.sessionID, max(items.count, item.groupMemberIDs?.count ?? 1))
         } isTargeted: { isDropTargeted = $0 }
         .overlay {
             if isDropTargeted {
@@ -86,15 +87,13 @@ struct BoardChatColumnView<StatusDot: View, Terminal: View>: View {
 
     private var header: some View {
         HStack(spacing: 6) {
-            // Mit drei Knöpfen brauchen die Namen den Platz.
-            if state.choices.count < 3 {
-                Text("Board chat")
-                    .textCase(.uppercase)
-                    .font(.system(size: 11, weight: .semibold))
-                    .kerning(0.5)
-                    .foregroundStyle(AgentTheme.textTertiary)
-                    .fixedSize()
-            }
+            // Bleibt immer stehen, sonst sagt nichts mehr, was die Spalte ist.
+            Text("Board chat")
+                .textCase(.uppercase)
+                .font(.system(size: 11, weight: .semibold))
+                .kerning(0.5)
+                .foregroundStyle(AgentTheme.textTertiary)
+                .fixedSize()
             if !state.choices.isEmpty {
                 ForEach(state.choices) { choice in choiceButton(choice) }
             } else if let title = state.title {

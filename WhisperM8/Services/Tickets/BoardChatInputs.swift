@@ -83,6 +83,15 @@ enum BoardChatInputRules {
         }
     }
 
+    static func message(_ rejection: BoardChatRejection, chatName: String, projectName: String) -> String {
+        switch rejection {
+        case .notAgentChat: return String(localized: "Only agent chats can be the board chat, not a terminal or a subagent.")
+        case .archived: return String(localized: "Archived chats can't be the board chat.")
+        case .otherProject: return String(localized: "\(chatName) works in another project. The board chat must belong to \(projectName).")
+        case .group: return String(localized: "Drag a single chat, not a group.")
+        }
+    }
+
     static func message(_ refusal: Refusal, chatName: String) -> String {
         switch refusal {
         case .noBoardChat: return String(localized: "No board chat is shown here.")
@@ -168,6 +177,9 @@ final class BoardChatInputs {
 
     func boardChat(in windowID: UUID) -> Registration? { registrations[windowID] }
 
+    /// Steht dieser Chat gerade in einer Spalte?
+    func isShown(_ sessionID: UUID) -> Bool { registrations.values.contains { $0.sessionID == sessionID } }
+
     // MARK: Diktat
 
     /// Ziel des Diktats: der Board-Chat des Fensters, das gerade vorn ist.
@@ -240,9 +252,14 @@ final class BoardChatInputs {
         notices[windowID] = Notice(text: text)
     }
 
-    private func refuse(_ refusal: BoardChatInputRules.Refusal, in windowID: UUID, name: String) {
+    func refuse(_ refusal: BoardChatInputRules.Refusal, in windowID: UUID, name: String) {
+        showNotice(BoardChatInputRules.message(refusal, chatName: name), in: windowID)
+    }
+
+    /// Warnton und ein Satz unter dem Terminal, der nach einigen Sekunden geht.
+    func showNotice(_ text: String, in windowID: UUID) {
         refuseSound()
-        let notice = Notice(text: BoardChatInputRules.message(refusal, chatName: name))
+        let notice = Notice(text: text)
         notices[windowID] = notice
         let seconds = noticeSeconds
         Task { [weak self] in

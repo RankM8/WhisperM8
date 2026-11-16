@@ -101,7 +101,8 @@ extension RecordingCoordinator {
             delivery: delivery,
             text: finalText,
             chatState: { chatWriter.state(of: $0) },
-            approvalPending: boardChatApprovalPending
+            approvalPending: boardChatApprovalPending,
+            boardChatShown: boardChatShown
         )
         if deliveryDecision != .frontApp {
             await deliverToChatTarget(

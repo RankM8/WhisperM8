@@ -10,9 +10,9 @@ final class BoardChatRulesTests: XCTestCase {
     private let now = Date(timeIntervalSince1970: 1_794_700_000)
 
     private func chat(_ title: String, project: UUID? = nil, running: Bool = true, minutesAgo: Double = 0,
-                      archived: Bool = false, id: UUID = UUID()) -> BoardChatCandidate {
+                      archived: Bool = false, id: UUID = UUID(), kind: AgentSessionKind = .chat) -> BoardChatCandidate {
         BoardChatCandidate(id: id, title: title, projectID: project ?? self.project, isRunning: running,
-                           lastActivityAt: now.addingTimeInterval(-minutesAgo * 60), isArchived: archived)
+                           lastActivityAt: now.addingTimeInterval(-minutesAgo * 60), isArchived: archived, kind: kind)
     }
 
     // MARK: Jarvis erkennen
@@ -70,6 +70,9 @@ final class BoardChatRulesTests: XCTestCase {
     func testProductChatIsRecognisedButNeverAJarvis() {
         XCTAssertTrue(BoardChatRules.isProduct(title: "Pia · Produkt WM8"))
         XCTAssertTrue(BoardChatRules.isProduct(title: "Product chat"))
+        XCTAssertTrue(BoardChatRules.isProduct(title: "Produkt-Chat WM8"))
+        XCTAssertFalse(BoardChatRules.isProduct(title: "Produktion: Release vorbereiten"), "ganzes Wort")
+        XCTAssertFalse(BoardChatRules.isProduct(title: "Production-Fix für den Export"), "ganzes Wort")
         XCTAssertFalse(BoardChatRules.isProduct(title: "Jarvis: Produkt und Supervisor"))
         XCTAssertFalse(BoardChatRules.isProduct(title: "Vic · Prüfer"))
     }
@@ -80,6 +83,43 @@ final class BoardChatRulesTests: XCTestCase {
         let jarvis = chat("Jarvis")
         XCTAssertEqual(BoardChatRules.automaticProduct(in: [foreign, jarvis, product], projectID: project), product.id)
         XCTAssertNil(BoardChatRules.automaticProduct(in: [jarvis], projectID: project))
+    }
+
+    func testTwoProductChatsPickTheRunningOneStably() {
+        let stopped = chat("Ada · Produkt", running: false, minutesAgo: 0)
+        let running = chat("Pia · Produkt", running: true, minutesAgo: 60)
+        XCTAssertEqual(BoardChatRules.automaticProduct(in: [stopped, running], projectID: project), running.id)
+        XCTAssertEqual(BoardChatRules.automaticProduct(in: [running, stopped], projectID: project), running.id)
+    }
+
+    // MARK: Nur echte Agent-Chats dieses Projekts
+
+    func testOnlyAgentChatsAndBackgroundAgentsQualify() {
+        XCTAssertTrue(BoardChatRules.acceptsKind(.chat))
+        XCTAssertTrue(BoardChatRules.acceptsKind(.backgroundChat))
+        for kind in [AgentSessionKind.terminal, .agentView, .subagentJob] {
+            XCTAssertFalse(BoardChatRules.acceptsKind(kind), "\(kind)")
+        }
+    }
+
+    func testRejectionReasons() {
+        func reject(_ kind: AgentSessionKind = .chat, archived: Bool = false, project: UUID? = nil, group: Int = 1) -> BoardChatRejection? {
+            BoardChatRules.rejection(kind: kind, isArchived: archived, projectID: project ?? self.project,
+                                     boardProjectID: self.project, groupSize: group)
+        }
+        XCTAssertNil(reject())
+        XCTAssertEqual(reject(.terminal), .notAgentChat, "Shell-Tab: Umbrüche würden Befehle")
+        XCTAssertEqual(reject(.subagentJob), .notAgentChat)
+        XCTAssertEqual(reject(archived: true), .archived)
+        XCTAssertEqual(reject(project: otherProject), .otherProject)
+        XCTAssertEqual(reject(group: 3), .group)
+    }
+
+    func testAShellTabNamedJarvisIsNeverPickedAutomatically() {
+        let shell = chat("Jarvis Shell", running: true, kind: .terminal)
+        let product = chat("Produkt Shell", kind: .terminal)
+        XCTAssertNil(BoardChatRules.automaticJarvis(in: [shell], projectID: project))
+        XCTAssertNil(BoardChatRules.automaticProduct(in: [product], projectID: project))
     }
 
     func testChoicesListJarvisProductAndAChosenChatOnce() {

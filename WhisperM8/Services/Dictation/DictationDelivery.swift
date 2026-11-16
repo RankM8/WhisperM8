@@ -65,6 +65,9 @@ enum DictationClipboardReason: Equatable {
     case chatUsageLimited
     case chatNotRunning
     case writeFailed
+    /// Umgelenktes Diktat (WM8-113): Der Board-Chat steht beim Ausliefern in
+    /// keiner Spalte mehr (Tickets zu, zugeklappt, anderes Fenster).
+    case boardChatHidden
 }
 
 enum DictationDeliveryDecision: Equatable {
@@ -86,11 +89,14 @@ enum DictationDeliveryRouter {
         delivery: DictationDelivery,
         text: String,
         chatState: (UUID) -> DictationChatState,
-        approvalPending: (UUID) -> Bool = { _ in false }
+        approvalPending: (UUID) -> Bool = { _ in false },
+        boardChatShown: (UUID) -> Bool = { _ in true }
     ) -> DictationDeliveryDecision {
         switch delivery.target {
         case .boardChat(let sessionID):
             guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .nothing }
+            // Nie an einen Chat, den Giuliano nicht mehr sieht.
+            guard boardChatShown(sessionID) else { return .clipboardOnly(.boardChatHidden) }
             // Dieselbe Prüfung wie „→ Jarvis“: auch Claudes Frage mit Textfeld
             // und eine Freigabe laut Sendeweg der CLI zählen als „wartet“.
             switch BoardChatInputRules.refusal(state: chatState(sessionID), approvalPending: approvalPending(sessionID)) {

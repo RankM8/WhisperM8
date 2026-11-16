@@ -161,6 +161,7 @@ final class RecordingCoordinator {
     }
     /// Freigabe offen laut Sendeweg der CLI (`chats send`); nur für den Board-Chat.
     var boardChatApprovalPending: @MainActor (UUID) -> Bool = { BoardChatInputs.shared.approvalPending($0) }
+    var boardChatShown: @MainActor (UUID) -> Bool = { BoardChatInputs.shared.isShown($0) }
     /// Bezug, eingefroren beim Start der Aufnahme: Blättert Giuliano während
     /// Transkription und Nacharbeit weiter, gilt trotzdem das Ticket, über
     /// das er gesprochen hat.
