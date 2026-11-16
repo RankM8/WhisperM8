@@ -54,6 +54,16 @@ final class PerformanceCounters: Sendable {
         /// Der Controller hat den unteren Rand eines Terminals abgelesen
         /// (Runde 5, R2) — einmal je Controller-Eingabe in einem Agent-Chat.
         case controllerScreenRead
+        // Auswertungen und neu angelegte Ansichten im Agent-Chats-Fenster
+        // (WM8-101): Welche Teile baut eine Workspace-Änderung neu?
+        case bodyWindow
+        case bodyTabStrip
+        case bodyTab
+        case appearTab
+        case bodySessionDetail
+        case appearSessionDetail
+        case bodyProjectGroup
+        case bodyLegend
 
         var label: String {
             switch self {
@@ -66,6 +76,14 @@ final class PerformanceCounters: Sendable {
             case .ptyResizeRequested: return "pty.resize.requested"
             case .ptyResizeForwarded: return "pty.resize.forwarded"
             case .controllerScreenRead: return "controller.screen.read"
+            case .bodyWindow: return "body.window"
+            case .bodyTabStrip: return "body.tabStrip"
+            case .bodyTab: return "body.tab"
+            case .appearTab: return "appear.tab"
+            case .bodySessionDetail: return "body.detail"
+            case .appearSessionDetail: return "appear.detail"
+            case .bodyProjectGroup: return "body.projectGroup"
+            case .bodyLegend: return "body.legend"
             }
         }
 

@@ -210,6 +210,7 @@ struct ControllerLegendHost: View {
     @State private var dictationKeys: [String]? = ["⌥", "␣"]
 
     var body: some View {
+        let _ = PerformanceCounters.shared.count(.bodyLegend)
         let mode = KeyboardLegend.mode(
             legendEnabled: legendEnabled, controllerRunning: status.isRunning, deviceConnected: status.device != nil,
             lastInput: model.lastInput, keyboardIslandEnabled: keyboardIslandEnabled)

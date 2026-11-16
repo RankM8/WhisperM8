@@ -290,6 +290,7 @@ struct ChatTabButton: View {
     private var foot: CGFloat { ChromeTabMetrics.footSize }
 
     var body: some View {
+        let _ = PerformanceCounters.shared.count(.bodyTab)
         Button(action: onSelect) {
             HStack(spacing: isNarrow ? 4 : 6) {
                 if let project {
@@ -392,6 +393,7 @@ struct ChatTabButton: View {
         .accessibilityLabel(AgentRowAccessibility.summary(
             title: session.title, status: resolvedStatus, project: project?.name))
         .accessibilityAction(named: Text("Close tab")) { onClose() }
+        .onAppear { PerformanceCounters.shared.count(.appearTab) }
     }
 
     @ViewBuilder
