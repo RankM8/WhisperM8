@@ -480,6 +480,21 @@ an Claude Code 2.1.325; gesucht wird nur dort (mit Feld darunter, ohne Feld in
 den untersten zwei Zeilen), damit ein Chat, der diese Wortlaute zitiert,
 seine Warteschlange nicht anhält.
 
+**Wartende Meldungen sichtbar und neu versucht (WM8-123):** Hält die
+Warteschlange eine Meldung wegen Text im Feld oder einer offenen Ansicht
+zurück, steht über dem Terminal des Chats eine Leiste „1 Meldung wartet: Text
+im Eingabefeld“ (bzw. „… Eine Ansicht von Claude ist offen“) mit dem Weg, wie
+sie frei wird (`QueueHoldStrip`, Zustand nur im Speicher in
+`QueueHoldNotices`; Seitenleiste und Status-Punkte bleiben unberührt). Vorher
+stieß nur das nächste Turn-Ende einen neuen Versuch an, und das kommt bei
+einem ruhenden Chat nie. Jetzt sieht die Warteschlange alle 30 s nach, solange
+so eine Meldung wartet, und sofort (höchstens einmal je Sekunde), wenn das
+Terminal wieder ganz unten ankommt. Dieses Nachsehen liest nur das Feld und
+schreibt die Queue-Datei nicht; erst wenn die Sperre frei gibt, läuft die
+normale Zustellung. Arbeitet der Chat oder startet er, endet es, dann
+übernehmen Turn-Ende und Start. Kosten je wartendem Chat: eine Ablesung der
+untersten 16 Zeilen alle 30 s.
+
 **Sichtbar leer schlägt die Schätzung (WM8-64, 15.11.2026):** Ist das Feld
 eines Claude-Chats am Bildschirm abzulesen und leer, gilt kein Entwurf, auch
 wenn die Schätzung einen vermutet. Getippte und wieder gelöschte Zeichen

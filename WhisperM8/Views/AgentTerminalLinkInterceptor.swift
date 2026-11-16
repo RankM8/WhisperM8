@@ -68,7 +68,13 @@ final class AgentTerminalLinkInterceptor: @preconcurrency TerminalViewDelegate {
     func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {
         base?.hostCurrentDirectoryUpdate(source: source, directory: directory)
     }
+    /// Jede Scroll-Bewegung der Ansicht (Rad, Leiste, Sprung ans Ende). Der
+    /// Controller merkt sich daraus „wieder unten“ für wartende Meldungen
+    /// (WM8-123); kein I/O, nur ein Vergleich.
+    var onScrolled: (@MainActor (Double) -> Void)?
+
     func scrolled(source: TerminalView, position: Double) {
+        onScrolled?(position)
         base?.scrolled(source: source, position: position)
     }
     func clipboardCopy(source: TerminalView, content: Data) {

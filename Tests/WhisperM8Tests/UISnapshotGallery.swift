@@ -199,8 +199,26 @@ final class UISnapshotGallery: XCTestCase {
             }
         }
 
+        /// Leiste über dem Terminal, wenn Meldungen wegen des Eingabefelds
+        /// warten (WM8-123): eine und mehrere, Text im Feld und offene Ansicht.
+        func queueHoldStrip() -> Fixture {
+            Fixture(name: "warteschlange-hinweis", size: CGSize(width: 640, height: 260)) {
+                AnyView(VStack(alignment: .leading, spacing: 0) {
+                    QueueHoldStripContent(notice: .init(count: 1, reason: .textInField))
+                    Rectangle().fill(AgentTheme.background).frame(height: 26)
+                    QueueHoldStripContent(notice: .init(count: 3, reason: .textInField))
+                    Rectangle().fill(AgentTheme.background).frame(height: 26)
+                    QueueHoldStripContent(notice: .init(count: 1, reason: .viewOpen))
+                    Rectangle().fill(AgentTheme.background).frame(maxHeight: .infinity)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                .background(AgentTheme.background))
+            }
+        }
+
         return [
             statusDots(),
+            queueHoldStrip(),
             transcription("transcription-groq-ohne-key", provider: .groq, model: .groq_whisper_v3),
             transcription("transcription-groq-mit-key", provider: .groq, model: .groq_whisper_v3, hasKey: true),
             transcription("transcription-openai-mit-key", provider: .openai, model: .openai_gpt4o, hasKey: true),
