@@ -24453,6 +24453,16 @@
           }
         }
       }
+    },
+    "Not loaded": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht geladen"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

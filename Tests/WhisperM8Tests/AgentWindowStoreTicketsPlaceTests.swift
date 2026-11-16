@@ -21,7 +21,7 @@ final class AgentWindowStoreTicketsPlaceTests: XCTestCase {
         persistence = AgentSessionStore(fileURL: tempURL("ws"), uiStateFileURL: tempURL("ui"))
         store = AgentWindowStore(persistence: persistence)
         boardEnabled = true
-        store.isTicketBoardEnabled = { [unowned self] in boardEnabled }
+        store.ticketPlaces.isBoardEnabled = { [unowned self] in boardEnabled }
     }
 
     private func seed(_ count: Int) throws -> [UUID] {
@@ -56,6 +56,25 @@ final class AgentWindowStoreTicketsPlaceTests: XCTestCase {
         XCTAssertFalse(store.isTicketsMode(in: window))
         XCTAssertEqual(store.previousPlace(in: window), .tickets(projectID: project),
                        "derselbe Chat, der hinter den Tickets stand: trotzdem zurück ins Board")
+
+        // Zurück ins Board (wie L2 getippt): Ziel ist wieder der Chat.
+        store.setTicketsMode(true, in: window)
+        XCTAssertEqual(store.previousPlace(in: window), .chat(s[0]), "hin und zurück, beliebig oft")
+        store.navigateToSession(s[0], in: window)
+        XCTAssertEqual(store.previousPlace(in: window), .tickets(projectID: project))
+    }
+
+    /// Lesen schreibt nicht: Der Verlauf ändert sich beim Abfragen nicht.
+    func testReadingThePreviousPlaceDoesNotWrite() throws {
+        let s = try seed(1)
+        store.openTab(s[0], in: window, select: true)
+        store.setSelectedProject(project, in: window)
+        store.setTicketsMode(true, in: window)
+        store.navigateToSession(s[0], in: window)
+        let before = store.placeHistories
+        _ = store.previousPlace(in: window)
+        _ = store.previousPlace(in: window)
+        XCTAssertEqual(store.placeHistories, before)
     }
 
     /// Aus dem Board in einen anderen Chat: Ziel ist das Board, nicht der Chat,

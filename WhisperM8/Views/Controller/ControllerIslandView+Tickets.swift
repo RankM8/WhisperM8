@@ -60,6 +60,12 @@ extension ControllerIslandView {
                     .font(.system(size: 11).monospacedDigit())
                     .foregroundStyle(palette.tertiary)
                     .fixedSize()
+            } else {
+                // Ohne geladenen Stand dieses Boards: keine Zahl, nichts wird dafür abgerufen.
+                Text(verbatim: "–")
+                    .font(.system(size: 11))
+                    .foregroundStyle(palette.tertiary)
+                    .accessibilityLabel(Text("Not loaded"))
             }
         }
         .padding(.horizontal, 8)

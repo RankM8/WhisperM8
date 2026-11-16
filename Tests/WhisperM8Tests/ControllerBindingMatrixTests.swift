@@ -216,21 +216,11 @@ final class ControllerBindingMatrixTests: XCTestCase {
         return table.merging(appDiamond) { old, _ in old }
     }()
 
-    /// Ticket-Modus (WM8-91, Paket 1): die Liste links wie bisher, dazu L2
-    /// getippt und gehalten wie im Chat, Options, und R2 „geht nicht“. Unter
-    /// R1 nur die App-Raute; die Chat-Raute ist aus.
-    static let ticketsTable: Table = {
-        var table = merge(moves(.up, .listMove(step: -1)), moves(.down, .listMove(step: 1)), [
-            .move(.right, source: .leftStick, isRepeat: false): .leaveList,
-            .move(.right, source: .dpad, isRepeat: false): .leaveList,
-            .tap(.circle): .leaveList,
-            .press(.cross): .listActivate,
-            .tap(.l1): .listFilter(step: -1),
-            .tap(.r1): .listFilter(step: 1),
-            .holdPending(.square, duration: 0.6): .holdProgress(.square, duration: 0.6),
-            .holdBegan(.square): .listCloseRow,
-            .holdCancelled(.square): .holdProgressCancelled(.square),
-            .tap(.r3): .listStartRow,
+    /// Ticket-Modus (WM8-91, Paket 1): überall L2 getippt und gehalten wie im
+    /// Chat, Options, Create, Touchpad, R2 „geht nicht“. Unter R1 nur die
+    /// App-Raute; die Chat-Raute ist aus.
+    static let ticketsCommon: Table = {
+        var table = merge([
             .press(.create): .newChat,
             .press(.r2): .rejected,
             .press(.touchpad): .clipboardToggle,
@@ -250,6 +240,27 @@ final class ControllerBindingMatrixTests: XCTestCase {
         }
         return table
     }()
+
+    /// Board im Fokus: nur ◀ in die Seitenleiste (Prüfung Paket 1: keine
+    /// Taste der Liste wirkt auf eine Markierung, die man nicht sieht).
+    static let ticketsBoardFocus: Table = merge(ticketsCommon, [
+        .move(.left, source: .leftStick, isRepeat: false): .enterList(step: 0),
+        .move(.left, source: .dpad, isRepeat: false): .enterList(step: 0),
+    ])
+
+    /// Liste links im Fokus: deren Tasten wie bisher.
+    static let ticketsSidebar: Table = merge(ticketsCommon, moves(.up, .listMove(step: -1)), moves(.down, .listMove(step: 1)), [
+        .move(.right, source: .leftStick, isRepeat: false): .leaveList,
+        .move(.right, source: .dpad, isRepeat: false): .leaveList,
+        .tap(.circle): .leaveList,
+        .press(.cross): .listActivate,
+        .tap(.l1): .listFilter(step: -1),
+        .tap(.r1): .listFilter(step: 1),
+        .holdPending(.square, duration: 0.6): .holdProgress(.square, duration: 0.6),
+        .holdBegan(.square): .listCloseRow,
+        .holdCancelled(.square): .holdProgressCancelled(.square),
+        .tap(.r3): .listStartRow,
+    ])
 
     /// Insel-Paket: zweite Raute unter R1. Das Steuerkreuz schaltet die App
     /// (ein Druck je Stufe), gehalten ▲ ▼ und der linke Stick hoch/runter
@@ -561,11 +572,11 @@ final class ControllerBindingMatrixTests: XCTestCase {
             .press(.r2): .dictationToggle,
             .press(.touchpad): .clipboardToggle,
         ], pauseChord)),
-        ("Tickets", .tickets(ControllerTicketState(place: ControllerTicketsPlace(projectID: nil, team: "WM8"))),
-         ticketsTable),
+        ("Tickets, Board im Fokus", .tickets(ControllerTicketState(place: ControllerTicketsPlace(projectID: nil, team: "WM8"))),
+         ticketsBoardFocus),
         ("Tickets, Liste im Fokus",
          .tickets(ControllerTicketState(place: ControllerTicketsPlace(projectID: nil, team: "WM8"), area: .list)),
-         ticketsTable),
+         ticketsSidebar),
         ("Liste", .list, merge(moves(.up, .listMove(step: -1)), moves(.down, .listMove(step: 1)), [
             .move(.right, source: .leftStick, isRepeat: false): .leaveList,
             .move(.right, source: .dpad, isRepeat: false): .leaveList,

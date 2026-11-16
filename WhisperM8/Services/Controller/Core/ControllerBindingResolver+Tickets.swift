@@ -11,9 +11,9 @@ import Foundation
 // (Rückweg und „Wohin“ mit dem Reiter „Tickets“), Options, R1 gehalten (nur
 // die App-Raute), Create, Touchpad, L1 + R1. R2 tut nichts, mit Rückmeldung
 // (Entscheidung E4: kein Diktat ohne sichtbares Ziel). Was das Board selbst
-// bedient (Stick, Kreuz, Kreis, L1/R1 …), kommt mit Paket 2; bis dahin gelten
-// dort die Tasten der Liste links wie bisher — sie öffnen höchstens sichtbar
-// einen Chat aus der Seitenleiste und schicken nichts hinein.
+// bedient (Stick, Kreuz, Kreis, L1/R1 …), kommt mit Paket 2; bis dahin führt
+// im Board nur ◀ in die Seitenleiste. Dort gelten die Tasten der Liste wie
+// bisher, mit sichtbarer Markierung; sie schicken nichts in einen Chat.
 
 extension ControllerBindingResolver {
     static func tickets(_ gesture: ControllerGesture, state: ControllerTicketState) -> ControllerAction? {
@@ -24,13 +24,22 @@ extension ControllerBindingResolver {
         case .press(.touchpad): return .clipboardToggle
         // E4: Diktat erst mit dem Board-Chat (WM8-113).
         case .press(.r2): return .rejected
-        default: return ticketsListFallback(gesture)
+        default: break
         }
+        // Mit dem Board im Fokus ist keine Markierung der Liste zu sehen: Eine
+        // dort stehen gebliebene Zeile darf weder geöffnet, gestartet noch
+        // geschlossen werden (Prüfung Paket 1). Nur ◀ führt sichtbar hinein,
+        // wie aus einem Chat; die Tasten der Liste gelten mit ihrem Fokus.
+        guard state.area == .list else {
+            if case .move(.left, _, false) = gesture { return .enterList(step: 0) }
+            return nil
+        }
+        return ticketsListFallback(gesture)
     }
 
-    /// Bis Paket 2 die Liste links: nur Gesten, die die Seitenleiste
-    /// bedienen. Nichts davon erreicht einen Chat ungesehen; Kreuz öffnet den
-    /// markierten Chat sichtbar (und verlässt die Tickets).
+    /// Mit der Liste links im Fokus: nur Gesten, die die Seitenleiste
+    /// bedienen. Die Markierung ist zu sehen; Kreuz öffnet den markierten Chat
+    /// sichtbar (und verlässt die Tickets).
     private static func ticketsListFallback(_ gesture: ControllerGesture) -> ControllerAction? {
         guard let action = list(gesture) else { return nil }
         switch action {

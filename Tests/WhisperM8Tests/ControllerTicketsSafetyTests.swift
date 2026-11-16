@@ -34,12 +34,20 @@ final class ControllerTicketsSafetyTests: XCTestCase {
     /// Aktionen, die einen Chat treffen: in sein Terminal schreiben, ihn
     /// scrollen, in ihn diktieren oder per Tastatur-Brücke Return/Escape an
     /// das Feld mit dem Fokus schicken.
-    private static func reachesChat(_ action: ControllerAction) -> Bool {
+    ///
+    /// Dazu wirken Öffnen, Starten und Schließen einer Zeile der Liste auf
+    /// einen Chat. Das darf nur mit der Liste im Fokus geschehen, wo ihre
+    /// Markierung zu sehen ist (Prüfung Paket 1): Mit dem Board im Fokus
+    /// träfe es eine stehen gebliebene Zeile, die man nicht sieht.
+    private static func reachesChat(_ action: ControllerAction, in context: ControllerContext) -> Bool {
         switch action {
         case .dictationToggle, .dictationStopAndSubmit, .chatKey, .chatInterrupt, .chatResume, .chatClearInput,
              .pasteNewest, .moveInContent, .toggleMaximize, .scroll, .scrollPage, .scrollToBottom,
              .sendNowOrContinue, .cycleMode, .slashCommand, .bridgeKey:
             return true
+        case .listActivate, .listStartRow, .listCloseRow, .listMove, .listFilter:
+            guard case let .tickets(state) = context else { return false }
+            return state.area != .list
         case let .quickDraw(item):
             return item.writesToChat || item == .switchAccount
         default:
@@ -51,7 +59,7 @@ final class ControllerTicketsSafetyTests: XCTestCase {
         for context in Self.contexts {
             for gesture in Self.allGestures {
                 guard let action = ControllerBindingResolver.action(for: gesture, in: context) else { continue }
-                XCTAssertFalse(Self.reachesChat(action), "\(gesture) → \(action) in \(context)")
+                XCTAssertFalse(Self.reachesChat(action, in: context), "\(gesture) → \(action) in \(context)")
             }
         }
     }
@@ -68,7 +76,7 @@ final class ControllerTicketsSafetyTests: XCTestCase {
                     for gesture in ControllerLegend.gestures(for: .button(paddle)) {
                         guard let action = ControllerBindingResolver.action(
                             for: gesture, in: context, paddles: bindings) else { continue }
-                        XCTAssertFalse(Self.reachesChat(action), "\(binding) \(gesture) → \(action)")
+                        XCTAssertFalse(Self.reachesChat(action, in: context), "\(binding) \(gesture) → \(action)")
                     }
                 }
             }
@@ -102,7 +110,8 @@ final class ControllerTicketsSafetyTests: XCTestCase {
             let inChat = ControllerBindingResolver.action(for: gesture, in: .chat(chatState))
             let inTickets = ControllerBindingResolver.action(for: gesture, in: context)
             XCTAssertNotNil(inChat, "\(name) wirkt im Chat (sonst prüft der Test nichts)")
-            XCTAssertFalse(inTickets.map(Self.reachesChat) ?? false, "\(name) → \(String(describing: inTickets))")
+            XCTAssertFalse(inTickets.map { Self.reachesChat($0, in: context) } ?? false,
+                           "\(name) → \(String(describing: inTickets))")
         }
     }
 
@@ -271,6 +280,23 @@ final class ControllerTicketsSafetyTests: XCTestCase {
         }
         assertNothingReachedTheChat("Ebenen")
         XCTAssertNotNil(window.tickets, "keine dieser Tasten verlässt das Board über einen Chat-Befehl")
+    }
+
+    /// Prüfung Paket 1: Steht vom letzten Besuch der Liste noch eine Zeile
+    /// markiert, während das Board den Fokus hat, schließen, starten und öffnen
+    /// Viereck gehalten, R3 und Kreuz sie nicht — man sieht die Markierung nicht.
+    func testAStaleListMarkerIsNotUsedWhileTheBoardHasFocus() {
+        ui.markedRow = .chat(chat)
+        ui.listWindowID = window.id
+        XCTAssertEqual(ui.area, .content)
+        hold(.square)
+        tap(.r3)
+        tap(.cross)
+        XCTAssertTrue(window.commands.isEmpty, "keine Befehle: \(window.commands)")
+        // ◀ führt sichtbar in die Liste; erst dort gelten ihre Tasten.
+        feed(.button(.dpadLeft, pressed: true))
+        feed(.button(.dpadLeft, pressed: false))
+        XCTAssertEqual(ui.area, .list)
     }
 
     func testR2RejectsWithoutDictating() {

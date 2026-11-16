@@ -408,8 +408,8 @@ Alles nur bei eingeschalteter Ticket-Ansicht (`ticketBoardEnabled`).
 
 - **Hin:** L2 halten, Reiter **„Tickets“** rechts von „Workspaces & Projekte“ (◀ ▶ gehen jetzt Schritt für
   Schritt, ohne Umlauf). Je eingerichtetem Team mit Projekt eine Zeile: Farbe, Kürzel, Projekt, rechts die
-  Zahl „wartet auf dich“ (nur, wenn das Fenster den Stand dieses Boards schon geladen hat; dafür wird
-  nichts abgerufen). Das Team des aktuellen Projekts steht oben, trägt „hier“ und ist markiert: Außerhalb
+  Zahl „wartet auf dich“ (nur, wenn das Fenster den Stand dieses Boards schon geladen hat, sonst „–“;
+  dafür wird nichts abgerufen). Das Team des aktuellen Projekts steht oben, trägt „hier“ und ist markiert: Außerhalb
   des Boards ist es ein Ziel, L2 halten, ▶ ▶, loslassen öffnet es. Im Board heißt die Zeile „jetzt“ und
   Loslassen ohne Bewegung tut nichts; das zuletzt gezeigte Board trägt „vorher“. Hat das Projekt kein
   Team, steht darunter „… hat kein Team · Einstellungen › Tickets“ und nichts ist markiert. R2 („hin und
@@ -425,9 +425,10 @@ Alles nur bei eingeschalteter Ticket-Ansicht (`ticketBoardEnabled`).
 **Belegung im Ticket-Modus** (Zusammenhang `tickets`, Vorrang nach Menü und Dialog, vor Liste und Chat):
 L2 getippt und gehalten wie im Chat, Options, Create, Touchpad, L1 + R1 wie überall. R1 gehalten zeigt nur
 die App-Raute; die Chat-Raute ist aus („wirkt auf den Board-Chat, den es noch nicht gibt“). L1 gehalten
-gibt es nicht. R2 tut nichts, mit „geht nicht“ (Entscheidung E4). Stick, Kreuz, Kreis und L1/R1 getippt
-bedienen bis Paket 2 die Liste links wie bisher; sie öffnen höchstens sichtbar einen Chat aus der
-Seitenleiste. Paddles wie in der Liste: Sprünge verlassen das Board, Eingaben in einen Chat „geht nicht“.
+gibt es nicht. R2 tut nichts, mit „geht nicht“ (Entscheidung E4). Bis Paket 2 das Board bedient, führt
+dort nur ◀ in die Seitenleiste; die Tasten der Liste gelten erst mit ihrem Fokus, wo ihre Markierung zu
+sehen ist (eine stehen gebliebene Markierung wird nie ungesehen geöffnet, gestartet oder geschlossen).
+Paddles wie in der Liste: Sprünge verlassen das Board, Eingaben in einen Chat „geht nicht“.
 
 **Schutz:** Hinter den Tickets kommt in keinem Chat etwas an — kein Enter, kein Escape, keine Taste, kein
 Diktat, auch nicht über die Insel (L2 + R2 auf „hier“ im Board) oder per Tastatur (Leertaste in ⌥Tab).
@@ -438,7 +439,8 @@ alle Tasten an einem Chat mit offener Freigabe durch. Das Board schreibt nichts 
 Gelesen wird abseits des Main Threads beim Erscheinen eines Fensters, beim Umschalten auf die Tickets und
 beim Öffnen von „Wohin“ (eine kleine Datei, je Projekt höchstens ein Blick in `.git`). Leiste, Kopf und
 Menü lesen nur den Speicher; bis zum ersten Ergebnis steht dort „Tickets“ ohne Kürzel. Der Schnappschuss
-je Eingabe bekommt im Ticket-Modus einen kleinen Wert dazu (Projekt, Kürzel), außerhalb nichts.
+je Eingabe bekommt im Ticket-Modus einen kleinen Wert dazu (Projekt, Kürzel), außerhalb nichts; den Verlauf
+der Orte liest er nur. Nachgezogen wird er beim Umschalten und nach einer Navigation aus den Tickets.
 
 ## Xbox-Controller und Paddles
 

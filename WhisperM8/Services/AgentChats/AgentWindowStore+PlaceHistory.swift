@@ -60,7 +60,7 @@ extension AgentWindowStore {
     /// damit auch der erste Wechsel nach dem Start ein Ziel hat. Billig:
     /// eine Suche je Fenster.
     func recordPlaces(before: AgentUIState) {
-        let boardEnabled = isTicketBoardEnabled()
+        let boardEnabled = ticketPlaces.isBoardEnabled()
         for window in state.windows {
             let ticketsMode = ticketsModeWindowIDs.contains(window.id)
             var history = placeHistories[window.id] ?? ChatPlaceHistory()
@@ -77,7 +77,7 @@ extension AgentWindowStore {
         if placeHistories.count > state.windows.count {
             let ids = Set(state.windows.map(\.id))
             placeHistories = placeHistories.filter { ids.contains($0.key) }
-            lastTicketsProjectIDs = lastTicketsProjectIDs.filter { ids.contains($0.key) }
+            ticketPlaces.lastProjectIDs = ticketPlaces.lastProjectIDs.filter { ids.contains($0.key) }
         }
     }
 
@@ -86,7 +86,7 @@ extension AgentWindowStore {
     /// (`ticketsModeWindowIDs`), ihr Umschalten ist trotzdem ein Ortswechsel.
     func recordPlace(of windowID: UUID) {
         guard let window = state.windows.first(where: { $0.id == windowID }) else { return }
-        let boardEnabled = isTicketBoardEnabled()
+        let boardEnabled = ticketPlaces.isBoardEnabled()
         var history = placeHistories[windowID] ?? ChatPlaceHistory()
         let place = Self.place(of: window, in: state, ticketsMode: ticketsModeWindowIDs.contains(windowID))
         history.record(place) { Self.isPlaceAvailable($0, window: window, in: state, ticketBoardEnabled: boardEnabled) }
@@ -103,28 +103,29 @@ extension AgentWindowStore {
         guard var history = placeHistories[windowID], case .tickets = history.current else { return }
         history.record(nil, isAvailable: { _ in true })
         placeHistories[windowID] = history
+        // Wo die Navigation endet: Hat sie den Zustand nicht geändert
+        // (derselbe Chat wie hinter den Tickets), holt das den Ort nach.
+        // Gelesen wird der Verlauf ohne Schreiben (bei jedem Schnappschuss).
+        DispatchQueue.main.async { [weak self] in self?.recordPlace(of: windowID) }
     }
 
     private func noteShownBoard(_ place: ChatPlace?, in windowID: UUID) {
-        guard case let .tickets(projectID?)? = place, lastTicketsProjectIDs[windowID] != projectID else { return }
-        lastTicketsProjectIDs[windowID] = projectID
+        guard case let .tickets(projectID?)? = place, ticketPlaces.lastProjectIDs[windowID] != projectID else { return }
+        ticketPlaces.lastProjectIDs[windowID] = projectID
     }
 
     /// Ziel von L2 in diesem Fenster: der vorige Ort, sofern es ihn noch gibt.
-    /// Gleicht vorher den aktuellen Ort ab (nach einer Navigation ohne
-    /// Änderung des Zustands steht dort noch „kein Ort“).
+    /// Nur lesen: Läuft bei jedem Schnappschuss des Controllers.
     func previousPlace(in windowID: UUID) -> ChatPlace? {
-        guard placeHistories[windowID] != nil else { return nil }
-        recordPlace(of: windowID)
         guard let history = placeHistories[windowID] else { return nil }
         let window = state.windows.first { $0.id == windowID }
-        let boardEnabled = isTicketBoardEnabled()
+        let boardEnabled = ticketPlaces.isBoardEnabled()
         return history.target { Self.isPlaceAvailable($0, window: window, in: state, ticketBoardEnabled: boardEnabled) }
     }
 
     /// Zuletzt gezeigtes Board dieses Fensters (Projekt), für „vorher“ im
     /// Reiter „Tickets“ der Insel.
     func lastTicketsProjectID(in windowID: UUID) -> UUID? {
-        lastTicketsProjectIDs[windowID]
+        ticketPlaces.lastProjectIDs[windowID]
     }
 }
