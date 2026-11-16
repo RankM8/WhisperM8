@@ -199,20 +199,48 @@ final class UISnapshotGallery: XCTestCase {
             }
         }
 
-        /// Leiste über dem Terminal, wenn Meldungen wegen des Eingabefelds
-        /// warten (WM8-123): eine und mehrere, Text im Feld und offene Ansicht.
+        /// Leiste oben im Terminal, wenn Meldungen wegen des Eingabefelds
+        /// warten (WM8-123): als Überlagerung über nachgestelltem
+        /// Terminal-Text, damit sichtbar ist, dass sie nichts verschiebt.
+        /// Claude mit Text im Feld (eine und drei), Codex mit eigenem zweiten
+        /// Satz, offene Ansicht.
         func queueHoldStrip() -> Fixture {
-            Fixture(name: "warteschlange-hinweis", size: CGSize(width: 640, height: 260)) {
-                AnyView(VStack(alignment: .leading, spacing: 0) {
-                    QueueHoldStripContent(notice: .init(count: 1, reason: .textInField))
-                    Rectangle().fill(AgentTheme.background).frame(height: 26)
-                    QueueHoldStripContent(notice: .init(count: 3, reason: .textInField))
-                    Rectangle().fill(AgentTheme.background).frame(height: 26)
-                    QueueHoldStripContent(notice: .init(count: 1, reason: .viewOpen))
-                    Rectangle().fill(AgentTheme.background).frame(maxHeight: .infinity)
+            let lines = [
+                "⏺ Die Leiste liegt jetzt oben im Terminal.",
+                "  ⎿  Read WhisperM8/Views/QueueHoldStrip.swift (52 lines)",
+                "⏺ Snapshots für hell und dunkel sind gerendert.",
+                "  ⎿  make snapshots ONLY=warteschlange-hinweis",
+                "",
+                "╭──────────────────────────────────────────────╮",
+                "│ > Bitte noch die Doku zum Snapshot ergänz    │",
+                "╰──────────────────────────────────────────────╯",
+            ]
+            func pane(_ notice: QueueHoldNotices.Notice) -> some View {
+                VStack(alignment: .leading, spacing: 1) {
+                    ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                        Text(verbatim: line.isEmpty ? " " : line)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(AgentTheme.textPrimary)
+                    }
                 }
+                .padding(.horizontal, 8)
+                .padding(.top, 6)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .frame(height: 150, alignment: .top)
+                .background(AgentTheme.background)
+                .overlay(alignment: .top) { QueueHoldStripContent(notice: notice) }
+                .clipped()
+            }
+            return Fixture(name: "warteschlange-hinweis", size: CGSize(width: 640, height: 660)) {
+                AnyView(VStack(alignment: .leading, spacing: 12) {
+                    pane(.init(count: 1, reason: .textInField))
+                    pane(.init(count: 3, reason: .textInField))
+                    pane(.init(count: 1, reason: .textInField, fieldReadable: false))
+                    pane(.init(count: 1, reason: .viewOpen))
+                }
+                .padding(8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .background(AgentTheme.background))
+                .background(AgentTheme.sidebar))
             }
         }
 

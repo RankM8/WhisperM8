@@ -482,10 +482,18 @@ seine Warteschlange nicht anhält.
 
 **Wartende Meldungen sichtbar und neu versucht (WM8-123):** Hält die
 Warteschlange eine Meldung wegen Text im Feld oder einer offenen Ansicht
-zurück, steht über dem Terminal des Chats eine Leiste „1 Meldung wartet: Text
+zurück, liegt oben im Terminal des Chats eine Leiste „1 Meldung wartet: Text
 im Eingabefeld“ (bzw. „… Eine Ansicht von Claude ist offen“) mit dem Weg, wie
 sie frei wird (`QueueHoldStrip`, Zustand nur im Speicher in
-`QueueHoldNotices`; Seitenleiste und Status-Punkte bleiben unberührt). Vorher
+`QueueHoldNotices`; Seitenleiste und Status-Punkte bleiben unberührt). Die
+Leiste ist eine Überlagerung und verschiebt nichts: Als eigene Zeile über dem
+Terminal änderte sie dessen Höhe, Claude zeichnete neu und das Bild sprang,
+oft mitten beim Tippen. Sie verdeckt dafür die obersten zwei Zeilen; Klicks
+gehen durch sie hindurch ans Terminal. Bei Codex-Chats nennt der zweite Satz
+Enter und Ctrl+C, denn dort liest die App das Feld nicht, und von Hand
+gelöschter Text zählt nicht. Entfernt `chats dequeue` die wartenden Meldungen,
+verschwindet die Leiste sofort (bleiben welche offen, stimmt die Zahl gleich),
+nicht erst beim nächsten Versuch. Vorher
 stieß nur das nächste Turn-Ende einen neuen Versuch an, und das kommt bei
 einem ruhenden Chat nie. Jetzt sieht die Warteschlange alle 30 s nach, solange
 so eine Meldung wartet, und sofort (höchstens einmal je Sekunde), wenn das

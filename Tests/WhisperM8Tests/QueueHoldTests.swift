@@ -77,7 +77,52 @@ final class QueueHoldTests: XCTestCase {
         XCTAssertTrue(one.hasPrefix("1 "), one)
         XCTAssertTrue(three.hasPrefix("3 "), three)
         XCTAssertNotEqual(one, view)
-        XCTAssertNotEqual(QueueHoldNotices.hint(for: .textInField), QueueHoldNotices.hint(for: .viewOpen))
+        XCTAssertNotEqual(QueueHoldNotices.hint(for: .init(count: 1, reason: .textInField)),
+                          QueueHoldNotices.hint(for: .init(count: 1, reason: .viewOpen)))
+    }
+
+    /// Codex: Das Feld wird nie abgelesen, deshalb ein eigener zweiter Satz,
+    /// der Enter und Ctrl+C nennt statt „Terminal nach unten scrollen“.
+    func testCodexHintDiffersFromClaude() {
+        let claude = QueueHoldNotices.hint(for: .init(count: 1, reason: .textInField))
+        let codex = QueueHoldNotices.hint(for: .init(count: 1, reason: .textInField, fieldReadable: false))
+        XCTAssertNotEqual(claude, codex)
+        XCTAssertTrue(codex.contains("Ctrl+C"), codex)
+        XCTAssertTrue(AgentPromptQueueDelivery.fieldReadable(.claudeCodeChat))
+        XCTAssertFalse(AgentPromptQueueDelivery.fieldReadable(.codexChat))
+        XCTAssertFalse(AgentPromptQueueDelivery.fieldReadable(.plainShell))
+    }
+
+    /// `chats dequeue`: Nichts mehr offen heißt sofort keine Leiste; bleibt
+    /// etwas offen, stimmt die Zahl. Ohne Hinweis entsteht keiner.
+    func testNoticeAfterQueueChange() {
+        let held = QueueHoldNotices.Notice(count: 3, reason: .textInField, fieldReadable: false)
+        XCTAssertNil(QueueHoldNotices.notice(held, afterOpenCount: 0))
+        XCTAssertEqual(QueueHoldNotices.notice(held, afterOpenCount: 1),
+                       .init(count: 1, reason: .textInField, fieldReadable: false))
+        XCTAssertNil(QueueHoldNotices.notice(nil, afterOpenCount: 2), "Hinweis entsteht nur beim Zustellversuch")
+    }
+
+    /// Über den Store: dequeue aller wartenden Meldungen räumt die Leiste
+    /// im selben Durchlauf, ohne den 30-s-Versuch abzuwarten.
+    @MainActor
+    func testDequeueClearsStripImmediately() throws {
+        let store = AgentPromptQueueStore(fileURL: tempFile())
+        let notices = QueueHoldNotices()
+        let delivery = AgentPromptQueueDelivery(store: store, settleDelay: 0, notices: notices)
+        let id = UUID()
+        try store.enqueue(sessionID: id, prompt: "Bitte WM8-Doku prüfen", by: "Test")
+        try store.enqueue(sessionID: id, prompt: "Und dann den Snapshot", by: "Test")
+        notices.set(.init(count: 2, reason: .textInField), for: id)
+
+        let first = store.openPrompts(for: id)[0]
+        store.cancel(sessionID: id, ids: [first.id])
+        delivery.noteQueueChanged(id)
+        XCTAssertEqual(notices.notices[id]?.count, 1)
+
+        store.cancel(sessionID: id)
+        delivery.noteQueueChanged(id)
+        XCTAssertNil(notices.notices[id])
     }
 
     private func tempFile() -> URL {

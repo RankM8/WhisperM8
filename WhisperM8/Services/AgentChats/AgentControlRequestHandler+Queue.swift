@@ -25,6 +25,8 @@ extension AgentControlRequestHandler {
             let ids = request.params["ids"]?.arrayValue?.compactMap { $0.stringValue }
                 .compactMap(UUID.init(uuidString:))
             let cancelled = store.cancel(sessionID: targetID, ids: ids.map(Set.init))
+            // Leiste „Meldung wartet“ gleich nachführen, nicht erst in 30 s (WM8-123).
+            await MainActor.run { AgentPromptQueueDelivery.shared.noteQueueChanged(targetID) }
             await audit(request.actor, method: "queue-cancel", target: await sessionLabel(targetID),
                         outcome: "ok", prompt: nil)
             return .success(requestID: request.requestID, result: .object([

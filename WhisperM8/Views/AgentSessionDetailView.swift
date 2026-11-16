@@ -186,11 +186,16 @@ struct AgentSessionDetailView: View {
             if let missingCLI, controller == nil {
                 AgentCLIMissingView(cli: missingCLI, onInstalled: { self.missingCLI = nil })
             } else if let controller {
-                // Meldungen warten wegen des Eingabefelds (WM8-123); eigene
-                // Ansicht, damit nur sie auf den Hinweis reagiert.
-                QueueHoldStrip(sessionID: session.id)
                 AgentTerminalView(controller: controller)
                     .background(AgentTheme.background)
+                    // Meldungen warten wegen des Eingabefelds (WM8-123). Als
+                    // Überlagerung, damit sich die Höhe des Terminals nie
+                    // ändert; eigene Ansicht, damit nur sie auf den Hinweis
+                    // reagiert.
+                    .overlay(alignment: .top) {
+                        QueueHoldStrip(sessionID: session.id)
+                            .allowsHitTesting(false)
+                    }
             } else if session.isTerminal {
                 // Terminal ohne laufenden Controller (App-Neustart oder Tab
                 // wurde geschlossen): es gibt kein Transcript, das man zeigen

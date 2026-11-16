@@ -24,6 +24,11 @@ final class QueueHoldNotices {
     struct Notice: Equatable {
         var count: Int
         var reason: Reason
+        /// Liest die App das Feld dieses Chats am Bildschirm ab? Nur bei
+        /// Claude. Bei Codex (und Shell-Tabs) gibt allein Enter, Ctrl+C oder
+        /// ein Absenden frei; ein von Hand gelöschtes Feld sieht die App dort
+        /// nicht, deshalb ein eigener zweiter Satz.
+        var fieldReadable: Bool = true
     }
 
     private(set) var notices: [UUID: Notice] = [:]
@@ -37,6 +42,16 @@ final class QueueHoldNotices {
 
     func clear(_ sessionID: UUID) {
         set(nil, for: sessionID)
+    }
+
+    /// Pur: Hinweis, nachdem sich die Zahl offener Meldungen geändert hat
+    /// (etwa per `chats dequeue`). Nichts mehr offen heißt: keine Leiste.
+    /// Ohne bisherigen Hinweis bleibt es dabei; ob neu gewartet wird,
+    /// entscheidet erst der nächste Zustellversuch.
+    nonisolated static func notice(_ current: Notice?, afterOpenCount openCount: Int) -> Notice? {
+        guard var current, openCount > 0 else { return nil }
+        current.count = openCount
+        return current
     }
 
     /// Text der Leiste, z. B. „1 Meldung wartet: Text im Eingabefeld“.
@@ -54,11 +69,13 @@ final class QueueHoldNotices {
     }
 
     /// Zweite Zeile: was die Meldung frei macht.
-    nonisolated static func hint(for reason: Reason) -> String {
-        switch reason {
-        case .textInField:
+    nonisolated static func hint(for notice: Notice) -> String {
+        switch (notice.reason, notice.fieldReadable) {
+        case (.textInField, true):
             return String(localized: "Sent once the text is submitted or cleared and the terminal is scrolled to the bottom.")
-        case .viewOpen:
+        case (.textInField, false):
+            return String(localized: "Sent once you press Enter or Ctrl+C in the terminal. The input field can't be read here, so deleting the text by hand doesn't count.")
+        case (.viewOpen, _):
             return String(localized: "Sent once the view is closed.")
         }
     }
