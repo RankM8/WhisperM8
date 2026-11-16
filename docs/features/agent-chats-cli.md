@@ -496,10 +496,18 @@ nichts: Als eigene Zeile über dem Terminal änderte sie dessen Höhe, Claude
 zeichnete neu und das Bild sprang, oft mitten beim Tippen. Oben rechts, weil
 Claudes Feld und Ausgabe links beginnen; ein Streifen über die ganze Breite
 verdeckte in einem kurzen Chat genau das Eingabefeld (Entscheidung Giuliano,
-16.11.2026). Eine Zeile, 11 pt; ist das Terminal schmaler, wird gekürzt. Der
-Grund steht immer in der Pille, der Weg, wie die Meldung frei wird, im Tooltip
-und in der Bedienungshilfe. Damit der Tooltip wirkt, nimmt die Pillenfläche
-selbst die Maus an; daneben geht jeder Klick ans Terminal. Bei Codex-Chats
+16.11.2026). Eine Zeile, 11 pt. An engen Stellen (Board-Spalte, schmale
+Kachel) steht die Kurzfassung „1 wartet · Text im Feld“ bzw. „1 wartet ·
+Ansicht offen“ (`ViewThatFits`), erst wenn auch die nicht passt, wird gekürzt.
+Der Grund steht immer in der Pille, der Weg, wie die Meldung frei wird, im
+Tooltip und in der Bedienungshilfe. Ein Klick auf die Pille springt im
+Terminal ans Ende und lässt die Warteschlange gleich nachsehen
+(`noteReturnedToBottom`); daneben geht jeder Klick ans Terminal. Im Raster
+weicht die Pille der offenen Jarvis-Notizkarte aus: rechts daneben, solange
+dort die Kurzfassung Platz hat (180 pt), sonst unter die Karte. Die Karte
+meldet dafür ihre Größe beim Öffnen, Schließen und Ändern
+(`JarvisNoteCardFootprints`, nur Speicher, gelesen nur von der Pille desselben
+Chats). Bei Codex-Chats
 nennt dieser Weg Enter und Ctrl+C, denn dort liest die App das Feld nicht, und
 von Hand gelöschter Text zählt nicht. Entfernt `chats dequeue` die wartenden
 Meldungen, verschwindet die Pille sofort (bleiben welche offen, stimmt die

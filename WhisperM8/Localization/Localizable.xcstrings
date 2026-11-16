@@ -25234,6 +25234,56 @@
         }
       }
     },
+    "1 waiting · text in field": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 wartet · Text im Feld"
+          }
+        }
+      }
+    },
+    "%lld waiting · text in field": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld warten · Text im Feld"
+          }
+        }
+      }
+    },
+    "1 waiting · view open": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 wartet · Ansicht offen"
+          }
+        }
+      }
+    },
+    "%lld waiting · view open": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld warten · Ansicht offen"
+          }
+        }
+      }
+    },
+    "Click to jump to the end of the terminal.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Klick springt ans Ende des Terminals."
+          }
+        }
+      }
+    },
     "Sent once you press Enter or Ctrl+C in the terminal. The input field can't be read here, so deleting the text by hand doesn't count.": {
       "localizations": {
         "de": {

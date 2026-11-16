@@ -185,6 +185,13 @@ struct JarvisNoteCardOverlay: View {
                     )
                     .onHover(perform: onHoverChanged)
                     .onDisappear { onHoverChanged(false) }
+                    // Fläche melden, damit die Pille „Meldung wartet“ ausweicht (WM8-123).
+                    .background(GeometryReader { card in
+                        Color.clear
+                            .onAppear { reportFootprint(card.size) }
+                            .onChange(of: card.size) { _, size in reportFootprint(size) }
+                    })
+                    .onDisappear { JarvisNoteCardFootprints.shared.set(nil, for: sessionID) }
                     .padding(.leading, Self.leadingInset)
                     .padding(.top, headerHeight)
                     .transition(reduceMotion ? .opacity : .asymmetric(
@@ -204,6 +211,14 @@ struct JarvisNoteCardOverlay: View {
         // Handklick verwerfen beim Hineingehen/Verlassen: fensterweit in
         // `AgentChatsView` (`JarvisNotesStore.selectionChanged`), nicht hier —
         // die Einzelansicht hat keine Kacheln, wechselt aber Chats.
+    }
+}
+
+extension JarvisNoteCardOverlay {
+    func reportFootprint(_ size: CGSize) {
+        JarvisNoteCardFootprints.shared.set(
+            JarvisNoteCardFootprint(trailingEdge: Self.leadingInset + size.width, bottomEdge: size.height),
+            for: sessionID)
     }
 }
 
