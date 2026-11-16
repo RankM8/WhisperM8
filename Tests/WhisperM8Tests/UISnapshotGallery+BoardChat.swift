@@ -139,8 +139,9 @@ extension UISnapshotGallery {
             // Teil d: Triage-Knöpfe, gesammelte Entscheidungen an den Zeilen und im Eingabefeld.
             Fixture(name: "tickets-board-chat-gesammelt", size: size) {
                 let shared = BoardChatInputs.shared
-                shared.register(windowID: window, sessionID: UUID(), name: "Jarvis")
-                shared.triageDecisions[window] = ["WM8-69": .accept, "WM8-12": .later]
+                let board = UUID()
+                shared.register(windowID: window, sessionID: board, name: "Jarvis")
+                shared.triageBatches[window] = TriageBatch(sessionID: board, decisions: ["WM8-69": .accept, "WM8-12": .later])
                 return screen("tickets-triage-mit-fenster", state: jarvis, triage: true, terminal: collectedText)
             },
             // Teil b: „→ Jarvis“ oben in der Triage, Bezug unter dem Terminal.

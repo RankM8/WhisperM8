@@ -64,43 +64,81 @@ extension BoardChatText {
     }
 }
 
+/// Sammelauftrag der Triage: an welchen Chat, ob die Überschrift schon im
+/// Feld steht, und was je Ticket gesammelt ist.
+struct TriageBatch: Equatable {
+    var sessionID: UUID
+    var decisions: [String: TriageDecision] = [:]
+}
+
+/// Was der Bildschirm über das Eingabefeld sagt.
+enum BoardChatFieldVisibility: Equatable {
+    case empty
+    case hasText
+    /// Hochgescrollt, eingeklappter Paste, Codex: nicht ablesbar.
+    case unknown
+}
+
+enum TriageBatchRules {
+    /// Ist der letzte Sammelauftrag raus? Sichtbar leeres Feld: ja. Sichtbarer
+    /// Text: nein. Sonst die Schätzung der Tasten (wie die Warteschlange).
+    static func batchEnded(field: BoardChatFieldVisibility, hasUnsentInput: Bool) -> Bool {
+        switch field {
+        case .empty: return true
+        case .hasText: return false
+        case .unknown: return !hasUnsentInput
+        }
+    }
+
+    /// Nach einem Klick springt die Triage weiter; ein zweiter Klick so kurz
+    /// danach entschiede ein Ticket, das Giuliano noch nicht gesehen hat.
+    static let doubleClickPause: TimeInterval = 0.5
+}
+
 extension BoardChatInputs {
     func triageDecision(for key: String, in windowID: UUID) -> TriageDecision? {
-        triageDecisions[windowID]?[key]
+        guard let batch = triageBatches[windowID], batch.sessionID == registrations[windowID]?.sessionID else { return nil }
+        return batch.decisions[key]
     }
 
     /// Hält eine Entscheidung zum Ticket der Triage fest und legt sie als Zeile
-    /// ins Eingabefeld des Board-Chats, nie mit Enter. Ist das Feld seit dem
-    /// letzten Sammeln leer (abgeschickt oder geleert), beginnt ein neuer
-    /// Sammelauftrag mit Überschrift. Bei offener Frage oder Freigabe passiert
-    /// nichts, auch keine Markierung.
+    /// ins Eingabefeld des Board-Chats, nie mit Enter. Ist der letzte
+    /// Sammelauftrag raus oder steht ein anderer Chat in der Spalte, beginnt ein
+    /// neuer mit Überschrift. Bei offener Frage oder Freigabe passiert nichts,
+    /// auch keine Markierung.
     @discardableResult
     func decide(_ decision: TriageDecision, in windowID: UUID) -> Bool {
         guard let registration = registrations[windowID] else {
             refuse(.noBoardChat, in: windowID, name: "")
             return false
         }
+        // Doppelklick: der zweite Klick träfe das nächste, ungesehene Ticket.
+        if let last = lastDecisionAt[windowID], now().timeIntervalSince(last) < TriageBatchRules.doubleClickPause { return false }
         guard let ticket = shownTicket(windowID) else { return false }
         let sessionID = registration.sessionID
         if let refusal = BoardChatInputRules.refusal(state: chatState(sessionID), approvalPending: approvalPending(sessionID)) {
             refuse(refusal, in: windowID, name: registration.name)
             return false
         }
-        let fieldHasText = hasUnsentInput(sessionID)
-        if triageBatchOpen.contains(windowID), !fieldHasText {
-            // Der letzte Sammelauftrag ist raus: neu anfangen.
-            triageBatchOpen.remove(windowID)
-            triageDecisions[windowID] = nil
+        let field = fieldVisibility(sessionID)
+        let unsent = hasUnsentInput(sessionID)
+        if let batch = triageBatches[windowID],
+           batch.sessionID != sessionID || TriageBatchRules.batchEnded(field: field, hasUnsentInput: unsent) {
+            // Anderer Chat oder der letzte Auftrag ist raus: neu anfangen, alte Marken weg.
+            triageBatches[windowID] = nil
         }
-        let old = triageDecisions[windowID]?[ticket.key]
-        let text = BoardChatText.triageInsert(ticket, decision, replacing: old,
-                                               batchOpen: triageBatchOpen.contains(windowID), fieldHasText: fieldHasText)
+        let batch = triageBatches[windowID]
+        let fieldHasText = field == .hasText || (field == .unknown && unsent)
+        let text = BoardChatText.triageInsert(ticket, decision, replacing: batch?.decisions[ticket.key],
+                                               batchOpen: batch != nil, fieldHasText: fieldHasText)
         guard insert(text, sessionID) else {
             refuse(.notRunning, in: windowID, name: registration.name)
             return false
         }
-        triageBatchOpen.insert(windowID)
-        triageDecisions[windowID, default: [:]][ticket.key] = decision
+        var updated = batch ?? TriageBatch(sessionID: sessionID)
+        updated.decisions[ticket.key] = decision
+        triageBatches[windowID] = updated
+        lastDecisionAt[windowID] = now()
         notices[windowID] = nil
         return true
     }

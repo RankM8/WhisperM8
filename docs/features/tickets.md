@@ -444,8 +444,12 @@ Idee 3.
   Jarvis:“ mit Annehmen, Zurückfragen, Zuweisen…, Später, Doppelt, Ablehnen. Ein Klick legt eine Zeile
   „- WM8-81 „Titel“ <Adresse>: annehmen“ ins Eingabefeld des Board-Chats (nie mit Enter) und geht zum nächsten
   Ticket; der erste Klick eines Auftrags setzt „Triage in WM8, bitte ausführen:“ davor. Die Zeile der Liste zeigt
-  „→ Annehmen · gesammelt“. Eine geänderte Entscheidung kommt als neue Zeile mit „(statt: …)“. Ist das Feld seit
-  dem letzten Sammeln leer (abgeschickt), beginnt ein neuer Auftrag. Bei offener Frage oder Freigabe: Warnton,
+  „→ Annehmen · gesammelt“. Eine geänderte Entscheidung kommt als neue Zeile mit „(statt: …)“. Ein neuer Auftrag
+  beginnt, wenn das Feld sichtbar leer ist oder, falls der Bildschirm nichts sagt, die Tasten-Schätzung keinen
+  Entwurf mehr sieht (wie die Warteschlange), oder wenn ein anderer Chat in der Spalte steht; die Marken gehören
+  zum Auftrag und verschwinden mit ihm. Ein zweiter Klick innerhalb einer halben Sekunde zählt nicht (er träfe
+  das nächste, ungesehene Ticket). Bezug und „→ Jarvis“ beginnen auf einer neuen Zeile, wenn im Feld schon Text
+  steht. Bei offener Frage oder Freigabe: Warnton,
   Hinweis, keine Zeile, keine Markierung. Das Board schreibt nichts nach Linear; das tut der Board-Chat nach
   Giulianos Enter (Entscheidung E1).
 - **Kosten:** Öffnen der Tickets hängt das Terminal einmal um (`pane.attach`, gemessen rund 70 ms auf ruhigem

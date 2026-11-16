@@ -135,10 +135,11 @@ final class BoardChatInputs {
     /// Bezug, der schon mitgegangen ist (Ticket-Nummer je Fenster).
     private(set) var usedReference: [UUID: String] = [:]
     var notices: [UUID: Notice] = [:]
-    /// Gesammelte Triage-Entscheidungen je Fenster (Teil d), Ticket-Nummer → Entscheidung.
-    var triageDecisions: [UUID: [String: TriageDecision]] = [:]
-    /// Fenster, deren Sammelauftrag schon seine Überschrift im Eingabefeld hat.
-    @ObservationIgnored var triageBatchOpen: Set<UUID> = []
+    /// Sammelauftrag der Triage je Fenster (Teil d). Gehört zu genau einem
+    /// Board-Chat: Wechselt der Chat, beginnt ein neuer Auftrag.
+    var triageBatches: [UUID: TriageBatch] = [:]
+    /// Wann zuletzt gesammelt wurde (Sperre gegen Doppelklick).
+    @ObservationIgnored var lastDecisionAt: [UUID: Date] = [:]
 
     // MARK: Abhängigkeiten (Tests ersetzen sie)
 
@@ -165,6 +166,17 @@ final class BoardChatInputs {
     @ObservationIgnored var hasUnsentInput: (UUID) -> Bool = { sessionID in
         AgentTerminalRegistry.shared.controller(for: sessionID)?.composerDraft.mayHaveUnsentInput ?? false
     }
+    /// Was der Bildschirm über das Eingabefeld sagt (wie die Warteschlange).
+    @ObservationIgnored var fieldVisibility: (UUID) -> BoardChatFieldVisibility = { sessionID in
+        guard let controller = AgentTerminalRegistry.shared.controller(for: sessionID) else { return .unknown }
+        let profile = controller.command.keyboardProfile
+        let field = controller.controllerScreenSnapshot()?.promptField
+        if PromptSubmitCheck.fieldVisiblyEmpty(field: field, profile: profile) { return .empty }
+        if PromptSubmitCheck.visibleDraft(field: field, profile: profile,
+                                          clearsBeforeSubmit: controller.composerDraft.shouldClearBeforeSubmit) { return .hasText }
+        return .unknown
+    }
+    @ObservationIgnored var now: () -> Date = { Date() }
     @ObservationIgnored var refuseSound: () -> Void = { NSSound.beep() }
     @ObservationIgnored var noticeSeconds: Double = 4
 
@@ -181,6 +193,18 @@ final class BoardChatInputs {
         guard let current = registrations[windowID], token == nil || current.token == token else { return }
         registrations[windowID] = nil
         notices[windowID] = nil
+        triageBatches[windowID] = nil
+        lastDecisionAt[windowID] = nil
+    }
+
+    /// Steht im Feld dieses Chats vermutlich schon Text (Entwurf, eingefügte
+    /// Zeilen, offener Sammelauftrag)? Dann beginnt Neues auf eigener Zeile.
+    func fieldProbablyHasText(_ sessionID: UUID, in windowID: UUID) -> Bool {
+        switch fieldVisibility(sessionID) {
+        case .empty: return false
+        case .hasText: return true
+        case .unknown: return hasUnsentInput(sessionID) || triageBatches[windowID]?.sessionID == sessionID
+        }
     }
 
     func boardChat(in windowID: UUID) -> Registration? { registrations[windowID] }
@@ -224,7 +248,8 @@ final class BoardChatInputs {
     func referenceForDictation(to sessionID: UUID) -> (prefix: String, commit: () -> Void)? {
         guard let windowID = registrations.first(where: { $0.value.sessionID == sessionID })?.key,
               let ticket = reference(in: windowID) else { return nil }
-        return (BoardChatText.referencePrefix(ticket), { [weak self] in self?.usedReference[windowID] = ticket.key })
+        let lead = fieldProbablyHasText(sessionID, in: windowID) ? "\n" : ""
+        return (lead + BoardChatText.referencePrefix(ticket), { [weak self] in self?.usedReference[windowID] = ticket.key })
     }
 
     // MARK: „→ Jarvis“
@@ -245,7 +270,8 @@ final class BoardChatInputs {
             refuse(refusal, in: windowID, name: registration.name)
             return false
         }
-        guard insert(BoardChatText.handOff(ticket), sessionID) else {
+        let lead = fieldProbablyHasText(sessionID, in: windowID) ? "\n" : ""
+        guard insert(lead + BoardChatText.handOff(ticket), sessionID) else {
             refuse(.notRunning, in: windowID, name: registration.name)
             return false
         }

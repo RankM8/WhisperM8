@@ -18,6 +18,8 @@ final class BoardChatInputsTests: XCTestCase {
     private var beeps = 0
     private var shown: [UUID: BoardChatTicket] = [:]
     private var fieldHasText = false
+    private var field: BoardChatFieldVisibility = .unknown
+    private var clock = Date(timeIntervalSince1970: 1_794_700_000)
 
     private let ticket81 = BoardChatTicket(key: "WM8-81", title: "Ticket-Board: Board und Backlog lesen",
                                            url: "https://linear.app/whisperm8/issue/WM8-81")
@@ -41,6 +43,9 @@ final class BoardChatInputsTests: XCTestCase {
         inputs.refuseSound = { [unowned self] in beeps += 1 }
         fieldHasText = false
         inputs.hasUnsentInput = { [unowned self] _ in fieldHasText }
+        field = .unknown
+        inputs.fieldVisibility = { [unowned self] _ in field }
+        inputs.now = { [unowned self] in clock }
         inputs.noticeSeconds = 60
     }
 
@@ -133,12 +138,76 @@ final class BoardChatInputsTests: XCTestCase {
 
     // MARK: Triage sammeln (Teil d)
 
+    /// Eine Sekunde nach dem letzten Klick entscheiden (nicht als Doppelklick).
+    @discardableResult
+    private func decideLater(_ decision: TriageDecision, in windowID: UUID) -> Bool {
+        clock = clock.addingTimeInterval(1)
+        return inputs.decide(decision, in: windowID)
+    }
+
+    func testVisibleFieldDecidesWhetherTheOrderIsStillOpen() {
+        inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
+        decideLater(.accept, in: window)
+        fieldHasText = true
+        field = .empty                                     // sichtbar leer: abgeschickt, trotz Schätzung
+        shown[window] = ticket86
+        decideLater(.later, in: window)
+        XCTAssertTrue(inserted.last!.0.hasPrefix(String(localized: "Triage in WM8, please carry out:")))
+        fieldHasText = false
+        field = .hasText                                   // sichtbarer Text: Auftrag noch offen
+        shown[window] = ticket81
+        decideLater(.accept, in: window)
+        XCTAssertTrue(inserted.last!.0.hasPrefix("\n- WM8-81"))
+    }
+
+    func testAnotherBoardChatStartsANewOrderAndDropsTheMarks() {
+        let pia = UUID()
+        inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
+        decideLater(.accept, in: window)
+        fieldHasText = true
+        inputs.register(windowID: window, sessionID: pia, name: "Pia")
+        XCTAssertNil(inputs.triageDecision(for: "WM8-81", in: window), "Marken gehören zum alten Chat")
+        shown[window] = ticket86
+        decideLater(.later, in: window)
+        XCTAssertEqual(inserted.last?.1, pia)
+        XCTAssertTrue(inserted.last!.0.contains(String(localized: "Triage in WM8, please carry out:")), "neuer Auftrag mit Überschrift")
+        XCTAssertNil(inputs.triageDecision(for: "WM8-81", in: window))
+        XCTAssertEqual(inputs.triageDecision(for: "WM8-86", in: window), .later)
+    }
+
+    func testDoubleClickDoesNotDecideTheNextTicket() {
+        inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
+        XCTAssertTrue(decideLater(.accept, in: window))
+        shown[window] = ticket86                           // Triage ist weitergesprungen
+        clock = clock.addingTimeInterval(0.2)
+        XCTAssertFalse(inputs.decide(.accept, in: window))
+        XCTAssertNil(inputs.triageDecision(for: "WM8-86", in: window))
+        XCTAssertEqual(inserted.count, 1)
+    }
+
+    func testReferenceAndHandOffStartOnANewLineAfterTriageLines() throws {
+        inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
+        decideLater(.accept, in: window)
+        shown[window] = ticket86                           // nächstes Ticket, sein Bezug ist frei
+        let reference = try XCTUnwrap(inputs.referenceForDictation(to: jarvis))
+        XCTAssertTrue(reference.prefix.hasPrefix("\n" + String(localized: "Re:")), "nicht an „annehmen“ kleben")
+        XCTAssertTrue(inputs.handOff(in: window))
+        XCTAssertTrue(inserted.last!.0.hasPrefix("\nWM8-86"))
+    }
+
+    func testUnregisterClearsTheOrder() {
+        inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
+        decideLater(.accept, in: window)
+        inputs.unregister(windowID: window)
+        XCTAssertNil(inputs.triageBatches[window])
+    }
+
     func testDecisionsCollectAsOneOrderWithHeaderAndNeverSend() {
         inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
-        XCTAssertTrue(inputs.decide(.accept, in: window))
+        XCTAssertTrue(decideLater(.accept, in: window))
         fieldHasText = true                                // die erste Zeile steht im Feld
         shown[window] = ticket86
-        XCTAssertTrue(inputs.decide(.later, in: window))
+        XCTAssertTrue(decideLater(.later, in: window))
         let header = String(localized: "Triage in WM8, please carry out:")
         XCTAssertEqual(inserted.map(\.0), [
             header + "\n- WM8-81 „Ticket-Board: Board und Backlog lesen“ https://linear.app/whisperm8/issue/WM8-81: "
@@ -152,9 +221,9 @@ final class BoardChatInputsTests: XCTestCase {
 
     func testChangingADecisionSaysWhatItReplaces() {
         inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
-        inputs.decide(.accept, in: window)
+        decideLater(.accept, in: window)
         fieldHasText = true
-        inputs.decide(.decline, in: window)
+        decideLater(.decline, in: window)
         XCTAssertEqual(inserted.last?.0, "\n- WM8-81 „Ticket-Board: Board und Backlog lesen“ https://linear.app/whisperm8/issue/WM8-81: "
             + TriageDecision.decline.instruction + " " + String(localized: "(instead of: \(TriageDecision.accept.instruction))"))
         XCTAssertEqual(inputs.triageDecision(for: "WM8-81", in: window), .decline)
@@ -162,10 +231,10 @@ final class BoardChatInputsTests: XCTestCase {
 
     func testAfterSendingANewOrderStartsWithItsHeader() {
         inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
-        inputs.decide(.accept, in: window)
+        decideLater(.accept, in: window)
         fieldHasText = false                               // Giuliano hat abgeschickt
         shown[window] = ticket86
-        inputs.decide(.duplicate, in: window)
+        decideLater(.duplicate, in: window)
         XCTAssertTrue(inserted.last!.0.hasPrefix(String(localized: "Triage in WM8, please carry out:")))
         XCTAssertNil(inputs.triageDecision(for: "WM8-81", in: window), "Markierungen des alten Auftrags sind weg")
         XCTAssertEqual(inputs.triageDecision(for: "WM8-86", in: window), .duplicate)
@@ -174,17 +243,17 @@ final class BoardChatInputsTests: XCTestCase {
     func testOwnTextInTheFieldPutsTheOrderOnANewLine() {
         inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
         fieldHasText = true
-        inputs.decide(.askBack, in: window)
+        decideLater(.askBack, in: window)
         XCTAssertTrue(inserted[0].0.hasPrefix("\n" + String(localized: "Triage in WM8, please carry out:")))
     }
 
     func testNoDecisionIntoAnOpenQuestionAndNoMark() {
         inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
         state = .awaitingInput
-        XCTAssertFalse(inputs.decide(.accept, in: window))
+        XCTAssertFalse(decideLater(.accept, in: window))
         approval = true
         state = .ready
-        XCTAssertFalse(inputs.decide(.accept, in: window))
+        XCTAssertFalse(decideLater(.accept, in: window))
         XCTAssertTrue(inserted.isEmpty)
         XCTAssertNil(inputs.triageDecision(for: "WM8-81", in: window))
         XCTAssertEqual(beeps, 2)
