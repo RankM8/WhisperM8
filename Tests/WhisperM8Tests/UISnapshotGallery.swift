@@ -68,7 +68,7 @@ final class UISnapshotGallery: XCTestCase {
         func jarvisNoteEntry(light: JarvisBoardLight = .running, work: String, needs: String = "",
                              blocker: String = "", milestones: [String]) -> JarvisBoardEntry {
             JarvisBoardEntry(
-                sessionID: UUID(), light: light, mission: "Prüfdienst wählen und Ticket für Richard schreiben",
+                sessionID: UUID(), light: light, mission: "Prüfdienst wählen und Ticket für Rita schreiben",
                 needs: needs, work: work, blocker: blocker,
                 milestones: milestones.enumerated().map { index, text in
                     JarvisBoardMilestone(at: noteNow.addingTimeInterval(Double(-(index + 1) * 1_500)), text: text)
@@ -97,7 +97,7 @@ final class UISnapshotGallery: XCTestCase {
                     VStack(spacing: 0) {
                         HStack(spacing: 8) {
                             Circle().fill(AgentTheme.statusWorking).frame(width: 7, height: 7)
-                            Text("5 Eli · SMTP-Verifizierung: Ticket für Richard")
+                            Text("5 Eli · SMTP-Verifizierung: Ticket für Rita")
                                 .font(.system(size: 12, weight: focused ? .semibold : .regular))
                                 .foregroundStyle(focused ? AgentTheme.textPrimary : AgentTheme.textSecondary)
                             Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold))
@@ -269,7 +269,7 @@ final class UISnapshotGallery: XCTestCase {
             },
             // Jarvis-Notiz: Karte hängt am Kachelkopf über Terminal-Text.
             jarvisNoteFixture("jarvis-notiz-eingriff", entry: jarvisNoteEntry(
-                light: .needsYou, work: "Wartet auf dich: Ticket für Richard erstellen",
+                light: .needsYou, work: "Wartet auf dich: Ticket für Rita erstellen",
                 needs: "Entscheidung: Chat ansehen und das Ticket mit ihm erstellen",
                 milestones: ["Empfehlung steht: MillionVerifier zuerst, Apify als zweite Meinung",
                              "Beide Dienste an 80 Adressen verglichen"])),

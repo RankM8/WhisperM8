@@ -707,7 +707,7 @@ final class TicketsCLITests: XCTestCase {
         let world = makeWorld()
         world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12)) }
         world.source.onPerson = { query in
-            if query == "xen" { throw TicketSourceError.ambiguous("„xen“ passt auf mehrere Personen: Xenia Muster, Xeno Suter") }
+            if query == "xen" { throw TicketSourceError.ambiguous("„xen“ passt auf mehrere Personen: Xena Beispiel, Xenia Muster") }
             return self.giuliano
         }
         _ = try await run(["assign", "WM8-12", "me"], world)

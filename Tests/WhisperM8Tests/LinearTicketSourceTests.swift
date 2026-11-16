@@ -194,15 +194,15 @@ final class LinearTicketSourceTests: XCTestCase {
         let stub = Stub()
         stub.replies = [
             ("viewer", 200, #"{"data":{"viewer":{"id":"u1","name":"Giuliano Costa"}}}"#),
-            ("users(", 200, #"{"data":{"users":{"nodes":[{"id":"u2","name":"Xeno Suter","app":false},{"id":"u3","name":"Xenia Muster","app":false},{"id":"b1","name":"Xen Bot","app":true}]}}}"#),
+            ("users(", 200, #"{"data":{"users":{"nodes":[{"id":"u2","name":"Xena Beispiel","app":false},{"id":"u3","name":"Xenia Muster","app":false},{"id":"b1","name":"Xen Bot","app":true}]}}}"#),
         ]
         let source = LinearTicketSource(client: stub.client())
         let me = try await source.person(matching: "me")
         XCTAssertEqual(me.id, "u1")
-        await assertThrows(.ambiguous("„xen“ passt auf mehrere Personen: Xenia Muster, Xeno Suter")) {
+        await assertThrows(.ambiguous("„xen“ passt auf mehrere Personen: Xena Beispiel, Xenia Muster")) {
             _ = try await source.person(matching: "xen")
         }
-        let exact = try await source.person(matching: "xeno suter")
+        let exact = try await source.person(matching: "xena beispiel")
         XCTAssertEqual(exact.id, "u2", "ein exakter Name gewinnt gegen ähnliche")
         XCTAssertFalse(stub.requests.last?.query.contains("id: { eq") ?? true, "kein ID-Filter für einen Namen")
         _ = try? await source.person(matching: "48801964-D507-4366-9864-492723DA01AB")
