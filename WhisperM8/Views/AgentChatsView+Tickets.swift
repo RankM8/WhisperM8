@@ -123,6 +123,9 @@ enum TicketBoardKeyRouting {
         }
         guard TabNavShortcut.shouldHandle(firstResponder: responder),
               !BoardChatFocusRule.isTerminal(responder), let key else { return event }
+        // Gehaltenes Return öffnet nichts weiter (Auflage der Prüferin): sonst
+        // ginge es nach „Zum Chat“ oder „← Chats“ als Wiederholung weiter.
+        if key == .open, event.isARepeat { return nil }
         // ⌘C mit markiertem Text (etwa in der Beschreibung) kopiert den Text.
         if key == .copyLink, let text = responder as? NSTextView, text.selectedRange().length > 0 { return event }
         return handle(key) ? nil : event

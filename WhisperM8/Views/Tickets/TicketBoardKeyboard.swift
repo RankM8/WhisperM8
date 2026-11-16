@@ -3,32 +3,62 @@ import Foundation
 
 /// Sperre nach einem Sprung per Tastatur in ein Terminal (WM8-91 Paket 3c):
 /// dieselbe Regel wie am Controller (`ControllerBindingResolver.arrivalLock`).
-/// Return und Esc wirken in der ersten Sekunde nach „→ in den Board-Chat“ oder
-/// „Return auf der Chat-Zeile“ nicht, mit Warnton. Ein schnell nachgedrücktes
-/// Return bestätigt so keine Freigabe, die dort schon lange offen ist, und
-/// Esc bricht keinen Turn ab, den man noch gar nicht gesehen hat.
+/// Return und Esc wirken in der ersten Sekunde nach „→ in den Board-Chat“,
+/// „Return auf der Chat-Zeile“ oder „← Chats“ nicht, mit Warnton. Ein schnell
+/// nachgedrücktes Return bestätigt so keine Freigabe, die dort schon lange
+/// offen ist, und Esc bricht keinen Turn ab, den man noch gar nicht gesehen hat.
+///
+/// Gehaltenes Return (Auflage der Prüferin): Die Tastenwiederholung beginnt
+/// nach rund 0,5 s und liefe sonst nach Ablauf der Sekunde als Enter in den
+/// Ziel-Chat. Deshalb werden Wiederholungen von Return, Enter und Esc dort
+/// geschluckt, bis ein neuer, nicht wiederholter Tastendruck kommt.
 @MainActor
 final class KeyboardArrivalLock {
     static let shared = KeyboardArrivalLock()
 
     static let duration: TimeInterval = ControllerBindingResolver.arrivalLock
 
+    enum Verdict: Equatable {
+        /// Geht ins Terminal.
+        case pass
+        /// Wiederholung einer gehaltenen Taste: still verschluckt.
+        case swallow
+        /// Neuer Druck während der Sperre: verschluckt, mit Warnton.
+        case refuse
+    }
+
     private(set) var arrival: (sessionID: UUID, at: Date)?
+    /// Seit der Ankunft kam noch kein neuer, nicht wiederholter Tastendruck
+    /// außerhalb der Sperre: Wiederholungen von Return, Enter, Esc bleiben gesperrt.
+    private(set) var holdsRepeats = false
     var now: () -> Date = Date.init
 
     /// Die Tastatur ist gerade in `sessionID` angekommen.
     func arrive(at sessionID: UUID) {
         arrival = (sessionID, now())
+        holdsRepeats = true
     }
 
-    /// Chat, für den die Sperre gerade gilt; räumt eine abgelaufene weg.
+    /// Chat, für den Sperre oder Schlucken der Wiederholungen gerade gelten;
+    /// räumt beides weg, wenn nichts mehr gilt.
     func lockedSession() -> UUID? {
         guard let arrival else { return nil }
-        guard now().timeIntervalSince(arrival.at) < Self.duration else {
-            self.arrival = nil
-            return nil
-        }
-        return arrival.sessionID
+        if now().timeIntervalSince(arrival.at) < Self.duration || holdsRepeats { return arrival.sessionID }
+        self.arrival = nil
+        return nil
+    }
+
+    /// Eine Taste im angekommenen Terminal. Ein neuer Druck außerhalb der
+    /// Sperre beendet das Schlucken; einer innerhalb nicht (seine eigenen
+    /// Wiederholungen kämen sonst nach Ablauf durch).
+    func judge(keyCode: UInt16, command: Bool, isRepeat: Bool) -> Verdict {
+        guard let arrival else { return .pass }
+        let guarded = Self.blocks(keyCode: keyCode, command: command)
+        let within = now().timeIntervalSince(arrival.at) < Self.duration
+        if !isRepeat, !(guarded && within) { holdsRepeats = false }
+        guard guarded else { return .pass }
+        if within { return isRepeat ? .swallow : .refuse }
+        return isRepeat && holdsRepeats ? .swallow : .pass
     }
 
     /// Pur: Gesperrt sind Return, Enter und Esc ohne ⌘ (⌘-Kürzel bleiben frei).
@@ -43,15 +73,22 @@ final class KeyboardArrivalLock {
 extension AgentChatsView {
     /// Erster Schritt der Tasten-Kette: Hat die Tastatur gerade einen Chat
     /// erreicht und liegt der Fokus in dessen Terminal, gehen Return und Esc
-    /// in der ersten Sekunde nicht hinein. Kosten ohne Sperre: ein Vergleich.
+    /// in der ersten Sekunde nicht hinein, ihre Wiederholungen auch danach
+    /// nicht. Kosten ohne Sperre: ein Vergleich.
     func handleKeyboardArrivalLock(_ event: NSEvent) -> NSEvent? {
-        guard let sessionID = KeyboardArrivalLock.shared.lockedSession(),
+        let lock = KeyboardArrivalLock.shared
+        guard let sessionID = lock.lockedSession(),
               let hostWindow, event.window === hostWindow,
-              KeyboardArrivalLock.blocks(keyCode: event.keyCode, command: event.modifierFlags.contains(.command)),
               let terminal = terminalRegistry.controller(for: sessionID)?.terminal,
               hostWindow.firstResponder === terminal else { return event }
-        NSSound.beep()
-        return nil
+        switch lock.judge(keyCode: event.keyCode, command: event.modifierFlags.contains(.command),
+                          isRepeat: event.isARepeat) {
+        case .pass: return event
+        case .swallow: return nil
+        case .refuse:
+            NSSound.beep()
+            return nil
+        }
     }
 
     /// Eine Taste des Boards über denselben Weg wie der Controller

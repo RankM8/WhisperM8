@@ -67,11 +67,52 @@ final class TicketBoardKeyboardTests: XCTestCase {
         let chat = UUID()
         lock.arrive(at: chat)
         XCTAssertEqual(lock.lockedSession(), chat)
-        now = now.addingTimeInterval(KeyboardArrivalLock.duration - 0.05)
-        XCTAssertEqual(lock.lockedSession(), chat)
-        now = now.addingTimeInterval(0.1)
+        XCTAssertEqual(lock.judge(keyCode: 36, command: false, isRepeat: false), .refuse)
+        now = now.addingTimeInterval(KeyboardArrivalLock.duration + 0.1)
+        // Nach der Sekunde geht ein neuer Druck durch und beendet alles.
+        XCTAssertEqual(lock.judge(keyCode: 36, command: false, isRepeat: false), .pass)
         XCTAssertNil(lock.lockedSession())
         XCTAssertNil(lock.arrival, "abgelaufen wird weggeräumt")
         XCTAssertEqual(KeyboardArrivalLock.duration, ControllerBindingResolver.arrivalLock, "dieselbe Sperre wie am Controller")
+    }
+
+    /// Auflage der Prüferin: Return auf der Chat-Zeile gehalten. Die
+    /// Wiederholung beginnt nach rund 0,5 s und läuft über 1,2 s hinaus; nichts
+    /// davon geht in den Ziel-Chat. Erst ein neuer Druck wirkt wieder.
+    func testHeldReturnNeverRunsIntoTheChat() {
+        let lock = KeyboardArrivalLock()
+        var now = Date(timeIntervalSince1970: 1_000)
+        lock.now = { now }
+        let chat = UUID()
+        lock.arrive(at: chat)   // Return auf der Chat-Zeile hat „Zum Chat“ ausgelöst
+        var verdicts: [KeyboardArrivalLock.Verdict] = []
+        var t = 0.5
+        while t <= 1.2 {
+            now = Date(timeIntervalSince1970: 1_000 + t)
+            XCTAssertEqual(lock.lockedSession(), chat)
+            verdicts.append(lock.judge(keyCode: 36, command: false, isRepeat: true))
+            t += 0.05
+        }
+        XCTAssertFalse(verdicts.contains(.pass), "keine Wiederholung als Enter: \(verdicts)")
+        XCTAssertFalse(verdicts.contains(.refuse), "Wiederholungen still, ohne Warnton-Gewitter")
+        // Esc gehalten ebenso.
+        XCTAssertEqual(lock.judge(keyCode: 53, command: false, isRepeat: true), .swallow)
+        // Tippen beendet das Schlucken; danach gilt wieder alles.
+        XCTAssertEqual(lock.judge(keyCode: 0, command: false, isRepeat: false), .pass)
+        XCTAssertEqual(lock.judge(keyCode: 36, command: false, isRepeat: false), .pass)
+        XCTAssertNil(lock.lockedSession())
+    }
+
+    /// Ein neuer Druck innerhalb der Sperre beendet das Schlucken nicht: Seine
+    /// eigenen Wiederholungen kämen sonst nach Ablauf durch.
+    func testAFreshPressInsideTheLockKeepsHoldingItsRepeats() {
+        let lock = KeyboardArrivalLock()
+        var now = Date(timeIntervalSince1970: 1_000)
+        lock.now = { now }
+        lock.arrive(at: UUID())
+        now = now.addingTimeInterval(0.8)
+        XCTAssertEqual(lock.judge(keyCode: 36, command: false, isRepeat: false), .refuse)
+        now = now.addingTimeInterval(0.5)
+        XCTAssertEqual(lock.judge(keyCode: 36, command: false, isRepeat: true), .swallow)
     }
 }

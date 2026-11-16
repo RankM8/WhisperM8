@@ -128,6 +128,19 @@ final class TicketBoardKeyRoutingTests: XCTestCase {
         XCTAssertNil(route(key("\u{F702}", code: 123, flags: .command)).boardGot)
     }
 
+    /// Auflage der Prüferin: Gehaltenes Return öffnet auf dem Board nichts
+    /// weiter (sonst „Zum Chat“ oder „← Chats“ als Wiederholung).
+    func testRepeatedReturnOpensNothing() {
+        focus(PlainView())
+        let repeated = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                        windowNumber: window.windowNumber, context: nil, characters: "\r",
+                                        charactersIgnoringModifiers: "\r", isARepeat: true, keyCode: 36)!
+        let outcome = route(repeated)
+        XCTAssertFalse(outcome.passedOn, "geschluckt, nicht ans Fenster")
+        XCTAssertNil(outcome.boardGot, "und nicht ausgeführt")
+        XCTAssertEqual(route(key("\r", code: 36)).boardGot, .open, "ein neuer Druck öffnet")
+    }
+
     /// Der alte Fehler: ein in `Any` gepacktes Optional nennt seinen eigenen Typ.
     func testTheOldCheckCouldNotSeeTheTerminal() {
         focus(FakeTerminalView())
