@@ -154,8 +154,9 @@ Hotkey (ab Werk ⌥Leertaste), gelesen beim Erscheinen der Leiste; ohne Hotkey f
 Leistung: Der Monitor prüft bei geschlossener Insel nur keyCode und Modifier; Einstellungen und
 Schnappschuss liest er erst bei ⌥Tab. ⌥Tab baut nur die Liste; Menü-Angaben, Schalterstände und die
 Layout-Abfrage der Tastenzeile entstehen erst, wenn die Insel nach 0,2 s erscheint oder ein Buchstabe
-kommt (`ensureKeyboardCommands`), ⌥Tab kurz getippt braucht sie nie. Beide Schritte misst dasselbe
-Signpost wie am Controller (`controller.islandShow`, Budget 33 ms).
+kommt (`ensureKeyboardCommands`), ⌥Tab kurz getippt braucht sie nie. Beide Schritte haben eigene
+Signposts mit Budget 33 ms: `keyboardIsland.open` (⌥Tab) und `keyboardIsland.commands` (Tastenzeile).
+`controller.islandShow` misst nur noch das Halten am Controller, so trennt das Log die Wege.
 
 ## Prüfen
 

@@ -41,7 +41,7 @@ extension ControllerActionDispatcher {
         // Hält der Controller gerade eine Ebene, schließt die Tastatur ihre
         // Insel wie heute; bis zum Loslassen kommt sie nicht wieder.
         if islandState != nil { closeIslandForUserInput() }
-        let built = PerfBudgets.controllerIslandShow.withInterval { makeIsland(.whereTo, input: .keyboard) }
+        let built = PerfBudgets.keyboardIslandOpen.withInterval { makeIsland(.whereTo, input: .keyboard) }
         guard var session = built, var whereTo = session.model.whereTo else { return false }
         whereTo.markPreviousForKeyboard()
         session.model.content = .whereTo(whereTo)

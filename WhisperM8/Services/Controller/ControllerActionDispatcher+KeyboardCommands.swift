@@ -37,11 +37,11 @@ extension ControllerActionDispatcher {
 
     var keyboardCommands: ControllerKeyboardCommands? { islandState?.model.keyboard }
 
-    /// Baut die Tastenzeile, falls noch nicht geschehen; gemessen wie das
-    /// Öffnen der Insel (`controller.islandShow`).
+    /// Baut die Tastenzeile, falls noch nicht geschehen; eigener Messpunkt
+    /// `keyboardIsland.commands`.
     func ensureKeyboardCommands() {
         guard isKeyboardIslandOpen, var state = islandState, state.model.keyboard == nil else { return }
-        PerfBudgets.controllerIslandShow.withInterval { makeKeyboardCommands(for: &state) }
+        PerfBudgets.keyboardIslandCommands.withInterval { makeKeyboardCommands(for: &state) }
         islandState = state
     }
 
