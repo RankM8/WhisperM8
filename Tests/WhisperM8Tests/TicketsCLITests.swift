@@ -37,6 +37,9 @@ final class TicketsCLITests: XCTestCase {
         var files: [String: String] = [:]
         var data: [String: Data] = [:]
         var existing: Set<String> = []
+        /// Gewartete Sekunden (`tickets link` nach `chats new`); `onSleep` läuft danach.
+        var slept: [TimeInterval] = []
+        var onSleep: (() -> Void)?
     }
 
     private func makeWorld() -> World {
@@ -81,7 +84,8 @@ final class TicketsCLITests: XCTestCase {
             readFile: { world.files[$0] },
             readData: { path, limit in world.data[path].flatMap { $0.count <= limit ? $0 : nil } },
             fileExists: { world.existing.contains($0) },
-            now: { Date(timeIntervalSince1970: 1_794_000_000) }
+            now: { Date(timeIntervalSince1970: 1_794_000_000) },
+            sleep: { world.slept.append($0); world.onSleep?() }
         )
     }
 
@@ -208,6 +212,48 @@ final class TicketsCLITests: XCTestCase {
         let output = try await run(["link", "WM8-10", "--chat", "b0096"], world)
         XCTAssertEqual(writes(world), ["saveLink id-10 2 Ole aktiv"])
         XCTAssertTrue(output.stdout.contains("Hinweis: An dem Ticket sitzt schon 3 Dex."))
+    }
+
+    /// Direkt nach `chats new` steht der Chat noch nicht auf Disk (WM8-119):
+    /// `link` sieht je Sekunde wieder nach und hängt an, sobald er da ist.
+    func testLinkWaitsForChatJustCreated() async throws {
+        let world = makeWorld()
+        let fresh = UUID(uuidString: "C0FFEE00-0000-4000-8000-000000000005")!
+        world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12, status: "Todo")) }
+        world.onSleep = {
+            if world.slept.count == 2 { world.chats.append(self.chat(fresh, "7 Kim · WM8-12 Neu", state: .idle)) }
+        }
+        let output = try await run(["link", "WM8-12", "--chat", "c0ffee00"], world)
+        XCTAssertEqual(output.exitCode, 0)
+        XCTAssertEqual(world.slept, [1, 1])
+        XCTAssertEqual(writes(world).first, "saveLink id-12 7 Kim aktiv")
+    }
+
+    /// Kommt er nicht, gibt `link` nach zehn Versuchen mit „nicht gefunden“ auf,
+    /// ohne etwas zu schreiben.
+    func testLinkGivesUpWhenChatNeverAppears() async throws {
+        let world = makeWorld()
+        let output = try await run(["link", "WM8-12", "--chat", "c0ffee00"], world)
+        XCTAssertEqual(output.exitCode, TicketsCLIExit.notFound)
+        XCTAssertEqual(world.slept.count, TicketsCLIRunner.newChatWaitSeconds)
+        XCTAssertTrue(world.source.calls.isEmpty)
+    }
+
+    /// Ohne laufende App oder bei einem Namen statt einer ID gibt es nichts
+    /// abzuwarten.
+    func testLinkDoesNotWaitWithoutAppOrForNames() async throws {
+        let offline = makeWorld()
+        offline.appReachable = false
+        let first = try await run(["link", "WM8-12", "--chat", "c0ffee00"], offline)
+        XCTAssertEqual(first.exitCode, TicketsCLIExit.notFound)
+        XCTAssertTrue(offline.slept.isEmpty)
+
+        let named = makeWorld()
+        let second = try await run(["link", "WM8-12", "--chat", "Kim-Chat"], named)
+        XCTAssertEqual(second.exitCode, TicketsCLIExit.notFound)
+        XCTAssertTrue(named.slept.isEmpty)
+        XCTAssertTrue(TicketsCLIRunner.looksLikeChatID("C0FFEE00-0000"))
+        XCTAssertFalse(TicketsCLIRunner.looksLikeChatID("abc"))
     }
 
     func testLinkOutsideAChatNeedsChatFlag() async throws {

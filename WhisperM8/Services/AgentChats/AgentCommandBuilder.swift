@@ -372,6 +372,19 @@ struct AgentCommandBuilder {
     /// (`claude --name`, WM8-85): der Kopf des Titels bis „·“ oder „:“ als
     /// Kürzel, dazu acht Zeichen der Chat-ID. Die ID macht ihn eindeutig und
     /// stabil, der Kopf lesbar; `ListAgents` zeigt ihn im selben Konto.
+    /// Projekt aus einem Supervisor-Titel („Jarvis: Supervisor WhisperM8“ →
+    /// „WhisperM8“), sonst `nil`. Nur der Kopf „Jarvis“ zählt; „Ex-Jarvis: …“
+    /// ist kein Supervisor mehr.
+    static func supervisorProject(_ title: String) -> String? {
+        let parts = title.split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+        guard parts.count == 2, parts[0].lowercased() == "jarvis" else { return nil }
+        var rest = parts[1].components(separatedBy: "·").first?.trimmingCharacters(in: .whitespaces) ?? ""
+        if rest.lowercased().hasPrefix("supervisor") {
+            rest = String(rest.dropFirst("supervisor".count)).trimmingCharacters(in: .whitespaces)
+        }
+        return rest.isEmpty ? nil : rest
+    }
+
     static func nativeName(for session: AgentChatSession) -> String {
         // Nie aus einem Titel ableiten, der selbst schon dieser Name ist: Sonst
         // wüchse er bei jedem Start (…-1a2b3c4d-1a2b3c4d, Vic zu WM8-85).
@@ -381,7 +394,11 @@ struct AgentCommandBuilder {
         // Platzhalter eines frischen Chats ergäben „neue-session-…“ in ListAgents,
         // der Linie über dem Feld und Claudes Liste (Vic): dann nur „chat-<id>“.
         if isPlaceholderTitle(title) { return "chat-" + nativeIDSuffix(session.id) }
-        let head = title.components(separatedBy: CharacterSet(charactersIn: "·:")).first ?? ""
+        var head = title.components(separatedBy: CharacterSet(charactersIn: "·:")).first ?? ""
+        // Supervisor-Chats heißen „Jarvis: Supervisor <Projekt>“. Nur mit dem Kopf
+        // hießen sie in ListAgents alle „jarvis-…“; ein Chat aus einem anderen
+        // Projekt fand per Name den falschen Supervisor (WM8-119).
+        if let project = supervisorProject(title) { head += " " + project }
         let folded = head.folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "de_DE"))
             .lowercased()
         var slug = ""

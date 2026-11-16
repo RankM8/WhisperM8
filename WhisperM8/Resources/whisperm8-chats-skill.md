@@ -161,7 +161,13 @@ Kandidaten, rate nie selbst.**
 ## Zwei Wege zu einem anderen Chat: die CLI und der native Weg
 
 **Meldungen an den Supervisor** (fertig, blockiert, Urteil eines Prüfers) gehen
-immer über die CLI: `whisperm8 chats enqueue <Supervisor> -- "…"`. Bei
+immer über die CLI: `whisperm8 chats enqueue <Supervisor> -- "…"`, an die
+Chat-ID, die dein Auftrag als Rückweg nennt. Nie einen Namen wie „Jarvis“
+selbst auflösen, auch nicht über `ListAgents`: Jedes Projekt hat einen eigenen
+Supervisor. Nennt der Auftrag keine ID, nimm den Absender aus seiner
+Marker-Zeile (`[via whisperm8 chats · von <Projekt>/<Titel> · HH:MM]`) und
+prüf in `whisperm8 chats list`, dass Projekt und Titel genau einen Chat
+treffen; sonst frag den User. Bei
 unklarem Ausgang (Exit 5 oder 6) nicht wiederholen, erst
 `whisperm8 chats queue <Supervisor>` lesen. Antwortet die CLI gar nicht (App
 nicht erreichbar) und ist der Auftrag dort nicht angekommen, ist der native Weg

@@ -32,13 +32,13 @@ swift test                                    # volle Suite
 swift test --filter AgentSessionStoreTests    # eine Klasse
 ```
 
-Details zu `make dev`: [DEVELOPMENT](docs/DEVELOPMENT.md).
+`make dev`: [DEVELOPMENT](docs/DEVELOPMENT.md).
 
 **WICHTIG — wenn du als Agent-Chat IN der WhisperM8-App läufst** (der übliche Fall): führe NIEMALS `make dev`,
 `make kill`, `make run`, `make install` oder `make clean-install` aus und nie `swift run` ohne Argument. Diese
 Ziele beenden die laufende App — und damit deine eigene Session samt aller anderen Chats. Baue und teste nur mit
-`swift build` / `swift test`; den Neustart macht der User oder der Supervisor-Chat (Jarvis: `make dev FORCE=1`
-im Hauptordner, nur mit Übergabe und Ansage). Aus einem Chat (`WHISPERM8_SESSION_ID` gesetzt) brechen `dev`,
+`swift build` / `swift test`, nach `scripts/wait-for-build-slot.sh`; neu starten User oder Supervisor (Jarvis:
+`make dev FORCE=1` im Hauptordner, nur mit Übergabe und Ansage). Aus einem Chat (`WHISPERM8_SESSION_ID` gesetzt) brechen `dev`,
 `dev-release`, `install`, `run` und `clean-install` sonst ab.
 
 - **Tests:** DI über einfache Closures und kleine Protokolle (`commandResolver: { _ in "/path" }`,
