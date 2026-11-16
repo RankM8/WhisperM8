@@ -393,14 +393,22 @@ Idee 3.
 - **Welcher Chat:** von Hand gewählt (`chosenSessionID`, kommt mit Teil c), sonst der Jarvis des Projekts:
   Titel beginnt mit „Jarvis“ (dieselbe Regel wie `tickets board` und `tickets status`), Projekt des Boards samt
   Arbeitsordnern, laufend vor ruhend, dann zuletzt aktiv. Gesucht wird nur unter offenen Tabs und laufenden Chats
-  (`BoardChatRules`, `BoardChatSessionLookup`), nie über alle Chats. Ohne Jarvis sagt die Spalte, wie einer
-  hineinkommt.
+  (`BoardChatRules`, `BoardChatSessionLookup`), nie über alle Chats; dazu der zuletzt gefundene Jarvis des
+  Projekts (`lastJarvisSessionID`), damit er auch gestoppt und ohne Tab als „Hier öffnen“ erscheint. Ohne Jarvis
+  sagt die Spalte, wie einer hineinkommt.
+- **Fokus:** Ins Terminal der Spalte kommt der Tastaturfokus nur durch einen Klick ins Terminal. Jeder andere
+  Klick im Fenster (Karte, Listenzeile, Pfeile, Knöpfe, freie Fläche) gibt ihn vorher ans Fenster zurück
+  (`BoardChatFocusGuard`, Regel pur in `BoardChatFocusRule`). Sonst blieben J/K, Esc und ⌘C nach einem Klick ins
+  Terminal dort, und Esc bräche den laufenden Turn ab. Wege ohne Maus (Controller) rufen
+  `BoardChatFocusRule.releaseTerminalFocus(in:)`.
 - **Breite und Zuklappen:** Ziehen am linken Rand; die Breite ändert sich beim Loslassen, vorher zeigt eine Linie
   die neue Kante (sonst bekäme die TUI bei jedem Mausschritt eine neue Größe). 280 bis 720 pt, Vorgabe 380; das
   Board behält mindestens 420 pt. In der Triage höchstens 330 pt. Zugeklappt bleibt eine schmale Leiste mit
   Knopf. Breite, Zuklappen und Wahl gelten je Projekt und liegen in `ticket-board-chat.json`
   (`BoardChatPreferencesStore`), nicht im UI-Zustand der Fenster: Eine Änderung dort ließe alle Fenster samt
   Seitenleiste neu auswerten.
+- **Filter:** „Liste kopieren“ steht im Kopf neben „Aktualisieren“; die Filterzeile hat die ganze Breite und
+  scrollt waagrecht mit sichtbarem Balken, damit mit Board-Chat jeder Filter erreichbar bleibt.
 - **Kosten:** Öffnen der Tickets hängt das Terminal einmal um (`pane.attach`, gemessen rund 70 ms auf ruhigem
   Rechner), Schließen einmal zurück; im Raster hängt das Schließen wie bisher alle Kacheln wieder ein. Je
   Auswertung des Fensters: Nachschlagen weniger Dutzend Chats über gemerkte Positionen; nur wenn sich der

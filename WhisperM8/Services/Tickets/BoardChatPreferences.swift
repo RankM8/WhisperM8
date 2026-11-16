@@ -10,8 +10,11 @@ struct BoardChatProjectPreferences: Codable, Equatable {
     var isCollapsed: Bool?
     /// Von Hand gewählter Board-Chat (Teil c). `nil` = automatisch der Jarvis.
     var chosenSessionID: UUID?
+    /// Zuletzt automatisch gefundener Jarvis. So findet die Spalte ihn auch
+    /// gestoppt und ohne Tab, ohne alle Chats zu durchsuchen.
+    var lastJarvisSessionID: UUID?
 
-    var isEmpty: Bool { width == nil && isCollapsed == nil && chosenSessionID == nil }
+    var isEmpty: Bool { width == nil && isCollapsed == nil && chosenSessionID == nil && lastJarvisSessionID == nil }
 }
 
 /// Inhalt von `ticket-board-chat.json`.
@@ -121,6 +124,10 @@ final class BoardChatPreferencesStore {
 
     func setChosenSession(_ sessionID: UUID?, for projectID: UUID) {
         update(projectID) { $0.chosenSessionID = sessionID }
+    }
+
+    func setLastJarvis(_ sessionID: UUID, for projectID: UUID) {
+        update(projectID) { $0.lastJarvisSessionID = sessionID }
     }
 
     private func update(_ projectID: UUID, _ change: (inout BoardChatProjectPreferences) -> Void) {

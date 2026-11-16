@@ -24584,26 +24584,6 @@
         }
       }
     },
-    "No Jarvis in this project": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kein Jarvis in diesem Projekt"
-          }
-        }
-      }
-    },
-    "A chat of this project whose title starts with “Jarvis” appears here automatically.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ein Chat dieses Projekts, dessen Titel mit „Jarvis“ beginnt, erscheint hier automatisch."
-          }
-        }
-      }
-    },
     "Chosen automatically: this project's Jarvis.": {
       "localizations": {
         "de": {
@@ -24630,6 +24610,26 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ziehen ändert die Breite des Board-Chats"
+          }
+        }
+      }
+    },
+    "No Jarvis found": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Jarvis gefunden"
+          }
+        }
+      }
+    },
+    "A chat of this project whose title starts with “Jarvis” appears here as soon as it runs or is open as a tab.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Chat dieses Projekts, dessen Titel mit „Jarvis“ beginnt, erscheint hier, sobald er läuft oder als Tab offen ist."
           }
         }
       }

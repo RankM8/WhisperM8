@@ -156,7 +156,12 @@ enum TicketBoardBuilder {
     }
 
     static func isSupervisor(_ chat: TicketChat) -> Bool {
-        chat.title.lowercased().hasPrefix(supervisorTitlePrefix)
+        isSupervisor(title: chat.title)
+    }
+
+    /// Eine Regel für CLI, Board und Board-Chat (WM8-113).
+    static func isSupervisor(title: String) -> Bool {
+        title.lowercased().hasPrefix(supervisorTitlePrefix)
     }
 
     /// `WM8-9` vor `WM8-10`.

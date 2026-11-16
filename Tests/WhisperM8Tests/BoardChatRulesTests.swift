@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 @testable import WhisperM8
 import XCTest
@@ -19,11 +20,11 @@ final class BoardChatRulesTests: XCTestCase {
     func testJarvisIsRecognisedByTheTitleLikeTheCLI() {
         XCTAssertTrue(BoardChatRules.isJarvis(title: "Jarvis: Supervisor WhisperM8"))
         XCTAssertTrue(BoardChatRules.isJarvis(title: "jarvis"))
-        XCTAssertTrue(BoardChatRules.isJarvis(title: "  Jarvis · WM8"))
+        XCTAssertFalse(BoardChatRules.isJarvis(title: "  Jarvis · WM8"), "wie die CLI: kein Trimmen")
         XCTAssertFalse(BoardChatRules.isJarvis(title: "Pia · Produkt"))
         XCTAssertFalse(BoardChatRules.isJarvis(title: "Frag Jarvis später"))
         // Dieselbe Regel wie `tickets board` und `tickets status`.
-        for title in ["Jarvis: Supervisor", "Vic · Prüfer", "JARVIS"] {
+        for title in ["Jarvis: Supervisor", "Vic · Prüfer", "JARVIS", "  Jarvis"] {
             let ticketChat = TicketChat(id: UUID(), title: title, projectName: "p", projectPath: "/p", state: nil, isRunning: true)
             XCTAssertEqual(BoardChatRules.isJarvis(title: title), TicketBoardBuilder.isSupervisor(ticketChat), title)
         }
@@ -178,6 +179,18 @@ final class BoardChatPreferencesStoreTests: XCTestCase {
         XCTAssertEqual(disk.file?.projects.isEmpty, true)
     }
 
+    func testRemembersTheLastJarvisPerProject() async throws {
+        let disk = Disk(nil)
+        let store = makeStore(disk)
+        await store.waitUntilLoaded()
+        let project = UUID(), jarvis = UUID()
+        store.setLastJarvis(jarvis, for: project)
+        try await settle(store)
+        let reloaded = makeStore(disk)
+        await reloaded.waitUntilLoaded()
+        XCTAssertEqual(reloaded.preferences(for: project).lastJarvisSessionID, jarvis)
+    }
+
     func testUnchangedValueWritesNothing() async throws {
         let disk = Disk(nil)
         let store = makeStore(disk)
@@ -242,3 +255,33 @@ final class BoardChatSessionLookupTests: XCTestCase {
         XCTAssertEqual(lookup.session(grown[20].id, in: grown)?.title, "neu")
     }
 }
+
+/// Fokus im Ticket-Modus: ins Terminal nur per Klick ins Terminal.
+@MainActor
+final class BoardChatFocusRuleTests: XCTestCase {
+    func testClickOutsideTheTerminalReleasesItsFocus() {
+        XCTAssertTrue(BoardChatFocusRule.releasesFocus(responderIsTerminal: true, clickInsideResponder: false))
+        XCTAssertFalse(BoardChatFocusRule.releasesFocus(responderIsTerminal: true, clickInsideResponder: true),
+                       "Klick ins Terminal: Fokus bleibt")
+        XCTAssertFalse(BoardChatFocusRule.releasesFocus(responderIsTerminal: false, clickInsideResponder: false),
+                       "Textfeld oder Fenster hat den Fokus: nichts tun")
+    }
+
+    func testTerminalIsRecognisedLikeTheBoardKeys() {
+        XCTAssertTrue(BoardChatFocusRule.isTerminal(QuietableTerminalView(frame: .zero)))
+        XCTAssertFalse(BoardChatFocusRule.isTerminal(NSTextView(frame: .zero)))
+        XCTAssertFalse(BoardChatFocusRule.isTerminal(nil))
+    }
+
+    func testReleaseHandsTheFocusBackToTheWindow() {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 200), styleMask: [.titled],
+                              backing: .buffered, defer: true)
+        let terminal = QuietableTerminalView(frame: NSRect(x: 0, y: 0, width: 100, height: 100))
+        window.contentView?.addSubview(terminal)
+        window.makeFirstResponder(terminal)
+        XCTAssertTrue(window.firstResponder === terminal)
+        BoardChatFocusRule.releaseTerminalFocus(in: window)
+        XCTAssertTrue(window.firstResponder === window)
+    }
+}
+

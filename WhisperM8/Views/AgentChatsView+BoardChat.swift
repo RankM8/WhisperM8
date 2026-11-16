@@ -26,12 +26,15 @@ extension AgentChatsView {
     func boardChatPick(projectID: UUID) -> (session: AgentChatSession, isAutomatic: Bool)? {
         let sessions = workspace.sessions
         let lookup = BoardChatSessionLookup.shared
-        if let chosen = BoardChatPreferencesStore.shared.preferences(for: projectID).chosenSessionID,
+        let preferences = BoardChatPreferencesStore.shared.preferences(for: projectID)
+        if let chosen = preferences.chosenSessionID,
            let session = lookup.session(chosen, in: sessions), session.status != .archived {
             return (session, false)
         }
         var ids = Set(windowStore.state.windows.flatMap(\.openTabIDs))
         ids.formUnion(terminalRegistry.activeSessionIDs)
+        // Der zuletzt gefundene Jarvis zählt mit, auch gestoppt und ohne Tab.
+        if let last = preferences.lastJarvisSessionID { ids.insert(last) }
         let running = terminalRegistry.activeSessionIDs
         let candidates = ids.compactMap { id -> BoardChatCandidate? in
             guard let session = lookup.session(id, in: sessions) else { return nil }
@@ -75,6 +78,14 @@ extension AgentChatsView {
                 available: available,
                 setWidth: { preferencesStore.setWidth($0, for: projectID) }))
             .task { preferencesStore.preload() }
+            // Einmal je gefundenem Jarvis merken (nicht im Body schreiben).
+            .task(id: "\(pick.flatMap { $0.isAutomatic ? $0.session.id.uuidString : nil } ?? "-")|\(preferencesStore.isLoaded)") {
+                if let pick, pick.isAutomatic, preferencesStore.isLoaded {
+                    preferencesStore.setLastJarvis(pick.session.id, for: projectID)
+                }
+            }
+            // Klick außerhalb des Terminals gibt den Fokus ans Fenster zurück.
+            .background(BoardChatFocusGuard())
         }
     }
 

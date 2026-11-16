@@ -35,7 +35,7 @@ enum BoardChatRules {
     /// erlaubt. Eine eigene Regel in der App fände früher oder später einen
     /// anderen Jarvis als die CLI.
     static func isJarvis(title: String) -> Bool {
-        title.trimmingCharacters(in: .whitespaces).lowercased().hasPrefix(TicketBoardBuilder.supervisorTitlePrefix)
+        TicketBoardBuilder.isSupervisor(title: title)
     }
 
     /// Automatisch gewählter Board-Chat: der Jarvis des Projekts. Laufende

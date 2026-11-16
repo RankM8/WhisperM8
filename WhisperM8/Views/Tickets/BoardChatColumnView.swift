@@ -142,10 +142,10 @@ struct BoardChatColumnView<StatusDot: View, Terminal: View>: View {
                 action: actions.openHere)
         case .noChat:
             VStack(spacing: 8) {
-                Text("No Jarvis in this project")
+                Text("No Jarvis found")
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(AgentTheme.textSecondary)
-                Text("A chat of this project whose title starts with “Jarvis” appears here automatically.")
+                Text("A chat of this project whose title starts with “Jarvis” appears here as soon as it runs or is open as a tab.")
                     .font(.system(size: 11.5))
                     .foregroundStyle(AgentTheme.textTertiary)
                     .multilineTextAlignment(.center)
@@ -274,9 +274,7 @@ struct BoardChatColumnFrame: ViewModifier {
                         .allowsHitTesting(false)
                 }
             }
-            .onHover { inside in
-                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
-            }
+            .background(BoardChatResizeCursor())
             .gesture(
                 DragGesture(minimumDistance: 2, coordinateSpace: .global)
                     .onChanged { value in
