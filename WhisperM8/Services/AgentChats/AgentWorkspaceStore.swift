@@ -459,9 +459,16 @@ final class AgentWorkspaceUIModel {
     }
 
     /// Chat zur ID ohne Suche über alle Chats.
+    /// An der gefundenen Position wird die ID gegengeprüft (Auflage Noa): Eine
+    /// veraltete Position darf nie einen anderen Chat liefern, sonst träfe
+    /// Senden, Schließen oder ein Kontowechsel den falschen. Passt sie nicht,
+    /// gilt die lineare Suche.
     func session(id: UUID) -> AgentChatSession? {
-        guard let index = sessionIndexByID[id], workspace.sessions.indices.contains(index) else { return nil }
-        return workspace.sessions[index]
+        if let index = sessionIndexByID[id], workspace.sessions.indices.contains(index),
+           workspace.sessions[index].id == id {
+            return workspace.sessions[index]
+        }
+        return workspace.sessions.first { $0.id == id }
     }
 
     /// Erste Position je ID (wie `Dictionary(uniquingKeysWith: first)`).
@@ -477,14 +484,9 @@ final class AgentWorkspaceUIModel {
     /// Gleiche ID-Folge? Ein Durchlauf ohne Hashing; bei einer bloßen
     /// Feldänderung (Titel, Status) ist die Antwort `true`.
     nonisolated static func sameIDs(_ lhs: [AgentChatSession], _ rhs: [AgentChatSession]) -> Bool {
-        lhs.count == rhs.count && lhs.elementsEqual(rhs, by: { $0.id == $1.id })
-    }
-
-    /// Passt der Index noch? Billiger als ihn neu zu bauen: bei einer bloßen
-    /// Feldänderung (Titel, Status) bleiben IDs und Reihenfolge gleich.
-    nonisolated static func index(_ index: [UUID: Int], matches sessions: [AgentChatSession]) -> Bool {
-        guard index.count == sessions.count else { return false }
-        for (position, session) in sessions.enumerated() where index[session.id] != position {
+        guard lhs.count == rhs.count else { return false }
+        // Über die Indizes, ohne die Chat-Strukturen zu kopieren.
+        for position in lhs.indices where lhs[position].id != rhs[position].id {
             return false
         }
         return true

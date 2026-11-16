@@ -847,7 +847,7 @@ struct AgentChatsView: View {
             // Projekt ist nur noch Ziel für „Neuer Chat" und den Inspector.
             // (Persistenz erledigt der Store automatisch bei jeder Mutation.)
             if let sessionID = newValue, !isTicketsModeActive,
-               let session = workspace.sessions.first(where: { $0.id == sessionID }) {
+               let session = workspaceModel.session(id: sessionID) {
                 selectedProjectID = session.projectID
             }
             // Subagent-Ergebnis gilt mit der Selektion als gelesen (No-op
@@ -1123,7 +1123,7 @@ struct AgentChatsView: View {
 
     private var renameSheet: some View {
         let originalTitle = renameTargetID
-            .flatMap { id in workspace.sessions.first(where: { $0.id == id })?.title }
+            .flatMap { id in workspaceModel.session(id: id)?.title }
             ?? ""
         return VStack(alignment: .leading, spacing: 14) {
             Text("Rename chat")

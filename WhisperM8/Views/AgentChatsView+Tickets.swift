@@ -16,7 +16,7 @@ extension AgentChatsView {
     func ticketsModeChanged(_ active: Bool) {
         syncActiveAgentChat()
         guard !active, let sessionID = selectedSessionID else { return }
-        if let session = workspace.sessions.first(where: { $0.id == sessionID }),
+        if let session = workspaceModel.session(id: sessionID),
            selectedProjectID != session.projectID {
             selectedProjectID = session.projectID
         }

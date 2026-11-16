@@ -19,7 +19,7 @@ extension AgentChatsView {
         // nur zur Anzeige unter dem Haupt-Projekt. Ziehen innerhalb dieser
         // Gruppe darf ihn nicht ins Haupt-Projekt verschieben, sonst startete
         // er dort statt in seinem Ordner.
-        if let source = workspace.sessions.first(where: { $0.id == dropped.sessionID }),
+        if let source = workspaceModel.session(id: dropped.sessionID),
            projectParents[source.projectID] == projectID {
             return
         }

@@ -141,7 +141,7 @@ extension AgentChatsView {
         guard let occupantID = entity.slots[index] else {
             return String(localized: "Slot \(index + 1) (free)")
         }
-        let occupantName = workspace.sessions.first { $0.id == occupantID }?.title
+        let occupantName = workspaceModel.session(id: occupantID)?.title
             ?? String(localized: "occupied")
         return String(localized: "Slot \(index + 1) — replaces “\(occupantName)”")
     }

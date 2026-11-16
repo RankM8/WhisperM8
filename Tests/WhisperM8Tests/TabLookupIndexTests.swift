@@ -77,19 +77,47 @@ final class TabLookupIndexTests: XCTestCase {
         XCTAssertFalse(AgentWorkspaceUIModel.sameIDs(sessions, Array(sessions.dropLast())))
     }
 
-    func testIndexMatchesOnlyWhileIDsAndOrderStay() {
-        var sessions = chats(50)
-        let index = AgentWorkspaceUIModel.index(of: sessions)
-        XCTAssertTrue(AgentWorkspaceUIModel.index(index, matches: sessions))
+    // MARK: - Am echten Modell (Auflage Noa)
 
-        sessions[4].title = "umbenannt"             // bloße Feldänderung
-        XCTAssertTrue(AgentWorkspaceUIModel.index(index, matches: sessions))
+    /// Nach jedem Schritt liefert `session(id:)` für jede ID genau den Chat mit
+    /// dieser ID: anlegen, löschen, vertauschen, umbenennen, archivieren.
+    @MainActor
+    func testModelLookupStaysRightThroughMutations() throws {
+        let url = makeTempStoreURL()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = AgentSessionStore(fileURL: url)
+        let model = AgentWorkspaceUIModel(store: AgentWorkspaceStoreRegistry.store(for: url))
+        let projectPath = try makeTempProjectDirectory().path
 
-        sessions.swapAt(1, 2)                        // neue Reihenfolge
-        XCTAssertFalse(AgentWorkspaceUIModel.index(index, matches: sessions))
+        func assertLookups(_ step: String, line: UInt = #line) {
+            let sessions = store.loadWorkspace().sessions
+            XCTAssertEqual(model.workspace.sessions.map(\.id), sessions.map(\.id), "\(step): Modell folgt dem Store", line: line)
+            for session in sessions {
+                XCTAssertEqual(model.session(id: session.id)?.id, session.id, "\(step)", line: line)
+                XCTAssertEqual(model.session(id: session.id)?.title, session.title, "\(step)", line: line)
+            }
+            XCTAssertNil(model.session(id: UUID()), "\(step): unbekannte ID", line: line)
+        }
 
-        XCTAssertFalse(AgentWorkspaceUIModel.index(index, matches: chats(50)), "andere IDs")
-        XCTAssertFalse(AgentWorkspaceUIModel.index(index, matches: Array(chats(50).prefix(49))))
+        let created = try (0..<5).map { try store.createSession(provider: .claude, projectPath: projectPath, title: "WM8-\($0)") }
+        assertLookups("angelegt")
+
+        try store.deleteSession(id: created[1].id)
+        assertLookups("gelöscht")
+        XCTAssertNil(model.session(id: created[1].id))
+
+        var workspace = store.loadWorkspace()
+        workspace.sessions.swapAt(0, workspace.sessions.count - 1)
+        try store.saveWorkspace(workspace)
+        assertLookups("vertauscht")
+
+        try store.renameSession(id: created[2].id, title: "umbenannt")
+        assertLookups("umbenannt")
+        XCTAssertEqual(model.session(id: created[2].id)?.title, "umbenannt")
+
+        try store.archiveSession(id: created[3].id)
+        assertLookups("archiviert")
+        XCTAssertEqual(model.session(id: created[3].id)?.status, .archived)
     }
 
     // MARK: - Messlauf
@@ -135,11 +163,10 @@ final class TabLookupIndexTests: XCTestCase {
         // und die Prüfung davor (bei jeder Workspace-Änderung).
         var build: [Double] = []
         var check: [Double] = []
-        var built: [UUID: Int] = [:]
+        let other = sessions.map { $0 }
         for _ in 0..<15 {
-            build.append(ms(clock.measure { built = AgentWorkspaceUIModel.index(of: sessions) }))
-            check.append(ms(clock.measure { _ = AgentWorkspaceUIModel.sameIDs(sessions, sessions) }))
-            _ = built
+            build.append(ms(clock.measure { _ = AgentWorkspaceUIModel.index(of: sessions) }))
+            check.append(ms(clock.measure { _ = AgentWorkspaceUIModel.sameIDs(sessions, other) }))
         }
         let buildText = String(format: "%.2f", median(build))
         let checkText = String(format: "%.2f", median(check))
