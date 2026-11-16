@@ -9,7 +9,7 @@ extension UISnapshotGallery {
     static func tabWidthFixtures() -> [Fixture] {
         let statusStore = AgentSessionRuntimeStatusStore()
         let wm8 = AgentProject(name: "whisperm8", path: "/tmp/whisperm8", color: "#3D6DF2", createdManually: true)
-        let lm8 = AgentProject(name: "ListM8", path: "/tmp/ListM8", color: "#E8590C", createdManually: true)
+        let shop = AgentProject(name: "shop-backend", path: "/tmp/shop-backend", color: "#E8590C", createdManually: true)
         func chat(_ title: String, _ project: AgentProject, _ status: AgentSessionRuntimeStatus) -> AgentChatSession {
             let session = AgentChatSession(provider: .claude, projectID: project.id, title: title)
             statusStore.setStatus(status, for: session.id)
@@ -21,20 +21,20 @@ extension UISnapshotGallery {
             chat("WM8-75 Fin · Diktat: Enter", wm8, .working),
             chat("Jarvis: Supervisor WhisperM8", wm8, .idle),
         ]
-        let deal = [
-            chat("1 Una · Feedback: Wünsche", lm8, .idle),
-            chat("2 Pia · Linear: Feedback", lm8, .working),
-            chat("3 Kit · Kurs: Übersicht", lm8, .idle),
-            chat("4 Ben · Fix: Exportierte Leads", lm8, .idle),
-            chat("5 Max · MCP: Kampagnen", lm8, .idle),
+        let shopTabs = [
+            chat("1 Una · Rechnungen exportieren", shop, .idle),
+            chat("2 Pia · Warenkorb: Rabatt", shop, .working),
+            chat("3 Kit · Suche: Filter", shop, .idle),
+            chat("4 Ben · Fix: Versandkosten", shop, .idle),
+            chat("5 Max · Export: CSV-Spalten", shop, .idle),
         ]
         let singles = (1...9).map { chat("WM8-\($0 + 80) Tab\($0) · Einzelner Chat Nummer \($0)", wm8, .idle) }
         let wsActive = AgentTabGroupingKey.workspace(UUID())
-        let wsDeal = AgentTabGroupingKey.workspace(UUID())
+        let wsShop = AgentTabGroupingKey.workspace(UUID())
         let items: [AgentTabGroupingItem] = [.group(key: wsActive, sessionIDs: active.map(\.id))]
-            + [.group(key: wsDeal, sessionIDs: deal.map(\.id))] + singles.map { .single($0.id) }
-        let byID = Dictionary(uniqueKeysWithValues: (active + deal + singles).map { ($0.id, $0) })
-        let meta: [AgentTabGroupingKey: (String, String)] = [wsActive: ("WM8 Aktiv", "#7C5CFF"), wsDeal: ("DealSupply", "#9E73F2")]
+            + [.group(key: wsShop, sessionIDs: shopTabs.map(\.id))] + singles.map { .single($0.id) }
+        let byID = Dictionary(uniqueKeysWithValues: (active + shopTabs + singles).map { ($0.id, $0) })
+        let meta: [AgentTabGroupingKey: (String, String)] = [wsActive: ("WM8 Aktiv", "#7C5CFF"), wsShop: ("Shop-Admin", "#9E73F2")]
         let selected = active[3].id
 
         func strip(width: CGFloat) -> AnyView {
@@ -43,11 +43,11 @@ extension UISnapshotGallery {
                 manuallyCollapsed: [], manuallyOpened: [],
                 chipWidths: [
                     wsActive: AgentChatsView.tabGroupChipWidth(title: "WM8 Aktiv", count: 4),
-                    wsDeal: AgentChatsView.tabGroupChipWidth(title: "DealSupply", count: 5),
+                    wsShop: AgentChatsView.tabGroupChipWidth(title: "Shop-Admin", count: 5),
                 ])
             func tab(_ id: UUID, color: Color?) -> some View {
                 ChatTabButton(
-                    session: byID[id]!, project: byID[id]!.projectID == wm8.id ? wm8 : lm8,
+                    session: byID[id]!, project: byID[id]!.projectID == wm8.id ? wm8 : shop,
                     isSelected: id == selected, isMultiSelected: false, statusStore: statusStore,
                     groupColor: color, width: layout.widthByID[id], isNarrow: layout.narrowIDs.contains(id),
                     onSelect: {}, onClose: {})
