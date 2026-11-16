@@ -404,6 +404,9 @@ final class AgentWorkspaceUIModel {
     private(set) var workspace: AgentWorkspace {
         didSet {
             WorkspaceApplyMeasurement.workspaceChanged()
+            if !Self.index(sessionIndexByID, matches: workspace.sessions) {
+                sessionIndexByID = Self.index(of: workspace.sessions)
+            }
             guard workspace.projects != oldValue.projects else { return }
             let parents = AgentProjectDisplay.parentByProjectID(projects: workspace.projects)
             if parents != projectParents { projectParents = parents }
@@ -412,6 +415,11 @@ final class AgentWorkspaceUIModel {
     /// Arbeitsordner → Haupt-Projekt (WM8-102), einmal je Änderung der
     /// Projekte gebildet statt je Tab, Zeile oder Drop.
     private(set) var projectParents: [UUID: UUID] = [:]
+    /// Chat-ID → Position in `workspace.sessions`, einmal je Änderung gebildet
+    /// (WM8-101). Die Tab-Leiste baute vorher je Tab ein Dictionary über alle
+    /// Chats (rund 5.900) und suchte die Auswahl linear; im Profil eines
+    /// Chatwechsels war das der größte eigene Posten im Fensterbody.
+    private(set) var sessionIndexByID: [UUID: Int] = [:]
     /// `true`, solange der letzte Workspace-Write fehlgeschlagen ist (LR-AK-005).
     private(set) var persistenceFailing = false
     private let store: AgentWorkspaceStore
@@ -444,6 +452,33 @@ final class AgentWorkspaceUIModel {
         // Installation: eine genau dort erfolgte Mutation wird so nachgezogen.
         self.workspace = store.read { $0 }
         self.projectParents = AgentProjectDisplay.parentByProjectID(projects: workspace.projects)
+        self.sessionIndexByID = Self.index(of: workspace.sessions)
+    }
+
+    /// Chat zur ID ohne Suche über alle Chats.
+    func session(id: UUID) -> AgentChatSession? {
+        guard let index = sessionIndexByID[id], workspace.sessions.indices.contains(index) else { return nil }
+        return workspace.sessions[index]
+    }
+
+    /// Erste Position je ID (wie `Dictionary(uniquingKeysWith: first)`).
+    nonisolated static func index(of sessions: [AgentChatSession]) -> [UUID: Int] {
+        var result: [UUID: Int] = [:]
+        result.reserveCapacity(sessions.count)
+        for (position, session) in sessions.enumerated() where result[session.id] == nil {
+            result[session.id] = position
+        }
+        return result
+    }
+
+    /// Passt der Index noch? Billiger als ihn neu zu bauen: bei einer bloßen
+    /// Feldänderung (Titel, Status) bleiben IDs und Reihenfolge gleich.
+    nonisolated static func index(_ index: [UUID: Int], matches sessions: [AgentChatSession]) -> Bool {
+        guard index.count == sessions.count else { return false }
+        for (position, session) in sessions.enumerated() where index[session.id] != position {
+            return false
+        }
+        return true
     }
 }
 

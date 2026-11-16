@@ -49,7 +49,7 @@ struct AgentChatsView: View {
     /// P1 S6: Live-Projektion des Workspace-Stands. Facade-Mutationen
     /// spiegeln sich hier automatisch — die früheren ~24 manuellen
     /// `workspace = store.loadWorkspace()`-Reloads entfallen.
-    @State private var workspaceModel = AgentWorkspaceUIModel.shared
+    @State var workspaceModel = AgentWorkspaceUIModel.shared
     var workspace: AgentWorkspace { workspaceModel.workspace }
     var projectParents: [UUID: UUID] { workspaceModel.projectParents }  // WM8-102
 
@@ -457,7 +457,7 @@ struct AgentChatsView: View {
 
     var selectedSession: AgentChatSession? {
         AgentSelectionResolver.selected(
-            sessions: workspace.sessions, selectedID: selectedSessionID, openTabIDs: openTabIDs)
+            lookup: workspaceModel.session(id:), selectedID: selectedSessionID, openTabIDs: openTabIDs)
     }
 
     /// Projekt der selektierten Session — kann kurzzeitig vom

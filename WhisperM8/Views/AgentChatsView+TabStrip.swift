@@ -14,15 +14,18 @@ extension AgentChatsView {
     /// einmal je Durchlauf berechnet.
     @ViewBuilder
     func tabStripItemsContent(items: [AgentTabGroupingItem], layout: AgentTabWidthResolver.Layout) -> some View {
+        // Einmal je Durchlauf statt je Tab (WM8-101).
+        let tabsByID = Dictionary(headerTabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let selectedID = selectedSession?.id
         // zIndex hebt das Element mit dem aktiven Tab an, damit dessen
         // Chrome-Füße (7pt über die eigene Breite hinaus) über den
         // Nachbar-Tabs statt darunter gezeichnet werden.
         ForEach(Array(items.enumerated()), id: \.offset) { _, item in
             switch item {
             case .single(let sessionID):
-                if let session = headerTabs.first(where: { $0.id == sessionID }) {
+                if let session = tabsByID[sessionID] {
                     chromeTab(session, groupColor: nil, layout: layout)
-                        .zIndex(sessionID == selectedSession?.id ? 1 : 0)
+                        .zIndex(sessionID == selectedID ? 1 : 0)
                 }
             case .group(let key, let sessionIDs):
                 chromeTabGroup(key: key, sessionIDs: sessionIDs, layout: layout)
@@ -49,6 +52,10 @@ extension AgentChatsView {
         let isCollapsed = collapsedTabGroups.contains(key) || isAutoCollapsed
         let isActive = selectedSessionID.map(sessionIDs.contains) ?? false
         let visibleIDs = visibleTabIDs(in: sessionIDs, collapsed: isCollapsed)
+        // Nur die Mitglieder dieser Gruppe nachschlagen, nicht je Tab alle Chats.
+        let membersByID = Dictionary(
+            sessionIDs.compactMap { workspaceModel.session(id: $0) }.map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first })
 
         return HStack(alignment: .bottom, spacing: 0) {
             ChatTabGroupLabel(
@@ -82,7 +89,7 @@ extension AgentChatsView {
             // Der Chip ist der GRIFF der ganzen Gruppe — auf- wie zugeklappt.
             .draggable(DraggableSession(
                 sessionID: sessionIDs.first ?? UUID(),
-                sourceProjectID: headerTabs.first { $0.id == sessionIDs.first }?.projectID ?? UUID(),
+                sourceProjectID: sessionIDs.first.flatMap { membersByID[$0] }?.projectID ?? UUID(),
                 sourceWindowID: windowID,
                 groupMemberIDs: sessionIDs
             )) {
@@ -93,7 +100,7 @@ extension AgentChatsView {
             }
 
             ForEach(visibleIDs, id: \.self) { sessionID in
-                if let session = headerTabs.first(where: { $0.id == sessionID }) {
+                if let session = membersByID[sessionID], session.status != .archived {
                     chromeTab(session, groupColor: color, layout: layout)
                         .zIndex(sessionID == selectedSessionID ? 1 : 0)
                 }
@@ -244,7 +251,7 @@ extension AgentChatsView {
                             .onChange(of: headerTabs.map(\.id)) { _, _ in
                                 // Gegen ALLE Sessions prunen (nicht nur offene Tabs) — die
                                 // Multi-Auswahl gilt auch für Sidebar-Sessions ohne offenen Tab.
-                                multiSelection.formIntersection(Set(workspace.sessions.map(\.id)))
+                                multiSelection = multiSelection.filter { workspaceModel.session(id: $0) != nil }
                             }
                             // Einfüge-Linie — steht immer auf einer ERLAUBTEN
                             // Slot-Grenze, weil der Delegate den rohen Index

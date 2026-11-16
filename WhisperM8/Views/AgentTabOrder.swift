@@ -124,7 +124,14 @@ enum AgentTabOrder {
     /// gelöscht) und archivierte Chats fallen heraus.
     static func headerTabs(openTabIDs: [UUID], sessions: [AgentChatSession]) -> [AgentChatSession] {
         let byID = Dictionary(sessions.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        return openTabIDs.compactMap { byID[$0] }.filter { $0.status != .archived }
+        return headerTabs(openTabIDs: openTabIDs, lookup: { byID[$0] })
+    }
+
+    /// Wie oben, aber mit Nachschlagen statt Dictionary über alle Chats
+    /// (`AgentWorkspaceUIModel.session(id:)`, WM8-101): Kosten je Tab, nicht
+    /// je Chat im Workspace.
+    static func headerTabs(openTabIDs: [UUID], lookup: (UUID) -> AgentChatSession?) -> [AgentChatSession] {
+        openTabIDs.compactMap(lookup).filter { $0.status != .archived }
     }
 }
 

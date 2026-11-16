@@ -16,7 +16,7 @@ extension AgentChatsView {
     /// Angaben für das Menü. Nur im Ereignis-Pfad aufrufen: Die Kontenlisten
     /// kommen aus dem kurzlebigen Cache des Kontextmenüs.
     func controllerChatActionInfo(for sessionID: UUID) -> ControllerChatActionInfo? {
-        guard let session = workspace.sessions.first(where: { $0.id == sessionID }) else { return nil }
+        guard let session = workspaceModel.session(id: sessionID) else { return nil }
         // Dieselben Ziele wie im Kontextmenü: „Zu Account verschieben“ für
         // Claude-Chats, „GPT-Konto“ zusätzlich bei aktivem GPT-Backend.
         var accounts: [ControllerAccountChoice] = []
@@ -57,7 +57,7 @@ extension AgentChatsView {
     /// ausgewählt und die Anfrage kurz danach gestellt, wenn seine Ansicht
     /// steht — sonst sähe sie die Anfrage nie.
     func startChatFromCommand(_ sessionID: UUID) -> Bool {
-        guard let session = workspace.sessions.first(where: { $0.id == sessionID }),
+        guard let session = workspaceModel.session(id: sessionID),
               session.status != .archived,
               !session.isSubagentJob || jobRuntimeModel.isTakenOver(session.id),
               terminalRegistry.controller(for: sessionID)?.isRunning != true else { return false }

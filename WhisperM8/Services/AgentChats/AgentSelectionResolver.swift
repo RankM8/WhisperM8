@@ -29,4 +29,22 @@ enum AgentSelectionResolver {
         }
         return best?.session
     }
+
+    /// Dasselbe mit Nachschlagen statt Durchlauf über alle Chats (WM8-101):
+    /// Der Getter läuft je Tab und je Controller-Ereignis, bei rund 5.900
+    /// Chats war der lineare Durchlauf im Profil eines Chatwechsels sichtbar.
+    /// Ergebnis wie oben: die erste offene, nicht archivierte in Tab-Reihenfolge.
+    static func selected(
+        lookup: (UUID) -> AgentChatSession?,
+        selectedID: UUID?,
+        openTabIDs: [UUID]
+    ) -> AgentChatSession? {
+        if let selectedID, let hit = lookup(selectedID), hit.status != .archived {
+            return hit
+        }
+        for id in openTabIDs {
+            if let session = lookup(id), session.status != .archived { return session }
+        }
+        return nil
+    }
 }
