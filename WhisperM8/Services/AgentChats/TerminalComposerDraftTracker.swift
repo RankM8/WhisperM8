@@ -75,6 +75,9 @@ struct TerminalComposerDraftTracker: Equatable {
     /// Sonst stellte die Warteschlange ihn beim nächsten Turn-Ende ein zweites
     /// Mal zu. Auch nach Bearbeiten: Was im Feld stand, ist raus (WM8-123).
     private(set) var submittedWithheldQueueID: UUID?
+    /// Der Vermerk, den dieses Enter geräumt hat, für den Fall, dass der Text
+    /// doch im Feld blieb (`recordSubmitStayedInField`).
+    private var submittedWithheld: WithheldDelivery?
 
     /// Den Auftrag darf `chats submit` abschicken: beansprucht, unberuehrt, und
     /// er ist das Einzige, was der Tracker im Feld vermutet.
@@ -272,12 +275,17 @@ struct TerminalComposerDraftTracker: Equatable {
         16, 45,                                   // y, n
     ]
 
+    /// Ctrl+W, Ctrl+U, Ctrl+K, Ctrl+H: loeschen im Feld Text, sind also keine
+    /// Antwort im Dialog (Rand zu WM8-123).
+    private static let controlEditingKeyCodes: Set<UInt16> = [13, 32, 40, 4]
+
     /// Taste, die in einem Dialog eine Antwort ist und keinen Text ins Feld
-    /// schreibt. Cmd+V fügt ein; andere Cmd-/Ctrl-Kuerzel sind Bedienung.
+    /// schreibt. Cmd+V fügt ein, Ctrl+W/U/K/H löschen; andere Cmd-/Ctrl-Kürzel
+    /// sind Bedienung.
     static func isDialogAnswerKey(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {
         let flags = modifiers.intersection(.deviceIndependentFlagsMask)
         if flags.contains(.command) { return keyCode != 9 }
-        if flags.contains(.control) { return true }
+        if flags.contains(.control) { return !controlEditingKeyCodes.contains(keyCode) }
         return dialogAnswerKeyCodes.contains(keyCode)
     }
 
@@ -404,7 +412,25 @@ struct TerminalComposerDraftTracker: Equatable {
     }
 
     private mutating func noteWithheldSubmitted() {
-        if let id = withheldDelivery?.queuedPromptID { submittedWithheldQueueID = id }
+        if let id = withheldDelivery?.queuedPromptID {
+            submittedWithheldQueueID = id
+            submittedWithheld = withheldDelivery
+        }
+    }
+
+    /// Das Enter hat nur eine Vervollständigung gewählt (@-Datei, Slash-Menü):
+    /// Der Text steht noch im Feld. Dann gilt er wieder als eingefügt und als
+    /// derselbe Auftrag, aber bearbeitet; erst das nächste echte Enter
+    /// verbucht ihn (Rand zu WM8-123).
+    mutating func recordSubmitStayedInField(queuedPromptID: UUID) {
+        mayHoldInsertedText = true
+        // Derselbe Vermerk wie vor dem Enter: Wer per Vervollständigung
+        // bearbeitet hat, hat ihn schon berührt; ein liegengebliebenes
+        // `submit` bleibt abschickbar.
+        withheldDelivery = submittedWithheld?.queuedPromptID == queuedPromptID
+            ? submittedWithheld
+            : WithheldDelivery(fromSender: true, queuedPromptID: queuedPromptID, untouched: false)
+        submittedWithheld = nil
     }
 
     /// Einmal abholen: Welcher vorgemerkte Auftrag ist mit einem Enter raus?

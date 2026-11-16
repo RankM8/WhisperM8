@@ -69,8 +69,36 @@ extension AgentTerminalController {
     /// Hat ein Enter einen vorgemerkten Auftrag mit zurückgehaltenem Enter
     /// abgeschickt, verbucht die Warteschlange ihn als zugestellt (WM8-123).
     /// Ohne solchen Auftrag nur ein Nachsehen im Tracker, kein I/O.
+    ///
+    /// Erst kurz danach: Ein Enter, das nur eine Vervollständigung wählt
+    /// (@-Datei, Slash-Menü), lässt den Text im Feld stehen. Dann bleibt der
+    /// Auftrag vorgemerkt und gilt wieder als eingefügt; das nächste echte
+    /// Enter verbucht ihn. Kosten: eine Ablesung der untersten 16 Zeilen, nur
+    /// nach einem Enter auf einen solchen Auftrag.
     func bookSubmittedWithheldDelivery() {
         guard let id = takeSubmittedWithheldQueueID() else { return }
-        AgentControlRequestHandler.markWithheldQueueEntryDelivered(id, sessionID: sessionID)
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.completionCheckDelay) { [weak self] in
+            guard let self else { return }
+            let status = AgentSessionStatusCoordinator.shared.statusStore.status(for: self.sessionID)
+            if Self.submitLandedInCompletion(status: status, field: self.composerFieldForSendCheck().field) {
+                self.noteSubmitStayedInField(queuedPromptID: id)
+                Logger.agentStore.notice(
+                    "withheld_submit_stayed_in_field session=\(self.sessionID.uuidString, privacy: .public)")
+                return
+            }
+            AgentControlRequestHandler.markWithheldQueueEntryDelivered(id, sessionID: self.sessionID)
+        }
+    }
+
+    /// So lange nach dem Enter sieht die App aufs Feld.
+    nonisolated static let completionCheckDelay: TimeInterval = 0.5
+
+    /// Pur: Stand der Text nach dem Enter noch da, ohne dass ein Turn begann?
+    /// Nicht ablesbar heißt: raus (wie bisher verbuchen). Irrt die Ablesung in
+    /// die andere Richtung, fängt der Blick ins Transcript vor der nächsten
+    /// Zustellung den Auftrag ab (`checkAlreadySent`).
+    nonisolated static func submitLandedInCompletion(status: AgentSessionRuntimeStatus?,
+                                                      field: ControllerPromptField?) -> Bool {
+        status != .working && field?.hasText == true
     }
 }

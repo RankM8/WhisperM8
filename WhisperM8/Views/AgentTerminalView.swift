@@ -671,6 +671,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         composerDraft.claimWithheldDelivery(queuedPromptID: queuedPromptID)
     }
     func takeSubmittedWithheldQueueID() -> UUID? { composerDraft.takeSubmittedWithheldQueueID() }
+    func noteSubmitStayedInField(queuedPromptID: UUID) { composerDraft.recordSubmitStayedInField(queuedPromptID: queuedPromptID) }
 
     /// Sendet einen Prompt über den Control-Socket (`whisperm8 chats send`) in
     /// die laufende TUI — im Gegensatz zu `sendUserText` mit **Bracketed

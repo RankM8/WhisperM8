@@ -909,7 +909,21 @@ Warteschlange nach dem Start zustellte. Deshalb:
   Enter des Users auf der Tastatur oder am Controller, auch nach Bearbeiten
   (er ist ja raus). Sonst stellte die Warteschlange ihn beim nächsten
   Turn-Ende ein zweites Mal zu. Ctrl+C lässt ihn vorgemerkt; er kommt später
-  neu. Ein per `dequeue` stornierter bleibt storniert. Ein Neustart ohne Chatverlust trägt den Vermerk
+  neu. Ein per `dequeue` stornierter bleibt storniert.
+  Ränder (16.11.2026): Ctrl+W, Ctrl+U, Ctrl+K und Ctrl+H im Nachlauf des
+  Freigabe-Status löschen Text und zählen nicht als Dialog-Antwort. Verbucht
+  wird erst 0,5 s nach dem Enter: Steht der Text dann noch im Feld, ohne dass
+  ein Turn begann, hat das Enter nur eine Vervollständigung gewählt (@-Datei,
+  Slash-Menü); der Auftrag bleibt vorgemerkt, und das nächste echte Enter
+  verbucht ihn (Log `withheld_submit_stayed_in_field`). Ging ein zweites
+  Enter im Nachlauf als Dialog-Antwort durch, obwohl es den Auftrag
+  abschickte, fängt das ein Blick ins Transcript ab: Ein Auftrag, dessen Enter
+  einmal zurückgehalten war, trägt `enterWithheld` in der Queue-Datei. Vor
+  jeder erneuten Zustellung liest die App abseits des Main Threads die letzten
+  256 KB des Transcripts. Ist die letzte Nachricht des Users dieser Auftrag
+  (Marker-Zeile und ganzer Text), wird er als zugestellt verbucht statt
+  gesendet (Log `queue_already_sent`). Kosten: dieses Lesen nur bei solchen
+  Aufträgen, je Zustellversuch einmal. Ein Neustart ohne Chatverlust trägt den Vermerk
   im Manifest weiter (`composerWithheldDelivery`, `composerWithheldQueueID`).
   Hat jemand am Text weitergeschrieben, gehört er (auch) dem User; dann lehnt
   `submit` ab, sagt „eingefügt“ und nennt die Wege, die gehen. Direkt

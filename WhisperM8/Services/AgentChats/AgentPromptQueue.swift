@@ -52,6 +52,12 @@ struct QueuedPrompt: Codable, Equatable, Identifiable {
     var state: State = .pending
     var deliveredAt: Date?
     var lastError: String?
+    /// Das Enter dieses Auftrags wurde einmal wegen einer Freigabe
+    /// zurückgehalten (WM8-123). Sein Text kann seither abgeschickt worden
+    /// sein, ohne dass die App es verbuchen konnte (zweites Enter noch im
+    /// Nachlauf des Freigabe-Status). Vor einer erneuten Zustellung sieht die
+    /// Warteschlange deshalb im Transcript nach. Fehlt in älteren Dateien.
+    var enterWithheld: Bool = false
 
     /// Wartet noch auf Zustellung. `unknown` gehört bewusst NICHT dazu — es
     /// wird nie zugestellt und dürfte sonst als „wartet" gezählt werden.
@@ -79,6 +85,7 @@ struct QueuedPrompt: Codable, Equatable, Identifiable {
         state = try container.decodeIfPresent(State.self, forKey: .state) ?? .pending
         deliveredAt = try container.decodeIfPresent(Date.self, forKey: .deliveredAt)
         lastError = try container.decodeIfPresent(String.self, forKey: .lastError)
+        enterWithheld = try container.decodeIfPresent(Bool.self, forKey: .enterWithheld) ?? false
     }
 
     init(id: UUID = UUID(), sequence: Int = 0, sessionID: UUID, prompt: String,
