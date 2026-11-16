@@ -89,7 +89,12 @@ final class NativeMessagingTests: XCTestCase {
 
     func testNativeNameIsTheTitleHeadPlusTheShortID() {
         XCTAssertEqual(AgentCommandBuilder.nativeName(for: session("WM8-100 Gus · Nachrichten härten")), "wm8-100-gus-f0d79f2c")
-        XCTAssertEqual(AgentCommandBuilder.nativeName(for: session("Jarvis: Supervisor WhisperM8")), "jarvis-f0d79f2c")
+        // Supervisor mit Projekt im Namen (WM8-119): je Projekt eindeutig.
+        XCTAssertEqual(AgentCommandBuilder.nativeName(for: session("Jarvis: Supervisor WhisperM8")), "jarvis-whisperm8-f0d79f2c")
+        XCTAssertEqual(AgentCommandBuilder.nativeName(for: session("Jarvis: Supervisor Testprojekt Nord")),
+                       "jarvis-testprojekt-nord-f0d79f2c")
+        XCTAssertEqual(AgentCommandBuilder.nativeName(for: session("Jarvis: Supervisor")), "jarvis-f0d79f2c")
+        XCTAssertEqual(AgentCommandBuilder.nativeName(for: session("Ex-Jarvis: Testplan")), "ex-jarvis-f0d79f2c")
         XCTAssertEqual(AgentCommandBuilder.nativeName(for: session("Überprüfung Größe")), "uberprufung-grosse-f0d79f2c")
         XCTAssertEqual(AgentCommandBuilder.nativeName(for: session("· leer")), "chat-f0d79f2c")
         let long = AgentCommandBuilder.nativeName(for: session("Ein sehr langer Titel ohne jeden Trenner darin"))

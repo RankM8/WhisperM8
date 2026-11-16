@@ -275,7 +275,11 @@ alles, was er NICHT darf:
   Löschungen, History-Rewrites nie als Teil einer Sammel-Freigabe delegieren.
 - **Rückweg nennen.** Schreib in den Auftrag, wohin Fertig- und
   Blockiert-Meldungen gehen: per `whisperm8 chats enqueue <dein-ref> -- "…"`,
-  mit deiner Kurz-Ref. Bei unklarem Ausgang nicht wiederholen, erst
+  mit deiner Kurz-ID (die ersten acht Zeichen deiner Chat-ID), nie nur
+  „Jarvis“. Jedes Projekt hat seinen eigenen Supervisor; ein Chat, der den
+  Namen selbst auflöst, findet sonst den falschen (Vorfall 15.11.2026: zwei
+  Fertig-Meldungen mit Entscheidungen des Users landeten beim Supervisor
+  eines anderen Projekts). Bei unklarem Ausgang nicht wiederholen, erst
   `whisperm8 chats queue <dein-ref>` lesen. Der native Weg (`SendMessage` an
   die Adresse aus `whisperm8 chats address <dein-ref>`) ist nur der Rückfall,
   wenn die CLI nicht antwortet.

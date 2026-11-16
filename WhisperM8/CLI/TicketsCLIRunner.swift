@@ -170,7 +170,7 @@ enum TicketsCLIRunner {
             return TicketsCLIFormatter.mine(tickets, chat: chat, json: json)
 
         case .link(let key, let chatRef, let keepStatus):
-            let chat = try callerChat(chatRef, env)
+            let chat = try await callerChatWaitingForNew(chatRef, env)
             let source = try access.source(forKey: key)
             try access.guardChat(chat, key: key)
             let context = try await source.ticket(key: key)
@@ -477,8 +477,38 @@ enum TicketsCLIRunner {
     }
 
     /// Der Chat, in dem der Befehl läuft, oder der mit `--chat` genannte.
+    /// So lange sucht `tickets link` einen eben angelegten Chat (WM8-119).
+    static let newChatWaitSeconds = 10
+
+    /// Wie `callerChat`, wartet aber auf einen Chat, den `chats new` eben
+    /// angelegt hat: Die CLI liest die Chats von Disk, und die App speichert
+    /// erst kurz danach (sonst 0,5 s, bei rund 6.000 Chats auch einige
+    /// Sekunden). Nur bei einer ID (hex, ab vier Zeichen) und laufender App;
+    /// je Sekunde ein neues Lesen, höchstens zehnmal. Gefunden heißt sofort weiter.
+    private static func callerChatWaitingForNew(_ ref: String?, _ env: TicketsCLIEnvironment) async throws -> TicketChat {
+        var attempt = 0
+        while true {
+            let (chats, appReachable) = env.chats()
+            do {
+                return try callerChat(ref, chats: chats, env)
+            } catch let failure as Failure where failure.exitCode == TicketsCLIExit.notFound {
+                guard let ref, appReachable, attempt < newChatWaitSeconds, looksLikeChatID(ref) else { throw failure }
+                attempt += 1
+                await env.sleep(1)
+            }
+        }
+    }
+
+    /// Volle UUID oder ihr Anfang: nur Hex-Ziffern und Bindestriche.
+    static func looksLikeChatID(_ ref: String) -> Bool {
+        ref.count >= 4 && ref.allSatisfy { $0.isHexDigit || $0 == "-" }
+    }
+
     private static func callerChat(_ ref: String?, _ env: TicketsCLIEnvironment) throws -> TicketChat {
-        let (chats, _) = env.chats()
+        try callerChat(ref, chats: env.chats().chats, env)
+    }
+
+    private static func callerChat(_ ref: String?, chats: [TicketChat], _ env: TicketsCLIEnvironment) throws -> TicketChat {
         if let ref {
             switch TicketChatRef.resolve(ref, in: chats) {
             case .found(let chat): return chat

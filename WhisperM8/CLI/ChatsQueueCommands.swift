@@ -87,17 +87,24 @@ enum ChatsQueueSupport {
         var ids: [UUID] = []
         for selector in selectors {
             let id: UUID
-            if let number = Int(selector) {
+            // Eine Kurz-ID kann nur aus Ziffern bestehen („02476228“, rund 2 % der
+            // IDs). Passt die Angabe genau auf einen offenen Auftrag, gilt sie als
+            // ID, sonst als Nummer (WM8-119). Nummern ab vier Stellen kommen in
+            // einer Warteschlange praktisch nicht vor.
+            let lowered = selector.lowercased()
+            let idMatches = lowered.count >= 4 ? open.filter { $0.id.uuidString.lowercased().hasPrefix(lowered) } : []
+            if Int(selector) != nil, idMatches.count == 1 {
+                id = idMatches[0].id
+            } else if let number = Int(selector) {
                 guard number >= 1, number <= open.count else {
                     return .failure(.init(message: "Nr. \(number) gibt es nicht (offen: \(open.count)). `chats queue <ref>` zeigt die Nummern."))
                 }
                 id = open[number - 1].id
             } else {
-                let needle = selector.lowercased()
-                guard needle.count >= 4 else {
+                guard lowered.count >= 4 else {
                     return .failure(.init(message: "„\(selector)“ ist zu kurz: Nummer oder mindestens vier Zeichen der ID."))
                 }
-                let matches = open.filter { $0.id.uuidString.lowercased().hasPrefix(needle) }
+                let matches = idMatches
                 guard matches.count == 1 else {
                     return .failure(.init(message: matches.isEmpty
                         ? "Kein offener Auftrag mit der ID „\(selector)“ (schon zugestellt oder storniert?)."

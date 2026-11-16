@@ -37,6 +37,10 @@ Run `scripts/setup-codesign-cert.sh` once for a persistent local signing identit
 ad-hoc signing re-prompts for permissions on every rebuild.
 
 Tests: `swift test` (with `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`).
+Before every `swift build` or `swift test`, run `scripts/wait-for-build-slot.sh`: it waits until no build or test
+run is active on the machine (process names `swift-build`, `swift-test`, `swift-package`, `xctest`; with Xcode,
+`swift-test` is a link to `swift-package`) and gives up after 10 minutes with exit 1. Only one build at a time
+fits into memory when several chats work in parallel (WM8-119).
 An isolated test instance with its own bundle ID, data folder and socket: `scripts/test-instance.sh`
 (see [features/ui-testing.md](features/ui-testing.md)).
 

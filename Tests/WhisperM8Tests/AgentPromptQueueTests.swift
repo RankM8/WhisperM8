@@ -321,8 +321,14 @@ final class ChatsQueueSupportTests: XCTestCase {
 
     // MARK: dequeue einzeln (WM8-64)
 
+    /// Feste IDs: Mit Zufalls-UUIDs bestand der Präfix in rund 2 % der Läufe
+    /// nur aus Ziffern und wurde als Nummer gelesen (WM8-119).
     private func open(_ count: Int) -> [QueuedPrompt] {
-        (0..<count).map { _ in make(.pending) }
+        (0..<count).map { index in
+            var prompt = make(.pending)
+            prompt.id = UUID(uuidString: String(format: "A%07X-0000-4000-8000-000000000000", index + 1))!
+            return prompt
+        }
     }
 
     func testPendingLineShowsShortID() {
@@ -339,6 +345,23 @@ final class ChatsQueueSupportTests: XCTestCase {
                        [prompts[2].id, prompts[0].id], "doppelt genannt zählt einmal")
         XCTAssertEqual(try ChatsQueueSupport.resolveSelectors([prompts[0].id.uuidString], open: prompts).get(),
                        [prompts[0].id])
+    }
+
+    /// Kurz-ID nur aus Ziffern (WM8-119): „Nr. 2476228 gibt es nicht“ bei der
+    /// Kurz-ID 02476228. Passt sie auf genau einen Auftrag, gilt sie als ID.
+    func testAllDigitShortIDResolvesAsID() {
+        var digits = make(.pending)
+        digits.id = UUID(uuidString: "02476228-1111-4111-8111-111111111111")!
+        let prompts = open(2) + [digits]
+        XCTAssertEqual(try ChatsQueueSupport.resolveSelectors(["02476228"], open: prompts).get(), [digits.id])
+        XCTAssertEqual(try ChatsQueueSupport.resolveSelectors(["0247"], open: prompts).get(), [digits.id])
+        // Kurze Nummern bleiben Nummern, auch wenn eine ID so beginnt.
+        XCTAssertEqual(try ChatsQueueSupport.resolveSelectors(["3"], open: prompts).get(), [digits.id])
+        XCTAssertEqual(try ChatsQueueSupport.resolveSelectors(["1"], open: prompts).get(), [prompts[0].id])
+        // Ziffern ohne passende ID: Nummer, und die gibt es nicht.
+        guard case .failure = ChatsQueueSupport.resolveSelectors(["12345678"], open: prompts) else {
+            return XCTFail("12345678 passt weder als ID noch als Nummer")
+        }
     }
 
     func testCancelledLinesNameShortIDAndHead() {

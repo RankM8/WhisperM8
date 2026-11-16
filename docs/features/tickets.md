@@ -50,7 +50,9 @@ Tickets ändern, gibt es nicht. Stufe 1: [`../plans/ticket-board.md`](../plans/t
 | Einrichten und prüfen | `tickets setup`, `tickets doctor` |
 
 Jeder Befehl kennt `--json`; schreibende Befehle antworten dann mit `{"ok": true, "key": …, "message": …}`,
-`doctor` schreibt seinen Bericht immer nach stdout. Wer welchen Status setzt und wie Chats und Supervisor damit arbeiten, steht im
+`doctor` schreibt seinen Bericht immer nach stdout. `tickets link <Ticket> --chat <ID>` direkt nach `chats new`
+findet den neuen Chat auch, bevor die App ihn gespeichert hat: Findet es eine ID (hex, ab vier Zeichen) nicht, liest
+es bei laufender App bis zu zehnmal je Sekunde neu (WM8-119). Wer welchen Status setzt und wie Chats und Supervisor damit arbeiten, steht im
 Skill `tickets` (`WhisperM8/Resources/whisperm8-tickets-skill.md`) und im Jarvis-Skill, Abschnitt 11.
 
 ## So arbeitet dieses Projekt

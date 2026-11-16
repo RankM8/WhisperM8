@@ -1009,7 +1009,9 @@ dafür sicherer.
   sobald vorn ein Auftrag zugestellt wird. Aufgelöst wird gegen die gerade
   gelesene Liste, storniert dann nur genau diese IDs; ein inzwischen neu
   vorgemerkter Auftrag geht nie mit. Passt eine Angabe nicht (Nummer zu groß,
-  ID unbekannt oder mehrdeutig), wird nichts storniert (Exit 3). Die Ausgabe
+  ID unbekannt oder mehrdeutig), wird nichts storniert (Exit 3). Eine Kurz-ID
+  nur aus Ziffern (`02476228`) gilt als ID, sobald sie ab vier Zeichen auf genau
+  einen offenen Auftrag passt; sonst als Nummer (WM8-119). Die Ausgabe
   nennt je storniertem Auftrag Kurz-ID und Textanfang (JSON `items`).
   `--all` und `--id <UUID>` bleiben.
 - **Postfach mit Alter (WM8-71).** `chats queue` nennt je Chat die älteste
@@ -1030,7 +1032,9 @@ dafür sicherer.
 - **Fester Name je Claude-Chat (2b).** Die App startet Claude-Chats im Vordergrund mit `claude --name <name>`
   (Hintergrund-Chats und das Anhängen an einen Hintergrund-Lauf bekommen keinen Namen): Kopf des Titels bis
   „·“ oder „:“ als Kürzel (höchstens 24 Zeichen), dazu acht Zeichen der Chat-ID (`gus-f0d79f2c`); ein
-  Platzhalter wie „Neue Session“ oder „Claude Chat“ ergibt `chat-<id>`. Nur ab Claude Code 2.1.325 (gemessen, auch mit `--resume`) und nur bei bekannter Version;
+  Platzhalter wie „Neue Session“ oder „Claude Chat“ ergibt `chat-<id>`. Supervisor-Chats („Jarvis: Supervisor
+  <Projekt>“) tragen das Projekt mit (`jarvis-whisperm8-a37d241b`, WM8-119): Vorher hießen alle `jarvis-…`, und
+  ein Chat aus einem anderen Projekt fand per Name den falschen Supervisor. Gilt ab dem nächsten Start. Nur ab Claude Code 2.1.325 (gemessen, auch mit `--resume`) und nur bei bekannter Version;
   Notbremse `claudeNativeNameEnabled`. Ein `--name` aus den Einstellungen gewinnt.
   - Claude schreibt den Namen als `custom-title` in den Verlauf. Die Titel-Übernahme übergeht ihn
     (`NativeSessionTitle`, per Chat-ID und Namensmuster `kopf-1a2b3c4d`, das auch einen vom Abzweig

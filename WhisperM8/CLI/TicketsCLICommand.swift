@@ -514,6 +514,8 @@ struct TicketsCLIEnvironment {
     var readData: (_ path: String, _ limit: Int) -> Data?
     var fileExists: (String) -> Bool
     var now: () -> Date
+    /// Warten zwischen zwei Versuchen (`tickets link` nach `chats new`); Tests zählen nur.
+    var sleep: (TimeInterval) async -> Void = { try? await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) }
 
     static var live: TicketsCLIEnvironment {
         let configStore = TicketConfigStore.live
