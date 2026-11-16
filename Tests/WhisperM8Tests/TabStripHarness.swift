@@ -150,14 +150,14 @@ struct TabStripFixture {
     let sessions: [UUID: AgentChatSession]
     let projects: [UUID: AgentProject]
     let active: [UUID]
-    let shopTabs: [UUID]
+    let deal: [UUID]
     let singles: [UUID]
     let wsActive = AgentTabGroupingKey.workspace(UUID())
-    let wsShop = AgentTabGroupingKey.workspace(UUID())
+    let wsDeal = AgentTabGroupingKey.workspace(UUID())
 
     init() {
         let wm8 = AgentProject(name: "whisperm8", path: "/tmp/whisperm8", color: "#3D6DF2", createdManually: true)
-        let shop = AgentProject(name: "shop-backend", path: "/tmp/shop-backend", color: "#E8590C", createdManually: true)
+        let lm8 = AgentProject(name: "ListM8", path: "/tmp/ListM8", color: "#E8590C", createdManually: true)
         let store = AgentSessionRuntimeStatusStore()
         self.store = store
         func chat(_ title: String, _ project: AgentProject, _ status: AgentSessionRuntimeStatus) -> AgentChatSession {
@@ -169,21 +169,21 @@ struct TabStripFixture {
                       chat("WM8-12 Vic · Neustart ohne Verlust", wm8, .awaitingInput),
                       chat("WM8-75 Fin · Diktat: Enter", wm8, .working),
                       chat("Jarvis: Supervisor WhisperM8", wm8, .idle)]
-        let shopTabs = [chat("1 Una · Rechnungen exportieren", shop, .idle), chat("2 Pia · Warenkorb: Rabatt", shop, .working),
-                        chat("3 Kit · Suche: Filter", shop, .idle), chat("4 Ben · Fix: Versandkosten", shop, .idle),
-                        chat("5 Max · Export: CSV-Spalten", shop, .idle)]
+        let deal = [chat("1 Una · Feedback: Wünsche", lm8, .idle), chat("2 Pia · Linear: Feedback", lm8, .working),
+                    chat("3 Kit · Kurs: Übersicht", lm8, .idle), chat("4 Ben · Fix: Exportierte Leads", lm8, .idle),
+                    chat("5 Max · MCP: Kampagnen", lm8, .idle)]
         let singles = (1...9).map { chat("WM8-\($0 + 80) Tab\($0) · Einzelner Chat Nummer \($0)", wm8, .idle) }
-        self.sessions = Dictionary(uniqueKeysWithValues: (active + shopTabs + singles).map { ($0.id, $0) })
-        self.projects = [wm8.id: wm8, shop.id: shop]
+        self.sessions = Dictionary(uniqueKeysWithValues: (active + deal + singles).map { ($0.id, $0) })
+        self.projects = [wm8.id: wm8, lm8.id: lm8]
         self.active = active.map(\.id)
-        self.shopTabs = shopTabs.map(\.id)
+        self.deal = deal.map(\.id)
         self.singles = singles.map(\.id)
     }
 
     var selected: UUID { active[3] }
 
     var items: [AgentTabGroupingItem] {
-        [.group(key: wsActive, sessionIDs: active), .group(key: wsShop, sessionIDs: shopTabs)]
+        [.group(key: wsActive, sessionIDs: active), .group(key: wsDeal, sessionIDs: deal)]
             + singles.map { .single($0) }
     }
 
@@ -191,7 +191,7 @@ struct TabStripFixture {
     /// Workspace „WM8 Aktiv“ und wandert in dessen Gruppe.
     var regroupedItems: [AgentTabGroupingItem] {
         let moved = singles[2]
-        return [.group(key: wsActive, sessionIDs: active + [moved]), .group(key: wsShop, sessionIDs: shopTabs)]
+        return [.group(key: wsActive, sessionIDs: active + [moved]), .group(key: wsDeal, sessionIDs: deal)]
             + singles.filter { $0 != moved }.map { .single($0) }
     }
 
@@ -200,7 +200,7 @@ struct TabStripFixture {
             items: items,
             sessions: sessions,
             projects: projects,
-            groupMeta: [wsActive: ("WM8 Aktiv", "#7C5CFF"), wsShop: ("Shop-Admin", "#9E73F2")],
+            groupMeta: [wsActive: ("WM8 Aktiv", "#7C5CFF"), wsDeal: ("DealSupply", "#9E73F2")],
             selected: selected,
             store: store,
             probe: probe)
