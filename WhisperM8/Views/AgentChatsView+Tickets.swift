@@ -14,6 +14,11 @@ extension AgentChatsView {
     /// einen Chat aus einem anderen Projekt wählen): Das Projekt folgt dem
     /// gewählten Chat, und sein Subagent-Ergebnis gilt als gelesen.
     func ticketsModeChanged(_ active: Bool) {
+        // Tickets zu (L2, „Zu den Chats“, Maus): Auswahl im Kopf weg, damit sie
+        // beim Zurückkommen nicht mit einem alten Knopf wieder dasteht (WM8-91).
+        if !active, TicketBoardControllers.shared.hasController(for: windowID) {
+            TicketBoardControllers.shared.controller(for: windowID).viewModel.leaveHeader()
+        }
         syncActiveAgentChat()
         if active { refreshTicketTeams() }
         controllerLegendMayHaveChanged()

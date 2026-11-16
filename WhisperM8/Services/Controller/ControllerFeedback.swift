@@ -212,6 +212,10 @@ final class ControllerFeedback {
         let dispatcher = dispatcher
         inputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown]) { event in
             MainActor.assumeIsolated {
+                // Ein Klick räumt die Auswahl im Kopf des Ticket-Boards (WM8-91).
+                // Nur die Maus: Die Tastatur bedient den Kopf selbst (Pfeile,
+                // Return, Esc), jeder Tastendruck räumte ihn sonst gleich wieder.
+                if event.type != .keyDown { TicketBoardControllers.shared.leaveHeaders() }
                 guard ui.area == .list || ui.menu != nil || dispatcher.islandState != nil
                     || ui.boardChatFocus != nil else { return }
                 // Die Insel per Tastatur (⌥Tab) bedient ihr eigener Monitor,

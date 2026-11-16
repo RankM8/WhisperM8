@@ -320,6 +320,21 @@ final class TicketBoardControllers {
     }
 
     func hasController(for windowID: UUID) -> Bool { byWindow[windowID] != nil }
+
+    /// Die Maus greift ein (WM8-91, Folgepunkt der Prüferin zu Paket 3d):
+    /// Auswahl im Kopf und offene Liste der Bereiche weg, in jedem Fenster.
+    /// Sonst blieben Ring und Liste stehen, und ein späteres Kreuz wirkte auf
+    /// den alten Knopf, im ungünstigsten Fall „← Chats“. Kosten: ein Blick je
+    /// Fenster (es gibt wenige).
+    func leaveHeaders() {
+        Self.leaveHeaders(byWindow.values.map(\.viewModel))
+    }
+
+    static func leaveHeaders(_ models: [TicketBoardViewModel]) {
+        for model in models where model.headerFocus != nil || model.projectPickerIndex != nil {
+            model.leaveHeader()
+        }
+    }
 }
 
 // MARK: - Ansicht
