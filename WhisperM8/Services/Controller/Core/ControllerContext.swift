@@ -87,6 +87,12 @@ struct ControllerChatState: Equatable, Sendable {
     /// man nach dem Sprung noch gar nicht gesehen hat. Halten (unterbrechen) und
     /// L1 + Kreis sind davon nicht berührt.
     var jumpedToEndJustNow: Bool = false
+    /// Seit wann der Controller diesen Chat geöffnet hat (WM8-91): „Zum Chat“
+    /// am Ticket, L2 getippt, „Wohin“, „Zu den Chats“. `nil`, wenn er nicht so
+    /// hierher kam. Kreuz und Kreis warten dann `arrivalLock` ab: Ein zweites,
+    /// schnell nachgedrücktes Kreuz bestätigte sonst eine Freigabe, die schon
+    /// lange offen ist (WM8-67, 75, 107).
+    var secondsSinceControllerArrival: TimeInterval?
 
     /// Tasten, die ins Terminal schreiben, wirken nur bei lebendem Chat.
     var acceptsKeys: Bool { status != .ended && hasTerminal }

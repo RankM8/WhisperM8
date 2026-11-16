@@ -225,7 +225,8 @@ extension UISnapshotGallery {
             Fixture(name: "tickets-triage-schmal", size: CGSize(width: 760, height: 640)) {
                 view { $0.openFromLane("WM8-81"); $0.setComments(.loaded(comments), ticketID: "id-81") }
             },
-        ] + ticketEmptyStateFixtures()
+        ] + ticketEmptyStateFixtures() + ticketsControllerBoardFixtures(
+            view: { configure in view(configure) }, comments: comments)
     }
 
     /// Was die Ansicht zeigt, solange es kein Board gibt.

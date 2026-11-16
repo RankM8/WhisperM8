@@ -91,7 +91,7 @@ struct TicketBoardView: View {
         switch model.mode {
         case .board:
             TicketBoardLanesView(lanes: presentation.lanes, rule: presentation.rule, selectedKey: model.selectedKey,
-                                 source: source, open: { model.openFromLane($0) })
+                                 source: source, open: { model.openFromLane($0) }, moreColumn: model.moreColumn)
         case .list:
             TicketBacklogListView(groups: presentation.groups, selectedKey: model.selectedKey, source: source) {
                 model.openFromList($0)

@@ -58,6 +58,14 @@ enum ControllerMenuItem: String, CaseIterable, Sendable {
     /// Archiv der Seitenleiste zeigen bzw. verlassen, wie der Archiv-Knopf
     /// unten (Insel-Paket: von R1 + ▼ hierher gewandert).
     case archiveMode
+    // Ticket am Board (WM8-91, Menü-Karte am Ticket)
+    /// Zweite Ebene: Chats am gewählten Ticket, Kreuz wechselt dorthin.
+    case ticketChat
+    case ticketCopyLink, ticketOpenInLinear
+    // Board
+    /// Filter „Wartet auf mich“ an/aus.
+    case boardWaitingFilter
+    case boardCopyList, boardRefresh
     // Steuerung
     /// Ticket-Board des Projekts dieses Chats öffnen (WM8-91), nur außerhalb
     /// der Tickets und nur, wenn das Projekt ein Team hat.
@@ -70,7 +78,7 @@ enum ControllerMenuItem: String, CaseIterable, Sendable {
 
     /// Gruppen in der Reihenfolge des Menüs.
     enum Group: Int, CaseIterable, Sendable {
-        case input, chat, project, workspace, lifecycle, controller
+        case input, chat, project, workspace, lifecycle, ticket, board, controller
     }
 
     /// Feste Gruppe. „Zu Workspace hinzufügen“ und „In neues Fenster“ stehen
@@ -83,6 +91,8 @@ enum ControllerMenuItem: String, CaseIterable, Sendable {
         case .removeFromWorkspace, .addToWorkspace, .toggleTileNote, .moveToNewWindow,
              .renameWorkspace, .gridCapacity: return .workspace
         case .restart, .backgroundLogs, .backgroundStop, .backgroundRestart, .stopJob: return .lifecycle
+        case .ticketChat, .ticketCopyLink, .ticketOpenInLinear: return .ticket
+        case .boardWaitingFilter, .boardCopyList, .boardRefresh: return .board
         case .toggleNotes, .archiveMode, .ticketBoard, .backToChats, .clipboardHistory, .showBindings, .pause:
             return .controller
         }
@@ -100,6 +110,7 @@ enum ControllerMenuItem: String, CaseIterable, Sendable {
     /// Öffnet eine zweite Ebene statt etwas auszuführen.
     var opensSubmenu: Bool {
         self == .commands || self == .switchAccount || self == .addToWorkspace || self == .gridCapacity
+            || self == .ticketChat
     }
 }
 
@@ -264,6 +275,8 @@ struct ControllerMenuSetup: Equatable, Sendable {
     var ticketBoard: ControllerTicketBoardTarget?
     /// Das Fenster zeigt die Tickets (WM8-91).
     var ticketsShown = false
+    /// Gewähltes Ticket und Board, für die Menü-Karte am Ticket (WM8-91).
+    var ticket: ControllerTicketMenuInfo?
 }
 
 /// Das Options-Menü mit zweiter Ebene (Befehle, Konten, Workspaces). Pur.
@@ -275,6 +288,8 @@ struct ControllerMenuModel: Equatable, Sendable {
         case workspaces(ControllerListMenu<String>)
         /// „Rastergröße“: `ControllerCapacityChoice.id`.
         case capacities(ControllerListMenu<String>)
+        /// „Zum Chat ›“ am Ticket: Chat-IDs (WM8-91).
+        case ticketChats(ControllerListMenu<String>)
     }
 
     /// Sonder-Einträge unter den Konten (Runde 5): nur, solange ein Wechsel
@@ -372,7 +387,12 @@ struct ControllerMenuModel: Equatable, Sendable {
         case .stopJob: return chat?.canStopJob == true
         case .ticketBoard: return setup.ticketBoard != nil && !setup.ticketsShown
         case .backToChats: return setup.ticketsShown
-        case .archiveMode, .clipboardHistory, .showBindings, .pause: return true
+        case .ticketChat, .ticketCopyLink, .ticketOpenInLinear:
+            return setup.ticketsShown && setup.ticket?.key != nil
+        case .boardWaitingFilter, .boardCopyList, .boardRefresh: return setup.ticketsShown && setup.ticket != nil
+        // Das Archiv gehört zur Seitenleiste der Chats, nicht zum Board.
+        case .archiveMode: return !setup.ticketsShown
+        case .clipboardHistory, .showBindings, .pause: return true
         }
     }
 
@@ -388,6 +408,14 @@ struct ControllerMenuModel: Equatable, Sendable {
         }
         guard item.group != .controller else {
             return item == .ticketBoard || item == .backToChats ? isVisible(item, setup: setup) : true
+        }
+        if item.group == .ticket || item.group == .board {
+            guard isVisible(item, setup: setup), let ticket = setup.ticket else { return false }
+            switch item {
+            case .ticketChat: return !ticket.chats.isEmpty
+            case .ticketOpenInLinear: return ticket.hasURL
+            default: return true
+            }
         }
         guard let chat = setup.chat, setup.sessionID != nil else { return false }
         switch item {
@@ -437,6 +465,9 @@ struct ControllerMenuModel: Equatable, Sendable {
         case var .capacities(list):
             list.move(step)
             submenu = .capacities(list)
+        case var .ticketChats(list):
+            list.move(step)
+            submenu = .ticketChats(list)
         case nil:
             top.move(step)
         }
@@ -479,6 +510,10 @@ struct ControllerMenuModel: Equatable, Sendable {
             let current = choices.first(where: \.isCurrent)?.id
             submenu = .capacities(ControllerListMenu(
                 entries: choices.map { .init(id: $0.id, enabled: $0.isChoosable) }, start: current))
+        case .ticketChat:
+            let chats = setup.ticket?.chats ?? []
+            guard !chats.isEmpty else { return false }
+            submenu = .ticketChats(ControllerListMenu(entries: chats.map { .init(id: $0.id.uuidString, enabled: true) }))
         default:
             return false
         }

@@ -2,7 +2,8 @@ import SwiftUI
 
 extension ControllerMenuItem {
     func title(
-        chat: ControllerChatActionInfo?, archiveModeActive: Bool = false, ticketBoard: ControllerTicketBoardTarget? = nil
+        chat: ControllerChatActionInfo?, archiveModeActive: Bool = false, ticketBoard: ControllerTicketBoardTarget? = nil,
+        ticket: ControllerTicketMenuInfo? = nil
     ) -> String {
         switch self {
         case .continueWork: return String(localized: "Send “Continue”")
@@ -49,6 +50,14 @@ extension ControllerMenuItem {
             return archiveModeActive ? String(localized: "Leave archive") : String(localized: "Show archive")
         case .ticketBoard:
             return ticketBoard.map { String(localized: "Ticket board \($0.team)") } ?? String(localized: "Ticket board")
+        case .ticketChat: return String(localized: "Go to chat")
+        case .ticketCopyLink: return String(localized: "Copy link")
+        case .ticketOpenInLinear: return String(localized: "Open in Linear")
+        case .boardWaitingFilter:
+            return ticket?.waitingFilterOn == true
+                ? String(localized: "Show all tickets") : String(localized: "Only “Waiting for me”")
+        case .boardCopyList: return String(localized: "Copy list")
+        case .boardRefresh: return String(localized: "Refresh")
         case .backToChats: return String(localized: "Back to chats")
         case .clipboardHistory: return String(localized: "Clipboard history")
         case .showBindings: return String(localized: "Show button layout")
@@ -59,7 +68,7 @@ extension ControllerMenuItem {
     /// Kurzer Hinweis rechts: was in den Chat geht, oder dass eine zweite Ebene folgt.
     var hint: String? {
         switch self {
-        case .commands, .switchAccount, .addToWorkspace, .gridCapacity: return "›"
+        case .commands, .switchAccount, .addToWorkspace, .gridCapacity, .ticketChat: return "›"
         case .cycleMode: return "⇧⇥"
         default: return nil
         }
@@ -68,8 +77,12 @@ extension ControllerMenuItem {
 
 extension ControllerMenuItem.Group {
     /// Überschrift der Gruppe in der Menü-Karte.
-    func heading(chat: ControllerChatActionInfo?) -> String {
+    func heading(chat: ControllerChatActionInfo?, ticket: ControllerTicketMenuInfo? = nil) -> String {
         switch self {
+        case .ticket:
+            guard let key = ticket?.key else { return String(localized: "Ticket") }
+            return String(localized: "Ticket \(key)")
+        case .board: return String(localized: "Board")
         case .input: return String(localized: "Into the chat")
         case .chat: return String(localized: "Chat")
         case .project: return String(localized: "Project")
@@ -144,6 +157,11 @@ extension ControllerMenuRow {
                     id: choice.id.uuidString, title: choice.name, hint: nil,
                     enabled: list.isEnabled(choice.id.uuidString))
             }
+        case .ticketChats(let list):
+            return (menu.setup.ticket?.chats ?? []).map { chat in
+                ControllerMenuRow(id: chat.id.uuidString, title: chat.title, hint: nil,
+                                  enabled: list.isEnabled(chat.id.uuidString))
+            }
         case .capacities(let list):
             let choices = menu.setup.chat?.shownInWorkspace?.capacities ?? []
             return choices.map { choice in
@@ -158,9 +176,9 @@ extension ControllerMenuRow {
                 ControllerMenuRow(
                     id: entry.id.rawValue, title: entry.id.title(
                         chat: menu.setup.chat, archiveModeActive: menu.setup.archiveModeActive,
-                        ticketBoard: menu.setup.ticketBoard), hint: entry.id.hint,
+                        ticketBoard: menu.setup.ticketBoard, ticket: menu.setup.ticket), hint: entry.id.hint,
                     enabled: entry.enabled, startsGroup: menu.startsGroup(entry.id),
-                    groupHeading: menu.groupStart(entry.id)?.heading(chat: menu.setup.chat))
+                    groupHeading: menu.groupStart(entry.id)?.heading(chat: menu.setup.chat, ticket: menu.setup.ticket))
             }
         }
     }
@@ -193,7 +211,8 @@ extension ControllerMenuRow {
     /// Markierte Zeile, je nach Ebene.
     static func selectedID(of menu: ControllerMenuModel) -> String? {
         switch menu.submenu {
-        case .commands(let list), .accounts(let list), .workspaces(let list), .capacities(let list):
+        case .commands(let list), .accounts(let list), .workspaces(let list), .capacities(let list),
+             .ticketChats(let list):
             return list.selected
         case nil: return menu.selected?.rawValue
         }
@@ -206,6 +225,7 @@ extension ControllerMenuRow {
         case .accounts: return String(localized: "Account · 5 h · week")
         case .workspaces: return String(localized: "Add to workspace")
         case .capacities: return String(localized: "Grid size")
+        case .ticketChats: return String(localized: "Go to chat")
         case nil: return menu.setup.chat?.title ?? fallback ?? String(localized: "Menu")
         }
     }

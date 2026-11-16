@@ -111,8 +111,16 @@ final class TicketBoardViewModel {
         didSet { if filter != oldValue { rebuild() } }
     }
     var selectedKey: String? {
-        didSet { if selectedKey != oldValue { refreshSelection() } }
+        didSet {
+            if selectedKey != oldValue { refreshSelection() }
+            // Eine Karte gewählt (Maus, Tastatur, Controller): weg von „N weitere“ (WM8-91).
+            if moreColumn != nil, selectedKey != nil { moreColumn = nil }
+        }
     }
+    /// Controller (WM8-91): Die Auswahl steht auf „N weitere“ dieser Spalte.
+    var moreColumn: String?
+    /// Controller (WM8-91): Fokus in der Triage, Liste oder Chat-Zeile.
+    var triageFocus: TicketTriageFocus = .list
 
     private(set) var presentation: TicketBoardPresentation = .empty
     /// Eckdaten des gewählten Tickets (Eigenschaften, Chats, Adresse).
@@ -200,6 +208,8 @@ final class TicketBoardViewModel {
     /// Setzt die Triage; Auswahl, Kommentare und Text folgen.
     func setTriage(_ fresh: TicketTriage?) {
         guard fresh != triage else { return }
+        // Anderes Ticket oder Triage zu: Der Fokus geht zurück in die Liste.
+        if fresh?.current != triage?.current, triageFocus != .list { triageFocus = .list }
         triage = fresh
         if let fresh { selectedKey = fresh.current }
         refreshTriageTicket()

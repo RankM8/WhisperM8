@@ -4,6 +4,20 @@ import Foundation
 // Pur, nur Foundation: Was der Controller über das Board wissen muss und wie
 // die Zeilen im Reiter „Tickets“ der Insel entstehen.
 
+/// Was die Ticket-Ansicht gerade zeigt (WM8-91, Paket 2).
+enum ControllerTicketView: String, Sendable {
+    /// Noch kein Stand, kein Team, kein Zugang: nichts zu bedienen.
+    case empty
+    /// Spalten nach Status.
+    case board
+    /// Modus Liste (nach Projekt).
+    case list
+    /// Ticket groß, Fokus in der Liste links.
+    case triage
+    /// Ticket groß, Fokus auf einer Zeile unter „Chats am Ticket“.
+    case chatLine
+}
+
 /// Das Board, das ein Fenster gerade zeigt. Steht im Schnappschuss des
 /// Fensters nur, solange es die Tickets zeigt.
 struct ControllerTicketsPlace: Equatable, Sendable {
@@ -14,6 +28,19 @@ struct ControllerTicketsPlace: Equatable, Sendable {
     var team: String?
     /// Name des Projekts, falls es kein Team gibt.
     var projectName: String?
+    var view: ControllerTicketView = .empty
+    /// Auf der Chat-Zeile: Titel des Chats, zu dem Kreuz führt; `nil`, wenn
+    /// der Chat nicht auf diesem Rechner läuft (dann geht „Zum Chat“ nicht).
+    var chatLineTitle: String?
+    /// Auf der Chat-Zeile: der Chat, zu dem Kreuz führt (für die
+    /// Ankunftssperre im Ziel).
+    var chatLineChatID: UUID?
+    /// Chat, der hinter den Tickets gewählt ist; „Zu den Chats“ zeigt ihn.
+    var chatBehind: UUID?
+    /// Ein Ticket ist gewählt (Karte, Zeile oder groß).
+    var hasTicket = false
+    /// Das gewählte Ticket hat Chats (▶ in der Triage führt dorthin).
+    var ticketHasChats = false
 
     /// Was Leiste und Insel nach „Tickets · “ nennen.
     var label: String? { team ?? projectName }
@@ -107,4 +134,73 @@ struct ControllerTicketBoards: Equatable, Sendable {
 struct ControllerTicketBoardTarget: Equatable, Sendable {
     var projectID: UUID
     var team: String
+}
+
+/// Was der Controller im Ticket-Board auslöst. Nichts davon schreibt nach
+/// Linear oder in einen Chat; „Zum Chat“ wechselt nur sichtbar dorthin.
+enum ControllerTicketCommand: Equatable, Sendable {
+    /// Stick, Steuerkreuz: Auswahl, Liste der Triage, Chat-Zeile.
+    case move(ControllerDirection)
+    /// Kreuz: Ticket groß bzw. auf der Chat-Zeile „Zum Chat“.
+    case open
+    /// Kreis in der Triage: zurück zum Board, von der Chat-Zeile in die Liste.
+    case back
+    /// L1/R1: voriges oder nächstes Ticket.
+    case adjacent(Int)
+    case copyLink
+    case openInLinear
+    /// R3: wie ↻ im Kopf, einmal je Druck.
+    case refresh
+    /// Rechter Stick in der Triage: Beschreibung und Verlauf blättern.
+    case scroll(lines: Int)
+    /// Menü: Filter „Wartet auf mich“ an/aus, Liste kopieren.
+    case toggleWaitingFilter
+    case copyList
+    /// Menü „Zum Chat ›“: dieser Chat am gewählten Ticket.
+    case goToChat(UUID)
+    /// R2 ohne Board-Chat (E4): „geht nicht“ und einmal der Grund in der
+    /// Leiste. Kein Diktat, nichts an einen Chat.
+    case dictationUnavailable
+}
+
+extension ControllerTicketCommand {
+    /// Board oder Triage handeln: Der Tastaturfokus muss vorher aus dem
+    /// Terminal des Board-Chats zurück ans Fenster (WM8-113), sonst landeten
+    /// spätere Esc, J oder ⌘C der Tastatur bei Jarvis. „Zum Chat“ verlässt das
+    /// Board und braucht das nicht.
+    var actsOnBoard: Bool {
+        if case .goToChat = self { return false }
+        return true
+    }
+}
+
+/// Was ein Befehl bewirkt hat.
+enum ControllerTicketOutcome: Equatable, Sendable {
+    case done
+    /// Am Rand oder ohne Wirkung, still (etwa ▲ auf der obersten Karte).
+    case nothing
+    /// Geht hier nicht: „geht nicht“.
+    case rejected
+    /// Links aus der ersten Spalte oder der Liste: weiter in die Seitenleiste.
+    case leftEdge
+}
+
+/// Angaben für die Menü-Karte am Ticket (Options im Board).
+struct ControllerTicketMenuInfo: Equatable, Sendable {
+    struct Chat: Equatable, Sendable {
+        var id: UUID
+        var title: String
+    }
+
+    /// Ticket-Nummer für die Überschrift; `nil` ohne gewähltes Ticket.
+    var key: String?
+    /// Chats am Ticket, die auf diesem Rechner laufen.
+    var chats: [Chat] = []
+    var hasURL = false
+    var waitingFilterOn = false
+}
+
+/// Kurze Bestätigung in der Leiste nach einer Taste im Ticket-Board.
+enum ControllerTicketNotice: String, Sendable {
+    case linkCopied, listCopied, refreshing, dictationNeedsBoardChat
 }

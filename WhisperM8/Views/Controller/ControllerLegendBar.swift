@@ -11,7 +11,9 @@ struct ControllerLegendTarget: Equatable {
     var tone: Tone
 
     /// Ziel aus dem Zusammenhang der letzten Eingabe.
-    static func make(context: ControllerContext, chatTitle: String?) -> ControllerLegendTarget {
+    static func make(
+        context: ControllerContext, chatTitle: String?, ticketNotice: ControllerTicketNotice? = nil
+    ) -> ControllerLegendTarget {
         let title = chatTitle ?? String(localized: "No chat selected")
         switch context {
         case .paused:
@@ -35,8 +37,9 @@ struct ControllerLegendTarget: Equatable {
         case .list:
             return .init(title: String(localized: "List"), detail: nil, tone: .neutral)
         case let .tickets(state):
-            // Statt des Chats der Ort (WM8-91): „Tickets · WM8“.
-            return .init(title: ControllerTicketsText.placeTitle(state.place.label), detail: nil, tone: .neutral)
+            // Statt des Chats der Ort (WM8-91): „Tickets · WM8“, dazu kurz eine Bestätigung.
+            return .init(title: ControllerTicketsText.placeTitle(state.place.label),
+                         detail: ticketNotice.map(ControllerTicketsText.notice), tone: .neutral)
         case let .chat(state):
             switch state.status {
             case .working: return .init(title: title, detail: String(localized: "working"), tone: .working)
@@ -225,7 +228,7 @@ struct ControllerLegendHost: View {
             let context: ControllerContext = status.isPaused ? .paused : (isThisWindow ? model.context : .otherWindow)
             let traits = status.traits
             ControllerLegendBar(
-                target: .make(context: context, chatTitle: model.targetTitle),
+                target: .make(context: context, chatTitle: model.targetTitle, ticketNotice: model.ticketNotice),
                 entries: isThisWindow || status.isPaused ? ControllerLegend.entries(for: context, traits: traits) : [],
                 holdProgress: isThisWindow ? model.holdProgress : nil
             )

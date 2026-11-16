@@ -27,13 +27,15 @@ struct TicketTriageView: View {
                 }
                 VStack(spacing: 0) {
                     TicketTriageBar(model: model, triage: triage, load: load, actions: actions)
+                        .controllerTicketMenuAnchor(active: true)
                     Rectangle().fill(AgentTheme.border).frame(height: 1)
                     HStack(spacing: 0) {
                         TicketTriageText(model: model, ticketKey: triage.current)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
                         Rectangle().fill(AgentTheme.border).frame(width: 1)
                         if let content = model.detail {
-                            TicketTriageProperties(content: content, rule: model.presentation.rule, source: source, actions: actions)
+                            TicketTriageProperties(content: content, rule: model.presentation.rule, source: source, actions: actions,
+                                                   focusedChat: model.focusedChatLine)
                                 .frame(width: Self.propertiesWidth)
                         }
                     }
@@ -257,6 +259,8 @@ private struct TicketTriageProperties: View {
     let rule: TicketTeamRule
     let source: TicketChatStatusSource
     let actions: TicketBoardActions
+    /// Controller (WM8-91): fokussierte Zeile unter „Chats am Ticket“.
+    var focusedChat: Int? = nil
 
     private var entry: TicketBoardEntry { content.entry }
     private var ticket: Ticket { entry.ticket }
@@ -303,13 +307,16 @@ private struct TicketTriageProperties: View {
                         if content.agents.isEmpty, !entry.isHandedOver {
                             Text("No chat").foregroundStyle(AgentTheme.textSecondary)
                         }
-                        ForEach(content.agents) { line in
-                            TicketAgentRow(entry: line.entry, source: source)
-                            if let since = line.since {
-                                Text("since \(TicketBoardText.since(since))")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(AgentTheme.textSecondary)
+                        ForEach(Array(content.agents.enumerated()), id: \.element.id) { index, line in
+                            VStack(alignment: .leading, spacing: 2) {
+                                TicketAgentRow(entry: line.entry, source: source)
+                                if let since = line.since {
+                                    Text("since \(TicketBoardText.since(since))")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(AgentTheme.textSecondary)
+                                }
                             }
+                            .ticketChatLineFocus(focusedChat == index)
                         }
                         if entry.isHandedOver {
                             // Wie auf der Karte: abgegeben heißt, es wartet auf den nächsten Schritt (Merge).

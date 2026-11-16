@@ -147,6 +147,37 @@ final class ControllerTicketsWhereToTests: XCTestCase {
         XCTAssertTrue(ControllerMenuModel.isEnabled(.backToChats, setup: setup))
     }
 
+    /// Menü-Karte am Ticket: Gruppen Ticket, Board, Steuerung; das Archiv der
+    /// Seitenleiste fehlt im Board.
+    func testTicketMenuCard() {
+        let vic = ControllerTicketMenuInfo.Chat(id: UUID(), title: "Vic")
+        var setup = ControllerMenuSetup()
+        setup.ticketsShown = true
+        setup.ticket = ControllerTicketMenuInfo(key: "WM8-112", chats: [vic], hasURL: true, waitingFilterOn: false)
+        var model = ControllerMenuModel(setup: setup)
+        XCTAssertEqual(model.top.entries.map(\.id), [
+            .ticketChat, .ticketCopyLink, .ticketOpenInLinear,
+            .boardWaitingFilter, .boardCopyList, .boardRefresh,
+            .backToChats, .clipboardHistory, .showBindings, .pause,
+        ])
+        XCTAssertTrue(model.top.entries.allSatisfy(\.enabled))
+        XCTAssertEqual(model.groupStart(.ticketChat), .ticket)
+        XCTAssertEqual(model.groupStart(.boardWaitingFilter), .board)
+        model.select(.ticketChat)
+        XCTAssertTrue(model.openSubmenu(), "„Zum Chat ›“ zeigt die Chats am Ticket")
+        guard case let .ticketChats(list)? = model.submenu else { return XCTFail("keine Chat-Ebene") }
+        XCTAssertEqual(list.selected, vic.id.uuidString)
+
+        // Ohne Chat auf diesem Rechner und ohne Adresse: aus, aber sichtbar.
+        setup.ticket = ControllerTicketMenuInfo(key: "WM8-112", chats: [], hasURL: false)
+        let bare = ControllerMenuModel(setup: setup)
+        XCTAssertFalse(bare.top.entries.first { $0.id == .ticketChat }!.enabled)
+        XCTAssertFalse(bare.top.entries.first { $0.id == .ticketOpenInLinear }!.enabled)
+        // Ohne gewähltes Ticket nur das Board.
+        setup.ticket = ControllerTicketMenuInfo(key: nil)
+        XCTAssertFalse(ControllerMenuModel(setup: setup).top.entries.contains { $0.id == .ticketCopyLink })
+    }
+
     // MARK: - Leiste
 
     func testLegendNamesTheWayBackAndNoDictation() {
@@ -158,6 +189,30 @@ final class ControllerTicketsWhereToTests: XCTestCase {
         XCTAssertFalse(entries.contains(where: { $0.label == .dictate }), "R2 tut ohne Board-Chat nichts")
         XCTAssertTrue(entries.contains(where: { $0.label == .menu }))
         XCTAssertTrue(entries.contains(where: { $0.label == .layersHold }))
+    }
+
+    /// Board, Triage und Chat-Zeile zeigen ihre eigenen Tasten (Plan, „Die Leiste unten“).
+    func testLegendPerView() {
+        func labels(_ view: ControllerTicketView, chats: Bool = false, chatTitle: String? = nil) -> [ControllerLegendLabel] {
+            var place = ControllerTicketsPlace(projectID: here, team: "WM8")
+            place.view = view
+            place.hasTicket = true
+            place.ticketHasChats = chats
+            place.chatLineTitle = chatTitle
+            return ControllerLegend.entries(for: .tickets(ControllerTicketState(place: place))).map(\.label)
+        }
+        XCTAssertEqual(Array(labels(.board).prefix(7)),
+                       [.ticketSelection, .open, .copyLink, .ticketPreviousNext, .openInLinear, .refresh, .menu])
+        XCTAssertTrue(labels(.triage).contains(.backToBoard))
+        XCTAssertTrue(labels(.triage).contains(.read))
+        XCTAssertFalse(labels(.triage).contains(.chatsOnTicket), "▶ nur, wenn das Ticket Chats hat")
+        XCTAssertTrue(labels(.triage, chats: true).contains(.chatsOnTicket))
+        XCTAssertEqual(labels(.chatLine, chatTitle: "Vic"), [.goToChat, .backToTicketList, .chooseChat])
+        XCTAssertFalse(labels(.chatLine).contains(.goToChat), "Chat auf anderem Rechner: kein „Zum Chat“")
+        for view in [ControllerTicketView.empty, .board, .list, .triage, .chatLine] {
+            XCTAssertFalse(labels(view).contains(.dictate), "\(view): kein Diktat")
+            XCTAssertFalse(labels(view).contains(.send), "\(view): nichts senden")
+        }
     }
 
     // MARK: - Teams aus der Einrichtung

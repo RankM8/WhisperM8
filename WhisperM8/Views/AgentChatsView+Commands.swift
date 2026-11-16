@@ -20,7 +20,9 @@ extension AgentChatsView {
                 chatActionInfo: { controllerChatActionInfo(for: $0) },
                 workspaceChoices: { controllerWorkspaceChoices() },
                 ticketBoards: { controllerTicketBoards() },
-                ticketBoardTarget: { controllerTicketBoardTarget(for: $0) }
+                ticketBoardTarget: { controllerTicketBoardTarget(for: $0) },
+                ticketCommand: { performTicketCommand($0) },
+                ticketMenuInfo: { controllerTicketMenuInfo() }
             )
         )
         refreshTicketTeams()

@@ -7,6 +7,15 @@ extension ControllerBindingResolver {
     /// Kreuz ist nach einer neuen Rückfrage so lange ohne Wirkung, damit ein
     /// Reflex-Druck keine Freigabe erteilt.
     static let confirmLockAfterQuestion: TimeInterval = 0.5
+    /// Sperre für Kreuz und Kreis, nachdem der Controller in den Chat
+    /// gesprungen ist (WM8-91). Länger als die Sperre nach einer Frage: Der
+    /// Wechsel dauert spürbar, ein doppelter Druck ist dort wahrscheinlich.
+    static let arrivalLock: TimeInterval = 1.0
+
+    /// Gerade per Controller hier angekommen: Kreuz und Kreis warten.
+    static func arrivingJustNow(_ state: ControllerChatState) -> Bool {
+        state.secondsSinceControllerArrival.map { $0 < arrivalLock } ?? false
+    }
 
     static func chat(_ gesture: ControllerGesture, state: ControllerChatState) -> ControllerAction? {
         switch gesture {
@@ -165,7 +174,7 @@ extension ControllerBindingResolver {
     /// ist: Zwischen dem Erscheinen eines Freigabe-Dialogs und dem Status
     /// „wartet“ liegt eine Lücke, in der Enter sonst die Vorauswahl bestätigte.
     static func confirmAllowed(_ state: ControllerChatState) -> Bool {
-        guard state.acceptsKeys else { return false }
+        guard state.acceptsKeys, !arrivingJustNow(state) else { return false }
         switch state.status {
         case .awaitingInput:
             if let seconds = state.secondsSinceAwaitingBegan, seconds < confirmLockAfterQuestion { return false }
@@ -233,7 +242,7 @@ extension ControllerBindingResolver {
     /// Direkt nach einem Sprung ans Ende (0,5 s) nie: Ein Doppeldruck auf Kreis
     /// lehnte sonst eine Rückfrage ab, die erst mit dem Sprung sichtbar wurde.
     static func escapeAllowed(_ state: ControllerChatState) -> Bool {
-        if state.jumpedToEndJustNow { return false }
+        if state.jumpedToEndJustNow || arrivingJustNow(state) { return false }
         if viewOpen(state) { return !state.escapeSentJustNow }
         guard state.acceptsKeys, !state.escapeSentRecently else { return false }
         guard state.status == .idle || state.status == .awaitingInput else { return false }

@@ -45,12 +45,14 @@ struct TicketCardView: View {
             .background(isSelected ? AgentTheme.selection : AgentTheme.surface,
                         in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             .overlay {
+                // Gewählt: deutlicher Ring, auch vom Sofa aus zu sehen (WM8-91).
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(isSelected ? AgentTheme.accent : AgentTheme.border, lineWidth: 1)
+                    .strokeBorder(isSelected ? AgentTheme.accent : AgentTheme.border, lineWidth: isSelected ? 2 : 1)
             }
             .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
         .buttonStyle(.plain)
+        .controllerTicketMenuAnchor(active: isSelected)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text(verbatim: TicketBoardText.spoken(entry)))
         .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : [.isButton])
@@ -104,6 +106,8 @@ struct TicketBoardLanesView: View {
     let source: TicketChatStatusSource
     /// Öffnet das Ticket groß (Triage) mit seiner Spalte als Liste.
     let open: (String) -> Void
+    /// Controller (WM8-91): Die Auswahl steht auf „N weitere“ dieser Spalte.
+    var moreColumn: String? = nil
 
     /// Schmaler wird keine Spalte; darunter scrollt das Board waagrecht.
     static let minColumnWidth: CGFloat = 260
@@ -123,7 +127,8 @@ struct TicketBoardLanesView: View {
                             TicketBoardFoldedLaneView(lane: lane)
                                 .frame(width: TicketBoardLanes.foldedWidth)
                         } else {
-                            TicketBoardLaneView(lane: lane, rule: rule, selectedKey: selectedKey, source: source, open: open)
+                            TicketBoardLaneView(lane: lane, rule: rule, selectedKey: selectedKey, source: source, open: open,
+                                                moreFocused: moreColumn == lane.id)
                                 .frame(width: width)
                         }
                     }
@@ -158,11 +163,13 @@ private struct TicketBoardFoldedLaneView: View {
 
 /// Eine Spalte: Status, Zahl, Hinweis „wartet auf dich“ und die Karten.
 private struct TicketBoardLaneView: View {
+    private static let moreID = "ticket-lane-more"
     let lane: TicketBoardLane
     let rule: TicketTeamRule
     let selectedKey: String?
     let source: TicketChatStatusSource
     let open: (String) -> Void
+    var moreFocused = false
 
     var body: some View {
         // Auf dem Board ist eine Spalte nie aufgeklappt: Der Rest steht in der Triage.
@@ -188,6 +195,7 @@ private struct TicketBoardLaneView: View {
                         .foregroundStyle(AgentTheme.statusAwaiting)
                 }
             }
+            ScrollViewReader { reader in
             ScrollView {
                 LazyVStack(spacing: 8) {
                     ForEach(shown) { entry in
@@ -200,12 +208,20 @@ private struct TicketBoardLaneView: View {
                         Button { open(lane.entries[shown.count].ticket.key) } label: {
                             Text("\(hidden) more · in the list")
                                 .font(.system(size: 11.5, weight: .medium))
-                                .foregroundStyle(AgentTheme.textSecondary)
+                                .foregroundStyle(moreFocused ? AgentTheme.textPrimary : AgentTheme.textSecondary)
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 6)
                                 .contentShape(Rectangle())
+                                .overlay {
+                                    // Auswahl des Controllers auf „N weitere“ (WM8-91).
+                                    if moreFocused {
+                                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                            .strokeBorder(AgentTheme.accent, lineWidth: 2)
+                                    }
+                                }
                         }
                         .buttonStyle(.plain)
+                        .id(Self.moreID)
                     }
                     if lane.entries.isEmpty {
                         Text("No tickets for this filter.")
@@ -216,6 +232,15 @@ private struct TicketBoardLaneView: View {
                     }
                 }
                 .padding(.bottom, 8)
+            }
+            // Die Auswahl bleibt im Bild, wenn der Controller sie bewegt.
+            .onChange(of: selectedKey) { _, key in
+                guard let key, shown.contains(where: { $0.ticket.key == key }) else { return }
+                reader.scrollTo(key)
+            }
+            .onChange(of: moreFocused) { _, focused in
+                if focused { reader.scrollTo(Self.moreID) }
+            }
             }
         }
         .padding(10)

@@ -24454,6 +24454,156 @@
         }
       }
     },
+    "Selection": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auswahl"
+          }
+        }
+      }
+    },
+    "Ticket": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ticket"
+          }
+        }
+      }
+    },
+    "Linear": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linear"
+          }
+        }
+      }
+    },
+    "Read": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lesen"
+          }
+        }
+      }
+    },
+    "Chats on ticket": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chats am Ticket"
+          }
+        }
+      }
+    },
+    "Choose chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat wählen"
+          }
+        }
+      }
+    },
+    "Open chat (leaves the tickets)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat öffnen (verlässt die Tickets)"
+          }
+        }
+      }
+    },
+    "Back into the board": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "zurück ins Board"
+          }
+        }
+      }
+    },
+    "Go to chat %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zum Chat %@"
+          }
+        }
+      }
+    },
+    "List copied": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Liste kopiert"
+          }
+        }
+      }
+    },
+    "Refreshing…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird aktualisiert …"
+          }
+        }
+      }
+    },
+    "Dictation only with the board chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diktat erst mit dem Board-Chat"
+          }
+        }
+      }
+    },
+    "Show all tickets": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Tickets zeigen"
+          }
+        }
+      }
+    },
+    "Only “Waiting for me”": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur „Wartet auf mich“"
+          }
+        }
+      }
+    },
+    "Ticket %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ticket %@"
+          }
+        }
+      }
+    },
     "Not loaded": {
       "localizations": {
         "de": {
