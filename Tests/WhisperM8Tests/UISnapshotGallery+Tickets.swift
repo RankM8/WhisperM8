@@ -113,24 +113,28 @@ extension UISnapshotGallery {
         let criteria = "**Stand 14.11.2026:** Paket A ist in main.\n\n## Ziel\n\nIn WhisperM8 gibt es je Projekt eine Ansicht „Tickets“: Board und Backlog aus Linear, je Ticket der zuständige Chat mit seinem Live-Zustand.\n\n## Fertig, wenn\n\n- [x] die Ansicht hinter einem Schalter in den Labs-Einstellungen liegt\n- [ ] Board mit drei Spalten und Backlog-Liste stehen\n- [ ] jede Karte den verknüpften Chat mit Status-Punkt zeigt\n- [ ] das Detail „Zum Chat“ und „In Linear öffnen“ anbietet\n\n## Hinweise\n\nPlan: docs/plans/ticket-board.md"
         func ticket(_ n: Int, _ status: String, _ title: String, priority: Int = 3, person: TicketPerson? = nil, area: String? = "Tickets",
                     milestone: String? = nil, labels: [String] = [], links: [TicketChatLink] = [], blocked: Bool = false,
-                    text: String = "") -> Ticket {
+                    text: String = "", parent: Int? = nil) -> Ticket {
             Ticket(id: "id-\(n)", key: "WM8-\(n)", title: title, description: text, priority: priority,
                    status: statuses.first { $0.name == status }!, project: area, milestone: milestone, assignee: person, labels: labels,
-                   links: links, isBlocked: blocked, url: "https://linear.app/whisperm8/issue/WM8-\(n)")
+                   links: links, isBlocked: blocked, url: "https://linear.app/whisperm8/issue/WM8-\(n)",
+                   updatedAt: Date(timeIntervalSince1970: 1_794_600_000 - Double(n) * 3600), parentKey: parent.map { "WM8-\($0)" })
         }
         let tickets = [
+            // Eltern-Ticket mit Unteraufgaben (WM8-125); die Beziehungen sind für das Bild angenommen.
+            ticket(111, "In Progress", "Ticket-Board für den Alltag", priority: 2, person: me, labels: ["Feature"]),
             ticket(81, "In Progress", "Ticket-Board in der App, Stufe 1: Board und Backlog lesen, Chat je Ticket mit Live-Status", priority: 2,
-                   person: me, milestone: "Ticket-Board in der App", labels: ["Feature"], links: [link(1)], text: criteria),
+                   person: me, milestone: "Ticket-Board in der App", labels: ["Feature"], links: [link(1)], text: criteria, parent: 111),
             ticket(69, "In Progress", "Chats am Nutzungslimit erkennen, anzeigen, sauber umziehen", priority: 1, area: "Agent Chats",
                    labels: ["Feature", "Handtest"], links: [link(2)]),
             ticket(16, "In Progress", "Insel auch für die Tastatur: Entwurf fertigstellen", area: "Insel und Pille", links: [link(4)], blocked: true),
             ticket(12, "In Progress", "Neustart ohne Chatverlust: Gesamtabnahme", priority: 2, person: erika, area: "App-Hülle und Neustart", links: [link(3)]),
             ticket(30, "In Progress", "Tastenkürzel für den Workspace-Wechsel", priority: 4, area: "Agent Chats"),
             ticket(86, "Merge-bereit", "Ticket-Werkzeug: Entscheidung festhalten, Abschluss beim Abgeben", priority: 2, links: [link(1, active: false)],
-                   text: "## Fertig, wenn\n- [x] a\n- [x] b\n- [x] c"),
+                   text: "## Fertig, wenn\n- [x] a\n- [x] b\n- [x] c", parent: 111),
             ticket(37, "Wartet aufs Ausliefern", "Tickets an Chats zuweisen", person: me, links: [link(1, active: false)]),
             ticket(84, "Todo", "Linears eigene Agent-Funktion prüfen", priority: 2, person: me, labels: ["Entscheidung"]),
-            ticket(57, "Todo", "Linear-Keys ersetzen", priority: 1, person: me, area: "Konten und Zugänge", labels: ["Handtest"]),
+            ticket(57, "Todo", "Linear-Keys ersetzen", priority: 1, person: me, area: "Konten und Zugänge", labels: ["Handtest", "Entscheidung"],
+                   parent: 120),
             ticket(80, "Todo", "Seitenleiste sortiert und ohne Doppelungen, Tabs schrumpfen", area: "Agent Chats", milestone: "Seitenleiste und Tabs"),
             ticket(83, "Backlog", "Chat-Verlauf am Ticket: nachlesen und auf einem anderen Rechner fortsetzen"),
             ticket(45, "Backlog", "Chats sehen, die in WhisperM8 auf anderen Rechnern laufen", priority: 4),
@@ -145,7 +149,23 @@ extension UISnapshotGallery {
         // Regel wie für WM8 gedacht: Merge-bereit heißt Abnahme bei dir, Entscheidungen und Handtests warten auf dich.
         let rule = TicketTeamRule(statusMeanings: ["Merge-bereit": .waitsForMe, "Wartet aufs Ausliefern": .done],
                                   waitingLabels: ["Entscheidung", "Handtest"])
-        let board = TicketBoardBuilder.build(snapshot: snapshot, chats: chats, projectPath: project, rule: rule)
+        // Reiter wie im Team WM8 (WM8-125): Namen echt, Gruppierung wie in Linear.
+        func linearView(_ id: String, _ name: String, _ grouping: TicketViewGrouping = .status) -> TicketView {
+            TicketView(id: id, name: name, teamKey: "WM8", grouping: grouping, ordering: .priority, showsSubIssues: true,
+                       url: "https://linear.app/whisperm8/view/\(id)")
+        }
+        let views = [
+            linearView("next", "Als Nächstes: Giuliano"), linearView("all", "All issues"),
+            linearView("without", "Ohne Agent", .project), linearView("with", "Mit Agent", .project),
+            linearView("blocked", "Blockiert", .project), linearView("ready", "Als Nächstes", .priority),
+            linearView("work", "Gerade in Arbeit", .project), linearView("decisions", "Entscheidungen", .project),
+            linearView("tests", "Handtests", .project), linearView("waiting", "Wartet auf mich", .project),
+        ]
+        let catalog = TicketViewCatalog(views: views, defaultID: "next")
+        var board = TicketBoardBuilder.build(snapshot: snapshot, chats: chats, projectPath: project, rule: rule)
+        board.view = views[0]
+        var boardByProject = board
+        boardByProject.view = views[6]
         // Verlauf am Ticket: Abschluss und Entscheidung im festen Aufbau, dazu
         // ein gewöhnlicher Kommentar. Personen und Zeiten sind erfunden.
         func at(_ hour: Int, _ minute: Int) -> Date { Date(timeIntervalSince1970: 1_794_614_400 + Double(hour * 3600 + minute * 60)) }
@@ -182,8 +202,10 @@ extension UISnapshotGallery {
                               + "\n\n- Punkt eins\n- Punkt zwei mit `Code`", isReply: n == 5)
         }, hasMore: true)
         let source = TicketChatStatusSource.fixed(Dictionary(uniqueKeysWithValues: chats.compactMap { chat in chat.state.map { (chat.id, $0) } }))
-        func view(_ configure: (TicketBoardViewModel) -> Void = { _ in }, problem: String? = nil) -> AnyView {
-            let model = TicketBoardViewModel(model: board, documents: .immediate)
+        func view(_ configure: (TicketBoardViewModel) -> Void = { _ in }, problem: String? = nil,
+                  byProject: Bool = false) -> AnyView {
+            let model = TicketBoardViewModel(model: byProject ? boardByProject : board, documents: .immediate)
+            model.setViews(catalog, active: byProject ? "work" : "next", isLoading: false)
             configure(model)
             let load = TicketBoardLoad(fetchedAt: snapshot.fetchedAt, problem: problem)
             return AnyView(TicketBoardView(title: "Tickets · whisperm8", model: model, load: load, source: source,
@@ -191,40 +213,48 @@ extension UISnapshotGallery {
         }
         let size = CGSize(width: 1340, height: 860)
         return [
-            Fixture(name: "tickets-board", size: size) { view() },
-            Fixture(name: "tickets-board-ohne-agent", size: size) { view { $0.filter.agent = .withoutAgent } },
-            Fixture(name: "tickets-board-wartet-auf-mich", size: size) { view { $0.filter.waitingForMe = true } },
+            // Liste als Standard mit Reitern aus Linear (WM8-125).
+            Fixture(name: "tickets-liste", size: size) { view() },
+            Fixture(name: "tickets-liste-mittel", size: CGSize(width: 860, height: 760)) { view() },
+            Fixture(name: "tickets-liste-schmal", size: CGSize(width: 620, height: 760)) { view() },
+            Fixture(name: "tickets-liste-vorhaben", size: size) { view(byProject: true) },
+            Fixture(name: "tickets-liste-zugeklappt", size: size) {
+                view { $0.toggleGroup("status:backlog"); $0.setListStop(TicketListStop.group("status:todo")) }
+            },
+            Fixture(name: "tickets-liste-auswahl", size: size) { view { $0.setListStop("WM8-81") } },
+            Fixture(name: "tickets-board", size: size) { view { $0.mode = .board } },
             Fixture(name: "tickets-chats-ohne-ticket-offen", size: CGSize(width: 900, height: 120)) {
                 AnyView(TicketLooseChatsBar(chats: board.looseChats, supervisors: board.supervisors, source: source, openChat: { _ in },
                                             isExpanded: true)
                     .padding(14).background(AgentTheme.background))
             },
-            Fixture(name: "tickets-board-person", size: size) { view { $0.filter.person = .person(id: "u1") } },
-            Fixture(name: "tickets-backlog", size: size) { view { $0.mode = .list } },
-            Fixture(name: "tickets-backlog-schmal", size: CGSize(width: 560, height: 640)) { view { $0.mode = .list } },
             Fixture(name: "tickets-board-stoerung", size: size) {
                 view(problem: TicketSourceError.network("-1009").userText)
             },
             // Triage: Liste links (die Spalte), Ticket mit Verlauf, Eigenschaften rechts.
             Fixture(name: "tickets-triage", size: size) {
-                view { $0.openFromLane("WM8-81"); $0.setComments(.loaded(comments), ticketID: "id-81") }
+                view { $0.mode = .board; $0.openFromLane("WM8-81"); $0.setComments(.loaded(comments), ticketID: "id-81") }
             },
             Fixture(name: "tickets-triage-lange-kommentare", size: size) {
-                view { $0.openFromLane("WM8-86"); $0.setComments(.loaded(longComments), ticketID: "id-86") }
+                view { $0.mode = .board; $0.openFromLane("WM8-86"); $0.setComments(.loaded(longComments), ticketID: "id-86") }
             },
-            Fixture(name: "tickets-triage-laedt", size: size) { view { $0.openFromLane("WM8-57") } },
+            Fixture(name: "tickets-triage-laedt", size: size) { view { $0.mode = .board; $0.openFromLane("WM8-57") } },
             Fixture(name: "tickets-triage-fehler", size: size) {
-                view { $0.openFromLane("WM8-57"); $0.setComments(.failed(TicketSourceError.network("-1009").userText), ticketID: "id-57") }
+                view { $0.mode = .board; $0.openFromLane("WM8-57"); $0.setComments(.failed(TicketSourceError.network("-1009").userText), ticketID: "id-57") }
             },
+            // Triage aus der Liste (WM8-125): links dieselbe Liste mit Gruppen, das Ticket markiert.
             Fixture(name: "tickets-triage-liste", size: size) {
-                view { $0.mode = .list; $0.openFromList("WM8-69"); $0.setComments(.loaded(TicketComments(items: [], hasMore: false)), ticketID: "id-69") }
+                view { $0.openFromList("WM8-81"); $0.setComments(.loaded(comments), ticketID: "id-81") }
+            },
+            Fixture(name: "tickets-triage-liste-schmal", size: CGSize(width: 820, height: 700)) {
+                view { $0.openFromList("WM8-57"); $0.setComments(.loaded(TicketComments(items: [], hasMore: false)), ticketID: "id-57") }
             },
             // Grundlage für die Bilder des Board-Chats (WM8-113): Triage mit Fenster, damit „→ Jarvis“ erscheint.
             Fixture(name: "tickets-triage-mit-fenster", size: size) {
-                view { $0.windowID = boardChatSnapshotWindowID; $0.openFromLane("WM8-81"); $0.setComments(.loaded(comments), ticketID: "id-81") }
+                view { $0.mode = .board; $0.windowID = boardChatSnapshotWindowID; $0.openFromLane("WM8-81"); $0.setComments(.loaded(comments), ticketID: "id-81") }
             },
             Fixture(name: "tickets-triage-schmal", size: CGSize(width: 760, height: 640)) {
-                view { $0.openFromLane("WM8-81"); $0.setComments(.loaded(comments), ticketID: "id-81") }
+                view { $0.mode = .board; $0.openFromLane("WM8-81"); $0.setComments(.loaded(comments), ticketID: "id-81") }
             },
         ] + ticketEmptyStateFixtures() + ticketsControllerBoardFixtures(
             view: { configure in view(configure) }, comments: comments)

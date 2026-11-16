@@ -76,6 +76,7 @@ final class TicketTriageTests: XCTestCase {
 
     func testViewModelMovesOnBoardAndOpensSelected() {
         let viewModel = TicketBoardViewModel(model: model(), documents: .immediate)
+        viewModel.mode = .board
         viewModel.moveOnBoard(.down)
         XCTAssertEqual(viewModel.selectedKey, "WM8-4", "Start: oberste Karte der ersten Spalte (In Progress)")
         viewModel.moveOnBoard(.right)
@@ -132,7 +133,8 @@ final class TicketTriageTests: XCTestCase {
 
         viewModel.mode = .list
         viewModel.openFromList("WM8-4")
-        XCTAssertEqual(viewModel.triage?.keys, ["WM8-2", "WM8-3", "WM8-4", "WM8-1"], "Reihenfolge der Liste (nach Projekt)")
+        XCTAssertEqual(viewModel.triage?.keys, ["WM8-4", "WM8-1", "WM8-2", "WM8-3"],
+                       "Reihenfolge der Liste: Gruppen nach Status, darin nach Priorität (WM8-125)")
     }
 
     func testRefreshKeepsTriageAndLateCommentsForAnotherTicketAreIgnored() {

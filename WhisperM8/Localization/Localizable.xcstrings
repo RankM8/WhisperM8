@@ -25413,6 +25413,326 @@
           }
         }
       }
+    },
+    "Loading view…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ansicht lädt …"
+          }
+        }
+      }
+    },
+    "No tickets in this view.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Tickets in dieser Ansicht."
+          }
+        }
+      }
+    },
+    "%lld with chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld mit Chat"
+          }
+        }
+      }
+    },
+    "Collapsed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zugeklappt"
+          }
+        }
+      }
+    },
+    "Expanded": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufgeklappt"
+          }
+        }
+      }
+    },
+    "Sub-issue of %@, which is not in this view": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unteraufgabe von %@, das nicht in dieser Ansicht steht"
+          }
+        }
+      }
+    },
+    "Sub-issues in this view": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unteraufgaben in dieser Ansicht"
+          }
+        }
+      }
+    },
+    "More views": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Weitere Ansichten"
+          }
+        }
+      }
+    },
+    "More · %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mehr · %lld"
+          }
+        }
+      }
+    },
+    "All open tickets · grouped by status · %lld tickets": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle offenen Tickets · nach Status gruppiert · %lld Tickets"
+          }
+        }
+      }
+    },
+    "Views from Linear: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ansichten aus Linear: %@"
+          }
+        }
+      }
+    },
+    "grouped by %@ in Linear, shown by status": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "in Linear nach %@ gruppiert, hier nach Status"
+          }
+        }
+      }
+    },
+    "Back to the list (Esc)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück zur Liste (Esc)"
+          }
+        }
+      }
+    },
+    "Back to the list": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zurück zur Liste"
+          }
+        }
+      }
+    },
+    "Drag to resize the list. Double-click for the default width.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ziehen ändert die Breite der Liste. Doppelklick stellt die Vorgabe wieder her."
+          }
+        }
+      }
+    },
+    "Sub-issue of %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unteraufgabe von %@"
+          }
+        }
+      }
+    },
+    "Views": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ansichten"
+          }
+        }
+      }
+    },
+    "Collapse or expand": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auf- und zuklappen"
+          }
+        }
+      }
+    },
+    "1 ticket": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 Ticket"
+          }
+        }
+      }
+    },
+    "%lld tickets": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Tickets"
+          }
+        }
+      }
+    },
+    "From Linear": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus Linear"
+          }
+        }
+      }
+    },
+    "grouped by label": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nach Label gruppiert"
+          }
+        }
+      }
+    },
+    "grouped by person": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nach Person gruppiert"
+          }
+        }
+      }
+    },
+    "grouped by priority": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nach Priorität gruppiert"
+          }
+        }
+      }
+    },
+    "grouped by project": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nach Vorhaben gruppiert"
+          }
+        }
+      }
+    },
+    "grouped by status": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nach Status gruppiert"
+          }
+        }
+      }
+    },
+    "last updated first": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "zuletzt geändert zuerst"
+          }
+        }
+      }
+    },
+    "not grouped": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nicht gruppiert"
+          }
+        }
+      }
+    },
+    "sorted by priority": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nach Priorität sortiert"
+          }
+        }
+      }
+    },
+    "without sub-issues": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ohne Unteraufgaben"
+          }
+        }
+      }
+    },
+    "All tickets": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Tickets"
+          }
+        }
+      }
+    },
+    "No label": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ohne Label"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

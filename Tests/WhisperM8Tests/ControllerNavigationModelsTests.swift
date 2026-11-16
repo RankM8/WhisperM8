@@ -159,7 +159,7 @@ final class ControllerMenuModelTests: XCTestCase {
             .restart, .backgroundLogs, .backgroundStop, .backgroundRestart, .stopJob,
             .toggleNotes, .archiveMode,
             // Ticket-Board (WM8-91): Menü-Karte am Ticket, „Ticket-Board WM8“, „Zu den Chats“.
-            .ticketChat, .ticketCopyLink, .ticketOpenInLinear, .boardWaitingFilter, .boardCopyList, .boardRefresh,
+            .ticketChat, .ticketCopyLink, .ticketOpenInLinear, .boardCopyList, .boardRefresh,
             .ticketBoard, .backToChats, .clipboardHistory, .showBindings, .pause,
         ])
         let model = ControllerMenuModel(setup: setup())

@@ -23,6 +23,7 @@ struct LinearTicketSource: TicketSource {
     labels(first: 20) { nodes { name } }
     attachments(first: 20) { nodes { id title subtitle url metadata creator { name } } }
     inverseRelations(first: 20) { nodes { type issue { state { type } } } }
+    parent { identifier }
     """
 
     /// Felder für das Board, das im Takt geholt wird: kleinere Listen als beim
@@ -40,6 +41,7 @@ struct LinearTicketSource: TicketSource {
     labels(first: 8) { nodes { name } }
     attachments(first: 8, orderBy: updatedAt, filter: { url: { startsWith: $prefix } }) { nodes { id title subtitle url metadata creator { name } } }
     inverseRelations(first: 6) { nodes { type issue { state { type } } } }
+    parent { identifier }
     """
 
     static let closedTypes = ["completed", "canceled", "duplicate"]
@@ -80,6 +82,74 @@ struct LinearTicketSource: TicketSource {
         let viewerID = (head["viewer"] as? [String: Any])?["id"] as? String
         return TicketBoardSnapshot(team: team, statuses: Self.statuses(teamNode["states"]), tickets: tickets, fetchedAt: now(),
                                    viewerID: viewerID)
+    }
+
+    // MARK: Ansichten (WM8-125)
+
+    static let viewFields = "id name slugId modelName team { key } viewPreferencesValues { issueGrouping viewOrdering showSubIssues }"
+
+    /// Eine Anfrage: Favoriten mit ihren Ansichten, dazu die „Als Nächstes“-
+    /// Ansichten (Standard, auch wenn sie kein Favorit ist). Gemessen am
+    /// 16.11.2026 rund 300 Punkte.
+    func views() async throws -> TicketViewCatalog {
+        let data = try await client.run("""
+        {
+          viewer { name }
+          organization { urlKey }
+          favorites(first: 100) { nodes { sortOrder parent { sortOrder } customView { \(Self.viewFields) } } }
+          customViews(first: 50, filter: { or: [{ name: { startsWithIgnoreCase: "Als Nächstes" } }, { name: { startsWithIgnoreCase: "Next" } }, { name: { startsWithIgnoreCase: "Up next" } }] }) { nodes { \(Self.viewFields) } }
+        }
+        """)
+        let urlKey = (data["organization"] as? [String: Any])?["urlKey"] as? String
+        let favorites = Self.nodes(data["favorites"])
+            .compactMap { node -> (order: (Double, Double), view: TicketView)? in
+                guard let view = (node["customView"] as? [String: Any]).flatMap({ Self.view($0, urlKey: urlKey) }) else { return nil }
+                let own = (node["sortOrder"] as? NSNumber)?.doubleValue ?? 0
+                // In einem Ordner zählt erst der Platz des Ordners, dann der im Ordner.
+                let folder = ((node["parent"] as? [String: Any])?["sortOrder"] as? NSNumber)?.doubleValue
+                return ((folder ?? own, folder == nil ? 0 : own), view)
+            }
+            .sorted { $0.order < $1.order }
+            .map(\.view)
+        let candidates = Self.nodes(data["customViews"]).compactMap { Self.view($0, urlKey: urlKey) }
+        let viewer = (data["viewer"] as? [String: Any])?["name"] as? String ?? ""
+        return TicketViewCatalog.make(favorites: favorites, candidates: candidates, viewerName: viewer)
+    }
+
+    func tickets(inView viewID: String) async throws -> [Ticket] {
+        var tickets: [Ticket] = []
+        var cursor: String?
+        for _ in 0..<maxPages {
+            var variables: [String: Any] = ["id": viewID, "prefix": TicketChatLinkFormat.urlPrefix]
+            if let cursor { variables["after"] = cursor }
+            let page = try await client.run("""
+            query($id: String!, $prefix: String!, $after: String) {
+              customView(id: $id) { issues(first: 100, after: $after) { nodes { \(Self.boardFields) } pageInfo { hasNextPage endCursor } } }
+            }
+            """, variables: variables)
+            guard let view = page["customView"] as? [String: Any] else { throw TicketSourceError.notFound("Ansicht") }
+            let issues = view["issues"] as? [String: Any] ?? [:]
+            tickets.append(contentsOf: Self.nodes(issues).compactMap(Self.ticket))
+            let info = issues["pageInfo"] as? [String: Any] ?? [:]
+            guard info["hasNextPage"] as? Bool == true, let next = info["endCursor"] as? String else { break }
+            cursor = next
+        }
+        return tickets
+    }
+
+    /// Nur Ansichten über Tickets; Ansichten über Vorhaben werden kein Reiter.
+    static func view(_ node: [String: Any], urlKey: String?) -> TicketView? {
+        guard let id = node["id"] as? String, let name = node["name"] as? String,
+              (node["modelName"] as? String ?? "Issue") == "Issue" else { return nil }
+        let preferences = node["viewPreferencesValues"] as? [String: Any] ?? [:]
+        let slug = node["slugId"] as? String ?? id
+        return TicketView(
+            id: id, name: name,
+            teamKey: (node["team"] as? [String: Any])?["key"] as? String,
+            grouping: TicketViewGrouping(linear: preferences["issueGrouping"] as? String),
+            ordering: TicketViewOrdering(linear: preferences["viewOrdering"] as? String),
+            showsSubIssues: preferences["showSubIssues"] as? Bool ?? true,
+            url: urlKey.map { "https://linear.app/\($0)/view/\(slug)" })
     }
 
     func ticket(key: String) async throws -> TicketContext {
@@ -437,7 +507,8 @@ struct LinearTicketSource: TicketSource {
             links: nodes(node["attachments"]).compactMap(link),
             isBlocked: blocked,
             url: node["url"] as? String,
-            updatedAt: (node["updatedAt"] as? String).flatMap(date))
+            updatedAt: (node["updatedAt"] as? String).flatMap(date),
+            parentKey: (node["parent"] as? [String: Any])?["identifier"] as? String)
     }
 
     /// Linear schreibt Zeiten mit Millisekunden (`2026-11-14T03:57:12.345Z`).

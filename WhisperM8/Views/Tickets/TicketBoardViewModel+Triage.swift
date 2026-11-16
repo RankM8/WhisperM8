@@ -29,7 +29,8 @@ extension TicketBoardViewModel {
 
     /// Klick in der Liste: Triage mit allen sichtbaren Tickets der Liste.
     func openFromList(_ key: String) {
-        setTriage(TicketBoardSelection.open(key, keys: listKeys, source: .list, title: String(localized: "List")))
+        setTriage(TicketBoardSelection.open(key, keys: listKeys, source: .list,
+                                            title: activeView?.name ?? String(localized: "List")))
     }
 
     func nextInTriage() {
@@ -125,15 +126,16 @@ extension TicketBoardViewModel {
             sections = presentation.lanes.map { TicketCopyText.Section(title: $0.status.name, tickets: $0.entries.map(\.ticket)) }
         } else {
             sections = presentation.groups.map {
-                TicketCopyText.Section(title: TicketBoardText.project($0.project), tickets: $0.entries.map(\.ticket))
+                TicketCopyText.Section(title: $0.title, tickets: $0.entries.map(\.ticket))
             }
         }
         return TicketCopyText.list(title: title, sections: sections)
     }
 
-    /// Liste der Tickets in der Reihenfolge der Liste (nach Projekt).
+    /// Tickets in der Reihenfolge der Liste, nur aus aufgeklappten Gruppen
+    /// (J/K und die Liste der Triage überspringen zugeklappte, WM8-125).
     var listKeys: [String] {
-        presentation.groups.flatMap { $0.entries.map(\.ticket.key) }
+        openGroups.flatMap { $0.rows.map(\.id) }
     }
 
     /// Schlüssel der Quelle nach einem neuen Abzug.

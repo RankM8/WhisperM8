@@ -1,8 +1,9 @@
 import Foundation
 
-// Kopf und Filter des Ticket-Boards mit Controller und Tastatur (WM8-91,
+// Kopf und Reiter des Ticket-Boards mit Controller und Tastatur (WM8-91,
 // Paket 3d, Auftrag Giuliano 16.11.2026: „Das ganze Board, auch die ganzen
-// Filteransichten, müsste bedienbar sein“). Pur, neben `TicketBoardSelection`.
+// Filteransichten, müsste bedienbar sein“; seit WM8-125 Reiter statt Filter).
+// Pur, neben `TicketBoardSelection`.
 //
 // Weg: ▲ über die oberste Karte (bzw. Zeile, oberstes Ticket der Triage)
 // führt in die unterste Kopfzeile, ▲ weiter in die darüber. ◀ ▶ wandern durch
@@ -15,10 +16,9 @@ enum TicketHeaderItem: Hashable {
     case back, modeBoard, modeList, copyList, refresh
     // Kopfzeile der Triage
     case closeTriage, copyLink, handOff, openInLinear
-    // Filterzeile
-    case waitingForMe, project
-    case agent(TicketAgentFilter)
-    case person(TicketPersonFilter)
+    // Reiterzeile (WM8-125): Ansichten aus Linear und „Mehr“
+    case view(String)
+    case moreViews
 }
 
 /// Stelle im Kopf: Zeile (0 = oben) und Knopf in der Zeile.
@@ -31,15 +31,14 @@ struct TicketHeaderSpot: Equatable, Sendable {
 struct TicketHeaderLayout: Equatable {
     var rows: [[TicketHeaderItem]]
 
-    /// Board und Liste: oben „← Chats“, Board, Liste, „Liste kopieren“,
-    /// Aktualisieren; darunter die Filter in ihrer Reihenfolge am Bildschirm.
-    static func board(hasBack: Bool, people: [TicketPersonFilter]) -> TicketHeaderLayout {
+    /// Board und Liste: oben „← Chats“, Liste, Board, „Liste kopieren“,
+    /// Aktualisieren; darunter die Reiter, wie sie am Bildschirm stehen, und
+    /// „Mehr“, wenn nicht alle in die Zeile passen (WM8-125).
+    static func board(hasBack: Bool, tabs: [String], hasMore: Bool) -> TicketHeaderLayout {
         var top: [TicketHeaderItem] = hasBack ? [.back] : []
-        top += [.modeBoard, .modeList, .copyList, .refresh]
-        var filters: [TicketHeaderItem] = [.waitingForMe, .project]
-        filters += [.agent(.all), .agent(.withAgent), .agent(.withoutAgent)]
-        filters += [.person(.all), .person(.unassigned)] + people.map { .person($0) }
-        return TicketHeaderLayout(rows: [top, filters])
+        top += [.modeList, .modeBoard, .copyList, .refresh]
+        let row = tabs.map(TicketHeaderItem.view) + (hasMore ? [.moreViews] : [])
+        return TicketHeaderLayout(rows: [top, row])
     }
 
     /// Triage: eine Zeile mit „← Chats“, „Board“ (zurück), Link, → Jarvis
@@ -66,7 +65,7 @@ struct TicketHeaderLayout: Equatable {
         return TicketHeaderSpot(row: row, index: 0)
     }
 
-    /// Eine Stelle, die nach einem neuen Abzug (andere Personen) nicht mehr
+    /// Eine Stelle, die nach einem neuen Abzug (andere Reiter) nicht mehr
     /// passt, rückt auf den nächsten Knopf derselben Zeile.
     func reconcile(_ spot: TicketHeaderSpot) -> TicketHeaderSpot? {
         guard !rows.isEmpty else { return nil }
@@ -109,20 +108,10 @@ enum TicketHeaderSelection {
         }
     }
 
-    // MARK: Liste der Bereiche (Entscheidung 16.11.2026: „Liste darunter“)
-
-    /// Einträge der Liste: „Alle Bereiche“ (`nil`), dann die Bereiche.
-    static func projectOptions(_ projects: [String]) -> [String?] {
-        [nil] + projects.map { Optional($0) }
-    }
-
-    /// Start der Liste: auf dem Bereich, der gerade gilt.
-    static func projectStart(current: String?, options: [String?]) -> Int {
-        options.firstIndex(of: current) ?? 0
-    }
+    // MARK: Liste unter „Mehr“ (WM8-125)
 
     /// ▲ ▼ in der Liste, ohne Umlauf.
-    static func projectStep(_ index: Int, _ direction: TicketBoardMove, count: Int) -> Int {
+    static func pickerStep(_ index: Int, _ direction: TicketBoardMove, count: Int) -> Int {
         guard count > 0 else { return 0 }
         switch direction {
         case .up: return max(0, index - 1)

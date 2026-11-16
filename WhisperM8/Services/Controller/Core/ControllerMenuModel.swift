@@ -62,9 +62,7 @@ enum ControllerMenuItem: String, CaseIterable, Sendable {
     /// Zweite Ebene: Chats am gewählten Ticket, Kreuz wechselt dorthin.
     case ticketChat
     case ticketCopyLink, ticketOpenInLinear
-    // Board
-    /// Filter „Wartet auf mich“ an/aus.
-    case boardWaitingFilter
+    // Board (der Filter „Wartet auf mich“ ist seit WM8-125 ein Reiter aus Linear)
     case boardCopyList, boardRefresh
     // Steuerung
     /// Ticket-Board des Projekts dieses Chats öffnen (WM8-91), nur außerhalb
@@ -92,7 +90,7 @@ enum ControllerMenuItem: String, CaseIterable, Sendable {
              .renameWorkspace, .gridCapacity: return .workspace
         case .restart, .backgroundLogs, .backgroundStop, .backgroundRestart, .stopJob: return .lifecycle
         case .ticketChat, .ticketCopyLink, .ticketOpenInLinear: return .ticket
-        case .boardWaitingFilter, .boardCopyList, .boardRefresh: return .board
+        case .boardCopyList, .boardRefresh: return .board
         case .toggleNotes, .archiveMode, .ticketBoard, .backToChats, .clipboardHistory, .showBindings, .pause:
             return .controller
         }
@@ -389,7 +387,7 @@ struct ControllerMenuModel: Equatable, Sendable {
         case .backToChats: return setup.ticketsShown
         case .ticketChat, .ticketCopyLink, .ticketOpenInLinear:
             return setup.ticketsShown && setup.ticket?.key != nil
-        case .boardWaitingFilter, .boardCopyList, .boardRefresh: return setup.ticketsShown && setup.ticket != nil
+        case .boardCopyList, .boardRefresh: return setup.ticketsShown && setup.ticket != nil
         // Das Archiv gehört zur Seitenleiste der Chats, nicht zum Board.
         case .archiveMode: return !setup.ticketsShown
         case .clipboardHistory, .showBindings, .pause: return true

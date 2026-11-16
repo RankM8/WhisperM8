@@ -36,6 +36,19 @@ protocol TicketSource {
     /// Lädt ein Bild hoch und liefert die Adresse, unter der es in einem
     /// Kommentar eingebunden wird.
     func uploadImage(_ data: Data, fileName: String, contentType: String) async throws -> String
+    /// Gespeicherte Ansichten des Workspaces als Reiter (WM8-125): Favoriten
+    /// des Nutzers und seine „Als Nächstes“-Ansicht. Liest nur.
+    func views() async throws -> TicketViewCatalog
+    /// Tickets einer Ansicht, so wie das Werkzeug sie filtert (auch aus
+    /// anderen Teams des Workspaces).
+    func tickets(inView viewID: String) async throws -> [Ticket]
+}
+
+extension TicketSource {
+    /// Quellen ohne gespeicherte Ansichten (Tests, andere Werkzeuge): Das Board
+    /// zeigt dann alle offenen Tickets des Teams.
+    func views() async throws -> TicketViewCatalog { .empty }
+    func tickets(inView viewID: String) async throws -> [Ticket] { [] }
 }
 
 struct TicketContext: Equatable {

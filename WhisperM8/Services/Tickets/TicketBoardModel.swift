@@ -70,6 +70,9 @@ struct TicketBoardModel: Equatable {
     var statuses: [TicketStatus] = []
     /// Regel des Teams, mit der Bedeutungen und „wartet auf mich“ gerechnet wurden.
     var rule = TicketTeamRule()
+    /// Ansicht aus Linear, deren Tickets `entries` sind (WM8-125); `nil` = alle
+    /// offenen Tickets des Teams, nach Status gruppiert.
+    var view: TicketView? = nil
 
     /// Dasselbe Modell ohne den Zustand der Chats. Die Ansicht führt den
     /// Zustand getrennt: Ein Statuswechsel soll das Modell nicht „ändern“ und
@@ -97,6 +100,27 @@ struct TicketBoardModel: Equatable {
         let chats = entries.flatMap { $0.agents.compactMap(\.chat) } + looseChats.map(\.chat) + supervisors
         for chat in chats { if let state = chat.state { states[chat.id] = state } }
         return states
+    }
+}
+
+extension TicketBoardBuilder {
+    /// Board des Teams; mit Ansicht (WM8-125) stehen deren Tickets statt aller
+    /// offenen Tickets des Teams im Modell. Chats ohne Ticket und Supervisoren
+    /// kommen weiter aus dem Team. Ist eine Ansicht gewählt, aber noch nicht
+    /// geladen, bleibt die Liste leer, statt kurz die falschen Tickets zu zeigen.
+    static func build(snapshot: TicketBoardSnapshot, chats: [TicketChat], projectPath: String?, rule: TicketTeamRule,
+                      view: TicketView?, viewTickets: TicketViewTickets?) -> TicketBoardModel {
+        var model = build(snapshot: snapshot, chats: chats, projectPath: projectPath, rule: rule)
+        guard let view else { return model }
+        model.view = view
+        guard let viewTickets else {
+            model.entries = []
+            return model
+        }
+        let viewSnapshot = TicketBoardSnapshot(team: snapshot.team, statuses: snapshot.statuses, tickets: viewTickets.tickets,
+                                               fetchedAt: viewTickets.fetchedAt, viewerID: snapshot.viewerID)
+        model.entries = build(snapshot: viewSnapshot, chats: chats, projectPath: projectPath, rule: rule).entries
+        return model
     }
 }
 

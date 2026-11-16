@@ -78,7 +78,67 @@ final class TicketBoardStoreTests: XCTestCase {
         store.activate(team: "WM8")
         await settle { gate.count == 1 }
         try? await Task.sleep(for: .milliseconds(40))
-        XCTAssertEqual(source.calls.count, 1)
+        XCTAssertEqual(source.calls.filter { $0 == "board WM8" }.count, 1)
+        store.deactivate()
+    }
+
+    // MARK: Ansichten (WM8-125)
+
+    func testFirstLoadFetchesViewsAndTheDefaultView() async {
+        let source = TicketSourceStub()
+        source.onBoard = { _ in TicketFixtures.snapshot([TicketFixtures.ticket(1)]) }
+        source.onViews = { TicketViewCatalog(views: [TicketFixtures.view("a"), TicketFixtures.view("n")], defaultID: "n") }
+        source.onViewTickets = { id in id == "n" ? [TicketFixtures.ticket(1)] : [] }
+        let gate = Gate()
+        let store = TicketBoardStore(source: source, sleep: gate.sleep)
+        store.activate(team: "WM8")
+        await settle { gate.count == 1 && store.viewTickets["n"] != nil }
+        XCTAssertEqual(source.calls, ["board WM8", "views", "view n"])
+        XCTAssertEqual(store.effectiveViewID, "n")
+        XCTAssertEqual(store.viewTickets["n"]?.tickets.map(\.key), ["WM8-1"])
+
+        // Im Takt: Board und gezeigte Ansicht, die Reiter erst nach zehn Minuten wieder.
+        gate.release()
+        await settle { gate.count == 2 }
+        XCTAssertEqual(source.calls.filter { $0 == "views" }.count, 1)
+        XCTAssertEqual(source.calls.filter { $0 == "view n" }.count, 2)
+        store.deactivate()
+    }
+
+    func testChoosingAViewFetchesItOnceAndUsesTheCacheAfterwards() async {
+        let source = TicketSourceStub()
+        source.onBoard = { _ in TicketFixtures.snapshot([]) }
+        source.onViews = { TicketViewCatalog(views: [TicketFixtures.view("a"), TicketFixtures.view("n")], defaultID: "n") }
+        source.onViewTickets = { _ in [TicketFixtures.ticket(2)] }
+        let gate = Gate()
+        let store = TicketBoardStore(source: source, sleep: gate.sleep)
+        store.activate(team: "WM8")
+        await settle { store.viewTickets["n"] != nil }
+
+        store.viewID = "a"
+        await settle { store.viewTickets["a"] != nil }
+        store.viewID = "n"
+        try? await Task.sleep(for: .milliseconds(40))
+        XCTAssertEqual(source.calls.filter { $0 == "view n" }.count, 1, "frisch im Zwischenspeicher: keine zweite Anfrage")
+        XCTAssertEqual(source.calls.filter { $0 == "view a" }.count, 1)
+
+        store.viewID = "weg"
+        XCTAssertEqual(store.effectiveViewID, "n", "unbekannte Ansicht: zurück zum Standard")
+        store.deactivate()
+    }
+
+    func testViewErrorLeavesTheBoardStanding() async {
+        let source = TicketSourceStub()
+        source.onBoard = { _ in TicketFixtures.snapshot([TicketFixtures.ticket(3)], at: 9) }
+        source.onViews = { throw TicketSourceError.unauthorized }
+        let gate = Gate()
+        let store = TicketBoardStore(source: source, sleep: gate.sleep)
+        store.activate(team: "WM8")
+        await settle { gate.count == 1 }
+        XCTAssertEqual(store.snapshot?.tickets.map(\.key), ["WM8-3"])
+        XCTAssertNil(store.lastError)
+        XCTAssertEqual(store.viewError, .unauthorized)
+        XCTAssertNil(store.effectiveViewID, "ohne Reiter zeigt das Board alle offenen Tickets")
         store.deactivate()
     }
 

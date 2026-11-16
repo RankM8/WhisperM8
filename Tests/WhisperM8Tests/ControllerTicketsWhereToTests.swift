@@ -153,16 +153,16 @@ final class ControllerTicketsWhereToTests: XCTestCase {
         let vic = ControllerTicketMenuInfo.Chat(id: UUID(), title: "Vic")
         var setup = ControllerMenuSetup()
         setup.ticketsShown = true
-        setup.ticket = ControllerTicketMenuInfo(key: "WM8-112", chats: [vic], hasURL: true, waitingFilterOn: false)
+        setup.ticket = ControllerTicketMenuInfo(key: "WM8-112", chats: [vic], hasURL: true)
         var model = ControllerMenuModel(setup: setup)
         XCTAssertEqual(model.top.entries.map(\.id), [
             .ticketChat, .ticketCopyLink, .ticketOpenInLinear,
-            .boardWaitingFilter, .boardCopyList, .boardRefresh,
+            .boardCopyList, .boardRefresh,
             .backToChats, .clipboardHistory, .showBindings, .pause,
         ])
         XCTAssertTrue(model.top.entries.allSatisfy(\.enabled))
         XCTAssertEqual(model.groupStart(.ticketChat), .ticket)
-        XCTAssertEqual(model.groupStart(.boardWaitingFilter), .board)
+        XCTAssertEqual(model.groupStart(.boardCopyList), .board)
         model.select(.ticketChat)
         XCTAssertTrue(model.openSubmenu(), "„Zum Chat ›“ zeigt die Chats am Ticket")
         guard case let .ticketChats(list)? = model.submenu else { return XCTFail("keine Chat-Ebene") }
@@ -203,7 +203,7 @@ final class ControllerTicketsWhereToTests: XCTestCase {
         }
         // Paket 3d: „▲ Filter“ gleich hinter „Öffnen“.
         XCTAssertEqual(Array(labels(.board).prefix(8)),
-                       [.ticketSelection, .open, .boardFilters, .copyLink, .ticketPreviousNext, .openInLinear, .refresh, .menu])
+                       [.ticketSelection, .open, .boardViews, .copyLink, .ticketPreviousNext, .openInLinear, .refresh, .menu])
         XCTAssertTrue(labels(.triage).contains(.backToBoard))
         XCTAssertTrue(labels(.triage).contains(.read))
         XCTAssertFalse(labels(.triage).contains(.chatsOnTicket), "▶ nur, wenn das Ticket Chats hat")

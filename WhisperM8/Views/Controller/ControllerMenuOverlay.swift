@@ -53,9 +53,6 @@ extension ControllerMenuItem {
         case .ticketChat: return String(localized: "Go to chat")
         case .ticketCopyLink: return String(localized: "Copy link")
         case .ticketOpenInLinear: return String(localized: "Open in Linear")
-        case .boardWaitingFilter:
-            return ticket?.waitingFilterOn == true
-                ? String(localized: "Show all tickets") : String(localized: "Only “Waiting for me”")
         case .boardCopyList: return String(localized: "Copy list")
         case .boardRefresh: return String(localized: "Refresh")
         case .backToChats: return String(localized: "Back to chats")

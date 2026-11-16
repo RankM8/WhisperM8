@@ -17,6 +17,19 @@ final class TicketBoardStore {
     private(set) var lastError: TicketSourceError?
     private(set) var isLoading = false
     private(set) var team: String?
+    /// Reiter des Workspaces (WM8-125); `nil`, solange nicht geladen.
+    private(set) var catalog: TicketViewCatalog?
+    /// Tickets je Ansicht, zuletzt geholt. Nur die gezeigte wird im Takt geholt.
+    private(set) var viewTickets: [String: TicketViewTickets] = [:]
+    /// Fehler beim Holen der Ansichten; das Board der Team-Tickets bleibt davon unberührt.
+    private(set) var viewError: TicketSourceError?
+    /// Gezeigte Ansicht; `nil` = Standard des Katalogs.
+    var viewID: String? {
+        didSet {
+            guard viewID != oldValue, loop != nil, let id = effectiveViewID, !isFresh(id) else { return }
+            Task { [weak self] in await self?.refreshView(id) }
+        }
+    }
 
     /// Takt, solange die Ansicht sichtbar ist. Jeder Abruf kostet mindestens
     /// zwei Anfragen aus dem Stundenbudget des Keys (2.500), und derselbe Key
@@ -25,6 +38,8 @@ final class TicketBoardStore {
     static let defaultInterval: Duration = .seconds(120)
     /// So lange ruht der Takt, nachdem Linear „Rate limited“ gemeldet hat.
     static let rateLimitPause: TimeInterval = 15 * 60
+    /// So lange gelten die Reiter. Sie ändern sich selten; der Knopf holt sie sofort.
+    static let catalogLifetime: TimeInterval = 10 * 60
 
     @ObservationIgnored private let source: TicketSource
     @ObservationIgnored private let interval: Duration
@@ -41,6 +56,9 @@ final class TicketBoardStore {
     /// Abbruch (Ansicht kurz verdeckt), wird sofort nachgeholt; sonst stünde
     /// die wieder gezeigte Ansicht bis zum nächsten Takt ohne Stand da.
     @ObservationIgnored private var refreshWanted = false
+    @ObservationIgnored private var catalogFetchedAt: Date?
+    /// Ansichten, für die gerade ein Abruf läuft.
+    @ObservationIgnored private var loadingViews = Set<String>()
     /// Beginn und Ende jedes Abrufs. Die Ansicht gleicht hier ab, statt den
     /// Speicher in ihrer Wurzel zu beobachten: So zeichnet ein Abruf nur die
     /// Zeile im Kopf neu.
@@ -63,9 +81,12 @@ final class TicketBoardStore {
     func activate(team: String) {
         if self.team == team, loop != nil { return }
         loop?.cancel()
+        loop = nil
         if self.team != team {
             snapshot = nil
             lastError = nil
+            // Die Reiter gehören dem Workspace, die gezeigte Ansicht dem Board.
+            viewID = nil
         }
         // `pausedUntil` bleibt: Das Budget gehört dem Key, nicht dem Team.
         self.team = team
@@ -124,6 +145,9 @@ final class TicketBoardStore {
             snapshot = fresh
             lastError = nil
             pausedUntil = nil
+            // Reiter und Ansicht nach dem Board: Ein Fehler dort lässt das Board stehen.
+            await refreshCatalog(force: !byTimer)
+            if let id = effectiveViewID { await refreshView(id) }
         } catch is CancellationError {
             // Ansicht geschlossen: kein Fehler, der letzte Stand bleibt.
             wasCancelled = true
@@ -138,6 +162,64 @@ final class TicketBoardStore {
     }
 
     var isActive: Bool { loop != nil }
+
+    // MARK: Ansichten (WM8-125)
+
+    /// Gewählte Ansicht, sonst der Standard des Katalogs.
+    var effectiveViewID: String? {
+        guard let catalog else { return nil }
+        if let viewID, catalog.views.contains(where: { $0.id == viewID }) { return viewID }
+        return catalog.defaultID
+    }
+
+    private func isFresh(_ viewID: String) -> Bool {
+        guard let hit = viewTickets[viewID] else { return false }
+        return now().timeIntervalSince(hit.fetchedAt) < TimeInterval(interval.components.seconds)
+    }
+
+    /// Eine Anfrage, höchstens alle zehn Minuten (der Knopf: sofort).
+    private func refreshCatalog(force: Bool) async {
+        if !force, catalog != nil, let catalogFetchedAt, now().timeIntervalSince(catalogFetchedAt) < Self.catalogLifetime { return }
+        let team = team
+        let source = source
+        do {
+            let fresh = try await PerfBudgets.ticketsFetch.withInterval { try await source.views() }
+            guard self.team == team else { return }
+            catalog = fresh
+            catalogFetchedAt = now()
+            viewError = nil
+        } catch is CancellationError {
+            return
+        } catch let error as TicketSourceError {
+            if error == .rateLimited { pausedUntil = now().addingTimeInterval(Self.rateLimitPause) }
+            viewError = error
+        } catch {
+            viewError = .network("Netzfehler")
+        }
+        onChange?()
+    }
+
+    /// Tickets einer Ansicht. Während der Pause nach „Rate limited“ nicht.
+    func refreshView(_ viewID: String) async {
+        guard !loadingViews.contains(viewID) else { return }
+        if let pausedUntil, now() < pausedUntil { return }
+        loadingViews.insert(viewID)
+        defer { loadingViews.remove(viewID) }
+        let source = source
+        do {
+            let tickets = try await PerfBudgets.ticketsFetch.withInterval { try await source.tickets(inView: viewID) }
+            viewTickets[viewID] = TicketViewTickets(tickets: tickets, fetchedAt: now())
+            viewError = nil
+        } catch is CancellationError {
+            return
+        } catch let error as TicketSourceError {
+            if error == .rateLimited { pausedUntil = now().addingTimeInterval(Self.rateLimitPause) }
+            viewError = error
+        } catch {
+            viewError = .network("Netzfehler")
+        }
+        onChange?()
+    }
 
     // MARK: Kommentare
 
@@ -177,4 +259,10 @@ final class TicketBoardStore {
             throw error
         }
     }
+}
+
+/// Tickets einer Ansicht mit dem Zeitpunkt des Abrufs.
+struct TicketViewTickets: Equatable {
+    var tickets: [Ticket]
+    var fetchedAt: Date
 }
