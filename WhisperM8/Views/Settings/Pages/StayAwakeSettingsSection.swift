@@ -51,6 +51,8 @@ struct StayAwakeSettingsSection: View {
     }
 
     private var permissionDetail: String {
+        // Test-Instanz (WM8-122): fasst den Ruhezustand nie an.
+        guard controller.isAvailable else { return String(localized: "Not available in the test instance") }
         switch controller.permission {
         case .ready: return String(localized: "Granted")
         case .missing: return String(localized: "Not granted yet")

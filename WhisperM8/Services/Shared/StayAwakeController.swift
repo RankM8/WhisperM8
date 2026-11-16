@@ -25,6 +25,17 @@ final class StayAwakeController: ObservableObject {
     @Published private(set) var isAwaitingPermission = false
     @Published private(set) var lastEndReason: StayAwakeEndReason?
     @Published private(set) var alwaysSince: Date?
+    /// Wann jemand anderes den Ruhezustand zuletzt wieder eingeschaltet hat,
+    /// während der Knopf ihn aus haben wollte (WM8-122). Die App schaltet ihn
+    /// dann gleich wieder aus; der Knopf nennt es im Tooltip.
+    @Published private(set) var lastExternalResetAt: Date?
+
+    /// Darf dieser Prozess den Ruhezustand des Rechners anfassen? Die
+    /// Test-Instanz nie (WM8-122): `pmset -a disablesleep` gilt für den ganzen
+    /// Mac, und die sudo-Regel gilt für jeden Prozess des Users. In der Nacht
+    /// vom 15. auf den 16.11.2026 schaltete eine Test-Instanz beim Start den
+    /// Ruhezustand wieder ein, den die Haupt-App abgeschaltet hatte.
+    let isAvailable: Bool
 
     private let system: StayAwakeSystem
     private let preferences: AppPreferences
@@ -49,13 +60,15 @@ final class StayAwakeController: ObservableObject {
         marker: URL = AppInstance.applicationSupport
             .appendingPathComponent("WhisperM8", isDirectory: true)
             .appendingPathComponent("stay-awake.active"),
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        isAvailable: Bool = !AppInstance.isTestInstance
     ) {
         self.system = system
         self.preferences = preferences
         self.marker = marker
         self.now = now
-        mode = preferences.stayAwakeWhileWorking ? .whileWorking : .off
+        self.isAvailable = isAvailable
+        mode = isAvailable && preferences.stayAwakeWhileWorking ? .whileWorking : .off
     }
 
     /// Einmal beim ersten Erscheinen der Sidebar (oder beim ersten Druck auf
@@ -65,6 +78,16 @@ final class StayAwakeController: ObservableObject {
     func start(workingPublisher: AnyPublisher<Bool, Never>? = nil) {
         guard !started else { return }
         started = true
+        guard isAvailable else {
+            // Test-Instanz: kein sudo, kein pmset, keine Wache, nie ein
+            // Admin-Dialog, weder beim Start noch beim Beenden.
+            permission = .missing
+            Logger.stayAwake.info("stay_awake_unavailable test_instance=true")
+            let waiters = permissionWaiters
+            permissionWaiters = []
+            waiters.forEach { $0() }
+            return
+        }
         let system = self.system
         let marker = self.marker
         queue.async { [weak self] in
@@ -140,7 +163,7 @@ final class StayAwakeController: ObservableObject {
 
     /// Klick auf den Knopf: Aus → Bei Arbeit am Strom → Immer → Aus.
     func cycle() {
-        guard !isAwaitingPermission else { return }
+        guard isAvailable, !isAwaitingPermission else { return }
         let target = mode.next
         if target == .off {
             setMode(.off)
@@ -155,6 +178,7 @@ final class StayAwakeController: ObservableObject {
 
     /// Schalter in den Einstellungen für Stufe 1.
     func setWhileWorking(_ enabled: Bool) {
+        guard isAvailable else { return }
         if !enabled {
             setMode(.off)
             evaluate()
@@ -168,7 +192,7 @@ final class StayAwakeController: ObservableObject {
     }
 
     func removePermission() {
-        guard !isAwaitingPermission else { return }
+        guard isAvailable, !isAwaitingPermission else { return }
         setMode(.off)
         evaluate()
         isAwaitingPermission = true
@@ -223,20 +247,39 @@ final class StayAwakeController: ObservableObject {
     }
 
     func refreshPower() {
+        guard isAvailable else { return }
         let system = self.system
+        // Hält die App den Mac gerade wach, im selben Takt nachsehen, ob es
+        // noch gilt (WM8-122): Ein anderer Prozess mit derselben sudo-Regel
+        // kann den Ruhezustand wieder einschalten, ohne dass die App es merkt.
+        let verify = applied == true
         queue.async { [weak self] in
             let power = system.powerState()
+            let actual = verify ? system.isSleepDisabled() : nil
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 self.conditions.onACPower = power.onACPower
                 self.conditions.batteryPercent = power.batteryPercent
                 self.conditions.thermalState = ProcessInfo.processInfo.thermalState
+                if StayAwakePolicy.wasResetFromOutside(applied: self.applied, actual: actual) {
+                    self.noteExternalReset()
+                }
                 self.evaluate()
             }
         }
     }
 
+    /// Von außen wieder eingeschaltet: Anzeige ehrlich stellen und beim
+    /// folgenden `evaluate()` neu abschalten, falls der Knopf es weiter will.
+    private func noteExternalReset() {
+        lastExternalResetAt = now()
+        isHoldingAwake = false
+        applied = nil
+        Logger.stayAwake.notice("stay_awake_external_reset mode=\(self.mode.rawValue, privacy: .public)")
+    }
+
     func evaluate() {
+        guard isAvailable else { return }
         if mode == .always, let since = alwaysSince,
            let reason = StayAwakePolicy.endReason(conditions, alwaysSince: since, now: now()) {
             lastEndReason = reason
@@ -275,7 +318,7 @@ final class StayAwakeController: ObservableObject {
 
     /// Beim Beenden synchron: Danach läuft kein Code mehr, der aufräumen könnte.
     private func releaseForTermination() {
-        guard applied == true else { return }
+        guard isAvailable, applied == true else { return }
         applied = false
         _ = system.setSleepDisabled(false)
         try? FileManager.default.removeItem(at: marker)

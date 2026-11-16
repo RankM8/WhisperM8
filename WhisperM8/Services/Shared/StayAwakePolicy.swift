@@ -47,6 +47,13 @@ enum StayAwakePolicy {
         state == .serious || state == .critical
     }
 
+    /// Hat jemand anderes den Ruhezustand wieder eingeschaltet, den die App
+    /// abgeschaltet hat (WM8-122)? Nur ein sicher abgelesenes „an“ zählt;
+    /// nicht ablesbar heißt: nichts tun.
+    static func wasResetFromOutside(applied: Bool?, actual: Bool?) -> Bool {
+        applied == true && actual == false
+    }
+
     /// Muss „Immer wach“ enden? Reihenfolge: Hitze vor Akku vor Zeit.
     static func endReason(_ conditions: StayAwakeConditions, alwaysSince: Date, now: Date) -> StayAwakeEndReason? {
         if isHot(conditions.thermalState) { return .hot }

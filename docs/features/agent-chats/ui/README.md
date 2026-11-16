@@ -173,12 +173,31 @@ Beim Start setzt der Controller einen liegengebliebenen Merker zurück.
 „Immer“ wird nie gespeichert, `stayAwakeWhileWorking` schon. Endet „Immer“
 von selbst, fällt der Knopf auf `whileWorking` zurück und nennt den Grund im
 Tooltip. Logs: `stay_awake_mode`, `stay_awake_applied`,
-`stay_awake_always_ended`, `stay_awake_permission`.
+`stay_awake_always_ended`, `stay_awake_permission`, `stay_awake_external_reset`,
+`stay_awake_unavailable`.
 
 Der Controller (`StayAwakeController`) startet beim ersten Erscheinen der
 Sidebar und hört auf `AgentSessionRuntimeStatusStore.statuses` (irgendein
 `.working`), alle 30 s auf Strom und Akku (`IOPSCopyPowerSourcesInfo`) und auf
 `thermalStateDidChangeNotification`. Systemaufrufe laufen off-main.
+
+**Test-Instanz und Eingriffe von außen (WM8-122, 16.11.2026):** `pmset -a
+disablesleep` gilt für den ganzen Mac, und die sudo-Regel gilt für jeden
+Prozess des Users. In der Nacht vom 15. auf den 16.11. schaltete eine
+Test-Instanz (`scripts/test-instance.sh`) beim Start den Ruhezustand wieder
+ein: Ihr erstes `evaluate()` schickte `disablesleep 0`, die Haupt-App merkte
+es nicht, der Mac schlief zugeklappt ein. Seitdem:
+
+- Die Test-Instanz (`AppInstance.isTestInstance`) fasst den Ruhezustand nie
+  an: kein `sudo -n -l`, kein `pmset`, keine Wache, kein Admin-Dialog, weder
+  beim Start noch bei Klick oder Beenden (`StayAwakeController.isAvailable`).
+  Knopf und Einstellung zeigen „In der Test-Instanz nicht verfügbar“; der
+  Controller bekommt „Freigabe fehlt“ und öffnet keinen Dialog.
+- Hält die Haupt-App den Mac wach, liest sie im 30-s-Takt zusätzlich
+  `pmset -g` nach. Ist der Ruhezustand von außen wieder an, schaltet sie ihn
+  neu ab (Log `stay_awake_external_reset`), und der Tooltip nennt die Uhrzeit.
+  Kosten: ein Aufruf von `pmset -g` je 30 s, off-main und nur, solange die App
+  den Mac wach hält.
 
 ## Tabs
 

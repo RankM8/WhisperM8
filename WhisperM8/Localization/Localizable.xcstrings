@@ -6881,6 +6881,36 @@
         }
       }
     },
+    "Not available in the test instance: it never changes whether the Mac sleeps.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In der Test-Instanz nicht verfügbar: Sie ändert nie, ob der Mac schläft."
+          }
+        }
+      }
+    },
+    "At %@ something else switched sleep back on; WhisperM8 switched it off again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Um %@ hat etwas anderes den Ruhezustand wieder eingeschaltet; WhisperM8 hat ihn wieder ausgeschaltet."
+          }
+        }
+      }
+    },
+    "Not available in the test instance": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In der Test-Instanz nicht verfügbar"
+          }
+        }
+      }
+    },
     "Enlarge the tile, or go back to the grid": {
       "localizations": {
         "de": {
