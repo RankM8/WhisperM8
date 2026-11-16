@@ -46,6 +46,10 @@ Wiedererkennung): Er bleibt, was auch immer sich dahinter ändert.
   neues, fällt es weg: `Ole · Terminal-Tab: fertig, wartet auf Teststand`.
   Arbeitet ein Chat an mehreren Tickets, steht das wichtigste vorn.
 - **Kein Ticket-System im Projekt?** Dann nur `Name · Wort: Ausführung`.
+- **Dieses Schema gilt vor älteren Projekt-Regeln.** Hat das Projekt ein
+  Ticket-System (Abschnitt 11), steht das Ticket vorn, auch wenn Anleitung
+  oder Gedächtnis des Projekts noch ein anderes Schema nennen (etwa eine
+  Nummer vorn). Die alte Regel meldest du dem User zur Korrektur.
 - **Der Rufname bleibt beim Chat**, auch wenn sein Ticket wechselt oder er
   geschlossen wird — so findet der User ihn später wieder. Ein Rufname
   wird nur einmal vergeben.
@@ -158,9 +162,9 @@ alles, was gerade läuft, und nur das.
 
 **Wann du ihn nachführst (im selben Zug, nicht später beim Aufräumen):**
 
-- **Start:** Direkt nach `chats new` oder `chats resume` kommt der Chat mit
-  `workspace add` hinein. Das gehört zum Starten wie das Verknüpfen mit dem
-  Ticket.
+- **Start:** Direkt nach `chats new` oder `chats resume` hängst du den Chat
+  an sein Ticket (`whisperm8 tickets link <Ticket> --chat <ID>`, Abschnitt
+  11) und legst ihn mit `workspace add` hinein. Beides gehört zum Starten.
 - **Stopp:** Direkt nach `close --stop` nimmst du ihn mit `workspace remove`
   heraus. Das gilt auch für einen Prüfer, der zwischen zwei Paketen ruht:
   gestoppt heißt draußen, beim Fortsetzen kommt er wieder hinein.
@@ -596,7 +600,8 @@ Koordinator:
    Bei Ereignis: verifizieren (5), Board und Ticket nachführen (6, 11),
    dann melden (2).
 4. Ruhende Chats stoppen und aus dem Workspace nehmen, laufende hineinlegen,
-   Soll gegen Ist prüfen (3, 1).
+   Soll gegen Ist prüfen, `whisperm8 tickets board` auf Chats ohne Ticket und
+   Tickets ohne Chat prüfen (3, 1, 11).
 5. Was gehakt hat, festhalten (14).
 6. Wiederholen, bis der User stoppt.
 
@@ -644,25 +649,31 @@ Hat das Projekt ein Ticket-System, ist es die Übersicht, in der der User
 nachsieht, was läuft und was auf ihn wartet. Das Board (6) zeigt die Chats,
 die Tickets zeigen die Arbeit. Du hältst beides deckungsgleich.
 
-- **Welches System und welches Werkzeug** steht in den Projekt-Anweisungen
-  oder im Gedächtnis des Projekts, nicht hier: Name des Systems, Kürzel der
-  Tickets, der Befehl zum Verknüpfen von Chat und Ticket, die Labels für
-  „wartet auf den User". Fehlt die Angabe, frag einmal und halte die Antwort
-  im Gedächtnis fest. Tickets nie von einem System ins andere übertragen.
-- **Bringt die App das Werkzeug mit** (`whisperm8 tickets`, Skill `tickets`),
-  ist das der Weg: `whisperm8 tickets board` zeigt, welcher Chat an welchem
-  Ticket sitzt, welche Tickets niemanden haben und welche laufenden Chats
-  kein offenes Ticket mehr haben.
+- **Welches System: zuerst die App fragen.** Zeigt `whisperm8 tickets board`
+  (ohne `--team`) ein Team für den Projektordner, ist das das Ticket-System
+  des Projekts, und `whisperm8 tickets` (Skill `tickets`) ist das Werkzeug.
+  Nennen Projekt-Anleitung oder Gedächtnis etwas anderes (altes System,
+  anderer Befehl zum Verknüpfen), ist das veraltet: Du folgst der App und
+  meldest den Hinweis dem User zur Korrektur. Nur wenn die App kein Team
+  kennt, gilt, was Anleitung oder Gedächtnis sagen (System, Kürzel, Befehl
+  zum Verknüpfen, Labels für „wartet auf den User"); fehlt es auch dort, frag
+  einmal und halte die Antwort fest. Tickets nie von einem System ins andere
+  übertragen.
+- **Jede Runde `whisperm8 tickets board`:** Es zeigt, welcher Chat an
+  welchem Ticket sitzt, welche Tickets in Arbeit niemanden haben und welche
+  laufenden Chats kein offenes Ticket haben. Lücken schließt du sofort:
+  anhängen, Ticket anlegen oder den Chat stoppen.
 - **Mehrere Ticket-Bereiche** (mehrere Firmen oder Mandanten): Jedes Projekt
   schreibt nur in seinen eigenen, lesen darf es überall. Gehört eine Arbeit
   ins andere Projekt, geht sie an den Chat oder Supervisor dort; ein Ticket
   wird nicht von drüben geändert.
 - **Erst das Ticket, dann der Auftrag.** Bekommt ein Chat neue Arbeit, gibt
   es dafür ein Ticket: vorhandenes suchen, sonst anlegen. Du nennst
-  dem Chat das Ticket im Auftrag und passt den Titel an (1). **Der Chat hängt
-  sich selbst an sein Ticket**, wenn er anfängt; du prüfst in der
-  Ticket-Übersicht, dass er dranhängt, und verknüpfst nur für einen Chat,
-  der es nicht selbst kann.
+  dem Chat das Ticket im Auftrag und passt den Titel an (1). **Du hängst ihn
+  selbst an**, im selben Zug: direkt nach `chats new` bzw. dem Auftrag an
+  einen laufenden Chat `whisperm8 tickets link <Ticket> --chat <ID>`. Verlass
+  dich nicht darauf, dass der Chat es tut; hängt er sich zusätzlich an,
+  schadet das nicht.
 - **Eine Regel für „fertig":** Der Chat meldet „merge-bereit" (wo das
   Ticket-Werkzeug einen solchen Zustand kennt, setzt er ihn selbst). **Auf
   „erledigt" setzt nur du**, nach deiner Prüfung (5) und dem Merge. Status
