@@ -56,9 +56,9 @@ struct TicketBoardView: View {
                 TicketBoardProblemLine(load: load)
                 TicketTriageView(model: model, triage: triage, load: load, source: source, actions: actions)
             } else {
-                TicketBoardHeader(title: title, mode: $model.mode, load: load, refresh: actions.refresh)
-                HStack(alignment: .center, spacing: 8) {
-                    TicketBoardFilterBar(filter: $model.filter, counts: presentation.counts, projects: presentation.projects)
+                // „Liste kopieren“ steht im Kopf: Die Filterzeile braucht die ganze
+                // Breite, sobald rechts der Board-Chat steht (WM8-113).
+                TicketBoardHeader(title: title, mode: $model.mode, load: load, refresh: actions.refresh) {
                     if model.copied == .link {
                         // ⌘C auf dem Board: Dort gibt es keinen Link-Knopf, der „Kopiert“ zeigen könnte.
                         Label("Link copied", systemImage: "checkmark")
@@ -68,6 +68,7 @@ struct TicketBoardView: View {
                     }
                     TicketCopyButton(kind: .list, copied: model.copied) { model.copyList(title: listTitle) }
                 }
+                TicketBoardFilterBar(filter: $model.filter, counts: presentation.counts, projects: presentation.projects)
                 TicketBoardProblemLine(load: load)
                 content(presentation)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -143,11 +144,12 @@ struct TicketCopyButton: View {
 
 // MARK: - Kopf
 
-private struct TicketBoardHeader: View {
+private struct TicketBoardHeader<Trailing: View>: View {
     let title: String
     @Binding var mode: TicketBoardViewModel.Mode
     let load: TicketBoardLoad
     let refresh: () -> Void
+    @ViewBuilder let trailing: () -> Trailing
 
     var body: some View {
         HStack(spacing: 12) {
@@ -167,6 +169,7 @@ private struct TicketBoardHeader: View {
 
             Spacer(minLength: 8)
 
+            trailing()
             TicketBoardSyncLabel(load: load)
             TicketBoardRefreshButton(load: load, refresh: refresh)
         }
@@ -245,7 +248,9 @@ private struct TicketBoardFilterBar: View {
 
     var body: some View {
         let names = TicketBoardText.chipNames(counts.people.map(\.person))
-        ScrollView(.horizontal, showsIndicators: false) {
+        // Waagrecht scrollbar, mit sichtbarem Balken: Mit Board-Chat passt die
+        // Zeile oft nicht ganz, und jeder Filter muss erreichbar bleiben.
+        ScrollView(.horizontal, showsIndicators: true) {
             HStack(spacing: 6) {
                 // Die Auswahl des Projekts zuerst: Sie bleibt sichtbar, auch
                 // wenn viele Personen die Zeile füllen.
@@ -297,6 +302,8 @@ private struct TicketBoardFilterBar: View {
                     }
                 }
             }
+            // Platz für den Balken, damit er keine Filter verdeckt.
+            .padding(.bottom, 8)
         }
     }
 }

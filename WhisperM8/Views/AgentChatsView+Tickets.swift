@@ -51,14 +51,20 @@ extension AgentChatsView {
     ///
     /// `.equatable()`: Das Fenster wertet seinen Body bei jedem Statuswechsel
     /// aus. Ohne den Vergleich zöge das die Ticket-Ansicht samt Karten mit.
+    ///
+    /// Rechts daneben der Board-Chat (WM8-113, `AgentChatsView+BoardChat`).
     var ticketsWorkspace: some View {
-        TicketBoardScreen(
-            projectPath: selectedProject?.path,
-            projectName: selectedProject?.name ?? "",
-            controller: TicketBoardControllers.shared.controller(for: windowID),
-            onDisabled: { [windowStore, windowID] in windowStore.setTicketsMode(false, in: windowID) }
-        )
-        .equatable()
+        BoardChatSplit {
+            TicketBoardScreen(
+                projectPath: selectedProject?.path,
+                projectName: selectedProject?.name ?? "",
+                controller: TicketBoardControllers.shared.controller(for: windowID),
+                onDisabled: { [windowStore, windowID] in windowStore.setTicketsMode(false, in: windowID) }
+            )
+            .equatable()
+        } column: { available in
+            boardChatColumn(available: available)
+        }
     }
 }
 
@@ -80,6 +86,8 @@ struct TicketsModeButton: View {
                 windowStore.setTicketsMode(!active, in: windowID)
             }
             .accessibilityLabel(Text("Tickets"))
+            // Einstellungen der Board-Chat-Spalte schon vor dem ersten Klick lesen.
+            .task { BoardChatPreferencesStore.shared.preload() }
         }
     }
 }

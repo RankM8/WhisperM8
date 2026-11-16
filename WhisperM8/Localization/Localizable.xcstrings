@@ -24463,6 +24463,176 @@
           }
         }
       }
+    },
+    "Board chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Board-Chat"
+          }
+        }
+      }
+    },
+    "Open as tab": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Als Tab öffnen"
+          }
+        }
+      }
+    },
+    "Hide board chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Board-Chat ausblenden"
+          }
+        }
+      }
+    },
+    "Show board chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Board-Chat einblenden"
+          }
+        }
+      }
+    },
+    "Running in window %lld": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Läuft in Fenster %lld"
+          }
+        }
+      }
+    },
+    "A chat lives in one window at a time. Moving it here takes its tab out of window %lld.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Chat lebt immer in genau einem Fenster. Holst du ihn hierher, verlässt sein Tab Fenster %lld."
+          }
+        }
+      }
+    },
+    "Bring here": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hierher holen"
+          }
+        }
+      }
+    },
+    "Bring %@ to this window": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ in dieses Fenster holen"
+          }
+        }
+      }
+    },
+    "Not open in any window": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In keinem Fenster offen"
+          }
+        }
+      }
+    },
+    "Open it here as a tab. The tickets stay open.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Öffne ihn hier als Tab. Die Tickets bleiben offen."
+          }
+        }
+      }
+    },
+    "Open here": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hier öffnen"
+          }
+        }
+      }
+    },
+    "Open %@ here": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ hier öffnen"
+          }
+        }
+      }
+    },
+    "Chosen automatically: this project's Jarvis.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch gewählt: der Jarvis dieses Projekts."
+          }
+        }
+      }
+    },
+    "Chosen by you for this project.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Von dir für dieses Projekt gewählt."
+          }
+        }
+      }
+    },
+    "Drag to resize the board chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ziehen ändert die Breite des Board-Chats"
+          }
+        }
+      }
+    },
+    "No Jarvis found": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Jarvis gefunden"
+          }
+        }
+      }
+    },
+    "A chat of this project whose title starts with “Jarvis” appears here as soon as it runs or is open as a tab.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Chat dieses Projekts, dessen Titel mit „Jarvis“ beginnt, erscheint hier, sobald er läuft oder als Tab offen ist."
+          }
+        }
+      }
     }
   },
   "version": "1.0"
