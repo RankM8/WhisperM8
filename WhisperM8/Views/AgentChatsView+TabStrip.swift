@@ -193,6 +193,8 @@ extension AgentChatsView {
     // MARK: - Der Streifen selbst
 
     var projectChatStrip: some View {
+        // Läuft bei jeder Auswertung des Hauptbereichs (mainWorkspace) mit.
+        PerformanceCounters.shared.count(.bodyTabStrip)
         // Breiten einmal je Durchlauf (WM8-80, Paket 5). Der Platz dafür hängt
         // nur am Fenster und an den Knöpfen, nicht an den Tabs selbst.
         let groupingItems = tabGroupingItems

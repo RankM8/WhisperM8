@@ -135,7 +135,7 @@ struct ProjectChatGroup: View {
     }
 
     var body: some View {
-        let _ = PerfSignposts.sidebar.emitEvent("sidebar.bodyEval.projectGroup")
+        let _ = (PerfSignposts.sidebar.emitEvent("sidebar.bodyEval.projectGroup"), PerformanceCounters.shared.count(.bodyProjectGroup))
         VStack(alignment: .leading, spacing: 0) {
             groupHeader
                 .controllerListRow(.project(project.id))

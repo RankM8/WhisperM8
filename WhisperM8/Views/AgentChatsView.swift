@@ -505,7 +505,7 @@ struct AgentChatsView: View {
     }
 
     var body: some View {
-        let _ = PerfSignposts.sidebar.emitEvent("sidebar.bodyEval.chats")
+        let _ = (PerfSignposts.sidebar.emitEvent("sidebar.bodyEval.chats"), PerformanceCounters.shared.count(.bodyWindow))
         // GeometryReader liefert die Fensterbreite fuers Sidebar-Clamping —
         // er nimmt exakt die Flaeche ein, die vorher der HStack fuellte
         // (greedy), alle nachfolgenden Modifier verhalten sich unveraendert.

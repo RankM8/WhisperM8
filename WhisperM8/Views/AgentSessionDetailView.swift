@@ -149,6 +149,7 @@ struct AgentSessionDetailView: View {
     }
 
     var body: some View {
+        let _ = PerformanceCounters.shared.count(.bodySessionDetail)
         VStack(spacing: 0) {
             // Launch-/Repair-Fehler sichtbar machen (Review-Befund 2026-07-13:
             // errorMessage wurde gesetzt, aber nie gerendert — abgebrochene
@@ -212,6 +213,7 @@ struct AgentSessionDetailView: View {
             }
         }
         .onAppear {
+            PerformanceCounters.shared.count(.appearSessionDetail)
             attachToAdoptedController()
             showCollectiveStartNotice()
             // Punkt 11: Hinweis aus dem Rückfall der Übernahme.
