@@ -454,6 +454,26 @@ Tastatur beenden ihn, und er lebt beim Zurückkommen nicht wieder auf. Zweite Si
 Tasten, Scrollen und Leeren nur an `chatInputSessionID`, und das ist dort nur der Board-Chat mit Fokus, sonst
 keiner. Tests: `ControllerBoardChatFocusTests`.
 
+**Kopf und Filter** (Paket 3d, Auftrag Giuliano 16.11.2026): Stick oder Steuerkreuz ▲ über die oberste Karte,
+die oberste Zeile der Liste oder das erste Ticket der Triage führt in den Kopf, auch aus einem leeren Board (etwa
+wenn ein Filter alles ausblendet). Auf Board und Liste zuerst in die Filterzeile („Wartet auf mich“, „Alle
+Bereiche“, Agent: Alle · Mit Agent · Ohne Agent, Person: Alle · Nicht zugewiesen · je Person), mit ▲ darüber in
+die Kopfzeile („← Chats“, Board, Liste, „Liste kopieren“, Aktualisieren). In der Triage gibt es eine Zeile
+(„← Chats“, „Board“, Link, → Jarvis mit Board-Chat, Linear mit Adresse, Aktualisieren). ◀ ▶ wandern durch die
+Knöpfe, ohne Umlauf; **nur Kreuz schaltet**, Bewegen wählt nur aus, auch gehalten. ▼ unter der untersten Zeile
+und Kreis führen zurück auf die Karte, von der man kam. Ein gehaltener Stick rutscht nie in den Kopf (wie nie in
+den Board-Chat); hinein nur mit einem einzelnen Druck. „← Chats“ nimmt denselben Weg wie L2 getippt, mit
+Ankunftssperre. **„Alle Bereiche“** öffnet mit Kreuz eine Liste direkt darunter (Entscheidung 16.11.2026): ▲ ▼
+wählen, Kreuz übernimmt, Kreis schließt ohne Änderung; das Board filtert erst beim Übernehmen. Sichtbar ist die
+Auswahl am Ring in Akzentfarbe wie an den Karten; die Filterzeile scrollt mit. Die Leiste nennt im Kopf
+„Bewegen · Auswählen · Zurück“, in der Liste „Bewegen · Auswählen · Schließen“, auf dem Board „▲ Filter“. Die
+Regeln liegen pur in `Views/Tickets/TicketBoardHeaderSelection.swift`, angewendet in
+`TicketBoardViewModel+Header.swift`; dieselben Wege nimmt die Tastatur (Paket 3c).
+
+**Leiste nach Ortswechsel per Maus:** Wechselt man Ticket-Modus, Projekt, Board/Liste oder öffnet die Triage mit
+Maus oder Tastatur, liest die Leiste des Controllers sofort neu (`controllerLegendMayHaveChanged`). Vorher stand
+dort bis zum nächsten Statuswechsel eines Chats der alte Ort.
+
 Die erste Bewegung zeigt die Start-Auswahl: die Karte des Tickets, an dem der Chat dahinter hängt, sonst
 die erste Karte der ersten Spalte, in der etwas wartet, sonst die erste Karte. **Options** öffnet die
 Menü-Karte an der gewählten Karte bzw. am Kopf des großen Tickets: Ticket (Zum Chat ›, Link kopieren, In

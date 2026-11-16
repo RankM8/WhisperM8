@@ -259,6 +259,9 @@ final class ControllerBindingMatrixTests: XCTestCase {
     static let ticketsEmpty: Table = merge(ticketsCommon, [
         .move(.left, source: .leftStick, isRepeat: false): .enterList(step: 0),
         .move(.left, source: .dpad, isRepeat: false): .enterList(step: 0),
+        // Paket 3d: ▲ in den Kopf, um Filter zurückzusetzen.
+        .move(.up, source: .leftStick, isRepeat: false): .ticket(.move(.up)),
+        .move(.up, source: .dpad, isRepeat: false): .ticket(.move(.up)),
     ])
 
     /// In Board und Triage gleich.
@@ -280,10 +283,11 @@ final class ControllerBindingMatrixTests: XCTestCase {
         for direction in ControllerDirection.allCases {
             table = merge(table, moves(direction, .ticket(.move(direction))))
         }
-        // Paket 3a: Gehalten nach rechts bewegt, führt am Rand aber nie in den
-        // Board-Chat; hinein nur mit einem einzelnen Druck.
+        // Paket 3a/3d: Gehalten nach rechts oder oben bewegt, führt am Rand aber
+        // nie in den Board-Chat oder den Kopf; hinein nur mit einem einzelnen Druck.
         for source in ControllerMoveSource.allCases {
             table[.move(.right, source: source, isRepeat: true)] = .ticket(.repeatMove(.right))
+            table[.move(.up, source: source, isRepeat: true)] = .ticket(.repeatMove(.up))
         }
         return table
     }()
@@ -299,9 +303,9 @@ final class ControllerBindingMatrixTests: XCTestCase {
         for direction in ControllerDirection.allCases {
             for source in ControllerMoveSource.allCases {
                 table[.move(direction, source: source, isRepeat: false)] = .ticket(.move(direction))
-                if direction == .up || direction == .down {
-                    table[.move(direction, source: source, isRepeat: true)] = .ticket(.move(direction))
-                }
+                // Gehalten nach oben nie in den Kopf (Paket 3d).
+                if direction == .down { table[.move(direction, source: source, isRepeat: true)] = .ticket(.move(direction)) }
+                if direction == .up { table[.move(direction, source: source, isRepeat: true)] = .ticket(.repeatMove(.up)) }
             }
         }
         return table

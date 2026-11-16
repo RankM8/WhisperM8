@@ -25403,6 +25403,16 @@
           }
         }
       }
+    },
+    "Filters": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Filter"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

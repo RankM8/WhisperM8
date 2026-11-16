@@ -60,7 +60,8 @@ struct TicketBoardView: View {
             } else {
                 // „Liste kopieren“ steht im Kopf: Die Filterzeile braucht die ganze
                 // Breite, sobald rechts der Board-Chat steht (WM8-113).
-                TicketBoardHeader(title: title, mode: $model.mode, load: load, back: actions.back, refresh: actions.refresh) { compact in
+                TicketBoardHeader(title: title, mode: $model.mode, load: load, back: actions.back, refresh: actions.refresh,
+                                  model: model) { compact in
                     if model.copied == .link {
                         // ⌘C auf dem Board: Dort gibt es keinen Link-Knopf, der „Kopiert“ zeigen könnte.
                         Label("Link copied", systemImage: "checkmark")
@@ -69,8 +70,12 @@ struct TicketBoardView: View {
                             .fixedSize()
                     }
                     TicketCopyButton(kind: .list, copied: model.copied, iconOnly: compact) { model.copyList(title: listTitle) }
+                        .ticketHeaderRing(.copyList, model: model)
                 }
-                TicketBoardFilterBar(filter: $model.filter, counts: presentation.counts, projects: presentation.projects)
+                TicketBoardFilterBar(filter: $model.filter, counts: presentation.counts, projects: presentation.projects,
+                                     model: model)
+                    // Über dem Board: Die Liste der Bereiche hängt darunter (Paket 3d).
+                    .zIndex(1)
                 TicketBoardProblemLine(load: load)
                 content(presentation)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -153,6 +158,8 @@ private struct TicketBoardHeader<Trailing: View>: View {
     let load: TicketBoardLoad
     let back: TicketsBackLinkModel?
     let refresh: () -> Void
+    /// Für die Ringe der Auswahl per Controller und Tastatur (Paket 3d).
+    let model: TicketBoardViewModel
     /// `true`: knapper Kopf, Knöpfe nur als Symbol.
     @ViewBuilder let trailing: (_ compact: Bool) -> Trailing
 
@@ -171,6 +178,7 @@ private struct TicketBoardHeader<Trailing: View>: View {
         HStack(spacing: compact ? 8 : 12) {
             if let back {
                 TicketsBackLinkButton(link: back, compact: compact)
+                    .ticketHeaderRing(.back, model: model)
             }
             Text(verbatim: title)
                 .font(.system(size: 15, weight: .semibold))
@@ -185,12 +193,20 @@ private struct TicketBoardHeader<Trailing: View>: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .fixedSize()
+            // Je eine Hälfte für Board und Liste (beide Wörter sind etwa gleich lang).
+            .overlay {
+                HStack(spacing: 0) {
+                    Color.clear.ticketHeaderRing(.modeBoard, model: model, cornerRadius: 6)
+                    Color.clear.ticketHeaderRing(.modeList, model: model, cornerRadius: 6)
+                }
+            }
 
             Spacer(minLength: 8)
 
             trailing(compact)
             if !compact { TicketBoardSyncLabel(load: load) }
             TicketBoardRefreshButton(load: load, refresh: refresh)
+                .ticketHeaderRing(.refresh, model: model)
         }
     }
 }
@@ -264,11 +280,14 @@ private struct TicketBoardFilterBar: View {
     @Binding var filter: TicketBoardFilter
     let counts: TicketFilterCounts
     let projects: [String]
+    /// Für Ringe, Mitscrollen und die Liste der Bereiche (Paket 3d).
+    let model: TicketBoardViewModel
 
     var body: some View {
         let names = TicketBoardText.chipNames(counts.people.map(\.person))
         // Waagrecht scrollbar, mit sichtbarem Balken: Mit Board-Chat passt die
         // Zeile oft nicht ganz, und jeder Filter muss erreichbar bleiben.
+        ScrollViewReader { proxy in
         ScrollView(.horizontal, showsIndicators: true) {
             HStack(spacing: 6) {
                 // Die Auswahl des Projekts zuerst: Sie bleibt sichtbar, auch
@@ -280,6 +299,8 @@ private struct TicketBoardFilterBar: View {
                 } label: {
                     Text("Waiting for me")
                 }
+                .ticketHeaderRing(.waitingForMe, model: model)
+                .id(TicketHeaderItem.waitingForMe)
 
                 Rectangle().fill(AgentTheme.border).frame(width: 1, height: 16).padding(.horizontal, 4)
 
@@ -294,35 +315,66 @@ private struct TicketBoardFilterBar: View {
                 .labelsHidden()
                 .pickerStyle(.menu)
                 .fixedSize()
+                .ticketHeaderRing(.project, model: model)
+                .id(TicketHeaderItem.project)
+                .anchorPreference(key: TicketProjectPickerAnchorKey.self, value: .bounds) { $0 }
 
                 Rectangle().fill(AgentTheme.border).frame(width: 1, height: 16).padding(.horizontal, 4)
 
                 TicketFilterGroupLabel(text: "Agent")
                 TicketFilterChip(isOn: filter.agent == .all, count: counts.all) { filter.agent = .all } label: { Text("All") }
+                    .ticketHeaderRing(.agent(.all), model: model)
+                    .id(TicketHeaderItem.agent(.all))
                 TicketFilterChip(isOn: filter.agent == .withAgent, count: counts.withAgent) { filter.agent = .withAgent } label: {
                     Text("With agent")
                 }
+                .ticketHeaderRing(.agent(.withAgent), model: model)
+                .id(TicketHeaderItem.agent(.withAgent))
                 TicketFilterChip(isOn: filter.agent == .withoutAgent, count: counts.withoutAgent) { filter.agent = .withoutAgent } label: {
                     Text("Without agent")
                 }
+                .ticketHeaderRing(.agent(.withoutAgent), model: model)
+                .id(TicketHeaderItem.agent(.withoutAgent))
 
                 Rectangle().fill(AgentTheme.border).frame(width: 1, height: 16).padding(.horizontal, 4)
 
                 TicketFilterGroupLabel(text: "Person")
                 TicketFilterChip(isOn: filter.person == .all, count: nil) { filter.person = .all } label: { Text("All") }
+                    .ticketHeaderRing(.person(.all), model: model)
+                    .id(TicketHeaderItem.person(.all))
                 TicketFilterChip(isOn: filter.person == .unassigned, count: counts.unassigned) { filter.person = .unassigned } label: {
                     Text("Unassigned")
                 }
+                .ticketHeaderRing(.person(.unassigned), model: model)
+                .id(TicketHeaderItem.person(.unassigned))
                 ForEach(counts.people, id: \.person.id) { entry in
                     TicketFilterChip(isOn: filter.person == .person(id: entry.person.id), count: entry.count) {
                         filter.person = .person(id: entry.person.id)
                     } label: {
                         Text(verbatim: names[entry.person.id] ?? entry.person.name)
                     }
+                    .ticketHeaderRing(.person(.person(id: entry.person.id)), model: model)
+                    .id(TicketHeaderItem.person(.person(id: entry.person.id)))
                 }
             }
-            // Platz für den Balken, damit er keine Filter verdeckt.
+            // Platz für den Balken (und die Ringe), damit er keine Filter verdeckt.
             .padding(.bottom, 8)
+            .padding(.horizontal, 4)
+            .padding(.top, 4)
+            .background { TicketHeaderScroller(model: model, proxy: proxy) }
+        }
+        }
+        // Liste der Bereiche direkt unter „Alle Bereiche“ (Entscheidung 16.11.2026).
+        .overlayPreferenceValue(TicketProjectPickerAnchorKey.self) { anchor in
+            GeometryReader { geometry in
+                if let anchor {
+                    let rect = geometry[anchor]
+                    TicketProjectPickerList(model: model, projects: projects)
+                        .offset(x: rect.minX, y: rect.maxY + 4)
+                }
+            }
+            // Nur Anzeige: Die Maus bedient weiter das Menü selbst.
+            .allowsHitTesting(false)
         }
     }
 }

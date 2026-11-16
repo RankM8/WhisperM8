@@ -201,8 +201,9 @@ final class ControllerTicketsWhereToTests: XCTestCase {
             place.chatLineTitle = chatTitle
             return ControllerLegend.entries(for: .tickets(ControllerTicketState(place: place))).map(\.label)
         }
-        XCTAssertEqual(Array(labels(.board).prefix(7)),
-                       [.ticketSelection, .open, .copyLink, .ticketPreviousNext, .openInLinear, .refresh, .menu])
+        // Paket 3d: „▲ Filter“ gleich hinter „Öffnen“.
+        XCTAssertEqual(Array(labels(.board).prefix(8)),
+                       [.ticketSelection, .open, .boardFilters, .copyLink, .ticketPreviousNext, .openInLinear, .refresh, .menu])
         XCTAssertTrue(labels(.triage).contains(.backToBoard))
         XCTAssertTrue(labels(.triage).contains(.read))
         XCTAssertFalse(labels(.triage).contains(.chatsOnTicket), "▶ nur, wenn das Ticket Chats hat")

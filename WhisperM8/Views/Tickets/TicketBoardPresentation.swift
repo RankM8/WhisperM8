@@ -104,7 +104,19 @@ final class TicketBoardViewModel {
         case list
     }
 
-    var mode: Mode = .board
+    var mode: Mode = .board {
+        didSet { if mode != oldValue { onControllerViewChange?() } }
+    }
+    /// Controller und Tastatur (WM8-91 Paket 3d): Auswahl im Kopf; `nil` =
+    /// auf den Karten. Board und Karten behalten ihre Auswahl darunter.
+    var headerFocus: TicketHeaderSpot?
+    /// Liste der Bereiche unter „Alle Bereiche“ offen: gewählter Eintrag.
+    var projectPickerIndex: Int?
+    /// Zuletzt gewählter Knopf der Filterzeile: Dort steigt ▲ wieder ein.
+    @ObservationIgnored var lastHeaderItem: TicketHeaderItem?
+    /// Ansicht gewechselt (Board/Liste, Triage auf/zu), auch per Maus: Die
+    /// Leiste des Controllers liest dann neu (WM8-91, Befund vom 16.11.2026).
+    @ObservationIgnored var onControllerViewChange: (@MainActor () -> Void)?
     /// Fenster dieser Ansicht; daran hängt der Board-Chat (WM8-113). `nil` in Bildern und Tests.
     @ObservationIgnored var windowID: UUID?
     var filter = TicketBoardFilter() {
@@ -127,7 +139,16 @@ final class TicketBoardViewModel {
     /// Gerechnet beim Wählen und bei einem neuen Abzug, nicht beim Zeichnen.
     private(set) var detail: TicketDetailContent?
     /// Offene Triage; `nil` zeigt das Board oder die Liste.
-    private(set) var triage: TicketTriage?
+    private(set) var triage: TicketTriage? {
+        didSet {
+            // Triage auf oder zu: Der Kopf hat dann andere Knöpfe; die Auswahl
+            // dort beginnt neu, und die Leiste des Controllers liest neu.
+            guard (triage == nil) != (oldValue == nil) else { return }
+            headerFocus = nil
+            projectPickerIndex = nil
+            onControllerViewChange?()
+        }
+    }
     /// Kommentare des Tickets in der Triage.
     private(set) var comments: TicketCommentsLoad = .loading
     /// Fertiger Text für die Mitte der Triage.

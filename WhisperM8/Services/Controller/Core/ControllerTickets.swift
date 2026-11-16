@@ -16,6 +16,10 @@ enum ControllerTicketView: String, Sendable {
     case triage
     /// Ticket groß, Fokus auf einer Zeile unter „Chats am Ticket“.
     case chatLine
+    /// Auswahl im Kopf: Filter, Board/Liste, „← Chats“ … (Paket 3d).
+    case header
+    /// Liste der Bereiche unter „Alle Bereiche“ offen (Paket 3d).
+    case headerPicker
 }
 
 /// Das Board, das ein Fenster gerade zeigt. Steht im Schnappschuss des
@@ -222,6 +226,12 @@ enum ControllerTicketOutcome: Equatable, Sendable {
     case rejected
     /// Links aus der ersten Spalte oder der Liste: weiter in die Seitenleiste.
     case leftEdge
+    /// Oben über die oberste Karte, Zeile oder das erste Ticket der Triage:
+    /// weiter in den Kopf (Paket 3d). Das Fenster wandelt es selbst um.
+    case topEdge
+    /// „← Chats“ im Kopf ausgelöst: zurück an den vorigen Ort wie L2 getippt
+    /// (Paket 3d). Den Sprung macht der Aufrufer, mit Ankunftssperre.
+    case goBack
     /// Rechts über die letzte Spalte, das Ende der Liste oder aus der
     /// Triage hinaus: weiter in den Board-Chat, falls einer sichtbar ist.
     case rightEdge

@@ -83,6 +83,7 @@ extension ControllerLegendLabel {
         case .backIntoBoard: return String(localized: "Back into the board")
         case .intoBoardChat: return String(localized: "Board chat")
         case .leaveBoardChat: return String(localized: "Back to the ticket")
+        case .boardFilters: return String(localized: "Filters")
         case .handOffToBoardChat: return String(localized: "To the board chat")
         case .limitsCard: return String(localized: "Limits")
         case .alertLevel: return String(localized: "Alerts")
