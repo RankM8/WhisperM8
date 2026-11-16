@@ -153,6 +153,12 @@ final class RecordingCoordinator {
     var inFlightDeliveryTarget: DictationDeliveryTarget = .frontApp
     /// Schreibt Diktate direkt in das Terminal eines Agent-Chats.
     let chatWriter: DictationChatWriting
+    /// Board-Chat im Ticket-Modus (WM8-113): sichtbarer Chat des vorderen
+    /// Fensters, und der Bezug, der vor seine nächste Nachricht gehört.
+    var boardChatTarget: @MainActor () -> UUID? = { BoardChatInputs.shared.dictationTarget() }
+    var boardChatReference: @MainActor (UUID) -> (prefix: String, commit: () -> Void)? = {
+        BoardChatInputs.shared.referenceForDictation(to: $0)
+    }
     /// Hinweis, wenn ein Diktat für einen Chat nur in der Zwischenablage
     /// gelandet ist (Titel, Text).
     let dictationNoticePoster: @MainActor (_ title: String, _ body: String) -> Void
@@ -251,6 +257,16 @@ final class RecordingCoordinator {
         refreshPreservedRecordingFlag()
     }
 
+    /// Pur: Nur ein Diktat ins vordere Programm wird umgelenkt, und nur bei
+    /// einem Agent-Chats-Fenster vorn, das einen Board-Chat zeigt. Ein
+    /// ausdrückliches Ziel (Controller, Insel) bleibt.
+    nonisolated static func boardChatTarget(
+        _ target: DictationDeliveryTarget, hasKeyAgentWindow: Bool, boardChat: UUID?
+    ) -> DictationDeliveryTarget {
+        guard target == .frontApp, hasKeyAgentWindow, let boardChat else { return target }
+        return .agentChat(sessionID: boardChat)
+    }
+
     /// `captureContext: false` nur für `debug record`: kein Cmd+C an die
     /// Vordergrund-App, keine Screenshots.
     /// `target`: wohin das Diktat am Ende geht; der Hotkey bleibt bei `.frontApp`.
@@ -291,6 +307,11 @@ final class RecordingCoordinator {
             // Mikrofonstart.
             let keyAgentWindow = AgentWindowStore.shared.keyAgentChatWindowID
             activeAgentChat = keyAgentWindow != nil ? appState.activeAgentChat : nil
+            // Ticket-Modus mit sichtbarem Board-Chat: Das Diktat geht dorthin,
+            // gleich wo der Tastaturfokus steht, mit den Regeln des Chat-Wegs
+            // (kein Enter, nichts in offene Fragen oder Freigaben).
+            pendingDeliveryTarget = Self.boardChatTarget(
+                pendingDeliveryTarget, hasKeyAgentWindow: keyAgentWindow != nil, boardChat: boardChatTarget())
         } else {
             activeAgentChat = nil
         }

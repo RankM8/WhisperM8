@@ -37,7 +37,7 @@ enum TicketCopyText {
     }
 
     /// Nur `https`-Adressen, wie „In Linear öffnen“.
-    private static func safeURL(_ ticket: Ticket) -> String? {
+    static func safeURL(_ ticket: Ticket) -> String? {
         guard let raw = ticket.url, let url = URL(string: raw), url.scheme?.lowercased() == "https", url.host != nil else { return nil }
         return raw
     }

@@ -549,3 +549,60 @@ final class RecordingCoordinatorDeliveryTests: XCTestCase {
         XCTAssertEqual(coordinator.pendingDeliveryTarget, .frontApp)
     }
 }
+
+// MARK: - Board-Chat (WM8-113)
+
+@MainActor
+extension RecordingCoordinatorDeliveryTests {
+    func testBoardChatDictationGetsTheReferenceInFrontOnce() async throws {
+        preferences.isAutoPasteEnabled = true
+        let audio = try makeAudio()
+        let coordinator = makeCoordinator(text: "Erst die Abnahme.")
+        var commits = 0
+        coordinator.boardChatReference = { [sessionID] target in
+            target == sessionID ? ("Bezug: WM8-86 „Titel“ https://linear.app/whisperm8/issue/WM8-86\n", { commits += 1 }) : nil
+        }
+        try await coordinator.transcribeAndDeliver(
+            audioURL: audio, audioDuration: 2, outputMode: rawMode, contextBundle: .empty, delivery: chatDelivery)
+
+        XCTAssertEqual(chatWriter.writes, [.init(
+            text: "Bezug: WM8-86 „Titel“ https://linear.app/whisperm8/issue/WM8-86\nErst die Abnahme.",
+            sessionID: sessionID, submit: false)])
+        XCTAssertEqual(commits, 1)
+        XCTAssertEqual(pasteSpy.clipboardText, "Erst die Abnahme.", "Zwischenablage nur mit dem Diktat")
+        XCTAssertEqual(pasteSpy.keyEvents, 0)
+    }
+
+    func testFailedWriteKeepsTheReference() async throws {
+        let audio = try makeAudio()
+        let coordinator = makeCoordinator(text: "Text")
+        chatWriter.writeSucceeds = false
+        var commits = 0
+        coordinator.boardChatReference = { _ in ("Bezug: WM8-1\n", { commits += 1 }) }
+        try await coordinator.transcribeAndDeliver(
+            audioURL: audio, audioDuration: 2, outputMode: rawMode, contextBundle: .empty, delivery: chatDelivery)
+        XCTAssertEqual(commits, 0)
+    }
+
+    func testOpenQuestionGetsNoReferenceAndNothingInTheField() async throws {
+        let audio = try makeAudio()
+        let coordinator = makeCoordinator(text: "Text")
+        chatWriter.chatState = .awaitingInput
+        coordinator.boardChatReference = { _ in XCTFail("kein Bezug ohne Schreiben"); return nil }
+        try await coordinator.transcribeAndDeliver(
+            audioURL: audio, audioDuration: 2, outputMode: rawMode, contextBundle: .empty, delivery: chatDelivery)
+        XCTAssertTrue(chatWriter.writes.isEmpty)
+    }
+
+    func testOnlyFrontAppDictationIsRedirectedToTheBoardChat() {
+        let board = UUID(), other = UUID()
+        XCTAssertEqual(RecordingCoordinator.boardChatTarget(.frontApp, hasKeyAgentWindow: true, boardChat: board),
+                       .agentChat(sessionID: board))
+        XCTAssertEqual(RecordingCoordinator.boardChatTarget(.frontApp, hasKeyAgentWindow: false, boardChat: board), .frontApp,
+                       "Ohne Agent-Chats-Fenster vorn (Einstellungen, andere App) bleibt es beim vorderen Programm")
+        XCTAssertEqual(RecordingCoordinator.boardChatTarget(.frontApp, hasKeyAgentWindow: true, boardChat: nil), .frontApp)
+        XCTAssertEqual(RecordingCoordinator.boardChatTarget(.agentChat(sessionID: other), hasKeyAgentWindow: true, boardChat: board),
+                       .agentChat(sessionID: other), "Ein ausdrückliches Ziel bleibt")
+    }
+}
+

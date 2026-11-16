@@ -43,6 +43,8 @@ struct BoardChatColumnActions {
 struct BoardChatColumnView<StatusDot: View, Terminal: View>: View {
     let state: BoardChatColumnState
     let actions: BoardChatColumnActions
+    /// Unter dem Terminal: Bezug und Hinweise (Teil b). Nur bei `.terminal`.
+    var inputBar: AnyView? = nil
     @ViewBuilder let statusDot: () -> StatusDot
     @ViewBuilder let terminal: () -> Terminal
 
@@ -52,6 +54,7 @@ struct BoardChatColumnView<StatusDot: View, Terminal: View>: View {
             Divider().overlay(AgentTheme.border)
             content
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if state.content == .terminal, let inputBar { inputBar }
             footer
         }
         .background(AgentTheme.background)

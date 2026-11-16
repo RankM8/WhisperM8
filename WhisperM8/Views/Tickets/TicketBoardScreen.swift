@@ -309,6 +309,7 @@ final class TicketBoardControllers {
     func controller(for windowID: UUID) -> TicketBoardController {
         if let known = byWindow[windowID] { return known }
         let fresh = TicketBoardController(environment: .live)
+        fresh.viewModel.windowID = windowID
         byWindow[windowID] = fresh
         return fresh
     }

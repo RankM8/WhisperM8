@@ -359,7 +359,8 @@ in [`../design/ticket-board/`](../design/ticket-board/).
 - **Steuerkanal:** Wählt `whisperm8 chats focus`, `chats open` oder `workspace open` einen Chat, bleiben die
   Tickets ebenfalls stehen; die Auswahl wechselt dahinter. Ausnahme: ein Chat, der erst starten muss
   (`chats start`, `chats resume`), siehe Grenzen.
-- **Was hinter den Tickets nicht gilt:** Der gewählte Chat ist kein Ziel für das Diktat, ein Subagent-Ergebnis
+- **Was hinter den Tickets nicht gilt:** Der gewählte Chat ist kein Ziel für das Diktat (Ziel ist der sichtbare
+  Board-Chat, siehe unten), ein Subagent-Ergebnis
   gilt nicht als gelesen, und das Projekt des Boards folgt einer Auswahl aus dem Steuerkanal nicht. Beim
   Verlassen der Tickets wird beides für den gewählten Chat nachgeholt: Das Projekt folgt ihm, sein Ergebnis gilt
   als gelesen.
@@ -409,6 +410,20 @@ Idee 3.
   Seitenleiste neu auswerten.
 - **Filter:** „Liste kopieren“ steht im Kopf neben „Aktualisieren“; die Filterzeile hat die ganze Breite und
   scrollt waagrecht mit sichtbarem Balken, damit mit Board-Chat jeder Filter erreichbar bleibt.
+- **Eingaben (Teil b):** Solange die Spalte ihr Terminal zeigt, meldet sie den Chat als sichtbar an
+  (`BoardChatInputs`, je Fenster, mit Zeichen gegen späte Abmeldungen). Ein Diktat per Hotkey geht dann an ihn,
+  gleich wo der Tastaturfokus steht, solange ein Agent-Chats-Fenster vorn ist (`RecordingCoordinator.boardChatTarget`);
+  ein ausdrückliches Ziel (Controller, Insel) bleibt. Es nimmt den Chat-Weg: kein Enter, bei offener Frage oder
+  Freigabe, beim Hochfahren oder am Limit nur Zwischenablage. Der Board-Chat ist im Ticket-Modus auch Kontext des
+  Diktats. Tastatur geht nur bei Fokus im Terminal an ihn; J/K, ⌘C und Esc im Board bleiben beim Board.
+- **Bezug:** Unter dem Terminal steht „Bezug: WM8-81 ✕“ für das Ticket der Triage. Das nächste Diktat an den
+  Board-Chat beginnt mit einer Zeile „Bezug: WM8-81 „Titel“ <Adresse>“, danach gilt der Bezug für dieses Ticket als
+  verbraucht; ✕ nimmt ihn für dieses Ticket weg. Getippter Text bekommt (noch) keinen Bezug.
+- **„→ Jarvis“** in der Triage legt `WM8-81 „Titel“ <Adresse>` ins Eingabefeld des Board-Chats; abgeschickt
+  wird mit Giulianos Return nach einem Klick ins Terminal (den Fokus gibt nur dieser Klick). Bei offener Frage oder Freigabe (Status, Codex-Dialog,
+  `DelayedEnterGuard.approvalPending` wie bei `chats send`), beim Hochfahren oder am Limit kommt nichts hinein: Warnton
+  und ein Satz unter dem Terminal. Aufträge nennen nur Nummer, Titel und Adresse (`BoardChatText`, Titel ohne
+  Steuerzeichen wie beim Kopieren), nie die Beschreibung.
 - **Kosten:** Öffnen der Tickets hängt das Terminal einmal um (`pane.attach`, gemessen rund 70 ms auf ruhigem
   Rechner), Schließen einmal zurück; im Raster hängt das Schließen wie bisher alle Kacheln wieder ein. Je
   Auswertung des Fensters: Nachschlagen weniger Dutzend Chats über den Index des Workspace (WM8-101). Die Triage beobachtet allein der Breiten-Modifier
@@ -649,4 +664,5 @@ Liste, ⌘C, Prüfung der Regel), `TicketTeamRuleTests`
 (Regel je Team, Spalten nach Status, „Wartet auf mich“, Befehl `setup --status`),
 `TicketBoardControllerTests` (Zuordnung, Abruf nur bei sichtbarer Ansicht, Leerzustände, Projektwechsel, überholte
 Antworten), `AgentWindowStoreTicketsModeTests` (Umschalter je Fenster, Rückkehr zu den Chats, Schnappschuss für
-den Controller) und `BoardChatRulesTests` (Jarvis wie die CLI, Wahl, Ort je Fenster, Breite, Speicher je Projekt). Bilder des Board-Chats: `make snapshots ONLY=board-chat`. Was nur von Hand prüfbar ist, steht als Liste im Plan unter „Tests und Abnahme“.
+den Controller) und `BoardChatRulesTests` (Jarvis wie die CLI, Wahl, Ort je Fenster, Breite, Speicher je Projekt), `BoardChatInputsTests` (Ziel nur sichtbar und vorn, Schutz bei Frage und Freigabe,
+Bezug, Texte) und `RecordingCoordinatorDeliveryTests` (Bezug vor dem Diktat, Umlenken nur vom vorderen Programm). Bilder des Board-Chats: `make snapshots ONLY=board-chat`. Was nur von Hand prüfbar ist, steht als Liste im Plan unter „Tests und Abnahme“.

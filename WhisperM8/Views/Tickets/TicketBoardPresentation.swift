@@ -105,6 +105,8 @@ final class TicketBoardViewModel {
     }
 
     var mode: Mode = .board
+    /// Fenster dieser Ansicht; daran hängt der Board-Chat (WM8-113). `nil` in Bildern und Tests.
+    @ObservationIgnored var windowID: UUID?
     var filter = TicketBoardFilter() {
         didSet { if filter != oldValue { rebuild() } }
     }

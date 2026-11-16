@@ -24633,6 +24633,126 @@
           }
         }
       }
+    },
+    "Re:": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bezug:"
+          }
+        }
+      }
+    },
+    "Re: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bezug: %@"
+          }
+        }
+      }
+    },
+    "No board chat is shown here.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hier steht kein Board-Chat."
+          }
+        }
+      }
+    },
+    "%@ is waiting for your answer. Nothing was added.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ wartet auf deine Antwort. Nichts eingefügt."
+          }
+        }
+      }
+    },
+    "%@ is still starting. Nothing was added.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ startet noch. Nichts eingefügt."
+          }
+        }
+      }
+    },
+    "%@'s account has reached its usage limit. Nothing was added.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Konto von %@ ist am Nutzungslimit. Nichts eingefügt."
+          }
+        }
+      }
+    },
+    "%@ isn't running. Nothing was added.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ läuft nicht. Nichts eingefügt."
+          }
+        }
+      }
+    },
+    "Put number, title and link into the input field of %@. Nothing is sent until you press Return.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Legt Nummer, Titel und Link ins Eingabefeld von %@. Abgeschickt wird erst mit deinem Return."
+          }
+        }
+      }
+    },
+    "Hand ticket to %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ticket an %@ geben"
+          }
+        }
+      }
+    },
+    "Remove the reference": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bezug entfernen"
+          }
+        }
+      }
+    },
+    "Remove the reference to %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bezug auf %@ entfernen"
+          }
+        }
+      }
+    },
+    "Goes in front of your next dictation: number, title and link.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steht vor deinem nächsten Diktat: Nummer, Titel und Link."
+          }
+        }
+      }
     }
   },
   "version": "1.0"
