@@ -318,7 +318,7 @@ final class TicketBoardControllerTests: XCTestCase {
 
     func testProjectChangeDropsFilterSelectionAndOldBoard() async {
         let world = readyWorld()
-        world.set(projectB, .ready(team: "DS", workspace: "dealsupply", projectPath: projectB))
+        world.set(projectB, .ready(team: "ABC", workspace: "dealsupply", projectPath: projectB))
         world.source.onBoard = { team in
             team == "WM8"
                 ? TicketFixtures.snapshot([TicketFixtures.ticket(1), TicketFixtures.ticket(2)], at: 100)
@@ -350,7 +350,7 @@ final class TicketBoardControllerTests: XCTestCase {
         // Der Takt des alten Projekts ruft nicht mehr ab.
         let before = world.source.calls.filter { $0 == "board WM8" }.count
         await world.tick()
-        await settle { world.source.calls.filter { $0 == "board DS" }.count == 2 }
+        await settle { world.source.calls.filter { $0 == "board ABC" }.count == 2 }
         XCTAssertEqual(world.source.calls.filter { $0 == "board WM8" }.count, before)
     }
 

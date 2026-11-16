@@ -190,9 +190,9 @@ final class WorktreeProjectDisplayTests: XCTestCase {
         try "gitdir: \(gitDir.path)\n".write(to: sibling.appendingPathComponent(".git"), atomically: true, encoding: .utf8)
 
         var config = TicketConfig()
-        config.set(team: "AKQ", forProject: main.path)
-        XCTAssertEqual(config.team(forDirectory: sibling.path), "AKQ")
-        XCTAssertEqual(config.team(forDirectory: sibling.appendingPathComponent("app").path), "AKQ")
+        config.set(team: "XYZ", forProject: main.path)
+        XCTAssertEqual(config.team(forDirectory: sibling.path), "XYZ")
+        XCTAssertEqual(config.team(forDirectory: sibling.appendingPathComponent("app").path), "XYZ")
         XCTAssertNotNil(config.projectPath(forDirectory: sibling.path))
         XCTAssertNil(config.team(forDirectory: base.appendingPathComponent("fremd").path))
     }

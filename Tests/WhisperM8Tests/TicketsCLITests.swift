@@ -94,22 +94,22 @@ final class TicketsCLITests: XCTestCase {
                                        otherWorkspace: TicketsCLIArguments.allowsOtherWorkspace(arguments))
     }
 
-    /// Zwei Firmen: `whisperm8` mit dem Team WM8, `dealsupply` mit dem Team DS.
+    /// Zwei Firmen: `whisperm8` mit dem Team WM8, `dealsupply` mit dem Team ABC.
     private func twoWorkspaceWorld() -> World {
         let world = makeWorld()
-        world.config.set(team: "DS", forProject: otherProject)
-        world.config.set(workspace: "dealsupply", forTeam: "DS")
+        world.config.set(team: "ABC", forProject: otherProject)
+        world.config.set(workspace: "dealsupply", forTeam: "ABC")
         world.storedKeys["dealsupply"] = "lin_api_ds"
         world.other.onAccount = {
             TicketAccount(userName: "Giuliano Costa", workspace: "DealSupply (linear.app/dealsupply)", workspaceKey: "dealsupply", isAdmin: true)
         }
-        world.other.onTeams = { ["DEA", "DS", "PRB"] }
+        world.other.onTeams = { ["ABA", "ABC", "PQR"] }
         world.chats.append(TicketChat(id: kai, title: "Kai · Umzug", projectName: "ListM8", projectPath: otherProject,
                                       state: .idle, isRunning: true))
         world.other.onTicket = { key in
             var ticket = TicketFixtures.ticket(5, status: "Todo", title: "Import prüfen")
             ticket.key = key
-            return TicketContext(ticket: ticket, team: "DS", statuses: TicketFixtures.statuses)
+            return TicketContext(ticket: ticket, team: "ABC", statuses: TicketFixtures.statuses)
         }
         return world
     }
@@ -707,7 +707,7 @@ final class TicketsCLITests: XCTestCase {
         let world = makeWorld()
         world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12)) }
         world.source.onPerson = { query in
-            if query == "xen" { throw TicketSourceError.ambiguous("„xen“ passt auf mehrere Personen: Xenia Muster, Xeno Suter") }
+            if query == "xen" { throw TicketSourceError.ambiguous("„xen“ passt auf mehrere Personen: Xena Beispiel, Xenia Muster") }
             return self.giuliano
         }
         _ = try await run(["assign", "WM8-12", "me"], world)
@@ -770,11 +770,11 @@ final class TicketsCLITests: XCTestCase {
 
     func testBoardWithExplicitTeamUsesThatTeamsProject() async throws {
         let world = makeWorld()
-        world.config.set(team: "DS", forProject: "/Users/g/repos/ListM8")
+        world.config.set(team: "ABC", forProject: "/Users/g/repos/ListM8")
         world.chats.append(TicketChat(id: UUID(), title: "1 Ana · Slack", projectName: "ListM8", projectPath: "/Users/g/repos/ListM8",
                                       state: .idle, isRunning: true))
         world.source.onBoard = { team in TicketBoardSnapshot(team: team, statuses: [], tickets: [], fetchedAt: Date()) }
-        let output = try await run(["board", "--team", "DS"], world)
+        let output = try await run(["board", "--team", "ABC"], world)
         XCTAssertTrue(output.stdout.contains("1 Ana"), "Chats des genannten Teams, nicht des aktuellen Ordners")
         XCTAssertFalse(output.stdout.contains("2 Ole"))
     }
@@ -856,12 +856,12 @@ final class TicketsCLITests: XCTestCase {
         let world = makeWorld()
         world.config = TicketConfig()
         world.config.add(workspace: "dealsupply")
-        world.other.onTeams = { ["DS"] }
+        world.other.onTeams = { ["ABC"] }
         world.directory = "/Users/g/repos"
-        let output = try await run(["setup", "--project", "ListM8", "--team", "ds"], world)
-        XCTAssertEqual(world.savedConfigs.last?.teamsByProjectPath, ["/Users/g/repos/ListM8": "DS"])
-        XCTAssertEqual(world.savedConfigs.last?.workspacesByTeam, ["DS": "dealsupply"])
-        XCTAssertTrue(output.stdout.contains("/Users/g/repos/ListM8 gehört zum Team DS im Workspace „dealsupply“."), output.stdout)
+        let output = try await run(["setup", "--project", "ListM8", "--team", "abc"], world)
+        XCTAssertEqual(world.savedConfigs.last?.teamsByProjectPath, ["/Users/g/repos/ListM8": "ABC"])
+        XCTAssertEqual(world.savedConfigs.last?.workspacesByTeam, ["ABC": "dealsupply"])
+        XCTAssertTrue(output.stdout.contains("/Users/g/repos/ListM8 gehört zum Team ABC im Workspace „dealsupply“."), output.stdout)
     }
 
     // MARK: Ordner ohne Team (WM8-95)
@@ -895,10 +895,10 @@ final class TicketsCLITests: XCTestCase {
     }
 
     func testTwoWorkspacesTheOnlyTeamWithAFolderIsNotEverybodysTeam() async throws {
-        // Der Fall aus dem Ticket: Die Zuordnung von whisperm8 fällt weg, übrig bleibt DS als einziges Team mit Ordner.
+        // Der Fall aus dem Ticket: Die Zuordnung von whisperm8 fällt weg, übrig bleibt ABC als einziges Team mit Ordner.
         let world = twoWorkspaceWorld()
         world.config.removeProject(project)
-        XCTAssertEqual(world.config.onlyTeam, "DS")
+        XCTAssertEqual(world.config.onlyTeam, "ABC")
         XCTAssertNil(world.config.teamForReadingAnywhere, "bei zwei Firmen wird nicht geraten")
         world.other.onBoard = { _ in TicketFixtures.snapshot([]) }
         world.other.onCreate = { draft in TicketFixtures.ticket(70, title: draft.title) }
@@ -908,7 +908,7 @@ final class TicketsCLITests: XCTestCase {
             world.directory = directory
             let refused = try await run(["new", "Verirrt"], world)
             XCTAssertEqual(refused.exitCode, TicketsCLIExit.usage, directory)
-            XCTAssertTrue(refused.stderr.contains("Nichts angelegt") && refused.stderr.contains("Eingerichtet: DS, WM8."), refused.stderr)
+            XCTAssertTrue(refused.stderr.contains("Nichts angelegt") && refused.stderr.contains("Eingerichtet: ABC, WM8."), refused.stderr)
             let board = try await run(["board"], world)
             XCTAssertEqual(board.exitCode, TicketsCLIExit.usage, directory)
             XCTAssertTrue(board.stderr.hasPrefix("Team unklar:") && board.stderr.contains("--team <Kürzel>"), board.stderr)
@@ -919,16 +919,16 @@ final class TicketsCLITests: XCTestCase {
         // Lesen geht weiter überall, sobald das Team genannt ist: per --team oder über die Ticket-Nummer.
         world.caller = nil
         world.directory = "/Users/g/Downloads"
-        let board = try await run(["board", "--team", "DS"], world)
+        let board = try await run(["board", "--team", "ABC"], world)
         XCTAssertEqual(board.exitCode, 0, board.stderr)
-        let list = try await run(["list", "--team", "DS"], world)
+        let list = try await run(["list", "--team", "ABC"], world)
         XCTAssertEqual(list.exitCode, 0, list.stderr)
-        let show = try await run(["show", "DS-5"], world)
+        let show = try await run(["show", "ABC-5"], world)
         XCTAssertEqual(show.exitCode, 0, show.stderr)
         XCTAssertTrue(writes(world, world.other).isEmpty)
 
         // Und wer das Team nennt, legt an.
-        let named = try await run(["new", "Gewollt", "--team", "DS"], world)
+        let named = try await run(["new", "Gewollt", "--team", "ABC"], world)
         XCTAssertEqual(named.exitCode, 0, named.stderr)
         XCTAssertEqual(writes(world, world.other), ["create Gewollt"])
     }
@@ -953,7 +953,7 @@ final class TicketsCLITests: XCTestCase {
         world.source.onCreate = { draft in TicketFixtures.ticket(70, title: draft.title) }
         world.other.onCreate = { draft in
             var ticket = TicketFixtures.ticket(71, title: draft.title)
-            ticket.key = "DS-71"
+            ticket.key = "ABC-71"
             return ticket
         }
         // Arbeitsordner unter dem Projekt: Team des Projekts.
@@ -966,7 +966,7 @@ final class TicketsCLITests: XCTestCase {
         world.directory = otherProject + "/apps/web/src"
         let other = try await run(["new", "Tief im anderen Projekt"], world)
         XCTAssertEqual(other.exitCode, 0, other.stderr)
-        XCTAssertTrue(other.stdout.hasPrefix("DS-71 angelegt"), other.stdout)
+        XCTAssertTrue(other.stdout.hasPrefix("ABC-71 angelegt"), other.stdout)
         XCTAssertEqual(writes(world, world.other), ["create Tief im anderen Projekt"])
 
         // Ein Ordner neben dem Projekt mit gleichem Namensanfang gehört nicht dazu.
@@ -977,7 +977,7 @@ final class TicketsCLITests: XCTestCase {
         XCTAssertEqual(writes(world, world.other).count, 1)
 
         // Verliert ein Unterordner seine eigene Zuordnung, erbt er die des Oberordners; das ist ein zugeordnetes Team.
-        world.config.set(team: "DS", forProject: project + "/vendor/listm8")
+        world.config.set(team: "ABC", forProject: project + "/vendor/listm8")
         world.config.removeProject(project + "/vendor/listm8")
         world.directory = project + "/vendor/listm8"
         XCTAssertEqual(try TicketsCLIRunner.resolveTeam(nil, environment(world), forWrite: true), "WM8")
@@ -1028,10 +1028,10 @@ final class TicketsCLITests: XCTestCase {
         let world = twoWorkspaceWorld()
         world.source.onTicket = { _ in self.context(TicketFixtures.ticket(12)) }
         _ = try await run(["show", "WM8-12"], world)
-        _ = try await run(["show", "DS-5"], world)
+        _ = try await run(["show", "ABC-5"], world)
         XCTAssertEqual(world.asked, ["whisperm8", "dealsupply"], "jede Nummer geht an den Workspace ihres Teams")
         XCTAssertEqual(world.source.calls, ["ticket WM8-12"])
-        XCTAssertEqual(world.other.calls, ["ticket DS-5"], "lesen über die Grenze geht")
+        XCTAssertEqual(world.other.calls, ["ticket ABC-5"], "lesen über die Grenze geht")
     }
 
     func testNoWritingIntoTheOtherWorkspace() async throws {
@@ -1039,11 +1039,11 @@ final class TicketsCLITests: XCTestCase {
         // Der Aufrufer steht im WhisperM8-Projekt (auch in einem Arbeitsordner darunter).
         world.directory = project + "/.claude/worktrees/ticket-board"
         let commands: [[String]] = [
-            ["link", "DS-5"], ["done", "DS-5", "--no-summary", "--status", "Merge-bereit"], ["unlink", "DS-5"], ["status", "DS-5", "Todo"],
-            ["note", "DS-5", "Stand"], ["comment", "DS-5", "Text"], ["assign", "DS-5", "me"], ["label", "DS-5", "--add", "Bug"],
-            ["new", "Titel", "--team", "DS"], ["check", "DS-5", "1"],
-            ["decide", "DS-5", "--question", "F", "--option", "a", "--option", "b", "--chosen", "a"],
-            ["done", "DS-5", "--built", "x", "--image", "bild.png"],
+            ["link", "ABC-5"], ["done", "ABC-5", "--no-summary", "--status", "Merge-bereit"], ["unlink", "ABC-5"], ["status", "ABC-5", "Todo"],
+            ["note", "ABC-5", "Stand"], ["comment", "ABC-5", "Text"], ["assign", "ABC-5", "me"], ["label", "ABC-5", "--add", "Bug"],
+            ["new", "Titel", "--team", "ABC"], ["check", "ABC-5", "1"],
+            ["decide", "ABC-5", "--question", "F", "--option", "a", "--option", "b", "--chosen", "a"],
+            ["done", "ABC-5", "--built", "x", "--image", "bild.png"],
         ]
         for command in commands {
             let output = try await run(command, world)
@@ -1067,7 +1067,7 @@ final class TicketsCLITests: XCTestCase {
         // Chat des WhisperM8-Projekts, Shell irgendwo: außerhalb jedes Projekts oder im Ordner des anderen.
         for directory in ["/tmp", "/Users/g", otherProject, "/Users/g/repos/whisperm8-kopie"] {
             world.directory = directory
-            let output = try await run(["comment", "DS-5", "Text"], world)
+            let output = try await run(["comment", "ABC-5", "Text"], world)
             XCTAssertEqual(output.exitCode, TicketsCLIExit.conflict, directory)
             XCTAssertTrue(output.stderr.contains("dieser Chat (Projekt whisperm8) gehört zu „whisperm8“"), output.stderr)
         }
@@ -1085,7 +1085,7 @@ final class TicketsCLITests: XCTestCase {
                                       state: .idle, isRunning: true))
         world.caller = loose
         world.directory = project
-        let fallback = try await run(["comment", "DS-5", "Text"], world)
+        let fallback = try await run(["comment", "ABC-5", "Text"], world)
         XCTAssertEqual(fallback.exitCode, TicketsCLIExit.conflict)
         XCTAssertTrue(fallback.stderr.contains("dieser Ordner gehört zu „whisperm8“"), fallback.stderr)
     }
@@ -1094,22 +1094,22 @@ final class TicketsCLITests: XCTestCase {
         let world = twoWorkspaceWorld()
         world.directory = otherProject
         world.caller = kai
-        let own = try await run(["comment", "DS-5", "Text"], world)
+        let own = try await run(["comment", "ABC-5", "Text"], world)
         XCTAssertEqual(own.exitCode, 0, own.stderr)
         XCTAssertEqual(writes(world, world.other), ["comment id-5 Text"])
 
         world.directory = project
         world.caller = jon
-        let forced = try await run(["comment", "DS-5", "Text", "--other-workspace"], world)
+        let forced = try await run(["comment", "ABC-5", "Text", "--other-workspace"], world)
         XCTAssertEqual(forced.exitCode, 0, forced.stderr)
         XCTAssertEqual(writes(world, world.other).count, 2, "nur mit dem ausdrücklichen Schalter")
         XCTAssertTrue(world.source.calls.isEmpty, "der eigene Workspace bleibt unberührt")
-        XCTAssertFalse(TicketsCLIArguments.allowsOtherWorkspace(["comment", "DS-5", "--", "--other-workspace"]), "hinter -- ist es Text")
+        XCTAssertFalse(TicketsCLIArguments.allowsOtherWorkspace(["comment", "ABC-5", "--", "--other-workspace"]), "hinter -- ist es Text")
 
         // Außerhalb jedes Projekts (Mensch im Terminal) gibt es keine Grenze.
         world.directory = "/Users/g"
         world.caller = nil
-        let outside = try await run(["comment", "DS-5", "Text"], world)
+        let outside = try await run(["comment", "ABC-5", "Text"], world)
         XCTAssertEqual(outside.exitCode, 0, outside.stderr)
     }
 
@@ -1118,7 +1118,7 @@ final class TicketsCLITests: XCTestCase {
         // Aus dem Terminal, ohne Projektgrenze für den Aufrufer: Der Chat selbst gehört zu WhisperM8.
         world.directory = "/Users/g"
         world.caller = nil
-        let output = try await run(["link", "DS-5", "--chat", "840b"], world)
+        let output = try await run(["link", "ABC-5", "--chat", "840b"], world)
         XCTAssertEqual(output.exitCode, TicketsCLIExit.conflict)
         XCTAssertTrue(output.stderr.contains("Dex") && output.stderr.contains("„dealsupply“"), output.stderr)
         XCTAssertTrue(world.other.calls.isEmpty)
@@ -1126,9 +1126,9 @@ final class TicketsCLITests: XCTestCase {
 
     func testUnmappedTeamIsNeverGuessed() async throws {
         let world = twoWorkspaceWorld()
-        let output = try await run(["show", "PRB-1"], world)
+        let output = try await run(["show", "PQR-1"], world)
         XCTAssertEqual(output.exitCode, TicketsCLIExit.usage)
-        XCTAssertTrue(output.stderr.contains("tickets setup --team PRB"), output.stderr)
+        XCTAssertTrue(output.stderr.contains("tickets setup --team PQR"), output.stderr)
         XCTAssertTrue(world.asked.isEmpty, "bei zwei Workspaces wird nicht geraten")
 
         // Mit nur einem Workspace liegt jedes Team dort.
@@ -1144,12 +1144,12 @@ final class TicketsCLITests: XCTestCase {
         world.source.onLinked = { _ in [TicketFixtures.ticket(23, links: [TicketFixtures.link(self.jon)])] }
         world.other.onLinked = { _ in
             var ticket = TicketFixtures.ticket(5, links: [TicketFixtures.link(self.jon, active: false)])
-            ticket.key = "DS-5"
+            ticket.key = "ABC-5"
             return [ticket]
         }
         let output = try await run(["mine"], world)
         XCTAssertEqual(output.exitCode, 0, output.stderr)
-        XCTAssertTrue(output.stdout.contains("WM8-23") && output.stdout.contains("DS-5"), output.stdout)
+        XCTAssertTrue(output.stdout.contains("WM8-23") && output.stdout.contains("ABC-5"), output.stdout)
         XCTAssertEqual(Set(world.asked), ["whisperm8", "dealsupply"])
     }
 
@@ -1172,30 +1172,30 @@ final class TicketsCLITests: XCTestCase {
 
     func testSetupFindsTheWorkspaceOfATeam() async throws {
         let world = twoWorkspaceWorld()
-        let found = try await run(["setup", "--team", "prb"], world)
+        let found = try await run(["setup", "--team", "pqr"], world)
         XCTAssertEqual(found.exitCode, 0, found.stderr)
-        XCTAssertEqual(world.config.workspacesByTeam["PRB"], "dealsupply")
-        XCTAssertNil(world.config.teamsByProjectPath.values.first { $0 == "PRB" }, "ohne --project nur das Team")
+        XCTAssertEqual(world.config.workspacesByTeam["PQR"], "dealsupply")
+        XCTAssertNil(world.config.teamsByProjectPath.values.first { $0 == "PQR" }, "ohne --project nur das Team")
 
         let missing = try await run(["setup", "--team", "XYZ"], world)
         XCTAssertEqual(missing.exitCode, TicketsCLIExit.notFound)
 
-        world.source.onTeams = { ["WM8", "DEA"] }
-        let twice = try await run(["setup", "--team", "DEA"], world)
+        world.source.onTeams = { ["WM8", "ABA"] }
+        let twice = try await run(["setup", "--team", "ABA"], world)
         XCTAssertEqual(twice.exitCode, TicketsCLIExit.conflict, "gibt es das Kürzel in beiden, muss der Nutzer wählen")
-        XCTAssertNil(world.config.workspacesByTeam["DEA"])
-        let chosen = try await run(["setup", "--team", "DEA", "--workspace", "dealsupply"], world)
+        XCTAssertNil(world.config.workspacesByTeam["ABA"])
+        let chosen = try await run(["setup", "--team", "ABA", "--workspace", "dealsupply"], world)
         XCTAssertEqual(chosen.exitCode, 0, chosen.stderr)
-        XCTAssertEqual(world.config.workspacesByTeam["DEA"], "dealsupply")
+        XCTAssertEqual(world.config.workspacesByTeam["ABA"], "dealsupply")
 
-        let notThere = try await run(["setup", "--team", "DS", "--workspace", "whisperm8"], world)
+        let notThere = try await run(["setup", "--team", "ABC", "--workspace", "whisperm8"], world)
         XCTAssertEqual(notThere.exitCode, TicketsCLIExit.notFound, "ein Team wird nur einem Workspace zugeordnet, in dem es das Team gibt")
-        XCTAssertEqual(world.config.workspacesByTeam["DS"], "dealsupply")
+        XCTAssertEqual(world.config.workspacesByTeam["ABC"], "dealsupply")
     }
 
     func testSetupDoesNotSilentlyMoveATeamToAnotherWorkspace() async throws {
         let world = twoWorkspaceWorld()
-        world.other.onTeams = { ["DS", "WM8"] }   // dasselbe Kürzel gibt es auch drüben
+        world.other.onTeams = { ["ABC", "WM8"] }   // dasselbe Kürzel gibt es auch drüben
         let saved = world.savedConfigs.count
         let refused = try await run(["setup", "--team", "WM8", "--workspace", "dealsupply"], world)
         XCTAssertEqual(refused.exitCode, TicketsCLIExit.conflict)
@@ -1215,10 +1215,10 @@ final class TicketsCLITests: XCTestCase {
 
     // MARK: Team aus der Einrichtung nehmen (WM8-94)
 
-    /// Zwei Firmen, dazu das Probe-Team PRB in `dealsupply`, ohne Ordner.
+    /// Zwei Firmen, dazu das Probe-Team PQR in `dealsupply`, ohne Ordner.
     private func worldWithProbeTeam() -> World {
         let world = twoWorkspaceWorld()
-        world.config.set(workspace: "dealsupply", forTeam: "PRB")
+        world.config.set(workspace: "dealsupply", forTeam: "PQR")
         world.source.onBoard = { _ in TicketFixtures.snapshot([]) }
         world.other.onBoard = { _ in TicketFixtures.snapshot([]) }
         return world
@@ -1236,136 +1236,136 @@ final class TicketsCLITests: XCTestCase {
     func testSetupRemovesATeamWithoutAskingLinear() async throws {
         let world = worldWithProbeTeam()
         world.storedKeys = [:]   // geht auch ohne Zugang
-        let output = try await run(["setup", "--remove-team", "prb"], world)
+        let output = try await run(["setup", "--remove-team", "pqr"], world)
         XCTAssertEqual(output.exitCode, 0, output.stderr)
-        XCTAssertEqual(output.stdout, "Team PRB ist aus der Einrichtung genommen (lag im Workspace „dealsupply“).")
-        XCTAssertEqual(world.config.workspacesByTeam, ["WM8": "whisperm8", "DS": "dealsupply"])
-        XCTAssertEqual(world.config.teamsByProjectPath, [project: "WM8", otherProject: "DS"], "die Ordner der anderen Teams bleiben")
+        XCTAssertEqual(output.stdout, "Team PQR ist aus der Einrichtung genommen (lag im Workspace „dealsupply“).")
+        XCTAssertEqual(world.config.workspacesByTeam, ["WM8": "whisperm8", "ABC": "dealsupply"])
+        XCTAssertEqual(world.config.teamsByProjectPath, [project: "WM8", otherProject: "ABC"], "die Ordner der anderen Teams bleiben")
         XCTAssertEqual(world.config.knownWorkspaces, ["dealsupply", "whisperm8"], "der Workspace bleibt eingerichtet")
         XCTAssertTrue(world.asked.isEmpty, "Linear wird nicht gefragt: \(world.asked)")
 
-        let again = try await run(["setup", "--remove-team", "PRB"], world)
+        let again = try await run(["setup", "--remove-team", "PQR"], world)
         XCTAssertEqual(again.exitCode, TicketsCLIExit.notFound)
-        XCTAssertTrue(again.stderr.contains("steht nicht in der Einrichtung") && again.stderr.contains("DS, WM8"), again.stderr)
+        XCTAssertTrue(again.stderr.contains("steht nicht in der Einrichtung") && again.stderr.contains("ABC, WM8"), again.stderr)
     }
 
     func testSetupKeepsATeamThatStillHasAFolderUnlessAsked() async throws {
         let world = worldWithProbeTeam()
         world.config.areasFileByProjectPath[otherProject] = "docs/bereiche.md"
         let saved = world.savedConfigs.count
-        let refused = try await run(["setup", "--remove-team", "DS"], world)
+        let refused = try await run(["setup", "--remove-team", "ABC"], world)
         XCTAssertEqual(refused.exitCode, TicketsCLIExit.conflict)
-        XCTAssertTrue(refused.stderr.contains("An Team DS hängt noch ein Ordner: \(otherProject)"), refused.stderr)
-        XCTAssertTrue(refused.stderr.contains("Nichts geändert") && refused.stderr.contains("whisperm8 tickets setup --remove-team DS --with-projects"),
+        XCTAssertTrue(refused.stderr.contains("An Team ABC hängt noch ein Ordner: \(otherProject)"), refused.stderr)
+        XCTAssertTrue(refused.stderr.contains("Nichts geändert") && refused.stderr.contains("whisperm8 tickets setup --remove-team ABC --with-projects"),
                       refused.stderr)
         // Die Folge steht dabei: Übrig bliebe ein einziges Team mit Ordner, und das bekäme die Befehle ohne --team.
         XCTAssertTrue(refused.stderr.contains("\(otherProject) hat kein Team mehr. Anlegen ohne --team bricht dort ab"), refused.stderr)
         XCTAssertTrue(refused.stderr.contains("gilt die Sperre gegen das Schreiben in einen fremden Workspace dort nicht mehr."), refused.stderr)
         XCTAssertEqual(world.savedConfigs.count, saved, "nichts gespeichert")
-        XCTAssertEqual(world.config.team(forDirectory: otherProject), "DS")
+        XCTAssertEqual(world.config.team(forDirectory: otherProject), "ABC")
 
-        let removed = try await run(["setup", "--remove-team", "DS", "--with-projects"], world)
+        let removed = try await run(["setup", "--remove-team", "ABC", "--with-projects"], world)
         XCTAssertEqual(removed.exitCode, 0, removed.stderr)
         XCTAssertTrue(removed.stdout.contains("\(otherProject) hat kein Team mehr. Anlegen ohne --team bricht dort ab"), removed.stdout)
         // Zwei Firmen: Auch lesend gilt WM8 dort nicht mehr für alle Ordner.
         XCTAssertEqual(world.config.onlyTeam, "WM8")
         XCTAssertNil(world.config.teamForReadingAnywhere)
         XCTAssertNil(world.config.team(forDirectory: otherProject))
-        XCTAssertNil(world.config.workspacesByTeam["DS"])
+        XCTAssertNil(world.config.workspacesByTeam["ABC"])
         XCTAssertTrue(world.config.areasFileByProjectPath.isEmpty, "die Tabelle der Bereiche hing am Ordner")
         XCTAssertEqual(world.config.team(forDirectory: project), "WM8", "das andere Projekt bleibt")
-        XCTAssertEqual(world.config.workspacesByTeam["PRB"], "dealsupply")
+        XCTAssertEqual(world.config.workspacesByTeam["PQR"], "dealsupply")
     }
 
     func testSetupRemoveTeamSaysWhatBecomesOfEveryFolder() async throws {
         let world = worldWithProbeTeam()
-        // PRB kennt die Einrichtung hier nur über Ordner, ohne Workspace-Eintrag; einer liegt in einem anderen Projekt.
-        world.config.workspacesByTeam["PRB"] = nil
-        world.config.set(team: "PRB", forProject: "/Users/g/repos/probe")
-        world.config.set(team: "PRB", forProject: project + "/Probe")
-        let refused = try await run(["setup", "--remove-team", "PRB"], world)
+        // PQR kennt die Einrichtung hier nur über Ordner, ohne Workspace-Eintrag; einer liegt in einem anderen Projekt.
+        world.config.workspacesByTeam["PQR"] = nil
+        world.config.set(team: "PQR", forProject: "/Users/g/repos/probe")
+        world.config.set(team: "PQR", forProject: project + "/Probe")
+        let refused = try await run(["setup", "--remove-team", "PQR"], world)
         XCTAssertEqual(refused.exitCode, TicketsCLIExit.conflict)
-        XCTAssertTrue(refused.stderr.contains("An Team PRB hängen noch 2 Ordner"), refused.stderr)
+        XCTAssertTrue(refused.stderr.contains("An Team PQR hängen noch 2 Ordner"), refused.stderr)
 
-        let removed = try await run(["setup", "--remove-team", "PRB", "--with-projects"], world)
+        let removed = try await run(["setup", "--remove-team", "PQR", "--with-projects"], world)
         XCTAssertEqual(removed.exitCode, 0, removed.stderr)
         let lines = removed.stdout.components(separatedBy: "\n")
-        XCTAssertEqual(lines.first, "Team PRB ist aus der Einrichtung genommen.")
+        XCTAssertEqual(lines.first, "Team PQR ist aus der Einrichtung genommen.")
         XCTAssertTrue(lines.contains("/Users/g/repos/probe hat kein Team mehr. Anlegen ohne --team bricht dort ab; mit Ticket-Nummer oder --team gilt die Sperre gegen das Schreiben in einen fremden Workspace dort nicht mehr."),
                       removed.stdout)
         XCTAssertTrue(lines.contains("\(project)/Probe gehört dann über \(project) zum Team WM8."), removed.stdout)
         XCTAssertEqual(world.config.team(forDirectory: project + "/Probe"), "WM8")
         XCTAssertNil(world.config.team(forDirectory: "/Users/g/repos/probe"))
-        XCTAssertFalse(world.config.knows(team: "PRB"))
+        XCTAssertFalse(world.config.knows(team: "PQR"))
     }
 
     func testSetupRemoveTeamStandsAlone() throws {
-        XCTAssertEqual(try TicketsCLIArguments.parse(["setup", "--remove-team", "prb"]), .removeTeam(team: "PRB", withProjects: false))
-        XCTAssertEqual(try TicketsCLIArguments.parse(["setup", "--with-projects", "--remove-team", " prb "]),
-                       .removeTeam(team: "PRB", withProjects: true))
-        XCTAssertThrowsError(try TicketsCLIArguments.parse(["setup", "--remove-team", "PRB", "--with-projects", "--with-projects"])) { error in
+        XCTAssertEqual(try TicketsCLIArguments.parse(["setup", "--remove-team", "pqr"]), .removeTeam(team: "PQR", withProjects: false))
+        XCTAssertEqual(try TicketsCLIArguments.parse(["setup", "--with-projects", "--remove-team", " pqr "]),
+                       .removeTeam(team: "PQR", withProjects: true))
+        XCTAssertThrowsError(try TicketsCLIArguments.parse(["setup", "--remove-team", "PQR", "--with-projects", "--with-projects"])) { error in
             XCTAssertEqual(error as? TicketsCLIArguments.ParseError, .usage("--with-projects ist doppelt angegeben"))
         }
-        XCTAssertTrue(TicketsCLIArguments.removeTeam(team: "PRB", withProjects: false).isWrite)
+        XCTAssertTrue(TicketsCLIArguments.removeTeam(team: "PQR", withProjects: false).isWrite)
         for wrong in [["setup", "--remove-team"], ["setup", "--remove-team", "--with-projects"], ["setup", "--with-projects"],
-                      ["setup", "--remove-team", "PRB", "--team", "DS"], ["setup", "--remove-team", "PRB", "--key-stdin"],
-                      ["setup", "--remove-team", "PRB", "--workspace", "dealsupply"], ["setup", "--remove-team", "PRB", "DS"]] {
+                      ["setup", "--remove-team", "PQR", "--team", "ABC"], ["setup", "--remove-team", "PQR", "--key-stdin"],
+                      ["setup", "--remove-team", "PQR", "--workspace", "dealsupply"], ["setup", "--remove-team", "PQR", "ABC"]] {
             XCTAssertThrowsError(try TicketsCLIArguments.parse(wrong), "\(wrong)")
         }
     }
 
     func testDoctorNamesTheCommandForADeletedTeam() async throws {
         let world = worldWithProbeTeam()
-        remove(team: "PRB", from: world.other, teams: ["DEA", "DS"])
+        remove(team: "PQR", from: world.other, teams: ["ABA", "ABC"])
         let broken = try await run(["doctor"], world)
         XCTAssertEqual(broken.exitCode, TicketsCLIExit.unavailable)
-        XCTAssertTrue(broken.stdout.contains("FEHLER Team PRB       in „dealsupply“ nicht mehr zu sehen: gelöscht, umbenannt oder kein Zugriff mit diesem Key. "
-                                             + "Aus der Einrichtung nehmen: whisperm8 tickets setup --remove-team PRB\n"), broken.stdout)
-        XCTAssertTrue(broken.stdout.contains("ok     Team DS") && broken.stdout.contains("ok     Team WM8"), "die anderen Teams laufen weiter")
+        XCTAssertTrue(broken.stdout.contains("FEHLER Team PQR       in „dealsupply“ nicht mehr zu sehen: gelöscht, umbenannt oder kein Zugriff mit diesem Key. "
+                                             + "Aus der Einrichtung nehmen: whisperm8 tickets setup --remove-team PQR\n"), broken.stdout)
+        XCTAssertTrue(broken.stdout.contains("ok     Team ABC") && broken.stdout.contains("ok     Team WM8"), "die anderen Teams laufen weiter")
 
         // Der genannte Befehl räumt auf, danach ist der Bericht sauber.
-        let removed = try await run(["setup", "--remove-team", "PRB"], world)
+        let removed = try await run(["setup", "--remove-team", "PQR"], world)
         XCTAssertEqual(removed.exitCode, 0, removed.stderr)
         let healthy = try await run(["doctor"], world)
         XCTAssertEqual(healthy.exitCode, 0, healthy.stdout)
-        XCTAssertFalse(healthy.stdout.contains("PRB"), healthy.stdout)
+        XCTAssertFalse(healthy.stdout.contains("PQR"), healthy.stdout)
     }
 
     func testDoctorLeadsThroughARenamedTeam() async throws {
         let world = worldWithProbeTeam()
-        world.config.set(team: "PRB", forProject: "/Users/g/repos/probe")
-        remove(team: "PRB", from: world.other, teams: ["DEA", "DS", "PROBE"])   // PRB heißt jetzt PROBE
+        world.config.set(team: "PQR", forProject: "/Users/g/repos/probe")
+        remove(team: "PQR", from: world.other, teams: ["ABA", "ABC", "PROBE"])   // PQR heißt jetzt PROBE
         let broken = try await run(["doctor"], world)
         XCTAssertEqual(broken.exitCode, TicketsCLIExit.unavailable)
-        let line = try XCTUnwrap(broken.stdout.split(separator: "\n").first { $0.contains("Team PRB") })
+        let line = try XCTUnwrap(broken.stdout.split(separator: "\n").first { $0.contains("Team PQR") })
         XCTAssertTrue(line.contains("Daran hängt noch /Users/g/repos/probe"), String(line))
-        XCTAssertTrue(line.contains("whisperm8 tickets setup --remove-team PRB (nennt erst die Folgen für den Ordner)"), String(line))
+        XCTAssertTrue(line.contains("whisperm8 tickets setup --remove-team PQR (nennt erst die Folgen für den Ordner)"), String(line))
         XCTAssertFalse(line.contains("--with-projects"), "wer die Zeile kopiert, sieht erst den Abbruch mit den Folgen: \(line)")
         XCTAssertTrue(line.contains("bei neuem Kürzel vorher: whisperm8 tickets setup --team <Kürzel> --project <Ordner>"), String(line))
 
         // Der Ordner bekommt das neue Kürzel, danach geht das alte ohne --with-projects.
         let relinked = try await run(["setup", "--team", "PROBE", "--project", "/Users/g/repos/probe"], world)
         XCTAssertEqual(relinked.exitCode, 0, relinked.stderr)
-        let removed = try await run(["setup", "--remove-team", "PRB"], world)
+        let removed = try await run(["setup", "--remove-team", "PQR"], world)
         XCTAssertEqual(removed.exitCode, 0, removed.stderr)
         XCTAssertEqual(world.config.team(forDirectory: "/Users/g/repos/probe"), "PROBE")
         XCTAssertEqual(world.config.workspacesByTeam["PROBE"], "dealsupply")
-        XCTAssertNil(world.config.workspacesByTeam["PRB"])
+        XCTAssertNil(world.config.workspacesByTeam["PQR"])
         let healthy = try await run(["doctor"], world)
         XCTAssertEqual(healthy.exitCode, 0, healthy.stdout)
     }
 
     func testDoctorMovesATeamThatSitsInTheWrongWorkspace() async throws {
         let world = worldWithProbeTeam()
-        world.config.set(workspace: "whisperm8", forTeam: "PRB")   // falsch: PRB liegt in dealsupply
-        remove(team: "PRB", from: world.source, teams: ["WM8"])
+        world.config.set(workspace: "whisperm8", forTeam: "PQR")   // falsch: PQR liegt in dealsupply
+        remove(team: "PQR", from: world.source, teams: ["WM8"])
         let broken = try await run(["doctor"], world)
         XCTAssertEqual(broken.exitCode, TicketsCLIExit.unavailable)
-        XCTAssertTrue(broken.stdout.contains("FEHLER Team PRB       in „whisperm8“ nicht zu sehen; ein Team PRB gibt es in „dealsupply“. "
-                                             + "Ist es dasselbe Team, umhängen: whisperm8 tickets setup --team PRB --workspace dealsupply --reassign. "
-                                             + "Ist es ein anderes, aus der Einrichtung nehmen: whisperm8 tickets setup --remove-team PRB\n"), broken.stdout)
+        XCTAssertTrue(broken.stdout.contains("FEHLER Team PQR       in „whisperm8“ nicht zu sehen; ein Team PQR gibt es in „dealsupply“. "
+                                             + "Ist es dasselbe Team, umhängen: whisperm8 tickets setup --team PQR --workspace dealsupply --reassign. "
+                                             + "Ist es ein anderes, aus der Einrichtung nehmen: whisperm8 tickets setup --remove-team PQR\n"), broken.stdout)
 
-        let moved = try await run(["setup", "--team", "PRB", "--workspace", "dealsupply", "--reassign"], world)
+        let moved = try await run(["setup", "--team", "PQR", "--workspace", "dealsupply", "--reassign"], world)
         XCTAssertEqual(moved.exitCode, 0, moved.stderr)
         world.source.onBoard = { _ in TicketFixtures.snapshot([]) }
         let healthy = try await run(["doctor"], world)
@@ -1373,23 +1373,23 @@ final class TicketsCLITests: XCTestCase {
     }
 
     func testDoctorWarnsBeforeMovingATeamWhoseFoldersWouldWriteElsewhere() async throws {
-        // PRB wurde in dealsupply gelöscht; whisperm8 hat zufällig ein eigenes Team PRB. Ein Ordner hängt noch am alten.
+        // PQR wurde in dealsupply gelöscht; whisperm8 hat zufällig ein eigenes Team PQR. Ein Ordner hängt noch am alten.
         let world = worldWithProbeTeam()
-        world.config.set(team: "PRB", forProject: "/Users/g/repos/probe")
-        remove(team: "PRB", from: world.other, teams: ["DEA", "DS"])
-        world.source.onTeams = { ["PRB", "WM8"] }
+        world.config.set(team: "PQR", forProject: "/Users/g/repos/probe")
+        remove(team: "PQR", from: world.other, teams: ["ABA", "ABC"])
+        world.source.onTeams = { ["PQR", "WM8"] }
         let broken = try await run(["doctor"], world)
-        let line = try XCTUnwrap(broken.stdout.components(separatedBy: "\n").first { $0.hasPrefix("FEHLER Team PRB") })
+        let line = try XCTUnwrap(broken.stdout.components(separatedBy: "\n").first { $0.hasPrefix("FEHLER Team PQR") })
         XCTAssertTrue(line.contains("--reassign (dann schreibt auch /Users/g/repos/probe nach „whisperm8“)"), line)
-        XCTAssertTrue(line.contains("Ist es ein anderes, aus der Einrichtung nehmen: whisperm8 tickets setup --remove-team PRB (nennt erst"), line)
+        XCTAssertTrue(line.contains("Ist es ein anderes, aus der Einrichtung nehmen: whisperm8 tickets setup --remove-team PQR (nennt erst"), line)
         XCTAssertFalse(line.contains("--with-projects"), line)
 
         // Der genannte Befehl bricht erst ab und nennt die Folgen; --with-projects löst dann den Ordner,
         // statt ihn in die andere Firma schreiben zu lassen.
-        let refused = try await run(["setup", "--remove-team", "PRB"], world)
+        let refused = try await run(["setup", "--remove-team", "PQR"], world)
         XCTAssertEqual(refused.exitCode, TicketsCLIExit.conflict)
         XCTAssertTrue(refused.stderr.contains("/Users/g/repos/probe hat kein Team mehr."), refused.stderr)
-        let removed = try await run(["setup", "--remove-team", "PRB", "--with-projects"], world)
+        let removed = try await run(["setup", "--remove-team", "PQR", "--with-projects"], world)
         XCTAssertEqual(removed.exitCode, 0, removed.stderr)
         XCTAssertNil(world.config.workspace(forDirectory: "/Users/g/repos/probe"))
         let healthy = try await run(["doctor"], world)
@@ -1399,11 +1399,11 @@ final class TicketsCLITests: XCTestCase {
     func testDoctorDoesNotClaimATeamLivesElsewhereWithoutProof() async throws {
         // Der andere Workspace antwortet auf die Team-Liste nicht: Dann steht nur da, was sicher ist.
         let world = worldWithProbeTeam()
-        world.config.set(workspace: "whisperm8", forTeam: "PRB")
-        remove(team: "PRB", from: world.source, teams: ["WM8"])
+        world.config.set(workspace: "whisperm8", forTeam: "PQR")
+        remove(team: "PQR", from: world.source, teams: ["WM8"])
         world.other.onTeams = { throw TicketSourceError.network("-1009") }
         let output = try await run(["doctor"], world)
-        let line = try XCTUnwrap(output.stdout.components(separatedBy: "\n").first { $0.hasPrefix("FEHLER Team PRB") })
+        let line = try XCTUnwrap(output.stdout.components(separatedBy: "\n").first { $0.hasPrefix("FEHLER Team PQR") })
         XCTAssertTrue(line.contains("in „whisperm8“ nicht mehr zu sehen") && !line.contains("--reassign"), line)
     }
 
@@ -1414,18 +1414,18 @@ final class TicketsCLITests: XCTestCase {
         let output = try await run(["doctor"], world)
         XCTAssertEqual(output.exitCode, TicketsCLIExit.unavailable)
         XCTAssertFalse(output.stdout.contains("--remove-team"), output.stdout)
-        XCTAssertTrue(output.stdout.contains("FEHLER Team PRB       Linear nicht erreichbar"), output.stdout)
+        XCTAssertTrue(output.stdout.contains("FEHLER Team PQR       Linear nicht erreichbar"), output.stdout)
     }
 
     func testDoctorNamesATeamKeyThatExistsInTwoWorkspaces() async throws {
         let world = twoWorkspaceWorld()
         world.source.onBoard = { _ in TicketFixtures.snapshot([]) }
         world.other.onBoard = { _ in TicketFixtures.snapshot([]) }
-        world.other.onTeams = { ["DS", "WM8"] }
+        world.other.onTeams = { ["ABC", "WM8"] }
         let output = try await run(["doctor"], world)
         XCTAssertEqual(output.exitCode, 0, "ein Hinweis, kein Fehler: \(output.stdout)")
         XCTAssertTrue(output.stdout.contains("ACHTE  Kürzel WM8     gibt es in dealsupply und whisperm8; erreichbar ist nur „whisperm8“"), output.stdout)
-        XCTAssertFalse(output.stdout.contains("Kürzel DS"))
+        XCTAssertFalse(output.stdout.contains("Kürzel ABC"))
         let json = try await run(["doctor", "--json"], world)
         let checks = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(json.stdout.utf8)) as? [[String: Any]])
         XCTAssertEqual(checks.first { $0["name"] as? String == "Kürzel WM8" }?["warning"] as? Bool, true)
@@ -1488,7 +1488,7 @@ final class TicketsCLITests: XCTestCase {
         let swapped = try await run(["doctor"], world)
         XCTAssertEqual(swapped.exitCode, TicketsCLIExit.unavailable)
         XCTAssertTrue(swapped.stdout.contains("dealsupply: der hinterlegte Key gehört zu WhisperM8"), swapped.stdout)
-        XCTAssertFalse(swapped.stdout.contains("Team DS"), "ohne brauchbaren Zugang wird das Team nicht abgefragt")
+        XCTAssertFalse(swapped.stdout.contains("Team ABC"), "ohne brauchbaren Zugang wird das Team nicht abgefragt")
 
         world.storedKeys["dealsupply"] = nil
         let noKey = try await run(["doctor"], world)
@@ -1499,7 +1499,7 @@ final class TicketsCLITests: XCTestCase {
     func testAccessErrorsNameTheWorkspace() async throws {
         let world = twoWorkspaceWorld()
         world.other.onTicket = { _ in throw TicketSourceError.unauthorized }
-        let output = try await run(["show", "DS-5"], world)
+        let output = try await run(["show", "ABC-5"], world)
         XCTAssertEqual(output.exitCode, TicketsCLIExit.unavailable)
         XCTAssertEqual(output.stderr, TicketSourceError.unauthorized.message + " Betroffen: Workspace „dealsupply“.")
     }

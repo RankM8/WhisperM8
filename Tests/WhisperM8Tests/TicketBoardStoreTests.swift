@@ -190,9 +190,9 @@ final class TicketBoardStoreTests: XCTestCase {
         let store = TicketBoardStore(source: source, sleep: gate.sleep)
         store.activate(team: "WM8")
         await settle { store.snapshot?.team == "WM8" }
-        store.activate(team: "DS")
+        store.activate(team: "ABC")
         XCTAssertNil(store.snapshot, "kein Board des alten Teams unter dem neuen Namen")
-        await settle { store.snapshot?.team == "DS" }
+        await settle { store.snapshot?.team == "ABC" }
         store.deactivate()
     }
 
@@ -208,11 +208,11 @@ final class TicketBoardStoreTests: XCTestCase {
         let store = TicketBoardStore(source: source, sleep: gate.sleep)
         store.activate(team: "WM8")
         await settle { slow.count == 1 }
-        store.activate(team: "DS")
-        await settle { store.snapshot?.team == "DS" }
+        store.activate(team: "ABC")
+        await settle { store.snapshot?.team == "ABC" }
         slow.release()
         try? await Task.sleep(for: .milliseconds(40))
-        XCTAssertEqual(store.snapshot?.team, "DS", "die späte Antwort des alten Teams wird verworfen")
+        XCTAssertEqual(store.snapshot?.team, "ABC", "die späte Antwort des alten Teams wird verworfen")
         XCTAssertFalse(store.isLoading)
         store.deactivate()
     }
@@ -341,10 +341,10 @@ final class TicketConfigTests: XCTestCase {
     func testLongestProjectPathWins() {
         var config = TicketConfig()
         config.set(team: "wm8", forProject: "/Users/g/repos/whisperm8/")
-        config.set(team: "DS", forProject: "/Users/g/repos")
+        config.set(team: "ABC", forProject: "/Users/g/repos")
         XCTAssertEqual(config.team(forDirectory: "/Users/g/repos/whisperm8"), "WM8", "Kürzel groß, Schrägstrich am Ende egal")
         XCTAssertEqual(config.team(forDirectory: "/Users/g/repos/whisperm8/.claude/worktrees/ticket-board"), "WM8", "Arbeitsordner gehören zum Projekt")
-        XCTAssertEqual(config.team(forDirectory: "/Users/g/repos/ListM8"), "DS")
+        XCTAssertEqual(config.team(forDirectory: "/Users/g/repos/ListM8"), "ABC")
         XCTAssertNil(config.team(forDirectory: "/Users/g/repos-andere"), "kein Treffer auf bloßen Namensanfang")
         XCTAssertEqual(config.projectPath(forDirectory: "/Users/g/repos/whisperm8/Tests"), "/Users/g/repos/whisperm8")
         XCTAssertNil(config.onlyTeam)
@@ -366,7 +366,7 @@ final class TicketConfigTests: XCTestCase {
         XCTAssertEqual(config.workspace(forTeam: "wm8"), "whisperm8", "ein Workspace: jedes Team liegt dort")
         config.set(workspace: "dealsupply", forTeam: "ds")
         XCTAssertEqual(config.knownWorkspaces, ["dealsupply", "whisperm8"])
-        XCTAssertEqual(config.workspace(forTeam: "DS"), "dealsupply")
+        XCTAssertEqual(config.workspace(forTeam: "ABC"), "dealsupply")
         XCTAssertNil(config.workspace(forTeam: "WM8"), "bei zweien muss das Team zugeordnet sein")
         config.set(workspace: "whisperm8", forTeam: "WM8")
         config.set(team: "WM8", forProject: "/Users/g/repos/whisperm8")
@@ -374,7 +374,7 @@ final class TicketConfigTests: XCTestCase {
         XCTAssertNil(config.workspace(forDirectory: "/Users/g"))
         XCTAssertEqual(config.workspace(forDirectory: "/users/g/repos/WhisperM8/Tests"), "whisperm8",
                        "andere Schreibweise desselben Ordners: die Schreibsperre gilt trotzdem")
-        XCTAssertEqual(config.knownTeams, ["DS", "WM8"])
+        XCTAssertEqual(config.knownTeams, ["ABC", "WM8"])
         XCTAssertEqual(TicketConfig.team(ofKey: "wm8-12"), "WM8")
     }
 

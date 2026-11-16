@@ -46,11 +46,11 @@ extension UISnapshotGallery {
             Fixture(name: "tickets-einstellungen-eingerichtet", size: size, storage: on) {
                 page(
                     workspaces: [
-                        Model.Workspace(name: "dealsupply", hasKey: true, teams: ["DEA", "DS", "PRB"]),
+                        Model.Workspace(name: "dealsupply", hasKey: true, teams: ["ABA", "ABC", "PQR"]),
                         Model.Workspace(name: "whisperm8", hasKey: true, teams: ["WM8"]),
                     ],
                     mappings: [
-                        Model.Mapping(path: home + "/repos/ListM8", team: "DS", workspace: "dealsupply"),
+                        Model.Mapping(path: home + "/repos/ListM8", team: "ABC", workspace: "dealsupply"),
                         Model.Mapping(path: home + "/repos/whisperm8", team: "WM8", workspace: "whisperm8"),
                     ])
             },
@@ -61,7 +61,7 @@ extension UISnapshotGallery {
                         Model.Workspace(name: "whisperm8", hasKey: true, problem: TicketSourceError.unauthorized.userText),
                     ],
                     mappings: [
-                        Model.Mapping(path: home + "/repos/ListM8", team: "DS", workspace: "dealsupply"),
+                        Model.Mapping(path: home + "/repos/ListM8", team: "ABC", workspace: "dealsupply"),
                         Model.Mapping(path: home + "/repos/alt", team: "ALT", workspace: nil),
                     ])
             },
@@ -69,15 +69,15 @@ extension UISnapshotGallery {
             Fixture(name: "tickets-einstellungen-team-fehlt", size: CGSize(width: 760, height: 1040), storage: on) {
                 page(
                     workspaces: [
-                        Model.Workspace(name: "dealsupply", hasKey: true, teams: ["DEA", "DS"]),
+                        Model.Workspace(name: "dealsupply", hasKey: true, teams: ["ABA", "ABC"]),
                         Model.Workspace(name: "whisperm8", hasKey: true, teams: ["WM8"]),
                     ],
                     mappings: [
-                        Model.Mapping(path: home + "/repos/ListM8", team: "DS", workspace: "dealsupply"),
+                        Model.Mapping(path: home + "/repos/ListM8", team: "ABC", workspace: "dealsupply"),
                         Model.Mapping(path: home + "/repos/probe", team: "ALT", workspace: "dealsupply", teamMissing: true),
                         Model.Mapping(path: home + "/repos/whisperm8", team: "WM8", workspace: "whisperm8"),
                     ],
-                    staleTeams: [Model.StaleTeam(team: "PRB", workspace: "dealsupply")])
+                    staleTeams: [Model.StaleTeam(team: "PQR", workspace: "dealsupply")])
             },
         ]
     }

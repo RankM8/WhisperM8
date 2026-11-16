@@ -13,7 +13,7 @@ final class TicketsSettingsModelTests: XCTestCase {
         private var _onMain: [String] = []
         var account: Result<TicketAccount, TicketSourceError> = .success(
             TicketAccount(userName: "Giuliano Costa", workspace: "WhisperM8 (linear.app/whisperm8)", workspaceKey: "whisperm8", isAdmin: true))
-        var teams: [String: Result<[String], TicketSourceError>] = ["whisperm8": .success(["WM8"]), "dealsupply": .success(["PRB", "DS"])]
+        var teams: [String: Result<[String], TicketSourceError>] = ["whisperm8": .success(["WM8"]), "dealsupply": .success(["PQR", "ABC"])]
         var storeSucceeds = true
         var deleteSucceeds = true
         var saveFails = false
@@ -112,8 +112,8 @@ final class TicketsSettingsModelTests: XCTestCase {
         let model = model(world, projects: projects)
         await model.load()
         XCTAssertEqual(model.workspaces.map(\.name), ["dealsupply", "whisperm8"])
-        XCTAssertEqual(model.workspaces[0].teams, ["DS", "PRB"], "Teams sortiert")
-        XCTAssertEqual(model.teamChoices.map(\.id), ["dealsupply/DS", "dealsupply/PRB", "whisperm8/WM8"])
+        XCTAssertEqual(model.workspaces[0].teams, ["ABC", "PQR"], "Teams sortiert")
+        XCTAssertEqual(model.teamChoices.map(\.id), ["dealsupply/ABC", "dealsupply/PQR", "whisperm8/WM8"])
         XCTAssertEqual(model.mappings, [.init(path: "/Users/g/repos/whisperm8", team: "WM8", workspace: "whisperm8")])
         XCTAssertEqual(model.unmappedProjects.map(\.name), ["ListM8"], "schon zugeordnete Projekte stehen nicht zur Wahl")
     }
@@ -193,7 +193,7 @@ final class TicketsSettingsModelTests: XCTestCase {
         let model = model(world)
         await model.load()
         await model.saveKey("lin_api_neu")
-        await model.assign(projectPath: "/Users/g/repos/ListM8", to: .init(team: "DS", workspace: "dealsupply"))
+        await model.assign(projectPath: "/Users/g/repos/ListM8", to: .init(team: "ABC", workspace: "dealsupply"))
         await model.removeMapping(path: "/Users/g/repos/ListM8")
         await model.removeKey(workspace: "dealsupply")
         XCTAssertFalse(world.calls.isEmpty)
@@ -300,7 +300,7 @@ final class TicketsSettingsModelTests: XCTestCase {
         let world = twoWorkspaces()
         world.unreadable = true
         let model = model(world)
-        let assigned = await model.assign(projectPath: "/Users/g/repos/ListM8", to: .init(team: "DS", workspace: "dealsupply"))
+        let assigned = await model.assign(projectPath: "/Users/g/repos/ListM8", to: .init(team: "ABC", workspace: "dealsupply"))
         XCTAssertFalse(assigned)
         XCTAssertNotNil(model.mappingProblem)
         await model.removeMapping(path: "/Users/g/repos/whisperm8")
@@ -325,17 +325,17 @@ final class TicketsSettingsModelTests: XCTestCase {
     func testAssignWritesProjectAndTeam() async {
         let world = twoWorkspaces()
         let model = model(world)
-        let assigned = await model.assign(projectPath: "/Users/g/repos/ListM8/", to: .init(team: "DS", workspace: "dealsupply"))
+        let assigned = await model.assign(projectPath: "/Users/g/repos/ListM8/", to: .init(team: "ABC", workspace: "dealsupply"))
         XCTAssertTrue(assigned)
-        XCTAssertEqual(world.config.teamsByProjectPath["/Users/g/repos/ListM8"], "DS")
-        XCTAssertEqual(world.config.workspacesByTeam["DS"], "dealsupply")
+        XCTAssertEqual(world.config.teamsByProjectPath["/Users/g/repos/ListM8"], "ABC")
+        XCTAssertEqual(world.config.workspacesByTeam["ABC"], "dealsupply")
         XCTAssertNil(model.mappingProblem)
-        XCTAssertEqual(model.mappings.map(\.team), ["DS", "WM8"])
+        XCTAssertEqual(model.mappings.map(\.team), ["ABC", "WM8"])
     }
 
     func testAssignDoesNotMoveATeamToAnotherWorkspace() async {
         let world = twoWorkspaces()
-        world.teams["dealsupply"] = .success(["DS", "WM8"])   // dasselbe Kürzel gibt es drüben auch
+        world.teams["dealsupply"] = .success(["ABC", "WM8"])   // dasselbe Kürzel gibt es drüben auch
         let model = model(world)
         let before = world.config
         let assigned = await model.assign(projectPath: "/Users/g/repos/ListM8", to: .init(team: "WM8", workspace: "dealsupply"))
@@ -360,21 +360,21 @@ final class TicketsSettingsModelTests: XCTestCase {
     func testATeamLinearNoLongerKnowsIsMarkedAndCanBeRemoved() async {
         let world = twoWorkspaces()
         var config = world.config
-        config.set(workspace: "dealsupply", forTeam: "PRB")   // ohne Ordner, in Linear gelöscht
+        config.set(workspace: "dealsupply", forTeam: "PQR")   // ohne Ordner, in Linear gelöscht
         config.set(workspace: "dealsupply", forTeam: "ALT")
         config.set(team: "ALT", forProject: "/Users/g/repos/alt")   // mit Ordner, in Linear umbenannt
-        config.set(workspace: "dealsupply", forTeam: "DS")   // ohne Ordner, gibt es noch
+        config.set(workspace: "dealsupply", forTeam: "ABC")   // ohne Ordner, gibt es noch
         world.config = config
-        world.teams["dealsupply"] = .success(["DS", "NEU"])
+        world.teams["dealsupply"] = .success(["ABC", "NEU"])
         let model = model(world)
         await model.load()
-        XCTAssertEqual(model.staleTeams, [.init(team: "PRB", workspace: "dealsupply")], "nur das Team ohne Ordner, das fehlt")
+        XCTAssertEqual(model.staleTeams, [.init(team: "PQR", workspace: "dealsupply")], "nur das Team ohne Ordner, das fehlt")
         XCTAssertEqual(model.mappings.map(\.teamMissing), [true, false], "ALT fehlt, WM8 gibt es")
         XCTAssertTrue(model.hasMissingTeams)
-        XCTAssertEqual(model.workspaces.first { $0.name == "dealsupply" }?.teams, ["DS", "NEU"], "als Team des Workspaces steht nur, was Linear nennt")
+        XCTAssertEqual(model.workspaces.first { $0.name == "dealsupply" }?.teams, ["ABC", "NEU"], "als Team des Workspaces steht nur, was Linear nennt")
 
-        await model.removeTeam("PRB")
-        XCTAssertNil(world.config.workspacesByTeam["PRB"])
+        await model.removeTeam("PQR")
+        XCTAssertNil(world.config.workspacesByTeam["PQR"])
         XCTAssertEqual(world.config.workspacesByTeam["ALT"], "dealsupply", "andere Einträge bleiben")
         XCTAssertEqual(world.config.teamsByProjectPath.count, 2)
         XCTAssertTrue(model.staleTeams.isEmpty)
@@ -382,7 +382,7 @@ final class TicketsSettingsModelTests: XCTestCase {
 
         // Der letzte Ordner eines fehlenden Teams nimmt das Team mit: ein Klick, und der Ordner ist wieder frei.
         await model.removeMapping(path: "/Users/g/repos/alt")
-        XCTAssertEqual(world.config.workspacesByTeam, ["WM8": "whisperm8", "DS": "dealsupply"])
+        XCTAssertEqual(world.config.workspacesByTeam, ["WM8": "whisperm8", "ABC": "dealsupply"])
         XCTAssertEqual(world.config.teamsByProjectPath, ["/Users/g/repos/whisperm8": "WM8"])
         XCTAssertFalse(model.hasMissingTeams)
     }
@@ -394,7 +394,7 @@ final class TicketsSettingsModelTests: XCTestCase {
         config.set(team: "ALT", forProject: "/Users/g/repos/alt")
         config.set(team: "ALT", forProject: "/Users/g/repos/alt2")
         world.config = config
-        world.teams["dealsupply"] = .success(["DS"])
+        world.teams["dealsupply"] = .success(["ABC"])
         let model = model(world)
         await model.load()
         await model.removeMapping(path: "/Users/g/repos/alt")
@@ -406,7 +406,7 @@ final class TicketsSettingsModelTests: XCTestCase {
     func testATeamIsOnlyCalledMissingWhenTheTeamListIsCertain() async {
         let world = twoWorkspaces()
         var config = world.config
-        config.set(workspace: "dealsupply", forTeam: "PRB")
+        config.set(workspace: "dealsupply", forTeam: "PQR")
         world.config = config
 
         world.teams["dealsupply"] = .failure(.network("-1009"))
@@ -420,27 +420,27 @@ final class TicketsSettingsModelTests: XCTestCase {
 
         typealias Workspace = TicketsSettingsModel.Workspace
         let full = Workspace(name: "gross", hasKey: true, teams: (0..<LinearTicketSource.teamListLimit).map { "T\($0)" })
-        XCTAssertFalse(TicketsSettingsModel.isMissing(team: "PRB", in: full), "eine abgeschnittene Liste beweist nichts")
-        XCTAssertFalse(TicketsSettingsModel.isMissing(team: "PRB", in: nil))
-        XCTAssertFalse(TicketsSettingsModel.isMissing(team: "prb", in: Workspace(name: "a", hasKey: true, teams: ["PRB"])))
-        XCTAssertTrue(TicketsSettingsModel.isMissing(team: "PRB", in: Workspace(name: "a", hasKey: true, teams: [])))
+        XCTAssertFalse(TicketsSettingsModel.isMissing(team: "PQR", in: full), "eine abgeschnittene Liste beweist nichts")
+        XCTAssertFalse(TicketsSettingsModel.isMissing(team: "PQR", in: nil))
+        XCTAssertFalse(TicketsSettingsModel.isMissing(team: "pqr", in: Workspace(name: "a", hasKey: true, teams: ["PQR"])))
+        XCTAssertTrue(TicketsSettingsModel.isMissing(team: "PQR", in: Workspace(name: "a", hasKey: true, teams: [])))
     }
 
     func testRemoveTeamLeavesATeamThatGotAFolderMeanwhile() async {
         let world = twoWorkspaces()
         var config = world.config
-        config.set(workspace: "dealsupply", forTeam: "PRB")
+        config.set(workspace: "dealsupply", forTeam: "PQR")
         world.config = config
-        world.teams["dealsupply"] = .success(["DS"])
+        world.teams["dealsupply"] = .success(["ABC"])
         let model = model(world)
         await model.load()
         // Die Kommandozeile schreibt dieselbe Datei: Inzwischen hängt ein Ordner an dem Team.
-        config.set(team: "PRB", forProject: "/Users/g/repos/probe")
+        config.set(team: "PQR", forProject: "/Users/g/repos/probe")
         world.config = config
-        await model.removeTeam("PRB")
-        XCTAssertEqual(world.config.workspacesByTeam["PRB"], "dealsupply")
-        XCTAssertEqual(world.config.team(forDirectory: "/Users/g/repos/probe"), "PRB")
-        XCTAssertEqual(model.mappings.first { $0.team == "PRB" }?.teamMissing, true, "danach steht es als Zuordnung da")
+        await model.removeTeam("PQR")
+        XCTAssertEqual(world.config.workspacesByTeam["PQR"], "dealsupply")
+        XCTAssertEqual(world.config.team(forDirectory: "/Users/g/repos/probe"), "PQR")
+        XCTAssertEqual(model.mappings.first { $0.team == "PQR" }?.teamMissing, true, "danach steht es als Zuordnung da")
     }
 
     func testRemovingATeamIsNotWrittenOnTopOfAnUnreadableFile() async {

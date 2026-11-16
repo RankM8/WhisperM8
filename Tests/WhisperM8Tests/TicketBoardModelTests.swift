@@ -10,7 +10,7 @@ final class TicketBoardModelTests: XCTestCase {
     private let ole = UUID(uuidString: "B0096DCA-0000-4000-8000-000000000002")!
     private let jarvis = UUID(uuidString: "A37D241B-0000-4000-8000-000000000003")!
     private let giuliano = TicketPerson(id: "u1", name: "Giuliano Costa")
-    private let xeno = TicketPerson(id: "u2", name: "Xeno Suter")
+    private let xena = TicketPerson(id: "u2", name: "Xena Beispiel")
 
     private func status(_ kind: TicketStatusKind, _ name: String? = nil) -> TicketStatus {
         TicketStatus(id: "s-\(kind.rawValue)", name: name ?? kind.rawValue, kind: kind, position: Double(kind.boardOrder))
@@ -125,7 +125,7 @@ final class TicketBoardModelTests: XCTestCase {
         TicketBoardBuilder.build(
             snapshot: snapshot([
                 ticket(1, .started, assignee: giuliano, links: [link(jon)]),
-                ticket(2, .started, assignee: xeno),
+                ticket(2, .started, assignee: xena),
                 ticket(3, .unstarted),
                 ticket(4, .backlog, assignee: giuliano, project: nil),
                 ticket(5, .backlog),

@@ -216,7 +216,7 @@ lesen lässt (die Kommandozeile finge in dem Fall leer an).
 Wer für mehr als eine Firma arbeitet, hat mehr als einen Workspace. Jeder ist ein eigener Mandant mit eigenem
 Key, eigenen Teams und eigener Rechnung.
 
-- **Weg der Auflösung:** Ticket-Nummer → Team (`DS-12` → `DS`) → Workspace (`tickets.json`) → Key dieses
+- **Weg der Auflösung:** Ticket-Nummer → Team (`ABC-12` → `ABC`) → Workspace (`tickets.json`) → Key dieses
   Workspaces. Bei `board`, `list` und `new` kommt das Team aus dem Projekt des aktuellen Ordners oder `--team`.
 - **Nie geraten:** Gibt es nur einen Workspace, liegt jedes Team dort. Bei mehreren muss das Team zugeordnet
   sein (`tickets setup --team <Kürzel>`); sonst bricht der Befehl ab, bevor er Linear fragt.
@@ -526,8 +526,8 @@ Kopfzeilen der Antworten (`X-Complexity`, `X-RateLimit-Requests-Remaining`, `X-R
 | Team | offene Tickets | Anfragen je Abruf | Punkte vorher | Punkte jetzt |
 |---|---|---|---|---|
 | WM8 | 74 | 2 | 230 | 140 |
-| DEA | 4 | 2 | 230 | 140 |
-| PRB | 108 | 3 | 310 | 175 |
+| ABA | 4 | 2 | 230 | 140 |
+| PQR | 108 | 3 | 310 | 175 |
 
 „Vorher“ holte je Ticket 20 Labels, 20 Anhänge und 20 Beziehungen. Jetzt holt das Board 8 Labels, 8 Anhänge
 (nur die Verknüpfungen mit Chats) und 6 Beziehungen (`LinearTicketSource.boardFields`); das einzelne Ticket

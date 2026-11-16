@@ -276,7 +276,7 @@
     So gelten weiter die Linear-Regeln des Teams, und Kollegen sehen nichts, was nicht ein Chat nach diesen Regeln geschrieben hat.
     <ul>
       <li><b>Neu sichtbar:</b> Spalten nach echtem Status, der Filter „Wartet auf mich“, die Triage wie in Linear, „Link kopieren“, der Board-Chat, „Wartet auf mich“ über alle Teams, Jarvis öffnet dir Tickets.</li>
-      <li><b>Daten:</b> Tickets und Chats aus dem Team WM8, Abzug vom 15.11.2026. Der Produkt-Chat „Pia“, die Vorratszahlen und alle Zeilen aus AKQ und DS sind erfundene Beispiele. Der Text im Terminal ist nachgestellt.</li>
+      <li><b>Daten:</b> Tickets und Chats aus dem Team WM8, Abzug vom 15.11.2026. Der Produkt-Chat „Pia“, die Vorratszahlen und alle Zeilen aus XYZ und ABC sind erfundene Beispiele. Der Text im Terminal ist nachgestellt.</li>
       <li><b>Stern ★</b> = Empfehlung, von Giuliano so gewählt. Alles ist ohne Überfahren mit der Maus sichtbar, Texte mindestens 11 pt.</li>
     </ul>
   </div>
@@ -385,10 +385,10 @@ const TRIAGE = ['WM8-112','WM8-113','WM8-114','WM8-115'];
 const EX = '<i style="color:var(--ink3)">Beispiel</i>';
 const INBOX = [
   {g:'Prüfung ohne Prüfer', d:'gebaut, aber niemand prüft: du entscheidest, wer (erfundene Beispiele)', rows:[
-    ['DS',null,'Export der Liste als CSV · PR offen seit 3 Tagen',null],
-    ['AKQ',null,'Neue Spalte in der Kundenübersicht · PR ohne Prüfer',null]]},
+    ['ABC',null,'Export der Liste als CSV · PR offen seit 3 Tagen',null],
+    ['XYZ',null,'Neue Spalte in der Kundenübersicht · PR ohne Prüfer',null]]},
   {g:'Produktentscheidung offen', d:'Status mit Sonderbedeutung im Team (erfundenes Beispiel)', rows:[
-    ['AKQ',null,'Feld „Notiz“ beim Anlegen als optional kennzeichnen',null]]},
+    ['XYZ',null,'Feld „Notiz“ beim Anlegen als optional kennzeichnen',null]]},
   {g:'Abnahme', d:'Merge-bereit in WM8', rows:[
     ['WM8','WM8-104','Insel per Tastatur bauen: ⌥Tab, Schnellbefehle als Buchstaben (Variante B)',['idle','Vic ruht']]]},
   {g:'Entscheidungen', d:'Label „Entscheidung“, dir zugewiesen', rows:[
@@ -682,7 +682,7 @@ function gridHTML() {
 /* --- Wartet auf mich, alle Teams --- */
 function inboxHTML() {
   return `<div class="inbox">
-    <div class="bhead"><h3>Wartet auf mich</h3><span class="sub">WM8 aus dem Abzug · AKQ und DS als erfundene Beispiele</span>
+    <div class="bhead"><h3>Wartet auf mich</h3><span class="sub">WM8 aus dem Abzug · XYZ und ABC als erfundene Beispiele</span>
       <div class="sp"><button class="btn primary small" id="walk">Durchgehen ab dem ersten →</button></div></div>
     <div class="ibody">${INBOX.map(G=>`<div class="igrp"><b>${G.g}</b><small>${G.d}</small></div>
       ${G.rows.map(r=>`<div class="irow" data-k="${r[1]||''}"><span class="team">${r[0]}</span><span class="k">${r[1]||EX}</span><span class="t">${r[2]}</span>
@@ -704,7 +704,7 @@ const CAPS = {
   ticket_full:'<b>Variante: Ticket allein.</b> Groß, ohne Liste; ← → blättert durch die Spalte. Darunter die Aufträge an den Board-Chat.',
   ticket_wide:'<b>Variante: breites Feld rechts (600 pt).</b> Das Board bleibt links sichtbar. Mit Board-Chat wird es eng.',
   ticket_today:'<b>Heute: 340 pt.</b> So sieht das Detail heute aus. Ohne Verlauf, ohne Liste, ohne Aufträge.',
-  inbox:'<b>„Wartet auf mich“ über alle Teams.</b> Eine Liste für den Morgen, nach Grund getrennt, mit denselben Regeln wie der PM-Tagesbericht. „Durchgehen“ öffnet die Triage mit genau dieser Liste. Die Zeilen aus AKQ und DS sind erfundene Beispiele.',
+  inbox:'<b>„Wartet auf mich“ über alle Teams.</b> Eine Liste für den Morgen, nach Grund getrennt, mit denselben Regeln wie der PM-Tagesbericht. „Durchgehen“ öffnet die Triage mit genau dieser Liste. Die Zeilen aus XYZ und ABC sind erfundene Beispiele.',
   jarvis:'<b>Jarvis steuert das Board (entschieden: nur, wenn du gerade mit ihm sprichst).</b> Ihr sprecht über Tickets, Jarvis öffnet sie dir per Befehl in der Triage. Du siehst dasselbe wie er und antwortest rechts. „Zurück, wo ich war“ stellt die Ansicht von vorher wieder her. Sprichst du gerade nicht mit ihm, legt er nur einen Hinweis hin.',
   chats:'<b>Zurück in die Chats.</b> Der Board-Chat ist kein zweites Terminal, sondern derselbe Chat an einem anderen Ort. Beim Umschalten wandert er zurück an seinen Tab und seine Kachel. Läuft er gerade in einem anderen Fenster, zeigt die Spalte „läuft in Fenster 2 · hierher holen“.',
 };
