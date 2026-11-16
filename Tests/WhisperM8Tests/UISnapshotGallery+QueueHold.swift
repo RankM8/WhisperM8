@@ -6,7 +6,7 @@ import SwiftUI
 /// (darf frei bleiben), Board-Spalte bei Mindestbreite 280 pt englisch und mit
 /// der längeren deutschen Fassung (Kurzfassung statt Abschneiden), Codex, und
 /// im Raster mit offener Jarvis-Notizkarte: breite Kachel (Pille rechts neben
-/// der Karte) und schmale Kachel (Pille unter der Karte).
+/// der Karte) und schmale Kachel (Pille an der Unterkante der Karte).
 extension UISnapshotGallery {
     static let queueHoldLongChat = [
         "⏺ Die Pille liegt jetzt oben rechts im Terminal und verschiebt nichts.",

@@ -49,7 +49,7 @@ struct QueueHoldStripPlaced: View {
         QueueHoldStripContent(notice: notice, onActivate: onActivate, fixedTexts: fixedTexts)
             .padding(.top, insets.top)
             .padding(.leading, insets.leading)
-            .padding(.trailing, QueueHoldPlacement.trailingInset)
+            .padding(.trailing, insets.trailing)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
     }
 }
@@ -117,7 +117,13 @@ enum QueueHoldPlacement {
     struct Insets: Equatable {
         var top: CGFloat
         var leading: CGFloat
+        var trailing: CGFloat = QueueHoldPlacement.trailingInset
     }
+
+    /// Höhe der Pille (11 pt Schrift, 4 pt Rand oben und unten, Linie).
+    static let pillHeight: CGFloat = 22
+    /// Abstand zur Kante der Karte, wenn die Pille in ihr sitzt.
+    static let insideCardInset: CGFloat = 6
 
     /// Abstand zur Ecke des Terminals; rechts mehr, damit der Scroller frei bleibt.
     static let topInset: CGFloat = 6
@@ -141,6 +147,12 @@ enum QueueHoldPlacement {
         if terminalWidth - trailingInset - besideLeading >= minimumWidthBesideCard {
             return Insets(top: topInset, leading: besideLeading)
         }
-        return Insets(top: cardBottom + cardGap, leading: leadingInset)
+        // Schmale Kachel: an die Unterkante der Karte heften, rechts und
+        // innerhalb ihrer Fläche. Darunter läge sonst eine weitere Zeile
+        // Terminal oder die Eingabezeile.
+        return Insets(
+            top: max(topInset, cardBottom - pillHeight - insideCardInset),
+            leading: leadingInset,
+            trailing: max(trailingInset, terminalWidth - cardRight + insideCardInset))
     }
 }
