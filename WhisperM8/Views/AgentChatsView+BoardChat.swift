@@ -102,6 +102,7 @@ extension AgentChatsView {
         BoardChatColumnView(
             state: state,
             actions: boardChatActions(session: session, placement: placement, projectID: projectID),
+            inputBar: AnyView(BoardChatInputBar(windowID: windowID)),
             statusDot: { if let session { boardChatStatusDot(session) } },
             terminal: {
                 if let session, placement == .here,
@@ -111,6 +112,11 @@ extension AgentChatsView {
                     // gibt ihm den Fokus, gestartet wird über den Kopf.
                     sessionDetailContent(for: session, project: project, suppressesAutoActivation: true)
                         .id(session.id)
+                        // Sichtbar: Ziel für Diktat und „→ Jarvis“ (Teil b).
+                        .modifier(BoardChatRegistrationModifier(
+                            windowID: windowID, sessionID: session.id,
+                            name: BoardChatText.callName(session.title),
+                            changed: { syncActiveAgentChat() }))
                 }
             })
     }
@@ -180,5 +186,32 @@ struct BoardChatSplit<Board: View, Column: View>: View {
                 column(proxy.size.width)
             }
         }
+    }
+}
+
+// MARK: - Diktat-Kontext (Teil b)
+
+extension AgentChatsView {
+    /// Im Ticket-Modus ist der sichtbare Board-Chat der Chat „vor mir“: Ziel
+    /// und Kontext des Diktats. Ohne sichtbaren Board-Chat gibt es keinen.
+    func syncBoardChatAsActiveChat() {
+        guard let registration = BoardChatInputs.shared.boardChat(in: windowID),
+              let session = workspaceModel.session(id: registration.sessionID),
+              session.status != .archived,
+              let project = workspace.projects.first(where: { $0.id == session.projectID }) else {
+            if AppState.shared.activeAgentChat != nil { AppState.shared.activeAgentChat = nil }
+            return
+        }
+        let ref = AgentChatContextRef(
+            sessionID: session.id,
+            provider: session.provider,
+            projectName: project.name,
+            projectPath: project.path,
+            title: session.title,
+            externalSessionID: session.externalSessionID,
+            kind: session.effectiveKind,
+            backgroundShortID: session.backgroundShortID
+        )
+        if AppState.shared.activeAgentChat != ref { AppState.shared.activeAgentChat = ref }
     }
 }

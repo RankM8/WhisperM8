@@ -5,6 +5,24 @@ import Foundation
 enum DictationDeliveryTarget: Equatable {
     case frontApp
     case agentChat(sessionID: UUID)
+    /// Board-Chat im Ticket-Modus (WM8-113): ein Diktat, das ins vordere
+    /// Programm gesprochen und dorthin umgelenkt wurde. Geht nie mit Senden
+    /// hinaus und nie in eine offene Frage; dieselben Regeln wie „→ Jarvis“.
+    case boardChat(sessionID: UUID)
+
+    /// Chat, in den das Diktat geht; `nil` = vorderes Programm.
+    var sessionID: UUID? {
+        switch self {
+        case .frontApp: return nil
+        case .agentChat(let id), .boardChat(let id): return id
+        }
+    }
+
+    /// Ein umgelenktes Diktat wird nie abgeschickt.
+    var neverSubmits: Bool {
+        if case .boardChat = self { return true }
+        return false
+    }
 }
 
 /// Ziel plus „danach senden“. Das Ziel merkt sich der Coordinator beim Start
@@ -14,6 +32,12 @@ struct DictationDelivery: Equatable {
     var submit: Bool = false
 
     static let frontApp = DictationDelivery()
+
+    /// Was beim Stopp gilt: Ein umgelenktes Diktat geht nie mit Senden hinaus,
+    /// auch wenn der Stopp „senden“ verlangt (Kreuz am Controller).
+    static func atStop(target: DictationDeliveryTarget, submit: Bool) -> DictationDelivery {
+        DictationDelivery(target: target, submit: submit && !target.neverSubmits)
+    }
 }
 
 /// Zustand des Ziel-Chats im Moment der Zustellung.
@@ -61,9 +85,21 @@ enum DictationDeliveryRouter {
     static func decide(
         delivery: DictationDelivery,
         text: String,
-        chatState: (UUID) -> DictationChatState
+        chatState: (UUID) -> DictationChatState,
+        approvalPending: (UUID) -> Bool = { _ in false }
     ) -> DictationDeliveryDecision {
         switch delivery.target {
+        case .boardChat(let sessionID):
+            guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .nothing }
+            // Dieselbe Prüfung wie „→ Jarvis“: auch Claudes Frage mit Textfeld
+            // und eine Freigabe laut Sendeweg der CLI zählen als „wartet“.
+            switch BoardChatInputRules.refusal(state: chatState(sessionID), approvalPending: approvalPending(sessionID)) {
+            case nil: return .writeToChat(sessionID: sessionID, submit: false)
+            case .awaitingInput: return .clipboardOnly(.decisionPending)
+            case .starting: return .clipboardOnly(.chatStarting)
+            case .usageLimited: return .clipboardOnly(.chatUsageLimited)
+            case .notRunning, .noBoardChat: return .clipboardOnly(.chatNotRunning)
+            }
         case .frontApp:
             // Der Weg ins vordere Programm bleibt, wie er ist, auch bei leerem Text.
             return .frontApp

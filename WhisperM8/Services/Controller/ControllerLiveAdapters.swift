@@ -116,13 +116,18 @@ final class LiveControllerDictation: ControllerDictationControlling {
     var isQuickActionRunning: Bool { AppState.shared.isQuickActionRunning }
 
     var targetSessionID: UUID? { AppState.shared.dictationTargetSessionID }
+    var targetNeverSubmits: Bool { AppState.shared.dictationTargetNeverSubmits }
 
     func start(target: DictationDeliveryTarget, label: String?) {
         Task { @MainActor in
             let appState = AppState.shared
             await appState.startRecording(target: target)
             // Erst nach dem Start: Der Start blendet die Pill zuvor einmal aus.
-            if appState.isRecording { appState.showControllerDictationTarget(label) }
+            // Umgelenkt in den Board-Chat (WM8-113): sein Name statt „App vorn“.
+            if appState.isRecording {
+                appState.showControllerDictationTarget(BoardChatInputs.shared.dictationLabel(
+                    for: appState.pendingDictationTarget) ?? label)
+            }
         }
     }
 

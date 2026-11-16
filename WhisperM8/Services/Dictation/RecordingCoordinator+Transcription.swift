@@ -100,7 +100,8 @@ extension RecordingCoordinator {
         let deliveryDecision = DictationDeliveryRouter.decide(
             delivery: delivery,
             text: finalText,
-            chatState: { chatWriter.state(of: $0) }
+            chatState: { chatWriter.state(of: $0) },
+            approvalPending: boardChatApprovalPending
         )
         if deliveryDecision != .frontApp {
             await deliverToChatTarget(

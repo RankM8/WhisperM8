@@ -5,6 +5,9 @@ import SwiftUI
 /// dem Chat rechts, dazu die Hinweise, wenn er nicht hier steht. Das Terminal
 /// ist nachgestellt (Text), alle Inhalte stammen aus WM8 oder sind erfunden.
 extension UISnapshotGallery {
+    /// Fenster der Bilder mit Board-Chat (Triage-Knopf „→ Jarvis“, Bezug).
+    static let boardChatSnapshotWindowID = UUID(uuidString: "00000000-0000-4000-8000-0000000000b1")!
+
     @MainActor
     static func boardChatFixtures() -> [Fixture] {
         let boards = ticketBoardFixtures()
@@ -34,8 +37,23 @@ extension UISnapshotGallery {
             Circle().fill(color).frame(width: 7, height: 7)
         }
 
+        // Eingaben wie in der App: Board-Chat des Fensters angemeldet, Triage zeigt WM8-81.
+        let window = boardChatSnapshotWindowID
+        let ticket = BoardChatTicket(key: "WM8-81", title: "Ticket-Board in der App, Stufe 1",
+                                     url: "https://linear.app/whisperm8/issue/WM8-81")
+        func inputs(notice: String? = nil) -> BoardChatInputs {
+            let inputs = BoardChatInputs()
+            inputs.register(windowID: window, sessionID: UUID(), name: "Jarvis")
+            inputs.shownTicket = { _ in ticket }
+            if let notice { inputs.showNoticeForSnapshot(notice, in: window) }
+            return inputs
+        }
+        func inputBar(notice: String? = nil) -> AnyView {
+            AnyView(BoardChatInputBar(windowID: window, inputs: inputs(notice: notice)))
+        }
+
         func screen(_ board: String, state: BoardChatColumnState, triage: Bool = false, collapsed: Bool = false,
-                    width: Double? = nil) -> AnyView {
+                    width: Double? = nil, inputBar: AnyView? = nil) -> AnyView {
             AnyView(BoardChatSplit {
                 base(board)
             } column: { available in
@@ -43,7 +61,8 @@ extension UISnapshotGallery {
                     if collapsed {
                         BoardChatCollapsedRail(title: state.title, expand: {}) { dot(AgentTheme.statusWorking) }
                     } else {
-                        BoardChatColumnView(state: state, actions: .none, statusDot: { dot(AgentTheme.statusWorking) }) {
+                        BoardChatColumnView(state: state, actions: .none, inputBar: inputBar,
+                                            statusDot: { dot(AgentTheme.statusWorking) }) {
                             Text(terminalText)
                                 .font(.system(size: 11.5, design: .monospaced))
                                 .foregroundStyle(AgentTheme.textPrimary)
@@ -85,6 +104,16 @@ extension UISnapshotGallery {
             },
             Fixture(name: "tickets-board-chat-schmales-fenster", size: CGSize(width: 900, height: 700)) {
                 screen("tickets-board", state: jarvis, width: 600)
+            },
+            // Teil b: „→ Jarvis“ oben in der Triage, Bezug unter dem Terminal.
+            Fixture(name: "tickets-board-chat-bezug", size: size) {
+                BoardChatInputs.shared.register(windowID: window, sessionID: UUID(), name: "Jarvis")
+                return screen("tickets-triage-mit-fenster", state: jarvis, triage: true, inputBar: inputBar())
+            },
+            Fixture(name: "tickets-board-chat-nichts-eingefuegt", size: size) {
+                BoardChatInputs.shared.register(windowID: window, sessionID: UUID(), name: "Jarvis")
+                return screen("tickets-triage-mit-fenster", state: jarvis, triage: true,
+                              inputBar: inputBar(notice: BoardChatInputRules.message(.awaitingInput, chatName: "Jarvis")))
             },
         ]
     }

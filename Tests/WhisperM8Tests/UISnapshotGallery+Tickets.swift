@@ -218,6 +218,10 @@ extension UISnapshotGallery {
             Fixture(name: "tickets-triage-liste", size: size) {
                 view { $0.mode = .list; $0.openFromList("WM8-69"); $0.setComments(.loaded(TicketComments(items: [], hasMore: false)), ticketID: "id-69") }
             },
+            // Grundlage für die Bilder des Board-Chats (WM8-113): Triage mit Fenster, damit „→ Jarvis“ erscheint.
+            Fixture(name: "tickets-triage-mit-fenster", size: size) {
+                view { $0.windowID = boardChatSnapshotWindowID; $0.openFromLane("WM8-81"); $0.setComments(.loaded(comments), ticketID: "id-81") }
+            },
             Fixture(name: "tickets-triage-schmal", size: CGSize(width: 760, height: 640)) {
                 view { $0.openFromLane("WM8-81"); $0.setComments(.loaded(comments), ticketID: "id-81") }
             },

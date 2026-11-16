@@ -69,7 +69,11 @@ extension RecordingCoordinator {
         case .writeToChat(let sessionID, let submit):
             copyAndRecord()
             overlayController.hide()
-            if chatWriter.write(finalText, to: sessionID, submit: submit) {
+            // Board-Chat (WM8-113): Bezug aufs Ticket, das beim Start offen war, nur einmal je Ticket.
+            let reference = boardChatReferenceAtStart.flatMap { $0.sessionID == sessionID ? $0 : nil }
+            boardChatReferenceAtStart = nil
+            if chatWriter.write((reference?.prefix ?? "") + finalText, to: sessionID, submit: submit) {
+                reference?.commit()
                 Logger.paste.info("Dictation written to agent chat submit=\(submit, privacy: .public)")
             } else {
                 Logger.paste.warning("Dictation could not be written to agent chat, text stays on clipboard")

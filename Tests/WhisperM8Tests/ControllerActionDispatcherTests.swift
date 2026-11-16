@@ -947,6 +947,19 @@ final class ControllerActionDispatcherTests: XCTestCase {
 
     /// In einer Shell wäre der diktierte Text ein Befehl: Kreuz beendet dort
     /// nur, sendet nie.
+    /// Board-Chat (WM8-113): Ein ins vordere Programm gesprochenes Diktat,
+    /// das in den Board-Chat umgelenkt wurde, geht nie mit Senden. Kreuz in
+    /// der Aufnahme tut dann nichts (Resolver: `targetIsChat: false` → nil).
+    func testRedirectedBoardChatDictationNeverSubmits() {
+        setTerminal(status: .idle)
+        perform(.dictationToggle)
+        dictation.targetNeverSubmits = true
+        XCTAssertEqual(context, .recording(
+            phase: .recording, targetIsChat: false, navigation: .init(area: .content, gridActive: false)))
+        dispatcher.perform(.dictationStopAndSubmit, in: context)
+        XCTAssertEqual(dictation.stopped, [false])
+    }
+
     func testStopAndSubmitOnlyForClaudeAndCodex() {
         setTerminal(status: .idle, profile: .shell)
         perform(.dictationToggle)

@@ -207,6 +207,9 @@ private struct TicketTriageBar: View {
             if model.detail != nil {
                 TicketCopyButton(kind: .link, copied: model.copied) { model.copyLink() }
             }
+            if model.detail != nil, let windowID = model.windowID {
+                BoardChatHandOffButton(windowID: windowID)
+            }
             if let content = model.detail {
                 if let url = content.url {
                     Button("Open in Linear") { actions.openURL(url) }

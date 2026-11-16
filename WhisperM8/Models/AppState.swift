@@ -181,14 +181,23 @@ final class AppState {
     var isStartingRecording: Bool { recordingCoordinator.isStartingRecording }
 
     /// Chat, in den die laufende Aufnahme geht; `nil` = vorderes Programm.
-    var dictationTargetSessionID: UUID? {
-        if case let .agentChat(sessionID) = recordingCoordinator.pendingDeliveryTarget { return sessionID }
+    var dictationTargetSessionID: UUID? { dictationChatTarget?.sessionID }
+
+    /// Ziel der laufenden Aufnahme (vor dem Stopp).
+    var pendingDictationTarget: DictationDeliveryTarget { recordingCoordinator.pendingDeliveryTarget }
+
+    /// Das laufende Diktat geht in den Board-Chat und nie mit Senden (WM8-113).
+    var dictationTargetNeverSubmits: Bool { dictationChatTarget?.neverSubmits ?? false }
+
+    /// Ziel der laufenden Aufnahme, wenn es ein Chat ist.
+    private var dictationChatTarget: DictationDeliveryTarget? {
+        if recordingCoordinator.pendingDeliveryTarget.sessionID != nil { return recordingCoordinator.pendingDeliveryTarget }
         // Nach dem Stopp: das eingefrorene Ziel, solange transkribiert oder
         // nachbearbeitet wird (Review Runde 5, Befund 9).
         switch recordingPhase {
         case .transcribing, .postProcessing:
-            if case let .agentChat(sessionID) = recordingCoordinator.inFlightDeliveryTarget { return sessionID }
-            return nil
+            let target = recordingCoordinator.inFlightDeliveryTarget
+            return target.sessionID != nil ? target : nil
         default:
             return nil
         }
