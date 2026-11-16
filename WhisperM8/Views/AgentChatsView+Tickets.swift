@@ -30,21 +30,9 @@ extension AgentChatsView {
     func handleTicketBoardKey(_ event: NSEvent) -> NSEvent? {
         guard let hostWindow, event.window === hostWindow, isTicketsModeActive,
               TicketBoardControllers.shared.hasController(for: windowID) else { return event }
-        let responder = hostWindow.firstResponder
-        guard TabNavShortcut.shouldHandle(firstResponder: responder),
-              !String(describing: type(of: responder as Any)).contains("TerminalView") else { return event }
-        let flags = event.modifierFlags
-        var modifiers: TicketBoardKey.ModifierSet = []
-        if flags.contains(.command) { modifiers.insert(.command) }
-        if flags.contains(.option) { modifiers.insert(.option) }
-        if flags.contains(.control) { modifiers.insert(.control) }
-        if flags.contains(.shift) { modifiers.insert(.shift) }
-        guard let key = TicketBoardKey.resolve(keyCode: event.keyCode, characters: event.charactersIgnoringModifiers,
-                                               modifiers: modifiers) else { return event }
-        // ⌘C mit markiertem Text (etwa in der Beschreibung) kopiert den Text.
-        if key == .copyLink, let text = responder as? NSTextView, text.selectedRange().length > 0 { return event }
-        let handled = TicketBoardControllers.shared.controller(for: windowID).viewModel.handle(key)
-        return handled ? nil : event
+        return TicketBoardKeyRouting.route(event, firstResponder: hostWindow.firstResponder) {
+            TicketBoardControllers.shared.controller(for: windowID).viewModel.handle($0)
+        }
     }
 
     /// Tickets des Projekts, das in diesem Fenster gewählt ist.
@@ -65,6 +53,34 @@ extension AgentChatsView {
         } column: { available in
             boardChatColumn(available: available)
         }
+    }
+}
+
+/// Wem gehört eine Taste im Ticket-Modus: dem Board oder dem Fokus? Getrennt
+/// von der Ansicht, damit Tests es mit echtem Fenster und Ereignis prüfen.
+enum TicketBoardKeyRouting {
+    /// `nil` = vom Board genommen. Ein Terminal mit Fokus (der Board-Chat in der
+    /// Spalte) und bearbeitbare Textfelder behalten alle Tasten, auch ⌘C: Dort
+    /// kopiert ⌘C die Markierung, nicht den Link. Vorher prüfte die Stelle den
+    /// Typnamen des Optionals („Optional<NSResponder>“) und erkannte das
+    /// Terminal nie; J, K, ↑, ↓ und Esc blätterten dann in der Triage, statt
+    /// im Board-Chat anzukommen (WM8-113).
+    @MainActor
+    static func route(_ event: NSEvent, firstResponder responder: NSResponder?,
+                      handle: (TicketBoardKey) -> Bool) -> NSEvent? {
+        guard TabNavShortcut.shouldHandle(firstResponder: responder),
+              !BoardChatFocusRule.isTerminal(responder) else { return event }
+        let flags = event.modifierFlags
+        var modifiers: TicketBoardKey.ModifierSet = []
+        if flags.contains(.command) { modifiers.insert(.command) }
+        if flags.contains(.option) { modifiers.insert(.option) }
+        if flags.contains(.control) { modifiers.insert(.control) }
+        if flags.contains(.shift) { modifiers.insert(.shift) }
+        guard let key = TicketBoardKey.resolve(keyCode: event.keyCode, characters: event.charactersIgnoringModifiers,
+                                               modifiers: modifiers) else { return event }
+        // ⌘C mit markiertem Text (etwa in der Beschreibung) kopiert den Text.
+        if key == .copyLink, let text = responder as? NSTextView, text.selectedRange().length > 0 { return event }
+        return handle(key) ? nil : event
     }
 }
 
