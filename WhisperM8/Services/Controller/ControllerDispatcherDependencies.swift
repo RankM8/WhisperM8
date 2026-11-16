@@ -106,6 +106,8 @@ protocol ControllerDictationControlling: AnyObject {
     var isQuickActionRunning: Bool { get }
     /// Chat, in den die laufende Aufnahme geht; `nil` = vorderes Programm.
     var targetSessionID: UUID? { get }
+    /// Umgelenktes Diktat in den Board-Chat (WM8-113): nie mit Senden.
+    var targetNeverSubmits: Bool { get }
     /// `label`: Ziel, das die Pill zeigt („Titel des Chats“, „Programm vorne“).
     func start(target: DictationDeliveryTarget, label: String?)
     func stop(submit: Bool)
@@ -219,3 +221,8 @@ final class ControllerUIModel {
         listWindowID = nil
     }
 }
+
+extension ControllerDictationControlling {
+    var targetNeverSubmits: Bool { false }
+}
+

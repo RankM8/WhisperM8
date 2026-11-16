@@ -25,8 +25,17 @@ struct BoardChatTicket: Equatable {
 enum BoardChatText {
     /// `WM8-81 „Titel“ https://…`, eine Zeile, Titel ohne Steuerzeichen.
     static func ticketLine(_ ticket: BoardChatTicket) -> String {
-        let head = "\(ticket.key) „\(TicketCopyText.flat(ticket.title))“"
+        let head = "\(ticket.key) „\(shortTitle(ticket.title))“"
         return ticket.url.map { "\(head) \($0)" } ?? head
+    }
+
+    /// Titel ohne Steuerzeichen, höchstens etwa 200 Zeichen: Ein sehr langer
+    /// Titel aus Linear soll das Eingabefeld nicht füllen.
+    static let maximumTitleLength = 200
+    static func shortTitle(_ title: String) -> String {
+        let flat = TicketCopyText.flat(title)
+        guard flat.count > maximumTitleLength else { return flat }
+        return String(flat.prefix(maximumTitleLength - 1)) + "…"
     }
 
     /// „→ Jarvis“: das Ticket ins Feld, mit Leerzeichen, damit Giuliano
@@ -166,6 +175,13 @@ final class BoardChatInputs {
     func dictationTarget() -> UUID? {
         guard let windowID = keyWindowID() else { return nil }
         return registrations[windowID]?.sessionID
+    }
+
+    /// Name für Pille und Insel, wenn das Diktat umgelenkt in den Board-Chat geht.
+    func dictationLabel(for target: DictationDeliveryTarget) -> String? {
+        guard case .boardChat(let sessionID) = target,
+              let registration = registrations.values.first(where: { $0.sessionID == sessionID }) else { return nil }
+        return registration.name
     }
 
     // MARK: Bezug

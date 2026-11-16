@@ -251,6 +251,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     /// Darf eine Aufnahme in diesen Chat mit Kreuz auch gesendet werden? Nur
     /// bei Claude und Codex — in einer Shell wäre der Text ein Befehl.
     func submitAllowed(to sessionID: UUID?) -> Bool {
+        // Ein umgelenktes Diktat in den Board-Chat geht nie mit Senden (WM8-113).
+        guard !dictation.targetNeverSubmits else { return false }
         guard let sessionID, let state = terminals.state(of: sessionID) else { return false }
         return state.profile == .claude || state.profile == .codex
     }

@@ -135,6 +135,19 @@ final class BoardChatInputsTests: XCTestCase {
         XCTAssertEqual(BoardChatText.ticketLine(hostile), "WM8-9 „Titel [201~ mit Umbruch“")
     }
 
+    func testVeryLongTitlesAreShortened() {
+        let long = BoardChatTicket(key: "WM8-1", title: String(repeating: "a", count: 500), url: nil)
+        XCTAssertEqual(BoardChatText.ticketLine(long).count, "WM8-1 „“".count + BoardChatText.maximumTitleLength)
+        XCTAssertTrue(BoardChatText.ticketLine(long).hasSuffix("…“"))
+    }
+
+    func testDictationLabelNamesTheBoardChat() {
+        inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
+        XCTAssertEqual(inputs.dictationLabel(for: .boardChat(sessionID: jarvis)), "Jarvis")
+        XCTAssertNil(inputs.dictationLabel(for: .frontApp))
+        XCTAssertNil(inputs.dictationLabel(for: .agentChat(sessionID: jarvis)))
+    }
+
     func testCallName() {
         XCTAssertEqual(BoardChatText.callName("Jarvis: Supervisor WhisperM8"), "Jarvis")
         XCTAssertEqual(BoardChatText.callName("Pia · Produkt WM8"), "Pia")

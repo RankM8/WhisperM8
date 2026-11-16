@@ -48,6 +48,7 @@ final class ControllerDictationSpy: ControllerDictationControlling {
     var phase: ControllerRecordingPhase?
     var isQuickActionRunning = false
     var targetSessionID: UUID?
+    var targetNeverSubmits = false
     private(set) var started: [DictationDeliveryTarget] = []
     private(set) var stopped: [Bool] = []
     private(set) var cancelCount = 0

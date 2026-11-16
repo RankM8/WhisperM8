@@ -159,6 +159,12 @@ final class RecordingCoordinator {
     var boardChatReference: @MainActor (UUID) -> (prefix: String, commit: () -> Void)? = {
         BoardChatInputs.shared.referenceForDictation(to: $0)
     }
+    /// Freigabe offen laut Sendeweg der CLI (`chats send`); nur für den Board-Chat.
+    var boardChatApprovalPending: @MainActor (UUID) -> Bool = { BoardChatInputs.shared.approvalPending($0) }
+    /// Bezug, eingefroren beim Start der Aufnahme: Blättert Giuliano während
+    /// Transkription und Nacharbeit weiter, gilt trotzdem das Ticket, über
+    /// das er gesprochen hat.
+    var boardChatReferenceAtStart: (sessionID: UUID, prefix: String, commit: () -> Void)?
     /// Hinweis, wenn ein Diktat für einen Chat nur in der Zwischenablage
     /// gelandet ist (Titel, Text).
     let dictationNoticePoster: @MainActor (_ title: String, _ body: String) -> Void
@@ -264,7 +270,7 @@ final class RecordingCoordinator {
         _ target: DictationDeliveryTarget, hasKeyAgentWindow: Bool, boardChat: UUID?
     ) -> DictationDeliveryTarget {
         guard target == .frontApp, hasKeyAgentWindow, let boardChat else { return target }
-        return .agentChat(sessionID: boardChat)
+        return .boardChat(sessionID: boardChat)
     }
 
     /// `captureContext: false` nur für `debug record`: kein Cmd+C an die
@@ -314,6 +320,11 @@ final class RecordingCoordinator {
                 pendingDeliveryTarget, hasKeyAgentWindow: keyAgentWindow != nil, boardChat: boardChatTarget())
         } else {
             activeAgentChat = nil
+        }
+        // Bezug jetzt festhalten, nicht erst beim Ausliefern.
+        boardChatReferenceAtStart = nil
+        if case .boardChat(let boardChat) = pendingDeliveryTarget, let reference = boardChatReference(boardChat) {
+            boardChatReferenceAtStart = (boardChat, reference.prefix, reference.commit)
         }
 
         // Sofortige Rückmeldung: Ohne sichtbare Pill während des Bluetooth-
@@ -581,7 +592,7 @@ final class RecordingCoordinator {
 
         let frozenOutputMode = appState.selectedOutputMode
         let frozenContextBundle = appState.contextBundle
-        let frozenDelivery = DictationDelivery(target: pendingDeliveryTarget, submit: submit)
+        let frozenDelivery = DictationDelivery.atStop(target: pendingDeliveryTarget, submit: submit)
         inFlightDeliveryTarget = frozenDelivery.target
         // Ab hier gehört das Ziel diesem Lauf; das nächste Diktat beginnt wieder beim vorderen Programm.
         pendingDeliveryTarget = .frontApp
