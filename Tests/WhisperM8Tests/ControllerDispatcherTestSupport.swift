@@ -45,7 +45,14 @@ final class ControllerTerminalSpy: ControllerTerminalControlling {
     }
     /// Offene Ansicht je Chat, wie `composerFieldForSendCheck` sie meldet (WM8-123).
     var openViews: [UUID: String] = [:]
-    func openViewForSending(in sessionID: UUID) -> String? { openViews[sessionID] }
+    /// Feld unter der Ansicht sichtbar leer (Agent-Liste); sonst kein Feld erkannt.
+    var viewFieldEmpty: [UUID: Bool] = [:]
+    func composerReadingForSending(in sessionID: UUID) -> ComposerFieldReading? {
+        let field = viewFieldEmpty[sessionID].map {
+            ControllerPromptField(rows: 1, cursorRow: 0, cursorAtStart: $0, isEmpty: $0)
+        }
+        return ComposerFieldReading(field: field, atBottom: true, openView: openViews[sessionID])
+    }
     private(set) var questionTexts: [String] = []
     var questionTextSucceeds = true
     func sendQuestionText(_ text: String, to sessionID: UUID) -> Bool {

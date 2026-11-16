@@ -128,6 +128,50 @@ final class ControllerOpenViewSendTests: XCTestCase {
         XCTAssertEqual(terminals.keys, [.down, .escape])
     }
 
+    /// Auflage der Prüferin: In `/config` schaltet auch ◀ oder ▶ eine
+    /// Einstellung um (Vorfall 16.11.2026, Auto-compact). Dort sind die
+    /// seitlichen Pfeile gesperrt, ↑ ↓ und Esc frei. In Agent-Liste und
+    /// Verlaufssuche bleiben ◀ ▶ frei.
+    func testSideArrowsStayOutOfTheConfigView() {
+        for lines in [Self.views[1].lines, Self.views[2].lines] {
+            show(lines)
+            for key in [ControllerChatKey.left, .right, .wordLeft, .wordRight] {
+                dispatcher.perform(.chatKey(key), in: context)
+            }
+            XCTAssertTrue(terminals.keys.isEmpty, "\(terminals.keys)")
+            XCTAssertEqual(haptics.last, .rejected)
+        }
+        dispatcher.perform(.chatKey(.up), in: context)
+        dispatcher.perform(.chatKey(.down), in: context)
+        dispatcher.perform(.chatKey(.escape), in: context)
+        XCTAssertEqual(terminals.keys, [.up, .down, .escape], "navigieren und schließen bleibt")
+        for view in [Self.views[0], Self.views[3]] {
+            show(view.lines)
+            dispatcher.perform(.chatKey(.left), in: context)
+        }
+        XCTAssertEqual(terminals.keys.suffix(2), [.left, .left], "Agent-Liste und Verlaufssuche: ◀ frei")
+    }
+
+    /// Frage der Prüferin: Enter heißt in der Agent-Liste „zurück“. Mit leerem
+    /// Feld darf Kreuz deshalb durch, sonst säße der Controller dort fest; mit
+    /// Text im Feld startete Enter eine neue Hintergrund-Sitzung.
+    func testCrossReturnsFromAnEmptyAgentList() {
+        show(Self.views[0].lines)
+        terminals.viewFieldEmpty[chat] = true
+        dispatcher.perform(.chatKey(.enter), in: context)
+        XCTAssertEqual(terminals.keys, [.enter], "leeres Feld: Enter führt zurück")
+        dispatcher.perform(.chatKey(.space), in: context)
+        XCTAssertEqual(terminals.keys, [.enter], "Leerzeichen („reply“) bleibt gesperrt")
+        terminals.viewFieldEmpty[chat] = false
+        dispatcher.perform(.chatKey(.enter), in: context)
+        XCTAssertEqual(terminals.keys, [.enter], "mit Text kein Enter")
+        // In /config hilft ein leeres Feld nichts.
+        show(Self.views[1].lines)
+        terminals.viewFieldEmpty[chat] = true
+        dispatcher.perform(.chatKey(.enter), in: context)
+        XCTAssertEqual(terminals.keys, [.enter])
+    }
+
     /// In den Ansichten, die der Controller-Leser selbst kennt (etwa die
     /// Auswahl in der Fußzeile), wählt Kreuz weiter aus.
     func testCrossStillSelectsInTheKnownViews() {
