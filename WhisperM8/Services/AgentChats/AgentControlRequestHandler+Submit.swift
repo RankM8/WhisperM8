@@ -33,6 +33,7 @@ extension AgentControlRequestHandler {
             switch Self.submitCheck(profile: controller.command.keyboardProfile, status: status,
                                     approvalPending: Self.approvalPending(targetID, controller),
                                     userDraft: controller.composerDraft.mayHaveUnsentInput,
+                                    insertedText: controller.composerDraft.mayHoldInsertedText,
                                     field: screen?.promptField, screenReadable: screen != nil) {
             case .allowed:
                 controller.submitComposer()
@@ -62,6 +63,17 @@ extension AgentControlRequestHandler {
         }
     }
 
+    static let submitRefusedTypedMessage = "Im Eingabefeld steht vermutlich ein Entwurf des Users (getippt, nicht "
+        + "abgeschickt). submit schickt nur liegengebliebene Aufträge ab, nie Text des Users. Nichts abgeschickt."
+
+    static let submitRefusedInsertedMessage = "Im Eingabefeld steht Text, den die App eingefügt und niemand "
+        + "abgeschickt hat: ein Diktat ohne Senden, „→ Jarvis“, `send --no-submit` oder ein Auftrag, dessen Enter "
+        + "wegen einer Freigabe zurückgehalten wurde. submit schickt ihn nicht ab, weil die App nicht unterscheiden "
+        + "kann, ob er dem User gehört. Nichts abgeschickt. Ausweg: Der User schickt ihn im Chat mit Enter ab. Ist "
+        + "es sicher dein eigener zurückgehaltener Auftrag: `whisperm8 chats interrupt <ref> --clear-input --force` "
+        + "leert das Feld (alles darin ist dann weg), danach mit `send` neu senden. Ein Auftrag aus der "
+        + "Warteschlange steht dort noch und geht danach von selbst raus (`chats queue <ref>`), nicht neu senden."
+
     enum SubmitDecision: Equatable {
         case allowed
         case refused(ChatsControlErrorCode, String)
@@ -71,16 +83,18 @@ extension AgentControlRequestHandler {
     /// Eingabefeld sichtbar Text zeigt; nie in eine Freigabe (WM8-75) und nie
     /// für einen Entwurf des Users (Vic zu WM8-100): Den meldet der Tracker,
     /// ein liegengebliebener Auftrag gilt dort als abgeschickt.
+    /// `insertedText`: Der Entwurf ist von der App eingefügter Text (WM8-121).
+    /// Dazu gehört auch ein Auftrag, dessen Enter wegen einer Freigabe
+    /// zurückgehalten wurde; die Meldung nennt deshalb den Weg, der dann geht.
     static func submitCheck(profile: TerminalKeyboardProfile, status: AgentSessionRuntimeStatus?,
-                            approvalPending: Bool, userDraft: Bool, field: ControllerPromptField?,
-                            screenReadable: Bool) -> SubmitDecision {
+                            approvalPending: Bool, userDraft: Bool, insertedText: Bool = false,
+                            field: ControllerPromptField?, screenReadable: Bool) -> SubmitDecision {
         guard profile == .claudeCodeChat else {
             return .refused(.unsupported, "`chats submit` gibt es nur für Claude-Chats")
         }
         if approvalPending { return .refused(.approvalPending, approvalPendingMessage) }
         if userDraft {
-            return .refused(.conflict, "Im Eingabefeld steht vermutlich ein Entwurf des Users (getippt, nicht "
-                + "abgeschickt). submit schickt nur liegengebliebene Aufträge ab, nie Text des Users. Nichts abgeschickt.")
+            return .refused(.conflict, insertedText ? submitRefusedInsertedMessage : submitRefusedTypedMessage)
         }
         if let status, status != .idle {
             return .refused(.conflict, "Ziel ist \(status.rawValue) — abschicken geht nur, wenn der Chat ruht")

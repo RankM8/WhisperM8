@@ -184,6 +184,23 @@ final class InsertedTextQueueFlowTests: XCTestCase {
         XCTAssertEqual(queueDecision(f), .deliver)
     }
 
+    /// Zurückgehaltenes Enter (WM8-75): Der Text bleibt eingefügt, auch nach
+    /// dem Turn, der auf die beantwortete Freigabe folgt. `submit` lehnt ab
+    /// und nennt den Ausweg; die Warteschlange hängt nichts an.
+    func testWithheldEnterStaysInsertedAndSubmitSaysSo() throws {
+        let f = try makeFixture()
+        drawClaude(fieldText: "Auftrag von Jarvis")
+        controller.noteComposerTextInserted()   // wie `delayedEnterAllowed` beim Zurückhalten
+        ownTurn(f)                             // Freigabe beantwortet, Claude arbeitet und ruht wieder
+        let decision = AgentControlRequestHandler.submitCheck(
+            profile: .claudeCodeChat, status: f.coordinator.statusStore.status(for: f.sessionID),
+            approvalPending: false, userDraft: controller.composerDraft.mayHaveUnsentInput,
+            insertedText: controller.composerDraft.mayHoldInsertedText,
+            field: controller.controllerScreenSnapshot()?.promptField, screenReadable: true)
+        XCTAssertEqual(decision, .refused(.conflict, AgentControlRequestHandler.submitRefusedInsertedMessage))
+        XCTAssertEqual(queueDecision(f), .draftPending)
+    }
+
     func testControlCReleasesInsertedText() throws {
         let f = try makeFixture()
         drawClaude(fieldText: "Triage: WM8-12 schließen")
