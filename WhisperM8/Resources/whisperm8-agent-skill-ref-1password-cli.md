@@ -52,8 +52,8 @@ Env-Variablen, wartet auf eingeloggte App, speichert
 ```bash
 export NODE_PATH=/opt/homebrew/lib/node_modules
 cd <repo>
-AKQ_USERNAME=admin@akquise.ai \
-AKQ_PASSWORD="op://<Vault>/<item-id>/password" \
+APP_USERNAME=admin@example.com \
+APP_PASSWORD="op://<Vault>/<item-id>/password" \
   op run -- node .qa/scripts/capture-state.mjs admin
 ```
 

@@ -48,12 +48,12 @@ final class AgentWorkingCopyTests: XCTestCase {
 
     func testSiblingWorktreeOfTheSameRepoIsAWorktree() {
         // ListM8-Dev-Slot: Ordner neben dem Projekt, .git zeigt auf <Projekt>/.git/worktrees/<n>.
-        let git = GitLocation(root: "/Users/demo/repos/whisperm8-ds190",
-                              gitDir: project + "/.git/worktrees/whisperm8-ds190", branch: "feat/ds")
+        let git = GitLocation(root: "/Users/demo/repos/whisperm8-abc190",
+                              gitDir: project + "/.git/worktrees/whisperm8-abc190", branch: "feat/abc")
         let copy = AgentWorkingCopyClassifier.classify(
-            cwd: "/Users/demo/repos/whisperm8-ds190/api", projectPath: project, git: git)
-        XCTAssertEqual(copy, AgentWorkingCopy(kind: .worktree, path: "/Users/demo/repos/whisperm8-ds190",
-                                              name: "whisperm8-ds190", branch: "feat/ds"))
+            cwd: "/Users/demo/repos/whisperm8-abc190/api", projectPath: project, git: git)
+        XCTAssertEqual(copy, AgentWorkingCopy(kind: .worktree, path: "/Users/demo/repos/whisperm8-abc190",
+                                              name: "whisperm8-abc190", branch: "feat/abc"))
     }
 
     func testHeadBranchWinsOverAStaleTranscriptBranch() {

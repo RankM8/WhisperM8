@@ -27,7 +27,7 @@ enum AgentProjectPath {
     ///
     /// Regel (Giuliano, 15.11.2026): Ein solcher Ordner gehört nur dann zum
     /// Haupt-Repo, wenn sein Name mit dem Namen des Haupt-Repos beginnt
-    /// (akquise-ai-kurse → akquise-ai, ListM8-ds190 → ListM8). Arbeitsordner
+    /// (akquise-ai-kurse → akquise-ai, ListM8-abc190 → ListM8). Arbeitsordner
     /// mit eigenem Namen (kunden-webseiten/podomedica aus sindy-deluxe) sind
     /// eigene Projekte. Nur die Wurzel des Arbeitsordners zählt, nicht ein
     /// Unterordner darin.
