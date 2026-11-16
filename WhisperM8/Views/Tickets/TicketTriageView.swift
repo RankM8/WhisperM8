@@ -71,7 +71,7 @@ struct TicketTriageLayout: Equatable {
 
     /// Darunter (Breite der Ticket-Spalte) wird der Kopf knapp: „← Chats“ ohne
     /// Namen, „Link kopieren“ und „In Linear öffnen“ nur als Symbol (WM8-124).
-    static let fullHeadFrom: CGFloat = 760
+    static let fullHeadFrom: CGFloat = 800
 
     var showsList: Bool
     var propertiesInline: Bool
@@ -257,11 +257,9 @@ private struct TicketTriageBar: View {
                     .padding(.leading, 6)
                 TicketPriorityBars(priority: content.entry.ticket.priority)
             }
+            // Die Tasten (J/K, ⌘C, Esc) stehen in der Leiste unten (WM8-124),
+            // nicht mehr abgeschnitten hier.
             Spacer(minLength: 8)
-            Text("J/K or ↑↓ next · ⌘C link · Esc board")
-                .font(.system(size: 11))
-                .foregroundStyle(AgentTheme.textSecondary)
-                .lineLimit(1)
             if model.detail != nil {
                 TicketCopyButton(kind: .link, copied: model.copied, iconOnly: compact) { model.copyLink() }
             }

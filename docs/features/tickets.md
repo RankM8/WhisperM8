@@ -358,7 +358,7 @@ in [`../design/ticket-board/`](../design/ticket-board/).
 - **„← Chats · WM8 Aktiv“:** links im Kopf des Boards, in der Triage vor „‹ Board“ und in den Leerzuständen oben,
   immer sichtbar. Er führt dorthin, wohin L2 führt (`backPlace()`): zum vorigen Chat oder Workspace. Gibt es den
   nicht, oder ist der vorige Ort ein anderes Board, schließt er nur die Tickets und nennt, was dahinter steht. Die
-  Regel ist pur (`TicketsBackLink`). Der Knopf wird nie gekürzt; Namen über 24 Zeichen enden mit „…“. Ist die Ticket-Spalte der Triage schmaler als 760 pt, steht im Kopf nur „← Chats“
+  Regel ist pur (`TicketsBackLink`). Der Knopf wird nie gekürzt; Namen über 24 Zeichen enden mit „…“. Ist die Ticket-Spalte der Triage schmaler als 800 pt, steht im Kopf nur „← Chats“
   (der Name in der Hilfe), und „Link kopieren“ und „In Linear öffnen“ zeigen nur ihr Symbol.
 - **Zurück zu den Chats:** derselbe Knopf, ⌘W, oder alles, womit der Nutzer einen Chat oder Workspace wählt
   (Klick in Seitenleiste oder Tab-Leiste, ⌘1 bis ⌘9, Ctrl+Tab, Controller, „Zum Chat“ am Ticket, ein Workspace,
@@ -420,7 +420,11 @@ Idee 3.
   Klick im Fenster (Karte, Listenzeile, Pfeile, Knöpfe, freie Fläche) gibt ihn vorher ans Fenster zurück
   (`BoardChatFocusGuard`, Regel pur in `BoardChatFocusRule`). Sonst blieben J/K, Esc und ⌘C nach einem Klick ins
   Terminal dort, und Esc bräche den laufenden Turn ab. Wege ohne Maus (Controller) rufen
-  `BoardChatFocusRule.releaseTerminalFocus(in:)`.
+  `BoardChatFocusRule.releaseTerminalFocus(in:)`. Hört der Board-Chat auf zu laufen, gibt sein Terminal den Fokus
+  ebenfalls ab (`releasesFocusWhenStopped`); sonst reagierte das Board erst nach einem Klick neben das Terminal.
+- **Unter dem Chat:** nur die Bezug-Marke in einer Zeile, dazu kurz ein Hinweis, wenn nichts eingefügt wurde.
+  Beim allerersten Öffnen steht einmal eine Erklärung darunter (wer hier steht und wie man wechselt, was die Marke
+  tut) mit OK; danach nicht mehr, gemerkt als `introSeen` in `ticket-board-chat.json` (WM8-124).
 - **Breite und Zuklappen:** Ab Werk 40 % des Bereichs aus Board und Spalte (WM8-124, Giuliano 16.11.2026),
   mindestens 280 pt. Gezogen wird am Griff auf der linken Kante (ein senkrechter Strich, immer sichtbar); die
   Breite ändert sich beim Loslassen, vorher zeigt eine Linie die neue Kante (sonst bekäme die TUI bei jedem
@@ -444,7 +448,9 @@ Idee 3.
   Board-Chat beginnt mit einer Zeile „Bezug: WM8-81 „Titel“ <Adresse>“, danach gilt der Bezug für dieses Ticket als
   verbraucht; ✕ nimmt ihn für dieses Ticket weg. Festgehalten wird er beim Start der Aufnahme, nicht beim
   Ausliefern: Wer währenddessen weiterblättert, behält den Bezug des Tickets, über das er gesprochen hat. Getippter
-  Text bekommt (noch) keinen Bezug.
+  Text bekommt (noch) keinen Bezug. Ob ein Diktat an den Board-Chat auf einer neuen Zeile beginnt, entscheidet sich
+  dagegen erst beim Ausliefern, mit oder ohne Bezug (`leadForDictation`): Steht dann Text im Feld, kommt ein
+  Umbruch davor.
 - **„→ Jarvis“** in der Triage legt `WM8-81 „Titel“ <Adresse>` ins Eingabefeld des Board-Chats; abgeschickt
   wird mit Giulianos Return nach einem Klick ins Terminal (den Fokus gibt nur dieser Klick). Bei offener Frage oder Freigabe (Status, Codex-Dialog,
   `DelayedEnterGuard.approvalPending` wie bei `chats send`), beim Hochfahren oder am Limit kommt nichts hinein: Warnton
@@ -456,8 +462,11 @@ Idee 3.
   Ticket; der erste Klick eines Auftrags setzt „Triage in WM8, bitte ausführen:“ davor. Die Zeile der Liste zeigt
   „→ Annehmen · gesammelt“. Eine geänderte Entscheidung kommt als neue Zeile mit „(statt: …)“. Ein neuer Auftrag
   beginnt, wenn das Feld sichtbar leer ist oder, falls der Bildschirm nichts sagt, die Tasten-Schätzung keinen
-  Entwurf mehr sieht (wie die Warteschlange), oder wenn ein anderer Chat in der Spalte steht; die Marken gehören
-  zum Auftrag und verschwinden mit ihm. Ein zweiter Klick innerhalb einer halben Sekunde zählt nicht (er träfe
+  Entwurf mehr sieht (wie die Warteschlange), wenn das Feld seit Beginn des Auftrags abgeschickt oder geleert wurde
+  (Zähler `fieldResets` des Trackers; so beginnt nach Abschicken und neuem Tippen ein neuer Auftrag mit
+  Überschrift), oder wenn ein anderer Chat in der Spalte steht; die Marken gehören zum Auftrag und verschwinden
+  mit ihm. Verschwindet nur die Spalte (Tickets kurz zu, zugeklappt, Chat in einem anderen Fenster), bleibt der
+  Auftrag; erst mit dem Fenster geht er. Ein zweiter Klick innerhalb einer halben Sekunde zählt nicht (er träfe
   das nächste, ungesehene Ticket). Bezug und „→ Jarvis“ beginnen auf einer neuen Zeile, wenn im Feld schon Text
   steht. Bei offener Frage oder Freigabe: Warnton,
   Hinweis, keine Zeile, keine Markierung. Das Board schreibt nichts nach Linear; das tut der Board-Chat nach
@@ -572,7 +581,8 @@ gezeigten Stands.
   der Liste alle sichtbaren Tickets), in der Mitte Titel, Beschreibung und Verlauf, rechts die Eigenschaften
   (Status mit „wartet auf dich“, Priorität, Person, Bereich, Vorhaben, „Fertig, wenn“, Labels, Chats am Ticket mit
   „Zum Chat“). Oben links „‹ Board“ (immer sichtbar, auch im schmalen Fenster), voriges/nächstes, „3 von 5“, „In Linear
-  öffnen“ und Aktualisieren. Beim Blättern steht in der Mitte nur der Text des gezeigten Tickets. J/K oder ↑↓ wechseln das
+  öffnen“ (bricht nicht um) und Aktualisieren. Die Tasten stehen nicht im Kopf, sondern in der Leiste unten, wenn
+  sie die Tastatur zeigt: „J K Ticket · ⌘C Link kopieren · esc Board“ (`KeyboardLegend.ticketItems`, WM8-124). Beim Blättern steht in der Mitte nur der Text des gezeigten Tickets. J/K oder ↑↓ wechseln das
   Ticket, Esc führt zurück zum Board auf dieselbe Karte; das wirkt nur, wenn der Fokus nicht in einem Textfeld oder
   Terminal liegt. Wird es eng (unter 960 pt für die Triage, etwa mit breitem Board-Chat), rücken Status, Priorität,
   Zugewiesen, „Fertig, wenn“ und Labels als Zeile in den Kopf des Tickets, darunter die Chats am Ticket mit „Zum

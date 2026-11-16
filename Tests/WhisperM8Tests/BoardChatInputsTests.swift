@@ -20,6 +20,7 @@ final class BoardChatInputsTests: XCTestCase {
     private var fieldHasText = false
     private var field: BoardChatFieldVisibility = .unknown
     private var clock = Date(timeIntervalSince1970: 1_794_700_000)
+    private var resets: Int? = 0
 
     private let ticket81 = BoardChatTicket(key: "WM8-81", title: "Ticket-Board: Board und Backlog lesen",
                                            url: "https://linear.app/whisperm8/issue/WM8-81")
@@ -46,6 +47,8 @@ final class BoardChatInputsTests: XCTestCase {
         field = .unknown
         inputs.fieldVisibility = { [unowned self] _ in field }
         inputs.now = { [unowned self] in clock }
+        resets = 0
+        inputs.fieldResets = { [unowned self] _ in resets }
         inputs.noticeSeconds = 60
     }
 
@@ -190,16 +193,74 @@ final class BoardChatInputsTests: XCTestCase {
         decideLater(.accept, in: window)
         shown[window] = ticket86                           // nächstes Ticket, sein Bezug ist frei
         let reference = try XCTUnwrap(inputs.referenceForDictation(to: jarvis))
-        XCTAssertTrue(reference.prefix.hasPrefix("\n" + String(localized: "Re:")), "nicht an „annehmen“ kleben")
+        XCTAssertTrue(reference.prefix.hasPrefix(String(localized: "Re:")), "der Umbruch kommt beim Ausliefern")
+        XCTAssertEqual(inputs.leadForDictation(to: jarvis), "\n", "nicht an „annehmen“ kleben")
         XCTAssertTrue(inputs.handOff(in: window))
         XCTAssertTrue(inserted.last!.0.hasPrefix("\nWM8-86"))
     }
 
-    func testUnregisterClearsTheOrder() {
+    /// Fenster zu: Der Auftrag geht mit.
+    func testClosingTheWindowClearsTheOrder() {
         inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
         decideLater(.accept, in: window)
         inputs.unregister(windowID: window)
         XCTAssertNil(inputs.triageBatches[window])
+    }
+
+    /// Prüfpunkt 1 (WM8-124): Tickets kurz zu, Spalte zu, Chat kurz woanders.
+    /// Die Zeilen stehen weiter im Feld; der nächste Klick setzt den Auftrag fort.
+    func testHidingTheColumnKeepsTheOrder() {
+        let firstView = UUID()
+        inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis", token: firstView)
+        decideLater(.accept, in: window)
+        fieldHasText = true
+        inputs.unregister(windowID: window, token: firstView)
+        XCTAssertNil(inputs.triageDecision(for: "WM8-81", in: window), "ohne Spalte keine Marken")
+        inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis", token: UUID())
+        XCTAssertEqual(inputs.triageDecision(for: "WM8-81", in: window), .accept, "Marke wieder da")
+        shown[window] = ticket86
+        decideLater(.later, in: window)
+        XCTAssertTrue(inserted.last!.0.hasPrefix("\n- WM8-86"), "keine zweite Überschrift")
+    }
+
+    /// Prüfpunkt 2 (WM8-124): Abgeschickt, neu getippt, dann geklickt: neuer
+    /// Auftrag mit Überschrift, ohne „(statt: …)“ und ohne alte Marken.
+    func testSubmittingEndsTheOrderEvenAfterNewTyping() {
+        inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
+        decideLater(.accept, in: window)
+        resets = 1                                         // Enter: abgeschickt
+        fieldHasText = true                                // und schon wieder getippt
+        field = .hasText
+        decideLater(.decline, in: window)                  // dasselbe Ticket, andere Entscheidung
+        let last = inserted.last!.0
+        XCTAssertTrue(last.hasPrefix("\n" + String(localized: "Triage in WM8, please carry out:")), "eigene Zeile, neue Überschrift")
+        XCTAssertFalse(last.contains(String(localized: "(instead of: \(TriageDecision.accept.instruction))")))
+        XCTAssertEqual(inputs.triageDecision(for: "WM8-81", in: window), .decline)
+    }
+
+    /// Ohne Terminal (kein Zähler) gilt wie bisher nur das Feld.
+    func testWithoutCounterTheFieldDecides() {
+        resets = nil
+        inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
+        decideLater(.accept, in: window)
+        field = .hasText
+        shown[window] = ticket86
+        decideLater(.later, in: window)
+        XCTAssertTrue(inserted.last!.0.hasPrefix("\n- WM8-86"))
+    }
+
+    /// Prüfpunkt 3 (WM8-124): Der Umbruch hängt nicht am Bezug und wird beim
+    /// Ausliefern bestimmt.
+    func testLeadForDictationIsDecidedOnDeliveryWithoutReference() {
+        inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
+        shown[window] = nil                                // Board, kein Bezug
+        XCTAssertNil(inputs.referenceForDictation(to: jarvis))
+        XCTAssertEqual(inputs.leadForDictation(to: jarvis), "")
+        fieldHasText = true                                // inzwischen getippt
+        XCTAssertEqual(inputs.leadForDictation(to: jarvis), "\n")
+        field = .empty
+        XCTAssertEqual(inputs.leadForDictation(to: jarvis), "")
+        XCTAssertEqual(inputs.leadForDictation(to: UUID()), "", "kein Board-Chat")
     }
 
     func testDecisionsCollectAsOneOrderWithHeaderAndNeverSend() {

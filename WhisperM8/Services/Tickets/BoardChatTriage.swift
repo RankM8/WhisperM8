@@ -69,6 +69,8 @@ extension BoardChatText {
 struct TriageBatch: Equatable {
     var sessionID: UUID
     var decisions: [String: TriageDecision] = [:]
+    /// Stand von `fieldResets` beim Beginn des Auftrags; `nil` ohne Terminal.
+    var fieldResetsAtStart: Int? = nil
 }
 
 /// Was der Bildschirm über das Eingabefeld sagt.
@@ -82,7 +84,11 @@ enum BoardChatFieldVisibility: Equatable {
 enum TriageBatchRules {
     /// Ist der letzte Sammelauftrag raus? Sichtbar leeres Feld: ja. Sichtbarer
     /// Text: nein. Sonst die Schätzung der Tasten (wie die Warteschlange).
-    static func batchEnded(field: BoardChatFieldVisibility, hasUnsentInput: Bool) -> Bool {
+    static func batchEnded(field: BoardChatFieldVisibility, hasUnsentInput: Bool,
+                           resetsAtStart: Int? = nil, resetsNow: Int? = nil) -> Bool {
+        // Seit Beginn abgeschickt oder geleert: raus, auch wenn schon wieder
+        // neuer Text im Feld steht (der gehört dann nicht zum Auftrag).
+        if let resetsAtStart, let resetsNow, resetsNow != resetsAtStart { return true }
         switch field {
         case .empty: return true
         case .hasText: return false
@@ -122,8 +128,11 @@ extension BoardChatInputs {
         }
         let field = fieldVisibility(sessionID)
         let unsent = hasUnsentInput(sessionID)
+        let resets = fieldResets(sessionID)
         if let batch = triageBatches[windowID],
-           batch.sessionID != sessionID || TriageBatchRules.batchEnded(field: field, hasUnsentInput: unsent) {
+           batch.sessionID != sessionID
+            || TriageBatchRules.batchEnded(field: field, hasUnsentInput: unsent,
+                                           resetsAtStart: batch.fieldResetsAtStart, resetsNow: resets) {
             // Anderer Chat oder der letzte Auftrag ist raus: neu anfangen, alte Marken weg.
             triageBatches[windowID] = nil
         }
@@ -135,7 +144,7 @@ extension BoardChatInputs {
             refuse(.notRunning, in: windowID, name: registration.name)
             return false
         }
-        var updated = batch ?? TriageBatch(sessionID: sessionID)
+        var updated = batch ?? TriageBatch(sessionID: sessionID, fieldResetsAtStart: resets)
         updated.decisions[ticket.key] = decision
         triageBatches[windowID] = updated
         lastDecisionAt[windowID] = now()
