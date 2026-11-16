@@ -7,6 +7,9 @@ import Foundation
 ///   Text des Users und schickte beides ab — der Entwurf wäre verloren
 ///   (LR-CLI-002). `send` lehnt ab (Ausweg `enqueue` oder `--force`), die Queue
 ///   wartet aufs nächste Turn-Ende.
+///   Mit zählt von der App eingefügter, nicht abgeschickter Text (Diktat ohne
+///   Senden, „→ Jarvis“): Den gibt ein Turn-Start nicht frei, nur Enter,
+///   Ctrl+C, Absenden oder ein sichtbar leeres Feld (WM8-121).
 /// - `launching`: Die TUI ist noch nicht bereit; ein Folgeauftrag ging dort
 ///   still verloren und stand trotzdem auf „zugestellt“ (LR-CLI-003).
 enum PromptDeliveryGate {
@@ -39,6 +42,15 @@ enum PromptDeliveryGate {
     static func sendBlockedByDraft(mayHaveUnsentInput: Bool, force: Bool, fieldVisiblyEmpty: Bool = false) -> Bool {
         mayHaveUnsentInput && !force && !fieldVisiblyEmpty
     }
+
+    static func draftMessage(insertedText: Bool) -> String {
+        insertedText ? insertedTextMessage : draftMessage
+    }
+
+    static let insertedTextMessage = "Im Eingabefeld des Ziel-Chats steht Text, den die App eingefügt und noch "
+        + "niemand abgeschickt hat (Diktat ohne Senden, „→ Jarvis“, `send --no-submit`). Der Prompt würde daran "
+        + "angehängt und beides abgeschickt. Ausweg: `whisperm8 chats enqueue <ref> \"…\"` (wartet, bis der Text "
+        + "abgeschickt oder gelöscht ist) oder bewusst `whisperm8 chats send <ref> --force …`."
 
     static let draftMessage = "Im Eingabefeld des Ziel-Chats steht vermutlich ein nicht abgeschickter Entwurf — "
         + "der Prompt würde daran angehängt und beides abgeschickt. Ausweg: `whisperm8 chats enqueue <ref> \"…\"` "

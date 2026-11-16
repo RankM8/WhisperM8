@@ -457,6 +457,40 @@ weil das nächste Turn-Ende erst nach einem laufenden Hintergrund-Befehl
 gekommen wäre. Sichtbarer Text bleibt ein Entwurf; nicht ablesbar heißt wie
 bisher: die Schätzung entscheidet.
 
+**Eingefügter Text bleibt Entwurf, auch über einen Turn-Start (WM8-121,
+16.11.2026):** Legt die App Text ins Feld, ohne abzuschicken (Diktat ohne
+Senden, „→ Jarvis“ und Triage am Ticket, `send --no-submit`, Report, Datei-Drop,
+zurückgehaltenes Enter), vermerkt der Tracker das eigens
+(`mayHoldInsertedText`). Getippte Entwürfe löscht ein Turn-Start weiter (sonst
+blieben Tasten aus Dialogen dauerhaft als Entwurf stehen), den eingefügten Text
+nicht: Beginnt der Chat von selbst einen Turn (Hintergrund-Befehl fertig,
+Subagent meldet sich, Monitor oder Wecker), steht der Text weiter im Feld.
+Vorher stellte die Warteschlange am Ende dieses Turns zu, wenn das Terminal
+hochgescrollt war (dann liest die App das Feld nicht), hängte die Meldung an
+den Text und schickte beides mit Enter ab.
+
+Frei wird der Vermerk durch Enter oder Ctrl+C im Terminal (auch vom
+Controller), durch jedes programmatische Absenden oder Leeren (`send`,
+`submit`, Diktat mit Senden, `interrupt --clear-input`) und durch ein am
+Bildschirm sichtbar leeres Feld beim nächsten Zustellversuch (Turn-Ende,
+`enqueue`, Chat wird bereit). Löscht der User den Text mit der Rücktaste,
+während das Terminal hochgescrollt ist, wartet die Meldung, bis das Terminal
+wieder ganz unten steht und ein Versuch kommt; eine Frist gibt es bewusst
+nicht, sie liefe auf ein Senden in ein Feld hinaus, das niemand gesehen hat.
+`chats queue` zeigt unter dem Auftrag den Grund („wartet: Eingefügter, nicht
+abgeschickter Text im Eingabefeld …“), `send` lehnt mit einer eigenen Meldung
+ab. Ein Neustart ohne Chatverlust trägt den Vermerk im Manifest
+(`composerInsertedText`) weiter.
+
+Was sich dadurch für `send` und `enqueue` ändert: Nur der Fall „eingefügt,
+nicht abgeschickt, danach ein Turn, ohne dass jemand Enter oder Ctrl+C
+gedrückt hat“. Dann lehnt `send` ab, statt anzuhängen, und die Warteschlange
+wartet, statt anzuhängen, solange das Feld nicht sichtbar leer ist. Bei
+Codex-Chats liest die App das Feld nie ab; dort gibt nur Enter, Ctrl+C oder
+ein Absenden den Vermerk frei. Dieselbe Schätzung nutzen `move-account
+--stop-and-resume` und der Kontowechsel nach dem Turn: Auch sie behandeln den
+eingefügten Text nach einem selbst begonnenen Turn weiter als Entwurf.
+
 **Grenze:** Drückt der User selbst Enter auf einen zurückgelegten Prompt,
 läuft dieser erneut — das ist eine bewusste Eingabe im Terminal, die App
 hält sie nicht auf. Wer einen Auftrag zurückzieht, nimmt deshalb

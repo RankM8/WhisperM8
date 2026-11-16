@@ -7,7 +7,9 @@ import Foundation
 /// - `mayHaveUnsentInput`: ein eigener, noch nicht abgeschickter Entwurf des
 ///   Users. Ein Beenden der TUI verwirft ihn (`--stop-and-resume` verweigert
 ///   ohne `--force`), ein programmatischer Versand hinge sich daran (`send`
-///   lehnt ab, die Queue wartet — `PromptDeliveryGate`).
+///   lehnt ab, die Queue wartet — `PromptDeliveryGate`). Zusammengesetzt aus
+///   dem getippten Entwurf (`mayHaveTypedInput`) und dem von der App
+///   eingefuegten, nicht abgeschickten Text (`mayHoldInsertedText`, WM8-121).
 /// - `mayHoldRestoredPrompt`: ein alter Prompt, den die Claude-CLI selbst
 ///   zurueckgelegt hat — nach einem Abbruch (ESC, Ctrl+C) oder per
 ///   Doppel-ESC-Rewind. Er steht schon im Transcript; ein programmatischer
@@ -33,7 +35,23 @@ struct TerminalComposerDraftTracker: Equatable {
     /// schnelles ESC lief sonst als „nur ESC" durch (Review S1, Fall 2).
     static let interruptWindowAfterProgrammaticSubmit: TimeInterval = 5
 
-    private(set) var mayHaveUnsentInput = false
+    /// Getippter Entwurf (Tasten, Cmd+V, ↑ bei Codex). Ein Turn-Start loescht
+    /// ihn: Wer tippt, schickt meist selbst mit Enter ab, und die Schaetzung
+    /// blieb sonst nach Tasten in Dialogen dauerhaft stehen (Review W4b).
+    private(set) var mayHaveTypedInput = false
+    /// Die App hat Text ins Feld gelegt, ohne abzuschicken: Diktat ohne
+    /// Senden, „→ Jarvis“ und Triage am Ticket, `chats send --no-submit`,
+    /// Report, Datei-Drop, zurueckgehaltenes Enter (WM8-121). Anders als der
+    /// getippte Entwurf loescht ihn ein Turn-Start NICHT: Beginnt der Chat von
+    /// selbst einen Turn (Hintergrund-Befehl fertig, Subagent, Wecker), steht
+    /// der Text weiter im Feld, und die Warteschlange haengte ihre Meldung
+    /// daran und schickte beides ab. Frei wird er nur durch Enter, Ctrl+C,
+    /// programmatisches Absenden oder Leeren — oder ein am Bildschirm sichtbar
+    /// leeres Feld (`PromptDeliveryGate`, `fieldVisiblyEmpty`).
+    private(set) var mayHoldInsertedText = false
+    /// Steht vielleicht ein nicht abgeschickter Entwurf im Feld, getippt oder
+    /// eingefuegt? Diese Frage stellen Schutz, `send` und Warteschlange.
+    var mayHaveUnsentInput: Bool { mayHaveTypedInput || mayHoldInsertedText }
     /// Ein Turn wurde abgebrochen (ESC, Ctrl+C, `chats interrupt`) oder ein
     /// Rewind hat eine alte Nachricht ins Feld gelegt. Ein programmatischer
     /// Versand haengte seinen Text daran an, und der abgebrochene Auftrag
@@ -122,8 +140,9 @@ struct TerminalComposerDraftTracker: Equatable {
         mayShowAcceptedSuggestion = true
     }
 
+    /// Eingefuegter Text bleibt stehen (`mayHoldInsertedText`, WM8-121).
     mutating func recordSubmittedByTurnStart() {
-        mayHaveUnsentInput = false
+        mayHaveTypedInput = false
         mayShowAcceptedSuggestion = false
         mayHoldRecalledCodexPrompt = false
         escapeRun = 0
@@ -173,7 +192,7 @@ struct TerminalComposerDraftTracker: Equatable {
             // dabei ein Feld mit Text, statt abzubrechen — ein eigener Entwurf
             // ist danach also weg; ein vermuteter Rueckleger schadet nicht.
             recordTurnInterrupted()
-            if isControlC { mayHaveUnsentInput = false }
+            if isControlC { clearDraft() }
             // Ein zweites ESC kann schon die Rewind-Auswahl oeffnen.
             escapeRun = isEscape ? escapeRun + 1 : 0
             return
@@ -210,23 +229,23 @@ struct TerminalComposerDraftTracker: Equatable {
             // im Entwurf.
             mayHoldRecalledCodexPrompt = false
             if flags.contains(.shift) || flags.contains(.option) {
-                mayHaveUnsentInput = true
+                mayHaveTypedInput = true
             } else {
-                mayHaveUnsentInput = false
+                clearDraft()
                 mayHoldRestoredPrompt = false
                 mayShowAcceptedSuggestion = false
                 interruptedSinceSubmit = false
             }
         case 8 where flags.contains(.control):
             // Ctrl+C leert in Claude Code den Composer.
-            mayHaveUnsentInput = false
+            clearDraft()
             mayHoldRestoredPrompt = false
             mayShowAcceptedSuggestion = false
             mayHoldRecalledCodexPrompt = false
             interruptedSinceSubmit = false
         case 9 where flags.contains(.command):
             // Cmd+V fuegt ein.
-            mayHaveUnsentInput = true
+            mayHaveTypedInput = true
             mayHoldRecalledCodexPrompt = false
             mayHaveEmptiedField = false
         case 32 where flags.contains(.control):
@@ -247,7 +266,7 @@ struct TerminalComposerDraftTracker: Equatable {
         default:
             // Andere Cmd-/Ctrl-Kuerzel sind Bedienung, kein Text.
             if flags.contains(.command) || flags.contains(.control) { break }
-            mayHaveUnsentInput = true
+            mayHaveTypedInput = true
             mayHoldRecalledCodexPrompt = false
             mayHaveEmptiedField = false
         }
@@ -277,14 +296,15 @@ struct TerminalComposerDraftTracker: Equatable {
                 mayHoldRecalledCodexPrompt = true
             }
             mayHaveEmptiedField = false
-            mayHaveUnsentInput = true
+            mayHaveTypedInput = true
         }
     }
 
-    /// Eingefuegter Text ohne Absenden (Datei-Drop, Report-Routing,
-    /// `chats send --no-submit`).
+    /// Eingefuegter Text ohne Absenden (Diktat ohne Senden, „→ Jarvis“,
+    /// Datei-Drop, Report-Routing, `chats send --no-submit`). Bleibt ueber
+    /// einen Turn-Start hinweg stehen (`mayHoldInsertedText`).
     mutating func recordTextInserted() {
-        mayHaveUnsentInput = true
+        mayHoldInsertedText = true
         mayHoldRecalledCodexPrompt = false
         mayHaveEmptiedField = false
         programmaticWrites += 1
@@ -294,7 +314,7 @@ struct TerminalComposerDraftTracker: Equatable {
     /// geleert (Ctrl+C von `sendComposerClear`). `programmaticAt` nur beim
     /// echten Absenden: ab dann laeuft das Abbruch-Fenster.
     mutating func recordSubmitted(programmaticAt date: Date? = nil) {
-        mayHaveUnsentInput = false
+        clearDraft()
         mayHoldRestoredPrompt = false
         mayShowAcceptedSuggestion = false
         mayHoldRecalledCodexPrompt = false
@@ -303,5 +323,24 @@ struct TerminalComposerDraftTracker: Equatable {
         escapeRun = 0
         programmaticWrites += 1
         if let date { lastProgrammaticSubmitAt = date }
+    }
+
+    /// Nach einem Neustart ohne Chatverlust: Das Manifest meldet einen
+    /// Entwurf. Eingefuegter Text bleibt eingefuegt; was die alte App nicht
+    /// unterschied (aeltere Manifeste), gilt wie bisher als getippt.
+    mutating func recordDraftAdopted(insertedText: Bool) {
+        if insertedText {
+            recordTextInserted()
+        } else {
+            mayHaveTypedInput = true
+            programmaticWrites += 1
+        }
+    }
+
+    /// Enter, Ctrl+C, programmatisches Absenden oder Leeren: Das Feld ist
+    /// leer, getippt wie eingefuegt.
+    private mutating func clearDraft() {
+        mayHaveTypedInput = false
+        mayHoldInsertedText = false
     }
 }

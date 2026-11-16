@@ -219,6 +219,11 @@ struct HandoverManifest: Codable, Equatable {
     var runtimeStatus: String?
     /// Entwurf im Eingabefeld; `nil` = unbekannt, gilt dann als „Entwurf vorhanden“.
     var hasComposerDraft: Bool?
+    /// Der Entwurf ist von der App eingefügter, nicht abgeschickter Text
+    /// (Diktat ohne Senden, „→ Jarvis“): Den gibt auch nach der Übernahme kein
+    /// Turn-Start frei (WM8-121). `nil` bei Manifesten älterer Builds, gilt
+    /// dann wie bisher als getippter Entwurf.
+    var composerInsertedText: Bool?
     /// Vorgemerkter Kontowechsel nach dem Turn (Entscheidung 9), undurchsichtig.
     var pendingAccountSwitch: HandoverJSONValue?
     var accountProfile: String?

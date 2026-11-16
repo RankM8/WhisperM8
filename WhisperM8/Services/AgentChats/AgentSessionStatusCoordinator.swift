@@ -112,6 +112,10 @@ final class AgentSessionStatusCoordinator {
     var freshTranscriptBeforeTurnEnd: ((UUID, @escaping () -> Void) -> Void)?
     /// Stößt die Warteschlange eines Chats an (Tests: Spy).
     var deliverQueued: (UUID) -> Void = { AgentPromptQueueDelivery.shared.deliverNext(for: $0) }
+    /// Meldet dem Terminal den Turn-Start (Tests: echter Controller ohne Registry).
+    var noteTurnStartedInTerminal: (UUID) -> Void = {
+        AgentTerminalRegistry.shared.controller(for: $0)?.noteTurnStarted()
+    }
     /// Notfrist eines übernommenen Chats ohne Beleg, der bei der Abgabe nicht
     /// ruhte (WM8-97). Lang, weil ein vorgemerkter Auftrag sonst in laufende
     /// Arbeit oder einen Dialog ginge; ein arbeitender Chat meldet sich über
@@ -1163,12 +1167,14 @@ final class AgentSessionStatusCoordinator {
         for effect in transition.effects {
             perform(effect, sessionID: sessionID)
         }
-        // Ein Turn beginnt: was im Eingabefeld stand, ist abgeschickt. Ohne
-        // das blieb die konservative Entwurfs-Schätzung nach Tasten in Dialogen
-        // (1/2/y ohne Enter) stehen und blockte send/Queue dauerhaft (Review W4b
-        // zu LR-CLI-002).
+        // Ein Turn beginnt: was getippt im Eingabefeld stand, gilt als
+        // abgeschickt. Ohne das blieb die konservative Entwurfs-Schätzung nach
+        // Tasten in Dialogen (1/2/y ohne Enter) stehen und blockte send/Queue
+        // dauerhaft (Review W4b zu LR-CLI-002). Von der App eingefügter Text
+        // bleibt vermerkt: Den Turn kann der Chat von selbst begonnen haben
+        // (WM8-121).
         if case .working = transition.state, oldState.runtimeStatus != .working {
-            AgentTerminalRegistry.shared.controller(for: sessionID)?.noteTurnStarted()
+            noteTurnStartedInTerminal(sessionID)
             startupInputSince[sessionID] = nil
             turnStartedAt[sessionID] = now()
             prefetchBackgroundTasks(sessionID)

@@ -208,6 +208,7 @@ enum HandoverManifestFactory {
         manifest.title = session.title
         manifest.hookCursor = AgentSessionStatusCoordinator.shared.hookCursor(sessionID: session.id)
         manifest.hasComposerDraft = controller.composerDraft.fieldMayHaveText
+        manifest.composerInsertedText = controller.composerDraft.mayHoldInsertedText
         // „Arbeitet seit“ (Review Paket 4, Befund 7): Arbeitet der Chat, zählt
         // die neue App ab der Abgabe weiter; bis dahin zählt die alte App.
         let coordinator = AgentSessionStatusCoordinator.shared

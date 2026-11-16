@@ -42,7 +42,7 @@ final class ComposerRestoredPromptTests: XCTestCase {
 
     func testTurnStartWithoutInterruptStillClearsTheEstimate() {
         var tracker = TerminalComposerDraftTracker()
-        tracker.recordTextInserted()
+        key(&tracker, 0, at: 0)   // getippt; eingefügter Text bleibt stehen (WM8-121)
         tracker.recordSubmittedByTurnStart()
         XCTAssertFalse(tracker.mayHaveUnsentInput)
         XCTAssertFalse(tracker.shouldClearBeforeSubmit)
