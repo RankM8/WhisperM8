@@ -579,10 +579,7 @@ struct AgentChatsView: View {
             // Dictation routet ausschliesslich ueber das Key-Fenster —
             // Selektionen in Nicht-Key-Fenstern aendern das Ziel nie
             // (Multi-Window-Politik, Plan-Abschnitt 03).
-            onBecomeKey: {
-                windowStore.windowDidBecomeKey(windowID)
-                syncActiveAgentChat()
-            },
+            onBecomeKey: { windowBecameKey() },
             onResignKey: {
                 windowStore.windowDidResignKey(windowID)
                 // Hover-Ereignisse gehen beim Fensterwechsel verloren — Verschieben

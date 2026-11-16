@@ -480,7 +480,9 @@ Kosten je Klick: ein Blick je Fenster mit Board.
 
 **Leiste nach Ortswechsel per Maus:** Wechselt man Ticket-Modus, Projekt, Board/Liste oder öffnet die Triage mit
 Maus oder Tastatur, liest die Leiste des Controllers sofort neu (`controllerLegendMayHaveChanged`). Vorher stand
-dort bis zum nächsten Statuswechsel eines Chats der alte Ort.
+dort bis zum nächsten Statuswechsel eines Chats der alte Ort. Dasselbe gilt, wenn ein anderes Agent-Chats-Fenster
+Key wird: Die Leiste dort zeigte sonst bis zur nächsten Eingabe Team und Rückweg des vorigen Fensters (Bild vom
+16.11.2026). Kosten: ein Schnappschuss je Fensterwechsel, nur mit laufender Steuerung.
 
 **Per Tastatur** (Paket 3c, dieselben Wege über `performTicketCommand`, `TicketBoardKey`): ↑ ↓ ← → wie Stick
 und Steuerkreuz, Return wie Kreuz (öffnen, auf der Chat-Zeile „Zum Chat“), Esc wie Kreis, J/K und ⌘⌥←/→ bzw.

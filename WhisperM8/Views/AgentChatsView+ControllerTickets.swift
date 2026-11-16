@@ -216,6 +216,18 @@ extension AgentChatsView {
         controllerLegendMayHaveChanged()
     }
 
+    /// Das Fenster ist Key geworden: Diktat-Ziel nachziehen und die Leiste neu
+    /// lesen. Sie zeigt sofort, aber sonst mit dem Zusammenhang des vorigen
+    /// Key-Fensters (dessen Team und Rückweg), bis zur nächsten Eingabe
+    /// (WM8-91). Erst nachdem der Store das Fenster als Key kennt, sonst läse
+    /// sie wieder das alte. Ein Schnappschuss je Fensterwechsel, nur mit
+    /// laufender Controller-Steuerung.
+    func windowBecameKey() {
+        windowStore.windowDidBecomeKey(windowID)
+        syncActiveAgentChat()
+        controllerLegendMayHaveChanged()
+    }
+
     /// Ort per Maus oder Tastatur gewechselt (Ticket-Modus, Projekt, Board/
     /// Liste, Triage auf oder zu): Die Leiste des Controllers liest neu. Sonst
     /// stand dort bis zum nächsten Statuswechsel eines Chats der alte Ort
