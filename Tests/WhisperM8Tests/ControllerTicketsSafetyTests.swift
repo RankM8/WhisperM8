@@ -16,7 +16,8 @@ final class ControllerTicketsSafetyTests: XCTestCase {
     private static var contexts: [ControllerContext] {
         let back = ControllerBackTarget(kind: .chat, title: "Jarvis", id: UUID())
         var result: [ControllerContext] = []
-        for view in [ControllerTicketView.empty, .board, .list, .triage, .chatLine] {
+        for view in [ControllerTicketView.empty, .board, .list, .triage, .chatLine, .header, .headerPicker,
+                     .boardChatHead, .boardChatHeadPicker] {
             for hasTicket in [false, true] {
                 var shown = place
                 shown.view = view

@@ -154,6 +154,31 @@ final class TicketBoardHeaderTests: XCTestCase {
         XCTAssertEqual(model.headerActivate(context), .refresh)
     }
 
+    /// WM8-126: ▶ hinter „Mehr“ am Ende der Reiterzeile führt in den Kopf der
+    /// Board-Chat-Spalte, ◀ zurück auf „Mehr“. Aus der offenen Liste unter
+    /// „Mehr“ führt ▶ nicht hinüber.
+    func testRightAfterMoreEntersTheBoardChatHead() {
+        let model = viewModel(width: 280)
+        let jarvis = UUID()
+        let column = BoardChatHeadLayout.make(
+            choices: [BoardChatChoice(id: jarvis, name: "Jarvis", title: "Jarvis", kind: .jarvis, isSelected: true)],
+            others: [], canOpenAsTab: true, isCollapsed: false)
+        let withColumn = TicketHeaderContext(hasBack: true, hasBoardChat: true, column: column)
+        model.enterHeader(withColumn)
+        _ = model.headerMove(.right, withColumn)
+        _ = model.headerMove(.right, withColumn)
+        XCTAssertEqual(model.headerItem(withColumn), .moreViews)
+        XCTAssertEqual(model.headerActivate(withColumn), .done)
+        XCTAssertEqual(model.headerMove(.right, withColumn), .nothing, "aus der Liste unter „Mehr“ nicht hinüber")
+        XCTAssertNil(model.columnFocus)
+        model.headerBack()
+        XCTAssertEqual(model.headerMove(.right, withColumn), .done)
+        XCTAssertEqual(model.columnFocus, .choice(jarvis))
+        XCTAssertEqual(model.controllerView(isReady: true), .boardChatHead)
+        XCTAssertEqual(model.columnMove(.left, withColumn, exit: .toBoard), .done)
+        XCTAssertEqual(model.headerItem(withColumn), .moreViews)
+    }
+
     /// Wie früher die Liste der Bereiche: Liste darunter, ▲ ▼ wählen, Kreuz
     /// zeigt die Ansicht, Kreis schließt ohne Änderung.
     func testMoreOpensAListAndSwitchesOnlyOnCross() {
@@ -302,8 +327,9 @@ final class TicketBoardHeaderTests: XCTestCase {
 
     func testBindingsInTheHeader() {
         let context = header(.header)
-        XCTAssertEqual(action(.move(.right, source: .leftStick, isRepeat: true), context), .ticket(.move(.right)),
-                       "gehalten wandert die Auswahl, ohne zu schalten")
+        XCTAssertEqual(action(.move(.right, source: .leftStick, isRepeat: true), context), .ticket(.repeatMove(.right)),
+                       "gehalten wandert die Auswahl, ohne zu schalten (und nie in den Kopf der Spalte, WM8-126)")
+        XCTAssertEqual(action(.move(.left, source: .leftStick, isRepeat: true), context), .ticket(.move(.left)))
         XCTAssertEqual(action(.press(.cross), context), .ticket(.open))
         XCTAssertEqual(action(.tap(.circle), context), .ticket(.back))
         XCTAssertEqual(action(.tap(.l1), context), .ticket(.adjacent(-1)))
@@ -330,7 +356,7 @@ final class TicketBoardHeaderTests: XCTestCase {
         inputs += [.leftStick, .rightStick, .dpad, .bumpers]
         let plain = Array(Set(inputs.flatMap(ControllerLegend.gestures(for:))))
         let gestures = plain + ControllerLayer.allCases.flatMap { layer in plain.map { ControllerGesture.inLayer(layer, $0) } }
-        for context in [header(.header), header(.headerPicker)] {
+        for context in [header(.header), header(.headerPicker), header(.boardChatHead), header(.boardChatHeadPicker)] {
             for gesture in gestures {
                 guard let action = action(gesture, context) else { continue }
                 switch action {

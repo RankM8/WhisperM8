@@ -70,15 +70,18 @@ extension UISnapshotGallery {
         """
 
         func screen(_ board: String, state: BoardChatColumnState, triage: Bool = false, collapsed: Bool = false,
-                    width: Double? = nil, inputBar: AnyView? = nil, terminal: String? = nil) -> AnyView {
+                    width: Double? = nil, inputBar: AnyView? = nil, terminal: String? = nil,
+                    headFocus: TicketBoardViewModel? = nil) -> AnyView {
             AnyView(BoardChatSplit {
                 base(board)
             } column: { available in
                 Group {
                     if collapsed {
-                        BoardChatCollapsedRail(title: state.title, expand: {}) { dot(AgentTheme.statusWorking) }
+                        BoardChatCollapsedRail(title: state.title, expand: {}, headFocus: headFocus) {
+                            dot(AgentTheme.statusWorking)
+                        }
                     } else {
-                        BoardChatColumnView(state: state, actions: .none, inputBar: inputBar,
+                        BoardChatColumnView(state: state, actions: .none, inputBar: inputBar, headFocus: headFocus,
                                             statusDot: { dot(AgentTheme.statusWorking) }) {
                             Text(terminal ?? terminalText)
                                 .font(.system(size: 11.5, design: .monospaced))
@@ -97,6 +100,12 @@ extension UISnapshotGallery {
         let productChoice = BoardChatChoice.Chat(id: UUID(), name: "Pia", title: "Pia · Produkt WM8 (Beispiel)")
         let vicChoice = BoardChatChoice.Chat(id: UUID(), name: "Vic", title: "Vic · Prüfer: Insel Paket 2")
         let jarvis = BoardChatColumnState(title: "Jarvis: Supervisor WhisperM8", isAutomatic: true, content: .terminal)
+        // Liste „Anderer Chat …“ (WM8-126): erfundene Chats aus WM8.
+        let otherChats = [
+            BoardChatHeadOption(id: vicChoice.id, name: "Vic", title: vicChoice.title, isRunning: true),
+            BoardChatHeadOption(id: UUID(), name: "Lou", title: "Lou · Doku: Notch (Beispiel)", isRunning: true),
+            BoardChatHeadOption(id: UUID(), name: "Mo", title: "Mo · Statistik-Seite (Beispiel)", isRunning: false),
+        ]
         let size = CGSize(width: 1500, height: 860)
         return [
             Fixture(name: "tickets-board-chat", size: size) { screen("tickets-board", state: jarvis) },
@@ -187,6 +196,42 @@ extension UISnapshotGallery {
                         keyboardItems: KeyboardLegend.ticketItems(for: context) + KeyboardLegend.items(dictationKeys: ["⌥", "␣"]))
                 }
                 .background(AppTheme.background))
+            },
+            // WM8-126: Kopf der Spalte mit dem Controller. Ring auf dem Produkt-Chat.
+            Fixture(name: "tickets-board-chat-kopf-controller", size: size) {
+                var state = jarvis
+                state.choices = BoardChatRules.choices(jarvis: jarvisChoice, product: productChoice, chosen: nil,
+                                                       current: jarvisChoice.id)
+                state.others = otherChats
+                let focus = TicketBoardViewModel()
+                focus.columnFocus = .choice(productChoice.id)
+                return screen("tickets-board", state: state, headFocus: focus)
+            },
+            // WM8-126: Liste „Anderer Chat …“ offen, zweiter Eintrag gewählt.
+            Fixture(name: "tickets-board-chat-kopf-anderer-chat", size: size) {
+                var state = jarvis
+                state.choices = BoardChatRules.choices(jarvis: jarvisChoice, product: productChoice, chosen: nil,
+                                                       current: jarvisChoice.id)
+                state.others = otherChats
+                let focus = TicketBoardViewModel()
+                focus.columnFocus = .otherChat
+                focus.columnPickerIndex = 1
+                return screen("tickets-board", state: state, headFocus: focus)
+            },
+            // WM8-126: Ring auf „Board-Chat ausblenden“.
+            Fixture(name: "tickets-board-chat-kopf-ausblenden", size: size) {
+                var state = jarvis
+                state.choices = BoardChatRules.choices(jarvis: jarvisChoice, product: productChoice, chosen: nil,
+                                                       current: jarvisChoice.id)
+                let focus = TicketBoardViewModel()
+                focus.columnFocus = .hide
+                return screen("tickets-board", state: state, headFocus: focus)
+            },
+            // WM8-126: zugeklappt, Ring auf dem Knopf zum Aufklappen.
+            Fixture(name: "tickets-board-chat-kopf-zugeklappt", size: size) {
+                let focus = TicketBoardViewModel()
+                focus.columnFocus = .show
+                return screen("tickets-board", state: jarvis, collapsed: true, headFocus: focus)
             },
             // WM8-124 Paket 2: „← Chats · WM8 Aktiv“ auch im schmalen Board.
             Fixture(name: "tickets-board-chat-kopf-board-schmal", size: CGSize(width: 1000, height: 760)) {

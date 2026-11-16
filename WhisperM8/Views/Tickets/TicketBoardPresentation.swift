@@ -122,6 +122,14 @@ final class TicketBoardViewModel {
     var tabsWidth: CGFloat?
     /// Zuletzt gewählter Knopf der Filterzeile: Dort steigt ▲ wieder ein.
     @ObservationIgnored var lastHeaderItem: TicketHeaderItem?
+    /// Controller und Tastatur (WM8-126): Auswahl im Kopf der Board-Chat-
+    /// Spalte; `nil` = nicht dort. Steht sie dort, ist `headerFocus` leer.
+    var columnFocus: BoardChatHeadItem?
+    /// Liste unter „Anderer Chat …“ offen: gewählter Eintrag.
+    var columnPickerIndex: Int?
+    /// Stelle im Kopf des Boards, von der ▶ in die Spalte führte; ◀ geht dorthin zurück.
+    @ObservationIgnored var columnReturn: TicketHeaderSpot?
+    @ObservationIgnored var lastColumnItem: BoardChatHeadItem?
     /// Ansicht gewechselt (Board/Liste, Triage auf/zu), auch per Maus: Die
     /// Leiste des Controllers liest dann neu (WM8-91, Befund vom 16.11.2026).
     @ObservationIgnored var onControllerViewChange: (@MainActor () -> Void)?
@@ -158,6 +166,8 @@ final class TicketBoardViewModel {
             guard (triage == nil) != (oldValue == nil) else { return }
             headerFocus = nil
             morePickerIndex = nil
+            columnFocus = nil
+            columnPickerIndex = nil
             onControllerViewChange?()
         }
     }

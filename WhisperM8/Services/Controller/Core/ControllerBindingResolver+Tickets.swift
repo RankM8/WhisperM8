@@ -44,8 +44,10 @@ extension ControllerBindingResolver {
             return ticketsTriage(gesture, state: state)
         case .header:
             return ticketsHeader(gesture, state: state)
-        case .headerPicker:
+        case .headerPicker, .boardChatHeadPicker:
             return ticketsHeaderPicker(gesture)
+        case .boardChatHead:
+            return ticketsColumnHead(gesture, state: state)
         }
     }
 
@@ -129,6 +131,9 @@ extension ControllerBindingResolver {
     private static func ticketsHeader(_ gesture: ControllerGesture, state: ControllerTicketState) -> ControllerAction? {
         if let shared = ticketsShared(gesture, state: state) { return shared }
         switch gesture {
+        // Gehalten nach rechts: wählt in der Zeile, rutscht am Ende aber nie
+        // in den Kopf der Board-Chat-Spalte (WM8-126). Hinein mit einem Druck.
+        case .move(.right, _, true): return .ticket(.repeatMove(.right))
         case let .move(direction, _, _): return .ticket(.move(direction))
         case .press(.cross): return .ticket(.open)
         case .tap(.circle): return .ticket(.back)
@@ -137,8 +142,26 @@ extension ControllerBindingResolver {
         }
     }
 
+    /// WM8-126: Kopf der Board-Chat-Spalte. ◀ ▶ wählen, Kreuz schaltet (Chat
+    /// wechseln, Liste „Anderer Chat …“, Als Tab öffnen, Ausblenden), Kreis
+    /// zurück auf die Karte. ▼ führt in den Board-Chat, aber nur mit einem
+    /// einzelnen Druck; gehalten bleibt die Auswahl im Kopf. Kreuz führt nie
+    /// in einen Chat: Ein Wechsel schickt nichts, auch nicht zweimal schnell.
+    private static func ticketsColumnHead(_ gesture: ControllerGesture, state: ControllerTicketState) -> ControllerAction? {
+        if let shared = ticketsShared(gesture, state: state) { return shared }
+        switch gesture {
+        case let .move(direction, _, true): return .ticket(.repeatMove(direction))
+        case let .move(direction, _, false): return .ticket(.move(direction))
+        case .press(.cross): return .ticket(.open)
+        case .tap(.circle): return .ticket(.back)
+        case .holdBegan(.circle): return .rejected
+        default: return nil
+        }
+    }
+
     /// Paket 3d, Liste der Bereiche (Entscheidung 16.11.2026): ▲ ▼ wählen,
-    /// Kreuz übernimmt, Kreis schließt ohne Änderung. Sonst nichts.
+    /// Kreuz übernimmt, Kreis schließt ohne Änderung. Sonst nichts. Ebenso die
+    /// Liste „Anderer Chat …“ im Kopf der Board-Chat-Spalte (WM8-126).
     private static func ticketsHeaderPicker(_ gesture: ControllerGesture) -> ControllerAction? {
         switch gesture {
         case let .move(direction, _, _) where direction == .up || direction == .down: return .ticket(.move(direction))

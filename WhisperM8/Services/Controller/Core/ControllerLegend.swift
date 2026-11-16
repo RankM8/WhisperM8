@@ -380,13 +380,27 @@ enum ControllerLegend {
                 candidate(.button(.cross), .select, [.press(.cross)]),
                 candidate(.button(.circle), .back, [.tap(.circle)]),
             ] + toBoardChat + [bumpers] + back + [layers]
-        case .headerPicker:
+        case .headerPicker, .boardChatHeadPicker:
             return [
                 ControllerLegend.Candidate(
                     entry: ControllerLegendEntry(inputs: [.leftStick, .dpad], label: .move), probes: verticalMoves),
                 candidate(.button(.cross), .select, [.press(.cross)]),
                 candidate(.button(.circle), .close, [.tap(.circle)]),
             ]
+        case .boardChatHead:
+            // WM8-126: Kopf der Spalte. ▼ in den Board-Chat nur, wenn die
+            // Spalte einen zeigt; sonst führt ▼ still zurück aufs Board.
+            let down: [Candidate] = state.place.boardChatID == nil ? [] : [Candidate(
+                entry: ControllerLegendEntry(inputs: [.button(.dpadDown)], label: .intoBoardChat,
+                                             name: state.place.boardChatName),
+                probes: [.move(.down, source: .dpad, isRepeat: false)])]
+            return [
+                ControllerLegend.Candidate(
+                    entry: ControllerLegendEntry(inputs: [.leftStick, .dpad], label: .move),
+                    probes: [.left, .right].map { .move($0, source: .leftStick, isRepeat: false) }),
+                candidate(.button(.cross), .select, [.press(.cross)]),
+                candidate(.button(.circle), .back, [.tap(.circle)]),
+            ] + down + toBoardChat + [bumpers] + back + [layers]
         case .triage:
             let chats: [Candidate] = state.place.ticketHasChats
                 ? [candidate(.button(.dpadRight), .chatsOnTicket, [.move(.right, source: .dpad, isRepeat: false)])] : []

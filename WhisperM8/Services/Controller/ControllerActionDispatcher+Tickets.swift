@@ -12,10 +12,13 @@ extension ControllerActionDispatcher {
         if command == .leaveBoardChat { return leaveBoardChat() }
         // „Zum Chat“: Kreuz und Kreis warten im Ziel-Chat (WM8-91), fest an
         // seiner ID, auch wenn das Fenster die Auswahl erst später meldet.
+        // Ebenso „Als Tab öffnen“ im Kopf der Board-Chat-Spalte (WM8-126).
         var target: UUID?
         switch command {
         case let .goToChat(chatID): target = chatID
-        case .open: target = targetWindowID.flatMap { chats.snapshot(of: $0) }?.tickets?.chatLineChatID
+        case .open:
+            let place = targetWindowID.flatMap { chats.snapshot(of: $0) }?.tickets
+            target = place?.chatLineChatID ?? place?.columnTabChatID
         default: target = nil
         }
         let outcome = chats.ticketCommand(command, in: targetWindowID)

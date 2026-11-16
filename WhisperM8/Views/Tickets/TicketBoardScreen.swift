@@ -379,7 +379,8 @@ final class TicketBoardControllers {
     }
 
     static func leaveHeaders(_ models: [TicketBoardViewModel]) {
-        for model in models where model.headerFocus != nil || model.morePickerIndex != nil {
+        for model in models where model.headerFocus != nil || model.morePickerIndex != nil
+            || model.columnFocus != nil || model.columnPickerIndex != nil {
             model.leaveHeader()
         }
     }

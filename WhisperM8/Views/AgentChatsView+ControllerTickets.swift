@@ -44,6 +44,11 @@ extension AgentChatsView {
         place.hasTicket = model.detail != nil
         place.onGroup = place.view == .list && model.selectedGroupID != nil
         place.ticketHasChats = !model.chatLines.isEmpty
+        // „Als Tab öffnen“ im Kopf der Spalte gewählt: Kreuz öffnet diesen Chat
+        // (Ankunftssperre im Ziel, WM8-126).
+        if place.view == .boardChatHead, model.columnFocus == .openAsTab {
+            place.columnTabChatID = place.boardChatID
+        }
         if place.view == .chatLine, let index = model.focusedChatLine, model.chatLines.indices.contains(index),
            model.chatLines[index].chatID != nil {
             place.chatLineTitle = model.chatLines[index].name
@@ -79,7 +84,13 @@ extension AgentChatsView {
             return .done
         }
         // Kopf und Filter (Paket 3d): Bewegen wählt nur, Kreuz schaltet, Kreis zurück.
-        let header = TicketHeaderContext(hasBack: true, hasBoardChat: BoardChatInputs.shared.boardChat(in: windowID) != nil)
+        var header = TicketHeaderContext(hasBack: true, hasBoardChat: BoardChatInputs.shared.boardChat(in: windowID) != nil)
+        // Kopf der Board-Chat-Spalte (WM8-126): nur gerechnet, solange die
+        // Auswahl in einem der Köpfe steht.
+        if model.headerFocus != nil || model.columnFocus != nil { header.column = boardChatHeadLayout() }
+        if model.columnFocus != nil, let outcome = performBoardChatHeadCommand(command, model: model, header: header) {
+            return outcome
+        }
         if model.headerFocus != nil, let outcome = performHeaderCommand(command, model: model, header: header) {
             return outcome
         }
@@ -167,8 +178,14 @@ extension AgentChatsView {
     private func performHeaderCommand(_ command: ControllerTicketCommand, model: TicketBoardViewModel,
                                       header: TicketHeaderContext) -> ControllerTicketOutcome? {
         switch command {
-        case .move(let direction), .repeatMove(let direction):
+        case .move(let direction):
             return model.headerMove(TicketBoardMove(direction), header)
+        case .repeatMove(let direction):
+            // Gehalten rutscht die Auswahl am Ende der Zeile nicht in den Kopf
+            // der Board-Chat-Spalte (WM8-126); hinein mit einem einzelnen Druck.
+            var held = header
+            held.column = nil
+            return model.headerMove(TicketBoardMove(direction), held)
         case .open:
             switch model.headerActivate(header) {
             case .done: return .done
