@@ -37,11 +37,11 @@ extension ControllerActionDispatcher {
 
     var keyboardCommands: ControllerKeyboardCommands? { islandState?.model.keyboard }
 
-    /// Baut die Tastenzeile, falls noch nicht geschehen; gemessen wie das
-    /// Öffnen der Insel (`controller.islandShow`).
+    /// Baut die Tastenzeile, falls noch nicht geschehen; eigener Messpunkt
+    /// `keyboardIsland.commands`.
     func ensureKeyboardCommands() {
         guard isKeyboardIslandOpen, var state = islandState, state.model.keyboard == nil else { return }
-        PerfBudgets.controllerIslandShow.withInterval { makeKeyboardCommands(for: &state) }
+        PerfBudgets.keyboardIslandCommands.withInterval { makeKeyboardCommands(for: &state) }
         islandState = state
     }
 
@@ -239,6 +239,22 @@ extension ControllerActionDispatcher {
             case .closeAndPassThrough: ui.menu = nil
             }
         }
+    }
+
+    /// ⌘K im Ticket-Board (WM8-91 Paket 3c): dieselbe Menü-Karte wie Options
+    /// am Controller, bedient per Tastatur (↑ ↓, Return, Esc). Nur auf Board
+    /// und Triage, nicht im Board-Chat und nicht bei schon offenem Menü.
+    func openKeyboardTicketMenu() -> Bool {
+        let context = ControllerContextResolver.context(for: snapshot())
+        guard case let .tickets(state) = context, state.area == .content, state.boardChat == nil,
+              ui.menu == nil else { return false }
+        performingForKeyboard = true
+        defer { performingForKeyboard = false }
+        if ui.lastInput != .keyboard { ui.lastInput = .keyboard }
+        perform(.menuToggle, in: context)
+        guard ui.menu != nil else { return false }
+        ui.menuByKeyboard = true
+        return true
     }
 
     // MARK: - Hilfen

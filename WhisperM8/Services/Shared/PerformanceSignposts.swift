@@ -394,4 +394,13 @@ enum PerfBudgets {
     /// zeigen. Zwei Bilder bei 60 Hz; die Animation selbst zählt nicht.
     static let controllerIslandShow = PerformanceBudget(
         name: "controller.islandShow", budget: 0.033, signposter: PerfSignposts.controller)
+    /// ⌥Tab: Insel per Tastatur aufbauen (nur das Modell, noch unsichtbar;
+    /// gezeigt wird erst nach 0,2 s). Eigener Name, damit das Log den Weg vom
+    /// Halten am Controller unterscheidet (WM8-91, Befund 16.11.2026).
+    static let keyboardIslandOpen = PerformanceBudget(
+        name: "keyboardIsland.open", budget: 0.033, signposter: PerfSignposts.controller)
+    /// Tastenzeile der Tastatur-Insel bauen (Menü-Angaben, Schalter, Layout),
+    /// wenn die Insel erscheint oder ein Buchstabe kommt.
+    static let keyboardIslandCommands = PerformanceBudget(
+        name: "keyboardIsland.commands", budget: 0.033, signposter: PerfSignposts.controller)
 }

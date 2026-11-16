@@ -474,6 +474,19 @@ Regeln liegen pur in `Views/Tickets/TicketBoardHeaderSelection.swift`, angewende
 Maus oder Tastatur, liest die Leiste des Controllers sofort neu (`controllerLegendMayHaveChanged`). Vorher stand
 dort bis zum nächsten Statuswechsel eines Chats der alte Ort.
 
+**Per Tastatur** (Paket 3c, dieselben Wege über `performTicketCommand`, `TicketBoardKey`): ↑ ↓ ← → wie Stick
+und Steuerkreuz, Return wie Kreuz (öffnen, auf der Chat-Zeile „Zum Chat“), Esc wie Kreis, J/K und ⌘⌥←/→ bzw.
+⌘⇧←/→ voriges/nächstes Ticket, ⌘C Link, ⌘O Linear, ⌘R Aktualisieren (im Ticket-Modus statt „Sitzungen neu
+lesen“), ⌘J „→ Jarvis“, ⌘K Menü-Karte am Ticket (dann ↑ ↓, Return, Esc wie das Menü aus der Insel per
+Tastatur; solange es offen ist, ruhen die Board-Tasten). → über den Rand gibt dem Terminal des Board-Chats den Tastaturfokus; **⌘←** führt zurück
+aufs Ticket (Entscheidung 16.11.2026). Im Terminal des Board-Chats nimmt das Board nur ⌘←, ⌘⌥←/→, ⌘⇧←/→ und
+⌘J; alles andere gehört dem Chat. Nach einem Sprung per Tastatur in ein Terminal (→ in den Board-Chat, Return
+auf der Chat-Zeile) tun Return, Enter und Esc dort 1 s nichts, mit Warnton (`KeyboardArrivalLock`, erster
+Schritt der Tasten-Kette des Fensters). Der Rahmen um die Spalte steht auch, solange das Terminal des
+Board-Chats den Tastaturfokus hat. Die Leiste zeigt bei Tastatur-Bedienung die Kürzel je Ansicht
+(`KeyboardLegend.ticketItems`). ← am linken Rand bleibt stehen: Die Seitenleiste hat keine Tastatur-Auswahl.
+Den Kopf erreicht ↑ wie am Controller (Paket 3d); dort schaltet Return, Esc führt zurück, „← Chats“ wie ⌥Tab kurz.
+
 Die erste Bewegung zeigt die Start-Auswahl: die Karte des Tickets, an dem der Chat dahinter hängt, sonst
 die erste Karte der ersten Spalte, in der etwas wartet, sonst die erste Karte. **Options** öffnet die
 Menü-Karte an der gewählten Karte bzw. am Kopf des großen Tickets: Ticket (Zum Chat ›, Link kopieren, In

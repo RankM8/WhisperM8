@@ -33,16 +33,57 @@ enum KeyboardLegend {
         return items
     }
 
-    /// In der Triage des Ticket-Boards zusätzlich die Tasten, die früher
-    /// abgeschnitten im Ticket-Kopf standen (WM8-124): „J K Ticket · ⌘C Link
-    /// kopieren · esc Board“. Sonst nichts.
+    /// Tasten des Ticket-Boards in der Leiste unten: in der Triage die, die
+    /// früher abgeschnitten im Ticket-Kopf standen (WM8-124), auf dem Board und
+    /// auf der Chat-Zeile die aus dem Plan „Tastatur“ (WM8-91 Paket 3c).
     static func ticketItems(for context: ControllerContext?) -> [KeyboardIslandFooter.Item] {
-        guard case .tickets(let state)? = context, state.place.view == .triage || state.place.view == .chatLine else { return [] }
-        return [
-            KeyboardIslandFooter.Item(keys: ["J", "K"], label: String(localized: "Ticket")),
-            KeyboardIslandFooter.Item(keys: ["⌘", "C"], label: String(localized: "Copy link")),
-            KeyboardIslandFooter.Item(keys: ["esc"], label: String(localized: "Board")),
+        guard case .tickets(let state)? = context, state.area == .content else { return [] }
+        typealias Item = KeyboardIslandFooter.Item
+        // ⌘J nur mit sichtbarem Board-Chat (WM8-91 Paket 3c), mit seinem Rufnamen.
+        let jarvis: [Item] = state.place.boardChatID == nil ? [] : [
+            Item(keys: ["⌘", "J"], label: "→ " + (state.place.boardChatName ?? String(localized: "Board chat"))),
         ]
+        switch state.place.view {
+        case .empty:
+            return []
+        case .board, .list:
+            // Plan „Die Leiste unten“, Zustand Board (Paket 3c).
+            return [
+                Item(keys: ["↑", "↓", "←", "→"], label: String(localized: "Selection")),
+                Item(keys: ["↩"], label: String(localized: "Open")),
+                Item(keys: ["⌘", "C"], label: String(localized: "Copy link")),
+                Item(keys: ["⌘", "⌥", "←", "→"], label: String(localized: "Ticket")),
+            ] + jarvis + [
+                Item(keys: ["⌘", "O"], label: String(localized: "Linear")),
+                Item(keys: ["⌘", "R"], label: String(localized: "Refresh")),
+                Item(keys: ["⌘", "K"], label: String(localized: "Menu")),
+            ]
+        case .triage:
+            return [
+                Item(keys: ["J", "K"], label: String(localized: "Ticket")),
+                Item(keys: ["⌘", "C"], label: String(localized: "Copy link")),
+                Item(keys: ["esc"], label: String(localized: "Board")),
+            ] + jarvis
+        case .chatLine:
+            return [
+                Item(keys: ["↩"], label: String(localized: "Go to chat")),
+                Item(keys: ["esc"], label: String(localized: "List")),
+                Item(keys: ["J", "K"], label: String(localized: "Ticket")),
+            ]
+        // Kopf und Filter (Paket 3d): Pfeile wählen, Return schaltet, Esc zurück.
+        case .header:
+            return [
+                Item(keys: ["↑", "↓", "←", "→"], label: String(localized: "Selection")),
+                Item(keys: ["↩"], label: String(localized: "Select")),
+                Item(keys: ["esc"], label: String(localized: "Back")),
+            ]
+        case .headerPicker:
+            return [
+                Item(keys: ["↑", "↓"], label: String(localized: "Selection")),
+                Item(keys: ["↩"], label: String(localized: "Select")),
+                Item(keys: ["esc"], label: String(localized: "Close")),
+            ]
+        }
     }
 
     /// Tastenkappen des Diktat-Hotkeys: ab Werk ⌥Leertaste als „⌥ ␣“, sonst

@@ -25364,12 +25364,12 @@
         }
       }
     },
-    "The controller is in the board chat": {
+    "The board chat has the keys": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Der Controller ist im Board-Chat"
+            "value": "Der Board-Chat hat die Tasten"
           }
         }
       }

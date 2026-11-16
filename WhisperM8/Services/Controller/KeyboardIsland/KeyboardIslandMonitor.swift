@@ -97,6 +97,13 @@ final class KeyboardIslandMonitor {
         return true
     }
 
+    /// ⌘K im Ticket-Board (WM8-91 Paket 3c): Menü-Karte am Ticket, danach
+    /// wie ein per B oder K geöffnetes Menü bedient. `false` ohne Ausführer
+    /// (Controller-Steuerung aus) oder wenn sie hier nicht aufgeht.
+    func openTicketMenu() -> Bool {
+        dispatcher?.openKeyboardTicketMenu() ?? false
+    }
+
     /// Options-Menü, das B oder K geöffnet hat.
     private func menuKeyDown(keyCode: UInt16, modifiers: NSEvent.ModifierFlags) -> Bool {
         guard let dispatcher else { return false }

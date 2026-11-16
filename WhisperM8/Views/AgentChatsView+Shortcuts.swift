@@ -40,11 +40,16 @@ extension AgentChatsView {
             // Treffer `nil` zurück (Event konsumiert), sonst das Event weiter
             // an den nächsten.
             guard let event = handleTabSwitcherKeyDown(event) else { return nil }
+            // Return und Esc gleich nach einem Sprung per Tastatur in ein
+            // Terminal (WM8-91): erst nach der Sperre.
+            guard let event = handleKeyboardArrivalLock(event) else { return nil }
             guard let event = handleNextWaitingChatShortcut(event) else { return nil }
             guard let event = handleNewChatShortcut(event) else { return nil }
             guard let event = handleJarvisNotesShortcut(event) else { return nil }
-            guard let event = handleTabNavShortcut(event) else { return nil }
+            // Im Ticket-Modus vor dem Tab-Wechsel: Dort blättert ⌘⌥←/→ Tickets
+            // (Plan „Tastatur“); außerhalb der Tickets geht die Taste unberührt weiter.
             guard let event = handleTicketBoardKey(event) else { return nil }
+            guard let event = handleTabNavShortcut(event) else { return nil }
             guard let event = handleGridFocusShortcut(event) else { return nil }
             observeTerminalInterruptKey(event)
             return handleCloseTabShortcut(event)

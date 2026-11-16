@@ -70,7 +70,8 @@ final class TicketBoardKeyRoutingTests: XCTestCase {
 
     func testBoardTakesTheKeysWithoutTerminalFocus() {
         focus(PlainView())
-        let expected: [TicketBoardKey] = [.next, .previous, .next, .previous, .close, .copyLink]
+        let expected: [TicketBoardKey] = [.next, .previous, .move(.down, isRepeat: false), .move(.up, isRepeat: false),
+                                          .close, .copyLink]
         for (event, want) in zip(triageKeys, expected) {
             let outcome = route(event)
             XCTAssertFalse(outcome.passedOn, "\(event.keyCode) gehört dem Board")
@@ -102,6 +103,42 @@ final class TicketBoardKeyRoutingTests: XCTestCase {
         focus(PlainView())
         let result = TicketBoardKeyRouting.route(key("j", code: 38), firstResponder: window.firstResponder) { _ in false }
         XCTAssertNotNil(result)
+    }
+
+    /// WM8-91 Paket 3c: Im Terminal des Board-Chats nimmt das Board nur ⌘←
+    /// (zurück aufs Ticket), ⌘⌥←/→ und ⌘⇧←/→ (Ticket) und ⌘J (→ Jarvis).
+    /// Return, Esc, Pfeile, J, K und ⌘C bleiben beim Chat.
+    func testTheBoardChatTerminalKeepsAllButTheBoardChatKeys() {
+        let terminal = FakeTerminalView()
+        focus(terminal)
+        func routeInBoardChat(_ event: NSEvent) -> TicketBoardKey? {
+            var got: TicketBoardKey?
+            _ = TicketBoardKeyRouting.route(event, firstResponder: window.firstResponder,
+                                            isBoardChatTerminal: { $0 === terminal }) { got = $0; return true }
+            return got
+        }
+        for event in triageKeys + [key("\r", code: 36), key("\u{F703}", code: 124)] {
+            XCTAssertNil(routeInBoardChat(event), "\(event.keyCode) gehört dem Chat")
+        }
+        XCTAssertEqual(routeInBoardChat(key("\u{F702}", code: 123, flags: .command)), .leaveBoardChat)
+        XCTAssertEqual(routeInBoardChat(key("\u{F703}", code: 124, flags: [.command, .option])), .adjacent(1))
+        XCTAssertEqual(routeInBoardChat(key("\u{F702}", code: 123, flags: [.command, .shift])), .adjacent(-1))
+        XCTAssertEqual(routeInBoardChat(key("j", code: 38, flags: .command)), .handOff)
+        // Ein anderes Terminal (der Chat hinter den Tickets) bekommt nichts vom Board.
+        XCTAssertNil(route(key("\u{F702}", code: 123, flags: .command)).boardGot)
+    }
+
+    /// Auflage der Prüferin: Gehaltenes Return öffnet auf dem Board nichts
+    /// weiter (sonst „Zum Chat“ oder „← Chats“ als Wiederholung).
+    func testRepeatedReturnOpensNothing() {
+        focus(PlainView())
+        let repeated = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                        windowNumber: window.windowNumber, context: nil, characters: "\r",
+                                        charactersIgnoringModifiers: "\r", isARepeat: true, keyCode: 36)!
+        let outcome = route(repeated)
+        XCTAssertFalse(outcome.passedOn, "geschluckt, nicht ans Fenster")
+        XCTAssertNil(outcome.boardGot, "und nicht ausgeführt")
+        XCTAssertEqual(route(key("\r", code: 36)).boardGot, .open, "ein neuer Druck öffnet")
     }
 
     /// Der alte Fehler: ein in `Any` gepacktes Optional nennt seinen eigenen Typ.

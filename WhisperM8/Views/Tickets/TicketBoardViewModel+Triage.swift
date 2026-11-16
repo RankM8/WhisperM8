@@ -89,6 +89,8 @@ extension TicketBoardViewModel {
         case .previous: previousInTriage()
         case .close: closeTriage()
         case .copyLink: break
+        // Die übrigen Tasten nimmt das Fenster über `performTicketCommand`.
+        default: return false
         }
         return true
     }

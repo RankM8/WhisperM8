@@ -166,33 +166,91 @@ extension TicketBoardSelection {
 // MARK: - Tasten in der Triage (pur)
 
 /// Was eine Taste in der Ticket-Ansicht tut. Nur, wenn der Fokus nicht in
-/// einem Terminal oder Textfeld liegt; das prüft der Aufrufer.
+/// einem Terminal oder Textfeld liegt; das prüft der Aufrufer (Ausnahme:
+/// `isBoardChatKey` im Terminal des Board-Chats).
+///
+/// Paket 3c (WM8-91): dieselben Wege wie am Controller, Plan „Tastatur“:
+/// Pfeile wie Stick und Steuerkreuz, Return wie Kreuz, Esc wie Kreis,
+/// ⌘⌥←/→ und ⌘⇧←/→ wie L1/R1, ⌘O wie L3, ⌘R wie R3, ⌘J wie Dreieck.
 enum TicketBoardKey: Equatable {
+    /// J: nächstes Ticket (wie R1).
     case next
+    /// K: voriges Ticket (wie L1).
     case previous
+    /// Esc: zurück (Chat-Zeile → Liste → Board), wie Kreis.
     case close
     /// ⌘C: Link des gewählten Tickets (Entscheidung Giuliano, 15.11.2026;
     /// ⌘⇧C bleibt der Zwischenablage-Verlauf). Markierter Text geht vor; das
     /// prüft der Aufrufer.
     case copyLink
+    /// ↑ ↓ ← →: Auswahl, Liste der Triage, Chat-Zeile; → am Rand in den
+    /// Board-Chat. `isRepeat`: gehalten, dann nie über den Rand.
+    case move(ControllerDirection, isRepeat: Bool)
+    /// Return: Ticket groß bzw. auf der Chat-Zeile „Zum Chat“.
+    case open
+    /// ⌘⌥←/→ und ⌘⇧←/→: voriges/nächstes Ticket.
+    case adjacent(Int)
+    /// ⌘O: In Linear öffnen.
+    case openInLinear
+    /// ⌘R: Aktualisieren (im Ticket-Modus statt „Sitzungen neu lesen“).
+    case refresh
+    /// ⌘J: → Jarvis (Ticket ins Feld des Board-Chats).
+    case handOff
+    /// ⌘K: Menü-Karte am Ticket, bedient mit ↑ ↓, Return und Esc wie die
+    /// Insel per Tastatur.
+    case menu
+    /// ⌘←: aus dem Terminal des Board-Chats zurück aufs Ticket
+    /// (Entscheidung 16.11.2026).
+    case leaveBoardChat
 
-    /// J/↓ nächstes, K/↑ voriges, Esc zurück zum Board. Ohne Modifier;
-    /// Pfeiltasten tragen `.function`/`.numericPad`, deshalb nur die vier
-    /// echten Modifier vergleichen (Muster `TabNavShortcut`).
-    static func resolve(keyCode: UInt16, characters: String?, modifiers: ModifierSet) -> TicketBoardKey? {
-        // Über das Zeichen, nicht die Taste: Auf anderen Tastaturbelegungen liegt C woanders.
-        if modifiers == .command, characters?.lowercased() == "c" { return .copyLink }
+    /// Ohne Modifier für Pfeile, Return, Esc, J, K. Pfeiltasten tragen
+    /// `.function`/`.numericPad`, deshalb nur die vier echten Modifier
+    /// vergleichen (Muster `TabNavShortcut`). Buchstaben über das Zeichen,
+    /// nicht die Taste: Auf anderen Belegungen liegen sie woanders.
+    static func resolve(keyCode: UInt16, characters: String?, modifiers: ModifierSet,
+                        isRepeat: Bool = false) -> TicketBoardKey? {
+        let character = characters?.lowercased()
+        if modifiers == .command {
+            switch character {
+            case "c": return .copyLink
+            case "o": return .openInLinear
+            case "r": return .refresh
+            case "j": return .handOff
+            case "k": return .menu
+            default: break
+            }
+            return keyCode == 123 ? .leaveBoardChat : nil
+        }
+        if modifiers == [.command, .option] || modifiers == [.command, .shift] {
+            switch keyCode {
+            case 123: return .adjacent(-1)
+            case 124: return .adjacent(1)
+            default: return nil
+            }
+        }
         guard modifiers.isEmpty else { return nil }
         switch keyCode {
-        case 125: return .next       // ↓
-        case 126: return .previous   // ↑
-        case 53: return .close       // Esc
+        case 125: return .move(.down, isRepeat: isRepeat)
+        case 126: return .move(.up, isRepeat: isRepeat)
+        case 123: return .move(.left, isRepeat: isRepeat)
+        case 124: return .move(.right, isRepeat: isRepeat)
+        case 36, 76: return .open     // Return, Enter
+        case 53: return .close        // Esc
         default: break
         }
-        switch characters?.lowercased() {
+        switch character {
         case "j": return .next
         case "k": return .previous
         default: return nil
+        }
+    }
+
+    /// Im Terminal des Board-Chats gehören alle Tasten dem Chat, bis auf diese:
+    /// zurück aufs Ticket, Ticket blättern (E2: auch im Board-Chat) und → Jarvis.
+    var isBoardChatKey: Bool {
+        switch self {
+        case .leaveBoardChat, .adjacent, .handOff: return true
+        default: return false
         }
     }
 
