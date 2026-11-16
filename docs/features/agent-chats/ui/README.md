@@ -198,6 +198,16 @@ es nicht, der Mac schlief zugeklappt ein. Seitdem:
   neu ab (Log `stay_awake_external_reset`), und der Tooltip nennt die Uhrzeit.
   Kosten: ein Aufruf von `pmset -g` je 30 s, off-main und nur, solange die App
   den Mac wach hält.
+- Der Merker `stay-awake.active` nennt seinen Besitzer (PID und Startzeit,
+  `StayAwakeMarker`). Zwei Produktiv-Apps teilen ihn (Neustart mit Übergabe,
+  `make run` aus dem Projektordner). Zurückgesetzt und gelöscht wird nur vom
+  Besitzer oder wenn der eingetragene Besitzer tot ist: beim Start, beim
+  Ausschalten, beim Beenden und in der Wache (sie vergleicht die erste Zeile
+  mit der PID ihrer App). Vorher setzte die zweite App beim Start
+  `disablesleep 0` und löschte den Merker der ersten, und die alte schaltete
+  beim Beenden den Ruhezustand wieder ein, den die neue gerade abgeschaltet
+  hatte. Leere Merker älterer Fassungen gelten wie bisher als liegengeblieben.
+  Log `stay_awake_marker_other_owner`.
 
 ## Tabs
 

@@ -383,6 +383,8 @@ private final class FakeStayAwakeSystem: StayAwakeSystem, @unchecked Sendable {
         }
     }
     func startWatchdog(appPID: Int32, marker: URL) { lock.withLock { _watchdogStarts += 1 } }
+    /// Andere Besitzer gelten hier als tot: ein liegengebliebener Merker.
+    func isAlive(_ owner: StayAwakeMarker) -> Bool { false }
     func powerState() -> (onACPower: Bool, batteryPercent: Int?) {
         let p = power
         return (p.0, p.1)

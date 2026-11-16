@@ -14,6 +14,9 @@ protocol StayAwakeSystem: Sendable {
     func isSleepDisabled() -> Bool?
     func startWatchdog(appPID: Int32, marker: URL)
     func powerState() -> (onACPower: Bool, batteryPercent: Int?)
+    /// Lebt der eingetragene Besitzer des Merkers noch (PID und, wenn
+    /// bekannt, dieselbe Startzeit)?
+    func isAlive(_ owner: StayAwakeMarker) -> Bool
 }
 
 struct LiveStayAwakeSystem: StayAwakeSystem {
@@ -46,6 +49,12 @@ struct LiveStayAwakeSystem: StayAwakeSystem {
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try? process.run()
+    }
+
+    func isAlive(_ owner: StayAwakeMarker) -> Bool {
+        guard owner.pid > 0, kill(owner.pid, 0) == 0 || errno == EPERM else { return false }
+        guard let expected = owner.startMicros else { return true }
+        return ProcessStartTime.microseconds(pid: owner.pid) == expected
     }
 
     func powerState() -> (onACPower: Bool, batteryPercent: Int?) {
