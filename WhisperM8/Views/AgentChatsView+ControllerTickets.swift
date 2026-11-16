@@ -125,6 +125,22 @@ extension AgentChatsView {
         case .goToChat(let chatID):
             guard model.chatLines.contains(where: { $0.chatID == chatID }) else { return .rejected }
             return openChatFromTicket(chatID)
+        case .handOff:
+            // Das gewählte Ticket: in der Triage das große (key nil), auf dem
+            // Board die Karte, in der Liste die Zeile. Die Regeln (Board-Chat
+            // sichtbar, keine offene Frage) prüft `BoardChatInputs`.
+            guard hadSpot else { return .rejected }
+            var key: String?
+            if model.triage == nil {
+                switch model.mode {
+                // Nur eine sichtbar gewählte Karte; „N weitere“ gibt kein
+                // verborgenes Ticket weiter.
+                case .board: if case .card(let card) = model.boardSpot { key = card }
+                case .list: key = model.selectedKey.flatMap { model.listKeys.contains($0) ? $0 : nil }
+                }
+                guard key != nil else { return .rejected }
+            }
+            return BoardChatInputs.shared.handOff(key: key, in: windowID) ? .done : .rejected
         case .refresh, .dictationUnavailable, .leaveBoardChat:
             return .rejected
         }

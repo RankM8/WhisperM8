@@ -24374,16 +24374,6 @@
         }
       }
     },
-    "In the ticket board these work on the board chat, which is not here yet.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Im Ticket-Board wirken diese auf den Board-Chat, den es noch nicht gibt."
-          }
-        }
-      }
-    },
     "No team set up · Settings › Tickets": {
       "localizations": {
         "de": {
@@ -25180,6 +25170,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Der Controller ist im Board-Chat"
+          }
+        }
+      }
+    },
+    "Added to the board chat's field": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Feld des Board-Chats eingefügt"
+          }
+        }
+      }
+    },
+    "To the board chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "an den Board-Chat"
+          }
+        }
+      }
+    },
+    "In the ticket board, R1 offers only the app diamond.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Ticket-Board bietet R1 nur die App-Raute."
           }
         }
       }

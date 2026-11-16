@@ -428,8 +428,8 @@ Tastatur-Kürzel im Board kommen mit Paket 3. Alles nur bei eingeschalteter Tick
 |---|---|---|
 | überall | L2 getippt / gehalten, Options, Create, Touchpad, L1 + R1 | wie im Chat bzw. wie überall |
 | überall | R1 gehalten | nur die App-Raute; die Chat-Raute ist aus („wirkt auf den Board-Chat, den es noch nicht gibt“) |
-| überall | R2 | „geht nicht“, die Leiste sagt einmal „Diktat erst mit dem Board-Chat“ (E4) |
-| überall | Dreieck | „geht nicht“ (→ Jarvis kommt mit WM8-113); L1 gehalten gibt es nicht |
+| überall | R2 | Diktat an den Board-Chat, den die Spalte zeigt, nie mit Senden (Paket 3b). Ohne sichtbaren Board-Chat „geht nicht“, die Leiste sagt einmal „Diktat erst mit dem Board-Chat“ (E4) |
+| Board, Triage | Dreieck | **→ Jarvis**: Nummer, Titel und Link des gewählten Tickets ins Eingabefeld des Board-Chats, ohne Enter (wie der Knopf; nicht auf „N weitere“). Ohne Board-Chat oder Ticket „geht nicht“. L1 gehalten gibt es nicht |
 | Board, Liste | Stick, Steuerkreuz | Auswahl, mit Wiederholung; unter der letzten gezeigten Karte steht „N weitere“ als eigene Stelle; ◀ aus der ersten Spalte (bzw. der Liste) in die Seitenleiste |
 | Board, Liste | Kreuz | Ticket groß, Liste = die Spalte; auf „N weitere“ beim ersten verborgenen Ticket, wie der Knopf |
 | Board | Kreis | nichts, mit „geht nicht“ (zweimal Kreis aus der Triage wirft nicht aus dem Board) |
@@ -466,8 +466,10 @@ Die Regeln liegen pur in `Views/Tickets/TicketBoardSelection.swift` (`step` mit 
 Rückgabe, `openKey`, `adjacent`, `stepInList`, `triageStep`, `controllerStart`) und
 `Core/ControllerBindingResolver+Tickets.swift`; `TicketBoardViewModel+Controller.swift` wendet sie an.
 
-**Schutz:** Hinter den Tickets kommt in keinem Chat etwas an — kein Enter, kein Escape, keine Taste, kein
-Diktat, auch nicht über die Insel (L2 + R2 auf „hier“ im Board) oder per Tastatur (Leertaste in ⌥Tab).
+**Schutz:** Im Chat hinter den Tickets kommt nichts an — kein Enter, kein Escape, keine Taste, kein
+Diktat, auch nicht über die Insel (L2 + R2 auf „hier“ im Board) oder per Tastatur (Leertaste in ⌥Tab). Einziges
+Ziel im Ticket-Modus ist der sichtbare Board-Chat: R2 diktiert ausdrücklich an seine Kennung (`.boardChat`, nie
+mit Senden), Dreieck legt Text in sein Feld, Tasten nur bei Fokus des Controllers dort.
 Kreuz springt nie von selbst in einen Chat: Dreimal schnell Kreuz öffnet das Ticket groß und tut dann
 nichts; „Zum Chat“ verlangt die Chat-Zeile (▶, dann Kreuz, E3). **Ankunftssperre:** Springt der Controller
 in einen Chat („Zum Chat“, L2 getippt, „Wohin“ per Controller oder ⌥Tab, „Zu den Chats“, Kreuz auf einer

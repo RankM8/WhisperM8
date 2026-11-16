@@ -194,6 +194,10 @@ enum ControllerTicketCommand: Equatable, Sendable {
     /// Stick ◀ im Board-Chat (bzw. Steuerkreuz ◀, wo ← im Terminal nichts
     /// tut): zurück aufs Ticket, auf dem man war. Erledigt der Ausführer.
     case leaveBoardChat
+    /// Dreieck (Paket 3b): „→ Jarvis“. Nummer, Titel und Link des gewählten
+    /// Tickets ins Eingabefeld des sichtbaren Board-Chats, ohne Enter
+    /// (`BoardChatInputs.handOff`, dieselben Regeln wie der Knopf).
+    case handOff
 }
 
 extension ControllerTicketCommand {
@@ -241,4 +245,6 @@ struct ControllerTicketMenuInfo: Equatable, Sendable {
 /// Kurze Bestätigung in der Leiste nach einer Taste im Ticket-Board.
 enum ControllerTicketNotice: String, Sendable {
     case linkCopied, listCopied, refreshing, dictationNeedsBoardChat
+    /// „→ Jarvis“ hat das Ticket ins Feld des Board-Chats gelegt (Paket 3b).
+    case handedOff
 }

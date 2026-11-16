@@ -40,6 +40,8 @@ enum ControllerLegendLabel: String, CaseIterable, Sendable {
     case backToTicketList, chooseChat, openChatLeavesTickets, backIntoBoard
     // Board-Chat (WM8-91 Paket 3a): ▶ am rechten Rand hinein, Stick ◀ zurück aufs Ticket.
     case intoBoardChat, leaveBoardChat
+    /// Dreieck „→ Jarvis“ (Paket 3b): Name in `ControllerLegendEntry.name`.
+    case handOffToBoardChat
 }
 
 struct ControllerLegendEntry: Equatable, Sendable {
@@ -339,9 +341,18 @@ enum ControllerLegend {
                 candidate(.button(.dpadRight), .backIntoBoard, [.move(.right, source: .dpad, isRepeat: false)]),
             ] + back
         }
+        let dictate = candidate(.button(.r2), .dictate, [.press(.r2)])
         if let chat = state.boardChat {
-            return boardChatCandidates(chat, back: back, layers: layers, bumpers: bumpers)
+            return boardChatCandidates(chat, back: back, layers: layers, bumpers: bumpers, dictate: dictate)
         }
+        // Dreieck und R2 wirken auf den Board-Chat (Paket 3b), nur wenn die
+        // Spalte einen zeigt; sonst fallen sie weg („geht nicht“).
+        let toBoardChat: [Candidate] = state.place.boardChatID == nil ? [] : [
+            Candidate(entry: ControllerLegendEntry(inputs: [.button(.triangle)], label: .handOffToBoardChat,
+                                                   name: state.place.boardChatName),
+                      probes: [.press(.triangle)]),
+            dictate,
+        ]
         // ▶ am rechten Rand in den Board-Chat, nur wenn die Spalte einen zeigt.
         let intoChat: [Candidate] = state.place.boardChatID == nil ? [] : [Candidate(
             entry: ControllerLegendEntry(inputs: [.button(.dpadRight)], label: .intoBoardChat,
@@ -351,7 +362,7 @@ enum ControllerLegend {
         case .empty:
             return [menu, candidate(.button(.r3), .refresh, [.tap(.r3)])] + back + [layers]
         case .board, .list:
-            return [stick, candidate(.button(.cross), .open, [.press(.cross)])] + intoChat
+            return [stick, candidate(.button(.cross), .open, [.press(.cross)])] + intoChat + toBoardChat
                 + [link, bumpers, linear, refresh, menu] + back + [layers]
         case .triage:
             let chats: [Candidate] = state.place.ticketHasChats
@@ -360,6 +371,7 @@ enum ControllerLegend {
                 ControllerLegend.Candidate(
                     entry: ControllerLegendEntry(inputs: [.leftStick], label: .ticketPreviousNext), probes: verticalMoves),
                 candidate(.button(.circle), .backToBoard, [.tap(.circle)]),
+            ] + toBoardChat + [
                 link, bumpers,
                 candidate(.rightStick, .read, [.scroll(lines: 1), .scroll(lines: -1)]),
             ] + chats + [menu] + back
@@ -380,7 +392,7 @@ enum ControllerLegend {
     /// Board-Chat mit den Tasten (Paket 3a): wie ein Chat, dazu L1 R1 Ticket
     /// und Stick ◀ zurück aufs Ticket. Ohne Chatwechsel, ohne Starten.
     private static func boardChatCandidates(
-        _ chat: ControllerChatState, back: [Candidate], layers: Candidate, bumpers: Candidate
+        _ chat: ControllerChatState, back: [Candidate], layers: Candidate, bumpers: Candidate, dictate: Candidate
     ) -> [Candidate] {
         let awaiting = chat.status == .awaitingInput
         let choosing = awaiting || ControllerBindingResolver.choiceListActive(chat)
@@ -392,6 +404,7 @@ enum ControllerLegend {
             candidate(.dpad, .arrows, gestures(for: .dpad)),
             candidate(.button(.cross), choosing ? .confirm : .send, [.press(.cross)]),
             candidate(.button(.circle), circleLabel(chat, awaiting: awaiting), [.tap(.circle)]),
+            dictate,
             // L1 R1 blättern hier Tickets (E2): weit vorn, damit es in einer
             // schmalen Leiste nicht wegfällt.
             bumpers,

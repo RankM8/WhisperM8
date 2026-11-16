@@ -26,6 +26,7 @@ extension ControllerActionDispatcher {
             case .copyLink: noteTicket(.linkCopied)
             case .copyList: noteTicket(.listCopied)
             case .refresh: noteTicket(.refreshing)
+            case .handOff: noteTicket(.handedOff)
             default: break
             }
             // Board ↔ Triage ↔ Chat-Zeile: Die Leiste zeigt gleich die neuen Tasten.
