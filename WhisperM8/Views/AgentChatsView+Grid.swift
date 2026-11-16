@@ -800,8 +800,8 @@ extension AgentChatsView {
                 // INNEN-Padding wie die Einzelansicht (mainWorkspace) — die
                 // Dichte-Vorgabe betrifft nur die Abstände ZWISCHEN den
                 // Panes, nicht den Leseabstand des Terminal-Inhalts.
-                .padding(.top, 14)
-                .padding(.horizontal, 14)
+                .padding(.top, Self.gridPaneContentInset)
+                .padding(.horizontal, Self.gridPaneContentInset)
                 .padding(.bottom, 8)
             } else {
                 ContentUnavailableView("Project missing", systemImage: "questionmark.folder")
@@ -858,6 +858,9 @@ extension AgentChatsView {
     }
 
     static let gridPaneHeaderHeight: CGFloat = 28
+    /// Einrückung des Terminals in der Kachel; die Pille „Meldung wartet“
+    /// rechnet damit die Notizkarte um (`JarvisNoteCardFootprint.terminalInset`).
+    static let gridPaneContentInset: CGFloat = JarvisNoteCardFootprint.terminalInset
 
     /// Maus über Notiz-Karte oder -Pfeil: `handleGridPaneMouseDown` verschiebt
     /// dann den Fokus nicht (sonst klappte der Fokuswechsel die Karte zu bzw.

@@ -121,8 +121,10 @@ extension RecordingCoordinator {
     static func clipboardOnlyPillHint(for reason: DictationClipboardReason) -> String {
         switch reason {
         // Am Limit kein ⌘V-Tipp: auch eingefügter Text würde verbraucht.
-        // Offene Ansicht: ⌘V landete im Filter der Ansicht.
-        case .decisionPending, .chatUsageLimited, .viewOpen: return String(localized: "On the clipboard")
+        case .decisionPending, .chatUsageLimited: return String(localized: "On the clipboard")
+        // Offene Ansicht: kein ⌘V-Tipp (landete im Filter der Ansicht), dafür
+        // der Grund; wer Mitteilungen aus hat, sähe ihn sonst nie (WM8-123).
+        case .viewOpen: return String(localized: "On the clipboard · Claude view open")
         case .chatStarting, .chatNotRunning, .writeFailed, .boardChatHidden: return String(localized: "On the clipboard · ⌘V to paste")
         }
     }

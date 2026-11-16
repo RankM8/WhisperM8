@@ -189,8 +189,10 @@ extension AgentControlRequestHandler {
                         status: statusStore.status(for: id),
                         openBackgroundTasks: ClaudeBackgroundTaskMonitor.shared.openTaskCount(liveSessionID: id))
                 },
-                mayHaveUnsentInput: {
-                    registry.controller(for: $0)?.composerDraft.mayHaveUnsentInput == true
+                // Wie der Kontowechsel in der App: Schätzung plus Bildschirm (WM8-123).
+                mayHaveUnsentInput: { id in
+                    registry.controller(for: id)?.mayHaveUnsentInputForAccountSwitch(
+                        status: statusStore.status(for: id)) == true
                 }
             )
             let blockedByID = Dictionary(
@@ -280,7 +282,8 @@ extension AgentControlRequestHandler {
                 for id in trust.scheduleAfterTurn {
                     let reason = AccountSwitchPlanner.waitReason(
                         status: statusStore.status(for: id),
-                        mayHaveUnsentInput: registry.controller(for: id)?.composerDraft.mayHaveUnsentInput == true,
+                        mayHaveUnsentInput: registry.controller(for: id)?.mayHaveUnsentInputForAccountSwitch(
+                            status: statusStore.status(for: id)) == true,
                         openBackgroundTasks: ClaudeBackgroundTaskMonitor.shared.openTaskCount(liveSessionID: id)
                     ) ?? .turnRunning
                     toSchedule.append((id, reason))

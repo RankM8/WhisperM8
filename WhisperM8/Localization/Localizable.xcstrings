@@ -12594,6 +12594,16 @@
         }
       }
     },
+    "On the clipboard · Claude view open": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In der Zwischenablage · Ansicht offen"
+          }
+        }
+      }
+    },
     "On the clipboard · ⌘V to paste": {
       "localizations": {
         "de": {
@@ -25260,6 +25270,56 @@
           "stringUnit": {
             "state": "translated",
             "value": "Geht raus, sobald die Ansicht geschlossen ist."
+          }
+        }
+      }
+    },
+    "1 waiting · text in field": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 wartet · Text im Feld"
+          }
+        }
+      }
+    },
+    "%lld waiting · text in field": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld warten · Text im Feld"
+          }
+        }
+      }
+    },
+    "1 waiting · view open": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 wartet · Ansicht offen"
+          }
+        }
+      }
+    },
+    "%lld waiting · view open": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld warten · Ansicht offen"
+          }
+        }
+      }
+    },
+    "Click to jump to the end of the terminal.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Klick springt ans Ende des Terminals."
           }
         }
       }

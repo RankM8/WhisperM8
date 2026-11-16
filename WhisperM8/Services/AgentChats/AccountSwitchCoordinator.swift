@@ -322,8 +322,12 @@ extension AccountSwitchCoordinator.Dependencies {
                 if case .launching = coordinator.lifecycleState(for: id) { return nil }
                 return coordinator.statusStore.status(for: id)
             },
-            mayHaveUnsentInput: {
-                AgentTerminalRegistry.shared.controller(for: $0)?.composerDraft.mayHaveUnsentInput == true
+            // Schätzung plus Bildschirm wie die Warteschlange (WM8-123): Ein
+            // wieder gelöschtes Diktat hält den Wechsel nicht mehr bis zum
+            // nächsten Enter auf.
+            mayHaveUnsentInput: { id in
+                AgentTerminalRegistry.shared.controller(for: id)?.mayHaveUnsentInputForAccountSwitch(
+                    status: AgentSessionStatusCoordinator.shared.statusStore.status(for: id)) == true
             },
             openBackgroundTasks: { ClaudeBackgroundTaskMonitor.shared.openTaskCount(liveSessionID: $0) },
             workspace: { AgentWorkspaceUIModel.shared.workspace },

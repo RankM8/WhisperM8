@@ -136,7 +136,9 @@ final class AgentPromptQueueDelivery {
         Task { @MainActor [store] in
             if await AgentTerminalController.enterWasWithheld(
                 sessionID: sessionID, clearedInput: clearedInput, since: sentAt) {
-                store.markFailed(id: reserved.id, error: "Enter zurückgehalten: Freigabe ging auf — Text steht im Feld", retry: true)
+                store.markFailed(id: reserved.id, error: Self.withheldError, retry: true)
+                // Mit der ID: `chats submit` verbucht ihn dann als zugestellt (WM8-123).
+                AgentTerminalRegistry.shared.controller(for: sessionID)?.claimWithheldDelivery(queuedPromptID: reserved.id)
                 Logger.agentStore.notice(
                     "queue_withheld session=\(sessionID.uuidString, privacy: .public) id=\(reserved.id.uuidString, privacy: .public)")
                 return
@@ -312,6 +314,9 @@ final class AgentPromptQueueDelivery {
         + "oder `enqueue` raus"
 
     static let stuckError = "Steht im Eingabefeld, nicht abgeschickt — `chats submit` schickt ihn ab"
+
+    nonisolated static let withheldError = "Enter zurückgehalten: Freigabe ging auf — Text steht im Feld. Nach der "
+        + "Freigabe schickt `chats submit` ihn ab und verbucht ihn hier als zugestellt"
 
     /// Der Absender erfährt es von selbst, nicht erst über `chats queue`
     /// (Vic zu WM8-100): Hinter einem stehengebliebenen Auftrag staut sich

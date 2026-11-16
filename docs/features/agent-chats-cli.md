@@ -411,8 +411,9 @@ Eingabefeld stehen könnte (`TerminalComposerDraftTracker`, pur getestet):
   (bis 330 ms) und antwortet dann ebenfalls `approvalPending` statt
   `delivered` (Audit `withheld`, `detail.textInField: true`,
   `detail.resend: false`): Der Text steht im Eingabefeld — nicht neu senden,
-  auch nicht per `enqueue`. `chats submit` schickt ihn nicht ab (er gilt als
-  eingefügter Text, WM8-121); Wege siehe `chats submit` unten. Die Idempotenz wird erst danach abgeschlossen; ein
+  auch nicht per `enqueue`. Nach der Freigabe schickt `chats submit` ihn ab,
+  solange im Feld niemand weitergeschrieben hat (WM8-123); Einzelheiten siehe
+  `chats submit` unten. Die Idempotenz wird erst danach abgeschlossen; ein
   Wiederholen mit derselben requestID bekommt nie „duplicate“ als Erfolg. Die
   Warteschlange verbucht einen Auftrag erst nach dem Enter als zugestellt;
   zurückgehalten bleibt er vorgemerkt (`queue_withheld`), und eine offene
@@ -477,7 +478,8 @@ task for a new session“ sieht wie ein leeres Eingabefeld aus; das Enter
 startete eine neue Hintergrund-Sitzung), `/config` (das Enter wählte eine
 Einstellung) und Verlaufssuche mit Ctrl+R. Dieselbe Ablesung prüfen seit dem
 16.11.2026 auch die Wege, die nur einfügen: Ein Diktat (mit wie ohne Senden)
-bleibt in der Zwischenablage und sagt warum, „→ Jarvis“ (Knopf und Dreieck am
+bleibt in der Zwischenablage und sagt warum (auch die Pille: „In der
+Zwischenablage · Ansicht offen“), „→ Jarvis“ (Knopf und Dreieck am
 Controller) und die Triage-Knöpfe lehnen mit Warnton und einem Satz unter dem
 Terminal ab (`LiveDictationChatWriter.state` → `.viewOpen`,
 `BoardChatInputRules`). Vorher landete ihr Text im Filter der Einstellungen, in
@@ -496,10 +498,18 @@ nichts: Als eigene Zeile über dem Terminal änderte sie dessen Höhe, Claude
 zeichnete neu und das Bild sprang, oft mitten beim Tippen. Oben rechts, weil
 Claudes Feld und Ausgabe links beginnen; ein Streifen über die ganze Breite
 verdeckte in einem kurzen Chat genau das Eingabefeld (Entscheidung Giuliano,
-16.11.2026). Eine Zeile, 11 pt; ist das Terminal schmaler, wird gekürzt. Der
-Grund steht immer in der Pille, der Weg, wie die Meldung frei wird, im Tooltip
-und in der Bedienungshilfe. Damit der Tooltip wirkt, nimmt die Pillenfläche
-selbst die Maus an; daneben geht jeder Klick ans Terminal. Bei Codex-Chats
+16.11.2026). Eine Zeile, 11 pt. An engen Stellen (Board-Spalte, schmale
+Kachel) steht die Kurzfassung „1 wartet · Text im Feld“ bzw. „1 wartet ·
+Ansicht offen“ (`ViewThatFits`), erst wenn auch die nicht passt, wird gekürzt.
+Der Grund steht immer in der Pille, der Weg, wie die Meldung frei wird, im
+Tooltip und in der Bedienungshilfe. Ein Klick auf die Pille springt im
+Terminal ans Ende und lässt die Warteschlange gleich nachsehen
+(`noteReturnedToBottom`); daneben geht jeder Klick ans Terminal. Im Raster
+weicht die Pille der offenen Jarvis-Notizkarte aus: rechts daneben, solange
+dort die Kurzfassung Platz hat (180 pt), sonst unter die Karte. Die Karte
+meldet dafür ihre Größe beim Öffnen, Schließen und Ändern
+(`JarvisNoteCardFootprints`, nur Speicher, gelesen nur von der Pille desselben
+Chats). Bei Codex-Chats
 nennt dieser Weg Enter und Ctrl+C, denn dort liest die App das Feld nicht, und
 von Hand gelöschter Text zählt nicht. Entfernt `chats dequeue` die wartenden
 Meldungen, verschwindet die Pille sofort (bleiben welche offen, stimmt die
@@ -552,9 +562,16 @@ nicht abgeschickt, danach ein Turn, ohne dass jemand Enter oder Ctrl+C
 gedrückt hat“. Dann lehnt `send` ab, statt anzuhängen, und die Warteschlange
 wartet, statt anzuhängen, solange das Feld nicht sichtbar leer ist. Bei
 Codex-Chats liest die App das Feld nie ab; dort gibt nur Enter, Ctrl+C oder
-ein Absenden den Vermerk frei. Dieselbe Schätzung nutzen `move-account
---stop-and-resume` und der Kontowechsel nach dem Turn: Auch sie behandeln den
-eingefügten Text nach einem selbst begonnenen Turn weiter als Entwurf.
+ein Absenden den Vermerk frei. `move-account --stop-and-resume` und der
+Kontowechsel nach dem Turn behandeln den eingefügten Text nach einem selbst
+begonnenen Turn ebenfalls als Entwurf, lesen aber seit WM8-123 das Feld wie die
+Warteschlange (`ComposerDraftOnScreen`, `mayHaveUnsentInputForAccountSwitch`):
+Sichtbar leer bei unten stehender Ansicht gibt frei, sichtbarer Text hält auch
+hochgescrollt, eine offene Ansicht von Claude zählt als nicht ablesbar, sonst
+gilt die Schätzung. Vorher hielt ein Diktat ohne Senden,
+das Giuliano mit der Rücktaste wieder gelöscht hatte, den Wechsel bis zum
+nächsten Enter auf (höchstens 30 Minuten). Gelesen wird nur bei einem
+ruhenden Chat, also höchstens alle 2 s je vorgemerktem Wechsel 16 Zeilen.
 
 **Grenze:** Drückt der User selbst Enter auf einen zurückgelegten Prompt,
 läuft dieser erneut — das ist eine bewusste Eingabe im Terminal, die App
@@ -872,13 +889,34 @@ Warteschlange nach dem Start zustellte. Deshalb:
   danach dasselbe Nachsehen. Leeres Feld, kein Feld oder nicht ablesbar: Exit 4,
   nichts gesendet. Vermutet die App einen Entwurf, lehnt `submit` ebenfalls ab.
   Seit WM8-121 gilt das auch für von der App eingefügten Text, über einen
-  Turn-Start hinweg, und damit auch für einen Auftrag, dessen Enter wegen einer
-  Freigabe zurückgehalten wurde: Die App kann ihn nicht von einem Diktat ohne
-  Senden unterscheiden. Die Ablehnung sagt dann „eingefügt“ und nennt die
-  Wege, die gehen. Direkt gesendeter Auftrag: Der User drückt im Chat Enter.
+  Turn-Start hinweg (Diktat ohne Senden, „→ Jarvis“, `send --no-submit`).
+  **Ausnahme seit WM8-123 (16.11.2026):** Ein Auftrag von `send` oder der
+  Warteschlange, dessen Enter wegen einer Freigabe zurückgehalten wurde, stammt
+  vom Absender, nicht vom User. Die App vermerkt ihn eigens
+  (`TerminalComposerDraftTracker.withheldDelivery`, beansprucht von `send` bzw.
+  der Warteschlange nach dem Zurückhalten; ein Diktat mit Senden beansprucht
+  nie). `submit` schickt ihn ab, wenn der Chat ruht, keine Freigabe offen ist
+  und seitdem niemand im Feld getippt, gelöscht, eingefügt oder etwas geholt hat
+  (ESC und Pfeile zählen nicht). Tasten, während der Status noch „wartet“
+  meldet, gehen meist an den Freigabe-Dialog; zählt der Status nach der
+  Antwort aber noch nach, landen sie schon im Feld. Deshalb lassen dort nur
+  typische Antworten den Auftrag unberührt (Enter, ESC, Tab, Leertaste,
+  Pfeile, Ziffern, y, n, Kürzel außer Cmd+V); jede andere Taste macht ihn zum
+  Text des Users. Restlücke: Wer nach der Freigabe sofort nur Ziffern, y oder n
+  tippt, bevor der Status nachzieht. Die Antwort trägt `withheldDelivery:
+  true`. War er vorgemerkt, verbucht die Warteschlange ihn als zugestellt
+  (`queue_delivered_by_submit`), sobald ein Enter ihn abschickt: `submit`, das
+  Enter des Users auf der Tastatur oder am Controller, auch nach Bearbeiten
+  (er ist ja raus). Sonst stellte die Warteschlange ihn beim nächsten
+  Turn-Ende ein zweites Mal zu. Ctrl+C lässt ihn vorgemerkt; er kommt später
+  neu. Ein per `dequeue` stornierter bleibt storniert. Ein Neustart ohne Chatverlust trägt den Vermerk
+  im Manifest weiter (`composerWithheldDelivery`, `composerWithheldQueueID`).
+  Hat jemand am Text weitergeschrieben, gehört er (auch) dem User; dann lehnt
+  `submit` ab, sagt „eingefügt“ und nennt die Wege, die gehen. Direkt
+  gesendeter Auftrag: Der User drückt im Chat Enter.
   Vorgemerkter Auftrag (die Warteschlange lässt ihn nach dem zurückgehaltenen
-  Enter vorgemerkt): entweder erst `dequeue`, dann Enter durch den User,
-  sonst kommt er beim nächsten Turn-Ende ein zweites Mal; oder
+  Enter vorgemerkt): Enter durch den User genügt, die Warteschlange verbucht
+  ihn dann als zugestellt (seit WM8-123, vorher erst `dequeue`); oder
   `interrupt <ref> --clear-input --force`, danach geht er von selbst neu raus.
   Leeren mit `--force` nur nach Rückfrage beim User: Kein chats-Befehl zeigt
   das Feld, und der User kann nach der Freigabe weitergetippt haben.

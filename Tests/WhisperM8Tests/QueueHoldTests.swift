@@ -125,6 +125,52 @@ final class QueueHoldTests: XCTestCase {
         XCTAssertNil(notices.notices[id])
     }
 
+    /// Kurzfassung für enge Stellen: der Grund bleibt, kürzer als der volle Text.
+    func testShortTextKeepsCountAndReason() {
+        for notice in [QueueHoldNotices.Notice(count: 1, reason: .textInField),
+                       .init(count: 3, reason: .textInField), .init(count: 1, reason: .viewOpen),
+                       .init(count: 3, reason: .viewOpen)] {
+            let short = QueueHoldNotices.shortText(for: notice)
+            XCTAssertTrue(short.hasPrefix("\(notice.count) "), short)
+            XCTAssertLessThan(short.count, QueueHoldNotices.text(for: notice).count, short)
+        }
+        XCTAssertNotEqual(QueueHoldNotices.shortText(for: .init(count: 1, reason: .textInField)),
+                          QueueHoldNotices.shortText(for: .init(count: 1, reason: .viewOpen)))
+        XCTAssertFalse(QueueHoldNotices.clickHint.isEmpty)
+    }
+
+    /// Ohne Notizkarte oben rechts; mit Karte rechts daneben, solange die
+    /// Kurzfassung Platz hat, sonst unter der Karte. Nie links über der Karte.
+    func testPlacementAvoidsTheNoteCard() {
+        let plain = QueueHoldPlacement.Insets(top: QueueHoldPlacement.topInset, leading: QueueHoldPlacement.leadingInset)
+        XCTAssertEqual(QueueHoldPlacement.insets(terminalWidth: 600, card: nil), plain)
+
+        let card = JarvisNoteCardFootprint(trailingEdge: 10 + 240, bottomEdge: 96)
+        let inset = JarvisNoteCardFootprint.terminalInset
+        let beside = QueueHoldPlacement.insets(terminalWidth: 472, card: card)
+        XCTAssertEqual(beside.top, QueueHoldPlacement.topInset)
+        XCTAssertEqual(beside.leading, 250 - inset + QueueHoldPlacement.cardGap)
+        XCTAssertGreaterThanOrEqual(472 - QueueHoldPlacement.trailingInset - beside.leading,
+                                    QueueHoldPlacement.minimumWidthBesideCard)
+
+        let below = QueueHoldPlacement.insets(terminalWidth: 262, card: card)
+        XCTAssertEqual(below.leading, QueueHoldPlacement.leadingInset)
+        XCTAssertEqual(below.top, 96 - inset + QueueHoldPlacement.cardGap)
+
+        // Karte reicht nicht ins Terminal (zugeklappt auf null): wie ohne Karte.
+        XCTAssertEqual(QueueHoldPlacement.insets(terminalWidth: 262, card: .init(trailingEdge: 10, bottomEdge: 0)), plain)
+    }
+
+    @MainActor
+    func testNoteCardFootprintsOnlyChangeOnRealChanges() {
+        let cards = JarvisNoteCardFootprints()
+        let id = UUID()
+        cards.set(.init(trailingEdge: 250, bottomEdge: 96), for: id)
+        XCTAssertEqual(cards.footprints[id], .init(trailingEdge: 250, bottomEdge: 96))
+        cards.set(nil, for: id)
+        XCTAssertNil(cards.footprints[id])
+    }
+
     private func tempFile() -> URL {
         FileManager.default.temporaryDirectory.appendingPathComponent("queue-hold-\(UUID().uuidString).json")
     }

@@ -316,6 +316,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             // Bei offener Limits-Karte geht R1 + L3 nicht (wie △ □ ○ dort).
             if key == .toggleTranscript, quickDrawSlots?.card != nil {
                 playHaptic(.rejected)
+            } else if let target = chatInputSessionID, unknownViewBlocksKey(key, to: target) {
+                // Agent-Liste, `/config`, Verlaufssuche (WM8-123): kein Enter,
+                // kein Leerzeichen in die Ansicht.
+                playHaptic(.rejected)
             } else if key == .enter, let state = Self.inputChatState(context),
                       ControllerBindingResolver.confirmRestsOnPromptField(state) {
                 confirmWhenSettled()
@@ -835,9 +839,11 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         switch item {
         case .continueWork:
             // Steht schon ein Entwurf im Feld, würde „Weiter“ daran angehängt
-            // und beides gesendet.
+            // und beides gesendet. Steht eine Ansicht offen (WM8-123), ginge
+            // „Weiter“ samt Enter in sie.
             guard let sessionID = inputTarget(of: setup),
-                  terminals.state(of: sessionID)?.draftSuspected != true else {
+                  terminals.state(of: sessionID)?.draftSuspected != true,
+                  !openViewBlocksSending(to: sessionID) else {
                 return playHaptic(.rejected)
             }
             terminals.sendText(ControllerMenuText.continueWork, submit: true, to: sessionID)
@@ -904,7 +910,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     /// `/model` gleich die Modellwahl). Nie an einen Entwurf hängen.
     func sendCommand(_ command: ControllerSlashCommand, setup: ControllerMenuSetup) {
         guard let sessionID = inputTarget(of: setup), let state = terminals.state(of: sessionID),
-              !state.draftSuspected else {
+              !state.draftSuspected, !openViewBlocksSending(to: sessionID) else {
             return playHaptic(.rejected)
         }
         terminals.sendText(command.text, submit: command.submits, to: sessionID)

@@ -212,7 +212,8 @@ final class InsertedTextQueueGateTests: XCTestCase {
         XCTAssertTrue(message.contains("zurückgehalten"), message)
         XCTAssertTrue(message.contains("chats interrupt <ref> --clear-input --force"), message)
         XCTAssertTrue(message.contains("nie ohne Rückfrage beim User"), message)
-        XCTAssertTrue(message.contains("chats dequeue"), message)   // Enter bei vorgemerktem Auftrag nur nach dequeue
+        // Enter des Users verbucht einen vorgemerkten Auftrag selbst (WM8-123).
+        XCTAssertTrue(message.contains("Enter durch den User genügt"), message)
 
         var typed = TerminalComposerDraftTracker()
         typed.recordTerminalKey(keyCode: 0, modifiers: [], status: .idle, restoresPromptOnInterrupt: true, now: Date())
