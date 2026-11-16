@@ -56,6 +56,11 @@ enum DictationChatState: Equatable {
     case usageLimited
     /// Kein laufendes Terminal.
     case notRunning
+    /// Eine Ansicht von Claude ist offen (Transkript, `/tasks`, Agent-Liste,
+    /// `/config`, Verlaufssuche …), abgelesen wie bei der Sendeprüfung
+    /// (`composerFieldForSendCheck`, WM8-123). Eingefügter Text landete im
+    /// Filter oder Suchfeld der Ansicht, ein Enter wählte dort etwas aus.
+    case viewOpen
 }
 
 /// Warum der Text nur in der Zwischenablage gelandet ist.
@@ -64,6 +69,8 @@ enum DictationClipboardReason: Equatable {
     case chatStarting
     case chatUsageLimited
     case chatNotRunning
+    /// Eine Ansicht von Claude ist offen (WM8-123).
+    case viewOpen
     case writeFailed
     /// Umgelenktes Diktat (WM8-113): Der Board-Chat steht beim Ausliefern in
     /// keiner Spalte mehr (Tickets zu, zugeklappt, anderes Fenster).
@@ -104,6 +111,7 @@ enum DictationDeliveryRouter {
             case .awaitingInput: return .clipboardOnly(.decisionPending)
             case .starting: return .clipboardOnly(.chatStarting)
             case .usageLimited: return .clipboardOnly(.chatUsageLimited)
+            case .viewOpen: return .clipboardOnly(.viewOpen)
             case .notRunning, .noBoardChat: return .clipboardOnly(.chatNotRunning)
             }
         case .frontApp:
@@ -131,6 +139,10 @@ enum DictationDeliveryRouter {
                 return .clipboardOnly(.chatUsageLimited)
             case .notRunning:
                 return .clipboardOnly(.chatNotRunning)
+            case .viewOpen:
+                // Mit wie ohne Senden: Der Text landete im Filter der Ansicht,
+                // ein Enter wählte dort etwas aus (in `/config` eine Einstellung).
+                return .clipboardOnly(.viewOpen)
             }
         }
     }

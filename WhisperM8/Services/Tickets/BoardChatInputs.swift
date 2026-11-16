@@ -70,6 +70,8 @@ enum BoardChatInputRules {
         case starting
         case usageLimited
         case notRunning
+        /// Eine Ansicht von Claude ist offen (WM8-123).
+        case viewOpen
     }
 
     static func refusal(state: DictationChatState, approvalPending: Bool) -> Refusal? {
@@ -80,6 +82,7 @@ enum BoardChatInputRules {
         case .starting: return .starting
         case .usageLimited: return .usageLimited
         case .notRunning: return .notRunning
+        case .viewOpen: return .viewOpen
         }
     }
 
@@ -99,6 +102,7 @@ enum BoardChatInputRules {
         case .starting: return String(localized: "\(chatName) is still starting. Nothing was added.")
         case .usageLimited: return String(localized: "\(chatName)'s account has reached its usage limit. Nothing was added.")
         case .notRunning: return String(localized: "\(chatName) isn't running. Nothing was added.")
+        case .viewOpen: return String(localized: "A Claude view is open in \(chatName) (transcript, /tasks, agent list, /config …). Close it first. Nothing was added.")
         }
     }
 }

@@ -19054,6 +19054,16 @@
         }
       }
     },
+    "A Claude view is open in the chat (transcript, /tasks, agent list, /config …), so the dictation wasn't added. Close it first. Your text is on the clipboard.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Chat ist eine Ansicht von Claude offen (Transkript, /tasks, Agent-Liste, /config …), deshalb wurde das Diktat nicht eingefügt. Erst schließen. Dein Text liegt in der Zwischenablage."
+          }
+        }
+      }
+    },
     "The chat starts with the default Claude model. Details in Settings > GPT Backend.": {
       "localizations": {
         "de": {
@@ -24830,6 +24840,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ läuft nicht. Nichts eingefügt."
+          }
+        }
+      }
+    },
+    "A Claude view is open in %@ (transcript, /tasks, agent list, /config …). Close it first. Nothing was added.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In %@ ist eine Ansicht von Claude offen (Transkript, /tasks, Agent-Liste, /config …). Erst schließen. Nichts eingefügt."
           }
         }
       }

@@ -389,6 +389,18 @@ final class RecordingCoordinatorDeliveryTests: XCTestCase {
         assertClipboardOnly(text: "Noch zu früh", reason: .chatStarting)
     }
 
+    /// Offene Ansicht von Claude (WM8-123): nichts ins Terminal, auch nicht
+    /// mit Senden; die Pille bietet kein ⌘V an (es landete im Filter der Ansicht).
+    func testOpenViewKeepsTextOnClipboardWithNotice() async throws {
+        chatWriter.chatState = .viewOpen
+        _ = try await deliverToChat("Bitte noch prüfen", submit: true)
+
+        XCTAssertTrue(chatWriter.writes.isEmpty)
+        assertClipboardOnly(text: "Bitte noch prüfen", reason: .viewOpen)
+        XCTAssertEqual(RecordingCoordinator.clipboardOnlyPillHint(for: .viewOpen),
+                       RecordingCoordinator.clipboardOnlyPillHint(for: .decisionPending))
+    }
+
     func testStoppedChatKeepsTextOnClipboardWithNotice() async throws {
         chatWriter.chatState = .notRunning
         _ = try await deliverToChat("Niemand da")
@@ -424,7 +436,8 @@ final class RecordingCoordinatorDeliveryTests: XCTestCase {
     }
 
     func testEveryClipboardReasonHasItsOwnMessage() {
-        let reasons: [DictationClipboardReason] = [.decisionPending, .chatStarting, .chatUsageLimited, .chatNotRunning, .writeFailed]
+        let reasons: [DictationClipboardReason] = [.decisionPending, .chatStarting, .chatUsageLimited, .chatNotRunning,
+                                                   .viewOpen, .writeFailed, .boardChatHidden]
         let messages = Set(reasons.map(RecordingCoordinator.clipboardOnlyMessage(for:)))
         XCTAssertEqual(messages.count, reasons.count)
     }

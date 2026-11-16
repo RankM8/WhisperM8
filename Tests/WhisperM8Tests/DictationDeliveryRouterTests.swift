@@ -67,6 +67,18 @@ final class DictationDeliveryRouterTests: XCTestCase {
         XCTAssertEqual(decide(chat(submit: true), state: .usageLimited), .clipboardOnly(.chatUsageLimited))
     }
 
+    /// Offene Ansicht von Claude (WM8-123): Text landete im Filter der
+    /// Ansicht, ein Enter wählte dort etwas aus. Mit wie ohne Senden nur
+    /// Zwischenablage, auch beim umgelenkten Diktat in den Board-Chat.
+    func testOpenViewKeepsTextOnClipboard() {
+        XCTAssertEqual(decide(chat(), state: .viewOpen), .clipboardOnly(.viewOpen))
+        XCTAssertEqual(decide(chat(submit: true), state: .viewOpen), .clipboardOnly(.viewOpen))
+        let board = DictationDelivery(target: .boardChat(sessionID: sessionID), submit: false)
+        XCTAssertEqual(decide(board, state: .viewOpen), .clipboardOnly(.viewOpen))
+        XCTAssertEqual(decide(board, state: .ready), .writeToChat(sessionID: sessionID, submit: false),
+                       "ohne offene Ansicht geht es wie bisher ins Feld")
+    }
+
     func testStoppedChatKeepsTextOnClipboard() {
         XCTAssertEqual(decide(chat(), state: .notRunning), .clipboardOnly(.chatNotRunning))
     }

@@ -94,13 +94,14 @@ final class BoardChatInputsTests: XCTestCase {
     func testNothingGoesIntoAnOpenQuestionOrApproval() {
         inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
         for (chatState, pending) in [(DictationChatState.awaitingInput, false), (.questionAcceptsText, false), (.ready, true),
-                                     (.starting, false), (.usageLimited, false), (.notRunning, false)] {
+                                     (.starting, false), (.usageLimited, false), (.notRunning, false),
+                                     (.viewOpen, false)] {
             state = chatState
             approval = pending
             XCTAssertFalse(inputs.handOff(in: window), "\(chatState) approval=\(pending)")
         }
         XCTAssertTrue(inserted.isEmpty)
-        XCTAssertEqual(beeps, 6)
+        XCTAssertEqual(beeps, 7)
         XCTAssertNotNil(inputs.notices[window])
     }
 
@@ -108,6 +109,21 @@ final class BoardChatInputsTests: XCTestCase {
         XCTAssertFalse(inputs.handOff(in: window))
         XCTAssertTrue(inserted.isEmpty)
         XCTAssertEqual(beeps, 1)
+    }
+
+    /// „→ Jarvis“ bei offener Ansicht von Claude (WM8-123): sichtbarer
+    /// Hinweis, der die Ansicht nennt; nach dem Schließen geht es wieder.
+    func testHandOffIntoAnOpenViewIsRefusedVisibly() {
+        inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
+        state = .viewOpen
+        XCTAssertFalse(inputs.handOff(in: window))
+        XCTAssertTrue(inserted.isEmpty)
+        XCTAssertEqual(inputs.notices[window]?.text, BoardChatInputRules.message(.viewOpen, chatName: "Jarvis"))
+        XCTAssertNotEqual(BoardChatInputRules.message(.viewOpen, chatName: "Jarvis"),
+                          BoardChatInputRules.message(.awaitingInput, chatName: "Jarvis"))
+        state = .ready
+        XCTAssertTrue(inputs.handOff(in: window), "Ansicht zu: wieder ins Feld")
+        XCTAssertEqual(inserted.count, 1)
     }
 
     func testRefusalMessageNamesTheChat() {
@@ -338,6 +354,17 @@ final class BoardChatInputsTests: XCTestCase {
         XCTAssertTrue(inserted.isEmpty)
         XCTAssertNil(inputs.triageDecision(for: "WM8-81", in: window))
         XCTAssertEqual(beeps, 2)
+    }
+
+    /// Triage-Knöpfe bei offener Ansicht von Claude (WM8-123): keine Zeile,
+    /// keine Marke, sichtbarer Hinweis.
+    func testNoDecisionIntoAnOpenView() {
+        inputs.register(windowID: window, sessionID: jarvis, name: "Jarvis")
+        state = .viewOpen
+        XCTAssertFalse(decideLater(.accept, in: window))
+        XCTAssertTrue(inserted.isEmpty)
+        XCTAssertNil(inputs.triageDecision(for: "WM8-81", in: window))
+        XCTAssertEqual(inputs.notices[window]?.text, BoardChatInputRules.message(.viewOpen, chatName: "Jarvis"))
     }
 
     // MARK: Texte
