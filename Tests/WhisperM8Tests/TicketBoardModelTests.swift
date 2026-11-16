@@ -154,26 +154,6 @@ final class TicketBoardModelTests: XCTestCase {
         XCTAssertEqual(TicketBoardFilter(agent: .withAgent, project: "").apply(to: all).count, 0)
     }
 
-    func testCountsFollowTheOtherGroup() {
-        let all = entries()
-        let open = TicketFilterCounts.make(entries: all, filter: .all)
-        XCTAssertEqual(open.all, 5)
-        XCTAssertEqual(open.withAgent, 1)
-        XCTAssertEqual(open.withoutAgent, 2)
-        XCTAssertEqual(open.unassigned, 2)
-        XCTAssertEqual(open.people.map(\.person.name), ["Giuliano Costa", "Xeno Suter"])
-        XCTAssertEqual(open.people.map(\.count), [2, 1])
-
-        // Person gewählt: Die Agent-Zahlen gelten nur noch für ihre Tickets.
-        let mine = TicketFilterCounts.make(entries: all, filter: TicketBoardFilter(person: .person(id: "u1")))
-        XCTAssertEqual(mine.all, 2)
-        XCTAssertEqual(mine.withAgent, 1)
-        XCTAssertEqual(mine.withoutAgent, 0)
-        // Die Personen-Zahlen bleiben dabei vollständig, sonst ließe sich nicht wechseln.
-        XCTAssertEqual(mine.unassigned, 2)
-        XCTAssertEqual(mine.people.map(\.count), [2, 1])
-    }
-
     // MARK: Spalten
 
     func testColumnsGroupByKindAndSort() {

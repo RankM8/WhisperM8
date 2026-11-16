@@ -25733,6 +25733,16 @@
           }
         }
       }
+    },
+    "View not available. It may have been deleted in Linear.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ansicht nicht verfügbar. Vielleicht wurde sie in Linear gelöscht."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

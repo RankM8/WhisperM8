@@ -21,8 +21,11 @@ final class TicketBoardStore {
     private(set) var catalog: TicketViewCatalog?
     /// Tickets je Ansicht, zuletzt geholt. Nur die gezeigte wird im Takt geholt.
     private(set) var viewTickets: [String: TicketViewTickets] = [:]
-    /// Fehler beim Holen der Ansichten; das Board der Team-Tickets bleibt davon unberührt.
-    private(set) var viewError: TicketSourceError?
+    /// Fehler beim Holen der Reiter. Getrennt von den Fehlern je Ansicht: Ein
+    /// gelungener Abruf des einen löscht den Fehler des anderen nicht.
+    private(set) var catalogError: TicketSourceError?
+    /// Fehler beim Holen der Tickets je Ansicht; das Board der Team-Tickets bleibt davon unberührt.
+    private(set) var viewErrors: [String: TicketSourceError] = [:]
     /// Gezeigte Ansicht; `nil` = Standard des Katalogs.
     var viewID: String? {
         didSet {
@@ -187,14 +190,14 @@ final class TicketBoardStore {
             guard self.team == team else { return }
             catalog = fresh
             catalogFetchedAt = now()
-            viewError = nil
+            catalogError = nil
         } catch is CancellationError {
             return
         } catch let error as TicketSourceError {
             if error == .rateLimited { pausedUntil = now().addingTimeInterval(Self.rateLimitPause) }
-            viewError = error
+            catalogError = error
         } catch {
-            viewError = .network("Netzfehler")
+            catalogError = .network("Netzfehler")
         }
         onChange?()
     }
@@ -209,16 +212,31 @@ final class TicketBoardStore {
         do {
             let tickets = try await PerfBudgets.ticketsFetch.withInterval { try await source.tickets(inView: viewID) }
             viewTickets[viewID] = TicketViewTickets(tickets: tickets, fetchedAt: now())
-            viewError = nil
+            viewErrors[viewID] = nil
         } catch is CancellationError {
             return
         } catch let error as TicketSourceError {
             if error == .rateLimited { pausedUntil = now().addingTimeInterval(Self.rateLimitPause) }
-            viewError = error
+            // In Linear gelöscht (oder nicht mehr sichtbar): Beim nächsten Takt
+            // die Reiter neu holen; fehlt sie dort, springt das Board von selbst
+            // auf den Standard (`effectiveViewID`).
+            if case .notFound = error { catalogFetchedAt = nil }
+            viewErrors[viewID] = error
         } catch {
-            viewError = .network("Netzfehler")
+            viewErrors[viewID] = .network("Netzfehler")
         }
         onChange?()
+    }
+
+    /// Fehler, der für die gezeigte Ansicht gilt: zuerst ihr eigener, sonst der der Reiter.
+    var viewError: TicketSourceError? {
+        effectiveViewID.flatMap { viewErrors[$0] } ?? catalogError
+    }
+
+    /// Die Ansicht hat keine gespeicherten Tickets und ihr Abruf ist gescheitert:
+    /// „Ansicht nicht verfügbar“ statt „Ansicht lädt …“.
+    func isUnavailable(_ viewID: String) -> Bool {
+        viewTickets[viewID] == nil && viewErrors[viewID] != nil
     }
 
     // MARK: Kommentare

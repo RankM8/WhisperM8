@@ -73,6 +73,9 @@ struct TicketBoardModel: Equatable {
     /// Ansicht aus Linear, deren Tickets `entries` sind (WM8-125); `nil` = alle
     /// offenen Tickets des Teams, nach Status gruppiert.
     var view: TicketView? = nil
+    /// Wie viele offene Tickets des ganzen Teams auf den Nutzer warten, gleich
+    /// welche Ansicht gezeigt wird (Zahl in der Board-Wahl des Controllers).
+    var teamWaitingCount = 0
 
     /// Dasselbe Modell ohne den Zustand der Chats. Die Ansicht führt den
     /// Zustand getrennt: Ein Statuswechsel soll das Modell nicht „ändern“ und
@@ -170,13 +173,16 @@ enum TicketBoardBuilder {
         let loose = candidates.filter { !isSupervisor($0) }.map {
             TicketLooseChat(chat: $0, earlier: (earlier[$0.id] ?? []).sorted(by: keyOrder))
         }
-        return TicketBoardModel(
+        var model = TicketBoardModel(
             entries: entries,
             looseChats: loose.sorted { $0.chat.title.localizedStandardCompare($1.chat.title) == .orderedAscending },
             supervisors: supervisors,
             statuses: snapshot.statuses,
             rule: rule
         )
+        // Erledigte stehen hier nicht mehr (siehe oben); gezählt wird über das ganze Team.
+        model.teamWaitingCount = entries.filter(\.waitsForMe).count
+        return model
     }
 
     static func isSupervisor(_ chat: TicketChat) -> Bool {
@@ -212,18 +218,18 @@ enum TicketPersonFilter: Hashable {
     case person(id: String)
 }
 
+/// Filter der Kommandozeile (`tickets list --no-agent`, `--person`, `--project`). Das Board
+/// filtert seit WM8-125 nicht mehr selbst, sondern zeigt Ansichten aus Linear.
 struct TicketBoardFilter: Equatable {
     var agent: TicketAgentFilter = .all
     var person: TicketPersonFilter = .all
     /// Name des Vorhabens; `""` steht für „ohne Vorhaben“.
     var project: String?
-    /// Nur, was nach der Regel des Teams auf den Nutzer wartet.
-    var waitingForMe = false
 
     static let all = TicketBoardFilter()
 
     func matches(_ entry: TicketBoardEntry) -> Bool {
-        (!waitingForMe || entry.waitsForMe) && matchesProject(entry) && matchesPerson(entry) && matchesAgent(entry)
+        matchesProject(entry) && matchesPerson(entry) && matchesAgent(entry)
     }
 
     func apply(to entries: [TicketBoardEntry]) -> [TicketBoardEntry] {
@@ -251,60 +257,6 @@ struct TicketBoardFilter: Equatable {
             return !entry.hasAgent && entry.ticket.status.kind != .backlog && !entry.isHandedOver
                 && entry.meaning != .done && entry.meaning != .waitsForMe
         }
-    }
-}
-
-/// Zahlen für die Filter-Knöpfe. Jede Gruppe zählt innerhalb der übrigen
-/// Auswahl, damit die Zahl am Knopf stimmt, wenn man ihn drückt.
-struct TicketFilterCounts: Equatable {
-    var all: Int
-    var withAgent: Int
-    var withoutAgent: Int
-    var unassigned: Int
-    /// Wartet auf den Nutzer, innerhalb der übrigen Auswahl.
-    var waitingForMe: Int = 0
-    /// Personen mit Anzahl, alphabetisch.
-    var people: [(person: TicketPerson, count: Int)]
-
-    static func == (lhs: TicketFilterCounts, rhs: TicketFilterCounts) -> Bool {
-        lhs.all == rhs.all && lhs.withAgent == rhs.withAgent && lhs.withoutAgent == rhs.withoutAgent
-            && lhs.unassigned == rhs.unassigned && lhs.waitingForMe == rhs.waitingForMe
-            && lhs.people.map(\.person) == rhs.people.map(\.person)
-            && lhs.people.map(\.count) == rhs.people.map(\.count)
-    }
-
-    static func make(entries: [TicketBoardEntry], filter: TicketBoardFilter) -> TicketFilterCounts {
-        var agentBase = filter
-        agentBase.agent = .all
-        let forAgents = agentBase.apply(to: entries)
-
-        var personBase = filter
-        personBase.person = .all
-        let forPeople = personBase.apply(to: entries)
-
-        var byPerson: [TicketPerson: Int] = [:]
-        for entry in forPeople {
-            if let person = entry.ticket.assignee { byPerson[person, default: 0] += 1 }
-        }
-        // Die gewählte Person bleibt als Knopf stehen, auch mit null Treffern.
-        // Sonst wäre der aktive Filter unsichtbar und das Board ohne Erklärung leer.
-        if case .person(let id) = filter.person, !byPerson.keys.contains(where: { $0.id == id }),
-           let chosen = entries.lazy.compactMap(\.ticket.assignee).first(where: { $0.id == id }) {
-            byPerson[chosen] = 0
-        }
-        var without = agentBase
-        without.agent = .withoutAgent
-        var waitingBase = filter
-        waitingBase.waitingForMe = false
-        return TicketFilterCounts(
-            all: forAgents.count,
-            withAgent: forAgents.filter(\.hasAgent).count,
-            withoutAgent: without.apply(to: entries).count,
-            unassigned: forPeople.filter { $0.ticket.assignee == nil }.count,
-            waitingForMe: waitingBase.apply(to: entries).filter(\.waitsForMe).count,
-            people: byPerson.map { (person: $0.key, count: $0.value) }
-                .sorted { $0.person.name.localizedStandardCompare($1.person.name) == .orderedAscending }
-        )
     }
 }
 

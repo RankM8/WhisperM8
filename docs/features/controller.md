@@ -408,7 +408,7 @@ Tastatur-Kürzel im Board kommen mit Paket 3. Alles nur bei eingeschalteter Tick
 
 - **Hin:** L2 halten, Reiter **„Tickets“** rechts von „Workspaces & Projekte“ (◀ ▶ gehen jetzt Schritt für
   Schritt, ohne Umlauf). Je eingerichtetem Team mit Projekt eine Zeile: Farbe, Kürzel, Projekt, rechts die
-  Zahl „wartet auf dich“ (nur, wenn das Fenster den Stand dieses Boards schon geladen hat, sonst „–“;
+  Zahl „wartet auf dich“ über das ganze Team, gleich welche Ansicht gezeigt wird (nur, wenn das Fenster den Stand dieses Boards schon geladen hat, sonst „–“;
   dafür wird nichts abgerufen). Das Team des aktuellen Projekts steht oben, trägt „hier“ und ist markiert: Außerhalb
   des Boards ist es ein Ziel, L2 halten, ▶ ▶, loslassen öffnet es. Im Board heißt die Zeile „jetzt“ und
   Loslassen ohne Bewegung tut nichts; das zuletzt gezeigte Board trägt „vorher“. Hat das Projekt kein

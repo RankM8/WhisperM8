@@ -138,6 +138,7 @@ final class TicketBoardStoreTests: XCTestCase {
         XCTAssertEqual(store.snapshot?.tickets.map(\.key), ["WM8-3"])
         XCTAssertNil(store.lastError)
         XCTAssertEqual(store.viewError, .unauthorized)
+        XCTAssertEqual(store.catalogError, .unauthorized)
         XCTAssertNil(store.effectiveViewID, "ohne Reiter zeigt das Board alle offenen Tickets")
         store.deactivate()
     }

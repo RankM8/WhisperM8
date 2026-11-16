@@ -68,7 +68,7 @@ final class TicketTeamRuleTests: XCTestCase {
     }
 
     func testLanesFollowRealStatusMostAdvancedFirst() {
-        let lanes = TicketBoardPresentation.make(model: model(), filter: .all).lanes
+        let lanes = TicketBoardPresentation.make(model: model()).lanes
         XCTAssertEqual(lanes.map(\.status.name), ["Merge-bereit", "In Progress", "Todo", "Backlog"],
                        "wartet auf mich zuerst, dann begonnen, als Nächstes, Backlog; erledigt nie")
         XCTAssertEqual(lanes.map(\.meaning), [.waitsForMe, .inProgress, nil, nil])
@@ -76,19 +76,14 @@ final class TicketTeamRuleTests: XCTestCase {
         XCTAssertEqual(lanes.map(\.waitingCount), [1, 0, 1, 0])
     }
 
-    func testFilterEmptiesLanesInsteadOfRemovingThem() {
-        var filter = TicketBoardFilter()
-        filter.waitingForMe = true
-        let presentation = TicketBoardPresentation.make(model: model(), filter: filter)
+    /// Seit WM8-125 filtert das Board nicht mehr selbst: Keine Spalte klappt ein,
+    /// und die Zahl „wartet“ gilt für das ganze Team.
+    func testBoardNoLongerFiltersAndCountsTheWholeTeam() {
+        let presentation = TicketBoardPresentation.make(model: model())
         XCTAssertEqual(presentation.lanes.count, 4)
-        XCTAssertEqual(presentation.lanes.map(\.isFolded), [false, true, false, true], "vom Filter geleert: schmal, an ihrem Platz")
-        XCTAssertEqual(TicketBoardPresentation.make(model: model(), filter: .all).lanes.map(\.isFolded), [false, false, false, false])
+        XCTAssertEqual(presentation.lanes.map(\.isFolded), [false, false, false, false])
         XCTAssertFalse(TicketBoardLanes.isFolded(entries: [], filterActive: false), "ohne Filter bleibt eine leere Spalte breit")
-        XCTAssertTrue(TicketBoardLanes.isFolded(entries: [], filterActive: true))
-        XCTAssertEqual(presentation.lanes.flatMap { $0.entries.map(\.ticket.key) }, ["WM8-2", "WM8-3"])
-        XCTAssertEqual(presentation.counts.waitingForMe, 2)
-        XCTAssertEqual(TicketBoardPresentation.make(model: model(), filter: .all).counts.waitingForMe, 2,
-                       "die Zahl am Knopf ist dieselbe, ob er gedrückt ist oder nicht")
+        XCTAssertEqual(presentation.teamWaitingCount, 2)
     }
 
     func testWaitingLanesFirstAndDoneBehindWork() {
@@ -125,16 +120,17 @@ final class TicketTeamRuleTests: XCTestCase {
         snapshot.tickets[0].status = TicketStatus(id: "neu", name: "Beim Kunden", kind: .started, position: 2.7)
         snapshot.statuses = TicketFixtures.statuses
         let model = TicketBoardBuilder.build(snapshot: snapshot, chats: [], projectPath: nil)
-        XCTAssertEqual(TicketBoardPresentation.make(model: model, filter: .all).lanes.map(\.status.name), ["Beim Kunden"])
+        XCTAssertEqual(TicketBoardPresentation.make(model: model).lanes.map(\.status.name), ["Beim Kunden"])
     }
 
     func testDoneAndWaitingStatusesDoNotCountAsMissingAgent() {
         var filter = TicketBoardFilter()
         filter.agent = .withoutAgent
-        let keys = TicketBoardPresentation.make(model: model(), filter: filter).lanes.flatMap { $0.entries.map(\.ticket.key) }
+        // Filter der Kommandozeile (`tickets list --no-agent`).
+        let keys = Set(filter.apply(to: model().entries).map(\.ticket.key))
         XCTAssertEqual(keys, ["WM8-4", "WM8-3"], "Merge-bereit wartet auf mich, nicht auf einen Chat")
-        let plain = TicketBoardPresentation.make(model: model(rule: TicketTeamRule()), filter: filter)
-        XCTAssertEqual(plain.lanes.flatMap { $0.entries.map(\.ticket.key) }, ["WM8-2", "WM8-4", "WM8-3"])
+        let plain = Set(filter.apply(to: model(rule: TicketTeamRule()).entries).map(\.ticket.key))
+        XCTAssertEqual(plain, ["WM8-2", "WM8-4", "WM8-3"])
     }
 
     // MARK: Kommandozeile

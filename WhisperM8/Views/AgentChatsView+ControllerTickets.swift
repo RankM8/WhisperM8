@@ -252,7 +252,7 @@ extension AgentChatsView {
         let loadedTeam = directory.team(of: last)
         let board = TicketBoardControllers.shared.hasController(for: windowID)
             ? TicketBoardControllers.shared.controller(for: windowID) : nil
-        let waitingHere = board?.phase == .ready ? board?.viewModel.presentation.counts.waitingForMe : nil
+        let waitingHere = board?.phase == .ready ? board?.viewModel.presentation.teamWaitingCount : nil
         return ControllerTicketBoards.make(
             teams: directory.resolved.teams, hereProjectID: here?.id, hereProjectName: here?.name,
             hereTeam: directory.team(of: here?.id), inTickets: isTicketsModeActive, lastProjectID: last,

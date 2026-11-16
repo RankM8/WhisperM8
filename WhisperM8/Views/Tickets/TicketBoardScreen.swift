@@ -256,8 +256,12 @@ final class TicketBoardController {
         if load.fetchedAt != snapshot.fetchedAt { load.fetchedAt = snapshot.fetchedAt }
         if hasModel, phase != .ready { phase = .ready }
         let viewID = store.effectiveViewID
+        // Ohne Stand und mit Fehler (etwa in Linear gelöscht) heißt es „nicht
+        // verfügbar“, nicht „lädt“; beim nächsten Takt kommen die Reiter neu.
+        let unavailable = viewID.map(store.isUnavailable) ?? false
         viewModel.setViews(store.catalog ?? .empty, active: viewID,
-                           isLoading: viewID != nil && viewID.flatMap { store.viewTickets[$0] } == nil)
+                           isLoading: !unavailable && viewID != nil && viewID.flatMap { store.viewTickets[$0] } == nil,
+                           isUnavailable: unavailable)
         match(snapshot, projectPath: active.projectPath, rule: active.rule)
     }
 

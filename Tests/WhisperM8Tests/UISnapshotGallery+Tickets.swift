@@ -222,6 +222,15 @@ extension UISnapshotGallery {
                 view { $0.toggleGroup("status:backlog"); $0.setListStop(TicketListStop.group("status:todo")) }
             },
             Fixture(name: "tickets-liste-auswahl", size: size) { view { $0.setListStop("WM8-81") } },
+            // Folgepaket WM8-125: gezeigte Ansicht in Linear gelöscht, kein gespeicherter Stand.
+            Fixture(name: "tickets-liste-nicht-verfuegbar", size: CGSize(width: 1100, height: 420)) {
+                view({ model in
+                    var gone = board
+                    gone.entries = []
+                    model.update(gone)
+                    model.setViews(catalog, active: "next", isLoading: false, isUnavailable: true)
+                }, problem: nil)
+            },
             Fixture(name: "tickets-board", size: size) { view { $0.mode = .board } },
             Fixture(name: "tickets-chats-ohne-ticket-offen", size: CGSize(width: 900, height: 120)) {
                 AnyView(TicketLooseChatsBar(chats: board.looseChats, supervisors: board.supervisors, source: source, openChat: { _ in },
