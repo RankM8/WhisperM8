@@ -282,11 +282,10 @@ struct BoardChatCollapsedRail<StatusDot: View>: View {
     }
 }
 
-/// Breite, Rand und Ziehen der Spalte. Eigener Modifier, damit nur er den
-/// Zustand der Triage beobachtet: Blättern mit J/K wertet so weder das
-/// Fenster noch das Terminal neu aus, nur diese Breitenrechnung.
+/// Breite, Rand und Ziehen der Spalte. Hängt nicht am Zustand der Triage:
+/// Board und Triage zeigen die Spalte gleich breit (WM8-124), Blättern mit
+/// J/K wertet weder diese Rechnung noch das Terminal neu aus.
 struct BoardChatColumnFrame: ViewModifier {
-    let isTriage: () -> Bool
     let storedWidth: Double?
     let isCollapsed: Bool
     let available: Double
@@ -298,7 +297,7 @@ struct BoardChatColumnFrame: ViewModifier {
     func body(content: Content) -> some View {
         let width = isCollapsed
             ? BoardChatRules.collapsedWidth
-            : BoardChatRules.width(stored: storedWidth, isTriage: isTriage(), available: available)
+            : BoardChatRules.width(stored: storedWidth, available: available)
         content
             .frame(width: width)
             .frame(maxHeight: .infinity)
@@ -310,15 +309,20 @@ struct BoardChatColumnFrame: ViewModifier {
             }
     }
 
-    /// Ziehen am linken Rand. Während des Ziehens steht nur eine Linie an der
-    /// neuen Kante; die Spalte (und damit das Terminal) ändert ihre Breite
-    /// erst beim Loslassen. Sonst bekäme die TUI bei jedem Mausschritt eine
-    /// neue Fenstergröße und zeichnete alles neu.
+    /// Ziehen am linken Rand. Der Griff (ein senkrechter Strich mitten auf der
+    /// Kante) steht immer da, nicht erst beim Überfahren. Während des Ziehens
+    /// steht nur eine Linie an der neuen Kante; die Spalte (und damit das
+    /// Terminal) ändert ihre Breite erst beim Loslassen. Sonst bekäme die TUI
+    /// bei jedem Mausschritt eine neue Fenstergröße und zeichnete alles neu.
     private func resizeHandle(width: Double) -> some View {
         let preview = dragStart.map { BoardChatRules.draggedWidth(from: $0, translation: dragTranslation, available: available) }
         return Color.clear
-            .frame(width: 7)
+            .frame(width: 9)
             .contentShape(Rectangle())
+            .overlay {
+                BoardChatResizeGrip(isActive: preview != nil)
+                    .allowsHitTesting(false)
+            }
             .overlay(alignment: .leading) {
                 if let preview {
                     Rectangle()
@@ -344,5 +348,24 @@ struct BoardChatColumnFrame: ViewModifier {
             )
             .help(String(localized: "Drag to resize the board chat"))
             .accessibilityHidden(true)
+    }
+}
+
+/// Der sichtbare Griff auf der linken Kante: ein Strich mit zwei Kerben,
+/// in beiden Erscheinungsbildern deutlich vom Rand abgesetzt.
+struct BoardChatResizeGrip: View {
+    var isActive = false
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 2, style: .continuous)
+            .fill(isActive ? AgentTheme.accent : AgentTheme.textTertiary)
+            .frame(width: 4, height: 36)
+            .overlay {
+                VStack(spacing: 3) {
+                    ForEach(0..<3, id: \.self) { _ in
+                        Rectangle().fill(AgentTheme.background.opacity(0.7)).frame(width: 2, height: 1)
+                    }
+                }
+            }
     }
 }

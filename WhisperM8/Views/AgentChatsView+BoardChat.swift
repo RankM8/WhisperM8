@@ -83,7 +83,6 @@ extension AgentChatsView {
                 }
             }
             .modifier(BoardChatColumnFrame(
-                isTriage: { [windowID] in TicketBoardControllers.shared.controller(for: windowID).viewModel.triage != nil },
                 storedWidth: preferences.width,
                 isCollapsed: preferences.isCollapsed == true,
                 available: available,

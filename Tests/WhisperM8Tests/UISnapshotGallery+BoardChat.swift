@@ -87,7 +87,7 @@ extension UISnapshotGallery {
                         }
                     }
                 }
-                .modifier(BoardChatColumnFrame(isTriage: { triage }, storedWidth: width, isCollapsed: collapsed,
+                .modifier(BoardChatColumnFrame(storedWidth: width, isCollapsed: collapsed,
                                                available: available, setWidth: { _ in }))
             }
             .background(AgentTheme.background))
@@ -100,9 +100,21 @@ extension UISnapshotGallery {
         let size = CGSize(width: 1500, height: 860)
         return [
             Fixture(name: "tickets-board-chat", size: size) { screen("tickets-board", state: jarvis) },
-            // Triage: vier Spalten, der Board-Chat wird schmaler (330 pt).
+            // Triage mit Board-Chat ab Werk (40 %): mittleres Fenster, Eigenschaften als Zeile im Kopf.
             Fixture(name: "tickets-board-chat-triage", size: size) {
                 screen("tickets-triage", state: jarvis, triage: true)
+            },
+            // Breites Fenster: Liste, Ticket und Eigenschaften-Spalte neben dem Board-Chat.
+            Fixture(name: "tickets-board-chat-triage-breit", size: CGSize(width: 1900, height: 900)) {
+                screen("tickets-triage", state: jarvis, triage: true)
+            },
+            // Schmales Fenster: nur das Ticket, Eigenschaften als Zeile.
+            Fixture(name: "tickets-board-chat-triage-schmal", size: CGSize(width: 1000, height: 760)) {
+                screen("tickets-triage", state: jarvis, triage: true)
+            },
+            // Weit gezogen: Das Board behält 420 pt.
+            Fixture(name: "tickets-board-chat-weit-gezogen", size: size) {
+                screen("tickets-board", state: jarvis, width: 1400)
             },
             Fixture(name: "tickets-board-chat-fenster-2", size: size) {
                 screen("tickets-board", state: BoardChatColumnState(title: "Jarvis: Supervisor WhisperM8", isAutomatic: true,

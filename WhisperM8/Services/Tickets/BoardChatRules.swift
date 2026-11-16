@@ -137,40 +137,48 @@ enum BoardChatRules {
 
     // MARK: Breite
 
-    static let defaultWidth: Double = 380
+    /// Ab Werk nimmt die Spalte diesen Anteil des Bereichs (Board plus Spalte),
+    /// solange nichts gezogen wurde (WM8-124, Giuliano 16.11.2026: 40 %).
+    static let defaultFraction: Double = 0.4
+    /// Vorgabe, solange die Breite des Bereichs noch nicht gemessen ist.
+    static let fallbackWidth: Double = 380
     static let minimumWidth: Double = 280
-    static let maximumWidth: Double = 720
-    /// In der Triage stehen schon drei Spalten (Liste, Ticket, Eigenschaften);
-    /// mit dem Board-Chat sind es vier. Die Spalte wird dort schmaler.
-    static let triageMaximumWidth: Double = 330
-    /// So viel Platz behält das Board mindestens neben der Spalte.
+    /// So viel Platz behält das Board mindestens neben der Spalte. Eine andere
+    /// Obergrenze gibt es nicht, auch nicht in der Triage: Dort rücken die
+    /// Eigenschaften unter den Titel, wenn es eng wird (`TicketTriageLayout`).
     static let boardMinimumWidth: Double = 420
     /// Breite der zugeklappten Spalte.
     static let collapsedWidth: Double = 34
 
     /// Breite, mit der die Spalte gezeigt wird.
     /// - Parameters:
-    ///   - stored: vom Nutzer gezogene Breite, `nil` = Vorgabe.
+    ///   - stored: vom Nutzer gezogene Breite, `nil` = Vorgabe (40 % von `available`).
     ///   - available: Breite des ganzen Bereichs (Board plus Spalte).
-    static func width(stored: Double?, isTriage: Bool, available: Double) -> Double {
-        var width = clamped(stored ?? defaultWidth)
-        if isTriage { width = min(width, triageMaximumWidth) }
-        // Das Board behält seinen Platz; die Spalte gibt nach, aber nie unter
-        // ihre Mindestbreite (dann wird das Fenster eben eng).
-        if available > 0 { width = min(width, max(minimumWidth, available - boardMinimumWidth)) }
-        return width.rounded()
+    static func width(stored: Double?, available: Double) -> Double {
+        let preferred = stored ?? (available > 0 ? available * defaultFraction : fallbackWidth)
+        return fitted(preferred, available: available)
     }
 
-    static func clamped(_ width: Double) -> Double {
-        min(maximumWidth, max(minimumWidth, width))
+    /// Gespeicherte Breite: nur die Mindestbreite gilt, die Obergrenze ergibt
+    /// sich erst beim Zeigen aus dem Platz des Fensters. Unsinn aus der Datei
+    /// (unendlich, keine Zahl) heißt Vorgabe.
+    static func clamped(_ width: Double) -> Double? {
+        guard width.isFinite else { return nil }
+        return max(minimumWidth, width)
     }
 
     /// Neue Breite nach einem Zug am linken Rand: nach links ziehen macht die
     /// Spalte breiter.
     static func draggedWidth(from start: Double, translation: Double, available: Double) -> Double {
-        var width = clamped(start - translation)
-        if available > 0 { width = min(width, max(minimumWidth, available - boardMinimumWidth)) }
-        return width.rounded()
+        fitted(start - translation, available: available)
+    }
+
+    /// Das Board behält seinen Platz; die Spalte gibt nach, aber nie unter
+    /// ihre Mindestbreite (dann wird das Fenster eben eng).
+    private static func fitted(_ width: Double, available: Double) -> Double {
+        var result = max(minimumWidth, width.isFinite ? width : fallbackWidth)
+        if available > 0 { result = min(result, max(minimumWidth, available - boardMinimumWidth)) }
+        return result.rounded()
     }
 }
 

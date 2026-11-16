@@ -12,15 +12,14 @@ struct TicketTriageView: View {
     let source: TicketChatStatusSource
     let actions: TicketBoardActions
 
-    /// Darunter fällt die Liste links weg; Blättern geht weiter mit J/K.
-    static let listFrom: CGFloat = 820
     static let listWidth: CGFloat = 260
     static let propertiesWidth: CGFloat = 210
 
     var body: some View {
         GeometryReader { proxy in
+            let layout = TicketTriageLayout(width: proxy.size.width)
             HStack(spacing: 0) {
-                if proxy.size.width >= Self.listFrom {
+                if layout.showsList {
                     TicketTriageList(model: model, triage: triage, source: source)
                         .frame(width: Self.listWidth)
                     Rectangle().fill(AgentTheme.border).frame(width: 1)
@@ -32,12 +31,18 @@ struct TicketTriageView: View {
                         // Triage-Knöpfe sammeln für den Board-Chat (WM8-113); nur mit sichtbarem Board-Chat.
                         BoardChatTriageButtons(windowID: windowID, ticketKey: triage.current) { model.nextInTriage() }
                     }
+                    if layout.propertiesInline, let content = model.detail {
+                        // Wenig Platz (WM8-124): Eigenschaften als Zeile im Kopf des Tickets statt als Spalte.
+                        Rectangle().fill(AgentTheme.border).frame(height: 1)
+                        TicketTriagePropertyStrip(content: content, rule: model.presentation.rule, source: source,
+                                                  actions: actions, focusedChat: model.focusedChatLine)
+                    }
                     Rectangle().fill(AgentTheme.border).frame(height: 1)
                     HStack(spacing: 0) {
                         TicketTriageText(model: model, ticketKey: triage.current)
                             .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        Rectangle().fill(AgentTheme.border).frame(width: 1)
-                        if let content = model.detail {
+                        if !layout.propertiesInline, let content = model.detail {
+                            Rectangle().fill(AgentTheme.border).frame(width: 1)
                             TicketTriageProperties(content: content, rule: model.presentation.rule, source: source, actions: actions,
                                                    focusedChat: model.focusedChatLine)
                                 .frame(width: Self.propertiesWidth)
@@ -49,6 +54,32 @@ struct TicketTriageView: View {
         .background(AgentTheme.background)
         .clipShape(TicketBoardStyle.shape)
         .overlay { TicketBoardStyle.shape.strokeBorder(AgentTheme.border, lineWidth: 1) }
+    }
+}
+
+/// Was die Triage bei welcher Breite zeigt (WM8-124). Pur, damit die Grenzen
+/// getestet sind: Wird es eng, rücken zuerst die Eigenschaften als Zeile in
+/// den Kopf des Tickets; erst danach fällt die Liste links weg. So bleiben
+/// Liste und Ticket lesbar, auch mit breitem Board-Chat daneben.
+struct TicketTriageLayout: Equatable {
+    /// Ab hier steht die Eigenschaften-Spalte: Liste, Ticket mit mindestens
+    /// rund 490 pt Text und die Spalte haben Platz.
+    static let propertiesColumnFrom: CGFloat = 960
+    /// Ab hier steht die Liste links (mit den Eigenschaften als Zeile bleiben
+    /// dem Ticket mindestens 400 pt).
+    static let listFrom: CGFloat = 660
+
+    var showsList: Bool
+    var propertiesInline: Bool
+
+    init(showsList: Bool, propertiesInline: Bool) {
+        self.showsList = showsList
+        self.propertiesInline = propertiesInline
+    }
+
+    init(width: CGFloat) {
+        showsList = width >= Self.listFrom
+        propertiesInline = width < Self.propertiesColumnFrom
     }
 }
 
@@ -349,6 +380,86 @@ private struct TicketTriageProperties: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(AgentTheme.surface)
+    }
+}
+
+// MARK: - Eigenschaften als Zeile (wenig Platz)
+
+/// Status, Priorität, Zugewiesen, „Fertig, wenn“ und Labels in einer Zeile
+/// unter dem Kopf des Tickets; bricht nur um, wenn auch das nicht passt.
+/// Darunter, nur wenn es welche gibt, die Chats am Ticket mit „Zum Chat“:
+/// Controller und Maus erreichen sie hier wie in der Spalte.
+private struct TicketTriagePropertyStrip: View {
+    let content: TicketDetailContent
+    let rule: TicketTeamRule
+    let source: TicketChatStatusSource
+    let actions: TicketBoardActions
+    var focusedChat: Int? = nil
+
+    private var entry: TicketBoardEntry { content.entry }
+    private var ticket: Ticket { entry.ticket }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            StatisticsFlowLayout(horizontalSpacing: 14, verticalSpacing: 6) {
+                item("Status") {
+                    Text(verbatim: ticket.status.name)
+                    if entry.waitsForMe {
+                        Text("waits for you").foregroundStyle(AgentTheme.statusAwaiting)
+                    }
+                }
+                item("Priority") {
+                    TicketPriorityBars(priority: ticket.priority)
+                    Text(verbatim: TicketBoardText.priority(ticket.priority))
+                }
+                item("Assignee") {
+                    if let assignee = ticket.assignee { Text(verbatim: assignee.name) } else { Text("Nobody") }
+                }
+                if let criteria = entry.criteria {
+                    item("Done when") {
+                        TicketCriteriaBadge(progress: criteria)
+                        Text("\(criteria.done) of \(criteria.total) done")
+                    }
+                }
+                if !ticket.labels.isEmpty || ticket.isBlocked {
+                    TicketCardTags(ticket: ticket, rule: rule, maxLabels: 8, hidesColumnStatus: true)
+                }
+            }
+            if !content.agents.isEmpty || content.localChatID != nil {
+                HStack(spacing: 12) {
+                    Text("Chats on this ticket")
+                        .font(.system(size: 11))
+                        .foregroundStyle(AgentTheme.textSecondary)
+                    ForEach(Array(content.agents.enumerated()), id: \.element.id) { index, line in
+                        TicketAgentRow(entry: line.entry, source: source)
+                            .ticketChatLineFocus(focusedChat == index)
+                    }
+                    if let chatID = content.localChatID {
+                        Button("Go to chat") { actions.openChat(chatID) }
+                            .buttonStyle(SettingsButtonStyle.standard)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .lineLimit(1)
+            }
+        }
+        .font(.system(size: 12))
+        .foregroundStyle(AgentTheme.textPrimary)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AgentTheme.surface)
+    }
+
+    private func item<Value: View>(_ label: LocalizedStringKey, @ViewBuilder value: () -> Value) -> some View {
+        HStack(spacing: 5) {
+            Text(label)
+                .font(.system(size: 11))
+                .foregroundStyle(AgentTheme.textSecondary)
+            value()
+        }
+        .lineLimit(1)
+        .fixedSize()
     }
 }
 

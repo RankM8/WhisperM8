@@ -167,30 +167,63 @@ final class BoardChatRulesTests: XCTestCase {
 
     // MARK: Breite
 
-    func testWidthDefaultsAndClamps() {
-        XCTAssertEqual(BoardChatRules.width(stored: nil, isTriage: false, available: 1400), 380)
-        XCTAssertEqual(BoardChatRules.width(stored: 100, isTriage: false, available: 1400), 280)
-        XCTAssertEqual(BoardChatRules.width(stored: 2000, isTriage: false, available: 2400), 720)
-        XCTAssertEqual(BoardChatRules.width(stored: 512.4, isTriage: false, available: 1400), 512)
+    func testDefaultIsFortyPercentOfTheArea() {
+        XCTAssertEqual(BoardChatRules.width(stored: nil, available: 1500), 600)
+        XCTAssertEqual(BoardChatRules.width(stored: nil, available: 2000), 800)
+        // Noch nicht gemessen: feste Vorgabe.
+        XCTAssertEqual(BoardChatRules.width(stored: nil, available: 0), 380)
+        // Kleines Fenster: nie unter die Mindestbreite.
+        XCTAssertEqual(BoardChatRules.width(stored: nil, available: 650), 280)
     }
 
-    func testTriageMakesTheColumnNarrowerButNeverWider() {
-        XCTAssertEqual(BoardChatRules.width(stored: nil, isTriage: true, available: 1400), 330)
-        XCTAssertEqual(BoardChatRules.width(stored: 300, isTriage: true, available: 1400), 300)
-        XCTAssertEqual(BoardChatRules.width(stored: 600, isTriage: true, available: 1400), 330)
+    func testDraggedWidthHasNoUpperLimitButTheBoardsRoom() {
+        XCTAssertEqual(BoardChatRules.width(stored: 100, available: 1400), 280)
+        XCTAssertEqual(BoardChatRules.width(stored: 512.4, available: 1400), 512)
+        // Früher bei 720 gedeckelt; jetzt bis zur Mindestbreite des Boards.
+        XCTAssertEqual(BoardChatRules.width(stored: 1200, available: 2000), 1200)
+        XCTAssertEqual(BoardChatRules.width(stored: 5000, available: 2000), 1580)
     }
 
     func testBoardKeepsItsRoomInANarrowWindow() {
-        XCTAssertEqual(BoardChatRules.width(stored: 600, isTriage: false, available: 900), 480)
+        XCTAssertEqual(BoardChatRules.width(stored: 600, available: 900), 480)
         // Sehr schmal: die Spalte bleibt bei ihrer Mindestbreite.
-        XCTAssertEqual(BoardChatRules.width(stored: 600, isTriage: false, available: 500), 280)
+        XCTAssertEqual(BoardChatRules.width(stored: 600, available: 500), 280)
     }
 
     func testDraggingLeftWidens() {
         XCTAssertEqual(BoardChatRules.draggedWidth(from: 380, translation: -100, available: 1400), 480)
         XCTAssertEqual(BoardChatRules.draggedWidth(from: 380, translation: 300, available: 1400), 280)
-        XCTAssertEqual(BoardChatRules.draggedWidth(from: 380, translation: -900, available: 1400), 720)
+        XCTAssertEqual(BoardChatRules.draggedWidth(from: 380, translation: -900, available: 1400), 980)
         XCTAssertEqual(BoardChatRules.draggedWidth(from: 380, translation: -300, available: 1000), 580)
+        XCTAssertEqual(BoardChatRules.draggedWidth(from: 600, translation: -1000, available: 2400), 1600)
+    }
+
+    func testStoredWidthKeepsOnlyTheMinimum() {
+        XCTAssertEqual(BoardChatRules.clamped(100), 280)
+        XCTAssertEqual(BoardChatRules.clamped(3000), 3000)
+        XCTAssertNil(BoardChatRules.clamped(.infinity))
+        XCTAssertNil(BoardChatRules.clamped(.nan))
+    }
+
+    // MARK: Triage
+
+    func testTriageMovesPropertiesFirstThenDropsTheList() {
+        XCTAssertEqual(TicketTriageLayout(width: 1200), TicketTriageLayout(showsList: true, propertiesInline: false))
+        XCTAssertEqual(TicketTriageLayout(width: 960), TicketTriageLayout(showsList: true, propertiesInline: false))
+        XCTAssertEqual(TicketTriageLayout(width: 959), TicketTriageLayout(showsList: true, propertiesInline: true))
+        XCTAssertEqual(TicketTriageLayout(width: 660), TicketTriageLayout(showsList: true, propertiesInline: true))
+        XCTAssertEqual(TicketTriageLayout(width: 659), TicketTriageLayout(showsList: false, propertiesInline: true))
+    }
+
+    /// Der Board-Chat ab Werk lässt in üblichen Fenstern Liste und Ticket stehen.
+    func testDefaultColumnKeepsListAndTicketInTheTriage() {
+        for available in [1300.0, 1500, 1800] {
+            let board = available - BoardChatRules.width(stored: nil, available: available)
+            let layout = TicketTriageLayout(width: board)
+            XCTAssertTrue(layout.showsList, "Bereich \(available)")
+        }
+        // Breites Fenster: auch die Eigenschaften-Spalte.
+        XCTAssertFalse(TicketTriageLayout(width: 2000 - BoardChatRules.width(stored: nil, available: 2000)).propertiesInline)
     }
 }
 
@@ -247,8 +280,10 @@ final class BoardChatPreferencesStoreTests: XCTestCase {
         let store = makeStore(disk)
         await store.waitUntilLoaded()
         let project = UUID()
+        store.setWidth(100, for: project)
+        XCTAssertEqual(store.preferences(for: project).width, BoardChatRules.minimumWidth)
         store.setWidth(5000, for: project)
-        XCTAssertEqual(store.preferences(for: project).width, BoardChatRules.maximumWidth)
+        XCTAssertEqual(store.preferences(for: project).width, 5000, "Keine Obergrenze beim Speichern")
         store.setWidth(nil, for: project)
         store.setCollapsed(true, for: project)
         store.setCollapsed(false, for: project)
