@@ -60,6 +60,7 @@ extension AgentChatsView {
     /// Liest nur; „Zum Chat“ wechselt sichtbar wie der Knopf am Ticket.
     func performTicketCommand(_ command: ControllerTicketCommand) -> ControllerTicketOutcome {
         guard isTicketsModeActive, TicketBoardControllers.shared.hasController(for: windowID) else { return .rejected }
+        ControllerTicketFocus.prepare(for: command, in: hostWindow)
         let controller = TicketBoardControllers.shared.controller(for: windowID)
         let model = controller.viewModel
         if command == .refresh {
@@ -198,5 +199,16 @@ extension AgentChatsView {
         let project = projectID.flatMap { id in workspace.projects.first { $0.id == id } }
         let title = TicketTeamDirectory.shared.team(of: projectID) ?? project?.name ?? ""
         return ControllerBackTarget(kind: .tickets, title: title, id: projectID)
+    }
+}
+
+/// Tastaturfokus vor einer Board-Aktion des Controllers (WM8-91 mit WM8-113):
+/// Der Controller erzeugt keine Mausklicks, also greift der Wächter der
+/// Board-Spalte nicht. Deshalb hier, vor jeder Aktion außer „Zum Chat“.
+enum ControllerTicketFocus {
+    @MainActor
+    static func prepare(for command: ControllerTicketCommand, in window: NSWindow?) {
+        guard command.actsOnBoard else { return }
+        BoardChatFocusRule.releaseTerminalFocus(in: window)
     }
 }

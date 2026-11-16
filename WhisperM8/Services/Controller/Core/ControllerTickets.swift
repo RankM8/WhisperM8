@@ -163,6 +163,17 @@ enum ControllerTicketCommand: Equatable, Sendable {
     case dictationUnavailable
 }
 
+extension ControllerTicketCommand {
+    /// Board oder Triage handeln: Der Tastaturfokus muss vorher aus dem
+    /// Terminal des Board-Chats zurück ans Fenster (WM8-113), sonst landeten
+    /// spätere Esc, J oder ⌘C der Tastatur bei Jarvis. „Zum Chat“ verlässt das
+    /// Board und braucht das nicht.
+    var actsOnBoard: Bool {
+        if case .goToChat = self { return false }
+        return true
+    }
+}
+
 /// Was ein Befehl bewirkt hat.
 enum ControllerTicketOutcome: Equatable, Sendable {
     case done
