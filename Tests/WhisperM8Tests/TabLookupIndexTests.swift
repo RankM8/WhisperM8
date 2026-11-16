@@ -65,6 +65,18 @@ final class TabLookupIndexTests: XCTestCase {
         XCTAssertEqual(index.count, 3)
     }
 
+    func testSameIDsIgnoresFieldChanges() {
+        let sessions = chats(30)
+        var renamed = sessions
+        renamed[3].title = "umbenannt"
+        renamed[4].status = .archived
+        XCTAssertTrue(AgentWorkspaceUIModel.sameIDs(sessions, renamed))
+        var moved = sessions
+        moved.swapAt(0, 1)
+        XCTAssertFalse(AgentWorkspaceUIModel.sameIDs(sessions, moved))
+        XCTAssertFalse(AgentWorkspaceUIModel.sameIDs(sessions, Array(sessions.dropLast())))
+    }
+
     func testIndexMatchesOnlyWhileIDsAndOrderStay() {
         var sessions = chats(50)
         let index = AgentWorkspaceUIModel.index(of: sessions)
@@ -126,7 +138,8 @@ final class TabLookupIndexTests: XCTestCase {
         var built: [UUID: Int] = [:]
         for _ in 0..<15 {
             build.append(ms(clock.measure { built = AgentWorkspaceUIModel.index(of: sessions) }))
-            check.append(ms(clock.measure { _ = AgentWorkspaceUIModel.index(built, matches: sessions) }))
+            check.append(ms(clock.measure { _ = AgentWorkspaceUIModel.sameIDs(sessions, sessions) }))
+            _ = built
         }
         let buildText = String(format: "%.2f", median(build))
         let checkText = String(format: "%.2f", median(check))

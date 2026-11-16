@@ -404,7 +404,10 @@ final class AgentWorkspaceUIModel {
     private(set) var workspace: AgentWorkspace {
         didSet {
             WorkspaceApplyMeasurement.workspaceChanged()
-            if !Self.index(sessionIndexByID, matches: workspace.sessions) {
+            // Läuft bei jeder Workspace-Änderung; neu gebaut wird nur, wenn
+            // sich die ID-Folge geändert hat (neuer, gelöschter, verschobener
+            // Chat). Der Vergleich mit dem alten Stand braucht kein Hashing.
+            if !Self.sameIDs(workspace.sessions, oldValue.sessions) {
                 sessionIndexByID = Self.index(of: workspace.sessions)
             }
             guard workspace.projects != oldValue.projects else { return }
@@ -469,6 +472,12 @@ final class AgentWorkspaceUIModel {
             result[session.id] = position
         }
         return result
+    }
+
+    /// Gleiche ID-Folge? Ein Durchlauf ohne Hashing; bei einer bloßen
+    /// Feldänderung (Titel, Status) ist die Antwort `true`.
+    nonisolated static func sameIDs(_ lhs: [AgentChatSession], _ rhs: [AgentChatSession]) -> Bool {
+        lhs.count == rhs.count && lhs.elementsEqual(rhs, by: { $0.id == $1.id })
     }
 
     /// Passt der Index noch? Billiger als ihn neu zu bauen: bei einer bloßen
