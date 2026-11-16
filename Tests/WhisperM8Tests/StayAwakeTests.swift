@@ -212,6 +212,91 @@ final class StayAwakeTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: marker.path))
     }
 
+    // MARK: Test-Instanz und Eingriffe von außen (WM8-122)
+
+    /// Die Test-Instanz fasst den Ruhezustand nie an: kein sudo, kein pmset,
+    /// keine Wache, kein Dialog, weder beim Start noch bei Arbeit, Klick oder
+    /// Beenden. Vorher schaltete ihr erstes `evaluate()` mit `pmset -a
+    /// disablesleep 0` den Ruhezustand des ganzen Macs wieder ein.
+    @MainActor
+    func testTestInstanceNeverTouchesSleep() {
+        let system = FakeStayAwakeSystem(installed: true)
+        let prefs = AppPreferences(defaults: UserDefaults(suiteName: suiteName)!)
+        prefs.stayAwakeWhileWorking = true
+        let controller = StayAwakeController(system: system, preferences: prefs, marker: marker, isAvailable: false)
+        XCTAssertEqual(controller.mode, .off, "gemerkte Stufe gilt hier nicht")
+        let working = PassthroughSubject<Bool, Never>()
+        var answered = false
+        controller.whenPermissionKnown(workingPublisher: working.eraseToAnyPublisher()) { answered = true }
+        XCTAssertTrue(answered, "Controller bekommt sofort eine Antwort")
+        working.send(true)
+        controller.cycle()
+        controller.setWhileWorking(true)
+        controller.removePermission()
+        controller.refreshPower()
+        controller.evaluate()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.3))
+        XCTAssertTrue(system.setCalls.isEmpty, "nie pmset")
+        XCTAssertEqual(system.permissionChecks, 0, "nie sudo")
+        XCTAssertEqual(system.installCalls, 0, "nie ein Admin-Dialog")
+        XCTAssertEqual(system.watchdogStarts, 0, "keine Wache")
+        XCTAssertEqual(controller.mode, .off)
+        XCTAssertEqual(controller.permission, .missing)
+        XCTAssertTrue(controller.nextStepNeedsPermission, "Controller-Weg öffnet keinen Dialog")
+        XCTAssertTrue(prefs.stayAwakeWhileWorking, "die Einstellung bleibt unberührt")
+    }
+
+    /// Schaltet ein anderer Prozess den Ruhezustand wieder ein, merkt die
+    /// Haupt-App es beim nächsten Takt und schaltet ihn wieder aus.
+    @MainActor
+    func testExternalResetIsNoticedAndUndone() {
+        let system = FakeStayAwakeSystem(installed: true)
+        let (controller, prefs, working) = makeController(system)
+        prefs.stayAwakeWhileWorking = true
+        controller.start(workingPublisher: working.eraseToAnyPublisher())
+        waitUntil { controller.permission == .ready }
+        controller.setWhileWorking(true)
+        working.send(true)
+        waitUntil { controller.isHoldingAwake }
+        XCTAssertEqual(system.setCalls.filter { $0 }.count, 1)
+
+        system.resetFromOutside()
+        controller.refreshPower()
+        waitUntil { controller.lastExternalResetAt != nil }
+        waitUntil { system.setCalls.filter { $0 }.count == 2 }
+        waitUntil { controller.isHoldingAwake }
+        XCTAssertEqual(system.lastSet, true)
+    }
+
+    /// Ohne Abschalten nichts nachsehen; nicht ablesbar heißt: nichts tun.
+    func testOnlyAReadableResetCounts() {
+        XCTAssertTrue(StayAwakePolicy.wasResetFromOutside(applied: true, actual: false))
+        XCTAssertFalse(StayAwakePolicy.wasResetFromOutside(applied: true, actual: nil))
+        XCTAssertFalse(StayAwakePolicy.wasResetFromOutside(applied: true, actual: true))
+        XCTAssertFalse(StayAwakePolicy.wasResetFromOutside(applied: false, actual: false))
+        XCTAssertFalse(StayAwakePolicy.wasResetFromOutside(applied: nil, actual: false))
+    }
+
+    @MainActor
+    func testWhileNotHoldingNothingIsReadBack() {
+        let system = FakeStayAwakeSystem(installed: true)
+        let (controller, _, working) = makeController(system)
+        controller.start(workingPublisher: working.eraseToAnyPublisher())
+        waitUntil { controller.permission == .ready }
+        let before = system.sleepReads
+        controller.refreshPower()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.2))
+        XCTAssertEqual(system.sleepReads, before, "kein pmset -g, solange der Mac nicht wach gehalten wird")
+    }
+
+    func testHelpNamesTheExternalReset() {
+        let text = SidebarStayAwakeButton.helpText(
+            mode: .whileWorking, isHolding: true, alwaysSince: nil, lastEnd: nil, externalResetAt: Date())
+        let plain = SidebarStayAwakeButton.helpText(mode: .whileWorking, isHolding: true, alwaysSince: nil, lastEnd: nil)
+        XCTAssertGreaterThan(text.components(separatedBy: "\n").count, plain.components(separatedBy: "\n").count)
+        XCTAssertFalse(SidebarStayAwakeButton.unavailableText.isEmpty)
+    }
+
     // MARK: Hilfen
 
     private var marker: URL!
@@ -254,6 +339,9 @@ private final class FakeStayAwakeSystem: StayAwakeSystem, @unchecked Sendable {
     private var _setCalls: [Bool] = []
     private var _watchdogStarts = 0
     private var _power: (Bool, Int?) = (true, 80)
+    private var _externalOverride: Bool?
+    private var _permissionChecks = 0
+    private var _sleepReads = 0
 
     init(installed: Bool, installSucceeds: Bool = true) {
         _installed = installed
@@ -264,12 +352,16 @@ private final class FakeStayAwakeSystem: StayAwakeSystem, @unchecked Sendable {
     var setCalls: [Bool] { lock.withLock { _setCalls } }
     var lastSet: Bool? { setCalls.last }
     var watchdogStarts: Int { lock.withLock { _watchdogStarts } }
+    var permissionChecks: Int { lock.withLock { _permissionChecks } }
+    var sleepReads: Int { lock.withLock { _sleepReads } }
+    /// Ein anderer Prozess schaltet den Ruhezustand wieder ein.
+    func resetFromOutside() { lock.withLock { _externalOverride = false } }
     var power: (Bool, Int?) {
         get { lock.withLock { _power } }
         set { lock.withLock { _power = newValue } }
     }
 
-    func isPermissionInstalled() -> Bool { lock.withLock { _installed } }
+    func isPermissionInstalled() -> Bool { lock.withLock { _permissionChecks += 1; return _installed } }
     func installPermission(prompt: String) -> Bool {
         lock.withLock {
             _installCalls += 1
@@ -278,8 +370,15 @@ private final class FakeStayAwakeSystem: StayAwakeSystem, @unchecked Sendable {
         }
     }
     func removePermission(prompt: String) -> Bool { lock.withLock { _installed = false; return true } }
-    func setSleepDisabled(_ disabled: Bool) -> Bool { lock.withLock { _setCalls.append(disabled); return true } }
-    func isSleepDisabled() -> Bool? { lastSet }
+    func setSleepDisabled(_ disabled: Bool) -> Bool {
+        lock.withLock { _setCalls.append(disabled); _externalOverride = nil; return true }
+    }
+    func isSleepDisabled() -> Bool? {
+        lock.withLock {
+            _sleepReads += 1
+            return _externalOverride ?? _setCalls.last
+        }
+    }
     func startWatchdog(appPID: Int32, marker: URL) { lock.withLock { _watchdogStarts += 1 } }
     func powerState() -> (onACPower: Bool, batteryPercent: Int?) {
         let p = power

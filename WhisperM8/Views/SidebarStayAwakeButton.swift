@@ -23,13 +23,15 @@ struct SidebarStayAwakeButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(controller.isAwaitingPermission)
-        .help(Self.helpText(
-            mode: controller.mode,
-            isHolding: controller.isHoldingAwake,
-            alwaysSince: controller.alwaysSince,
-            lastEnd: controller.lastEndReason
-        ))
+        .disabled(controller.isAwaitingPermission || !controller.isAvailable)
+        .help(controller.isAvailable
+            ? Self.helpText(
+                mode: controller.mode,
+                isHolding: controller.isHoldingAwake,
+                alwaysSince: controller.alwaysSince,
+                lastEnd: controller.lastEndReason,
+                externalResetAt: controller.lastExternalResetAt)
+            : Self.unavailableText)
         .accessibilityLabel(Text("Keep Mac awake"))
         .accessibilityValue(Text(Self.title(for: controller.mode)))
         .onAppear { controller.start() }
@@ -59,7 +61,13 @@ struct SidebarStayAwakeButton: View {
         }
     }
 
-    static func helpText(mode: StayAwakeMode, isHolding: Bool, alwaysSince: Date?, lastEnd: StayAwakeEndReason?) -> String {
+    /// Test-Instanz (WM8-122): Der Knopf fasst den Ruhezustand nie an.
+    static var unavailableText: String {
+        String(localized: "Not available in the test instance: it never changes whether the Mac sleeps.")
+    }
+
+    static func helpText(mode: StayAwakeMode, isHolding: Bool, alwaysSince: Date?, lastEnd: StayAwakeEndReason?,
+                         externalResetAt: Date? = nil) -> String {
         var lines = [title(for: mode)]
         switch mode {
         case .off:
@@ -75,6 +83,10 @@ struct SidebarStayAwakeButton: View {
         }
         if let lastEnd, mode != .always {
             lines.append(endText(lastEnd))
+        }
+        if let externalResetAt, mode != .off {
+            let time = externalResetAt.formatted(date: .omitted, time: .shortened)
+            lines.append(String(localized: "At \(time) something else switched sleep back on; WhisperM8 switched it off again."))
         }
         let action: String
         switch mode.next {
