@@ -131,7 +131,8 @@ final class AgentWorkspaceStore: @unchecked Sendable {
     /// Der Body darf KEINE Subprozesse/Blocking-I/O enthalten (läuft unter
     /// dem prozessweiten Lock) — git-Lookups etc. vorher berechnen und als
     /// Wert hineinreichen.
-    func mutate<T>(_ body: (inout AgentWorkspace) throws -> T) throws -> T {
+    /// `caller` nennt im Log, wer geändert hat (`WorkspaceMutationSources`, WM8-101).
+    func mutate<T>(caller: String = #function, _ body: (inout AgentWorkspace) throws -> T) throws -> T {
         lock.lock()
         var workspace = loadedLocked()
         let before = workspace
@@ -163,6 +164,7 @@ final class AgentWorkspaceStore: @unchecked Sendable {
             throw error
         }
         lock.unlock()
+        WorkspaceMutationSources.shared.record(caller)
         onWorkspaceChanged?(workspace)
         return result
     }
@@ -172,6 +174,7 @@ final class AgentWorkspaceStore: @unchecked Sendable {
     /// Callback und kein Persist. Bei `true` garantiert der Aufrufer eine
     /// effektive Änderung; die Normalisierung bleibt als Sicherheitsnetz.
     func mutateIfChanged(
+        caller: String = #function,
         _ body: (inout AgentWorkspace) throws -> Bool
     ) throws {
         lock.lock()
@@ -202,11 +205,12 @@ final class AgentWorkspaceStore: @unchecked Sendable {
             throw error
         }
         lock.unlock()
+        WorkspaceMutationSources.shared.record(caller)
         onWorkspaceChanged?(workspace)
     }
 
-    func replace(_ workspace: AgentWorkspace) throws {
-        try mutate { $0 = workspace }
+    func replace(_ workspace: AgentWorkspace, caller: String = #function) throws {
+        try mutate(caller: caller) { $0 = workspace }
     }
 
     /// Erzwingt das sofortige Schreiben gepufferter Änderungen (debounced-

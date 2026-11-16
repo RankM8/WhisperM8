@@ -81,6 +81,19 @@ Neue Messpunkte, Kategorie `perf.chats`:
 höchster Ordnungszahl (`MainRunLoopCommit`). Ein `DispatchQueue.main.async` endete zu
 früh, weil die Main-Queue vor dem Commit geleert wird.
 
+Reißt `workspace.apply` sein Budget, folgt eine Zeile `workspace_apply_sources
+durationMs=… sources=…` mit den Aufrufern, die den Chat-Bestand in diesem
+Durchgang geändert haben (WM8-101). Jede ändernde Mutation trägt dazu ihren
+Aufrufer ein: `AgentWorkspaceStore.mutate`/`mutateIfChanged` nehmen `#function`
+mit, die Fassade `AgentSessionStore.mutateWorkspace` reicht den Namen ihrer
+eigenen Methode durch (etwa `setTitle(_:for:)`). Mehrfache stehen als `×n`.
+Nur mit der Detail-Stufe; sonst kostet ein Eintrag einen Bool-Vergleich.
+
+```bash
+/usr/bin/log show --last 1h --predicate 'subsystem == "com.whisperm8.app" AND process == "WhisperM8"' --info \
+  | grep -E 'workspace_apply_sources'
+```
+
 Auswerten, welcher Verursacher wie viel Hängerzeit hat:
 
 ```bash

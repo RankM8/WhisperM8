@@ -1577,19 +1577,16 @@ struct AgentSessionStore {
 
     /// P1: Beide Primitive laufen über den serialisierten In-Memory-Kern.
     /// Persistiert wird Equatable-diff-gated — das frühere `changed`-Flag
-    /// von `mutateWorkspaceIfChanged` ist damit nur noch advisory.
-    func mutateWorkspace<Result>(_ mutate: (inout AgentWorkspace) throws -> Result) throws -> Result {
-        try PerfBudgets.storeMutate.withInterval {
-            try workspaceStore.mutate(mutate)
-        }
+    /// von `mutateWorkspaceIfChanged` ist damit nur noch advisory. `caller`:
+    /// ändernde Fassaden-Methode fürs Log (`WorkspaceMutationSources`, WM8-101).
+    func mutateWorkspace<Result>(caller: String = #function, _ mutate: (inout AgentWorkspace) throws -> Result) throws -> Result {
+        try PerfBudgets.storeMutate.withInterval { try workspaceStore.mutate(caller: caller, mutate) }
     }
 
     /// Boolescher Änderungsvertrag für fachlich präzise Mutatoren: `false`
     /// beendet den Store-Pfad vor Vollnormalisierung und Deep-Equatable.
-    func mutateWorkspaceIfChanged(_ mutate: (inout AgentWorkspace) throws -> Bool) throws {
-        try PerfBudgets.storeMutate.withInterval {
-            try workspaceStore.mutateIfChanged(mutate)
-        }
+    func mutateWorkspaceIfChanged(caller: String = #function, _ mutate: (inout AgentWorkspace) throws -> Bool) throws {
+        try PerfBudgets.storeMutate.withInterval { try workspaceStore.mutateIfChanged(caller: caller, mutate) }
     }
 }
 
