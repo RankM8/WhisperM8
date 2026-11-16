@@ -64,6 +64,42 @@ final class AutoNamingGiveUpTests: XCTestCase {
         XCTAssertEqual(stored.lastActivityAt, session.lastActivityAt, "der Verzicht darf den Chat nicht nach oben sortieren")
     }
 
+    /// WM8-101, Schritt C1: Nach einem App-Start gab der Titel-Geber bei vier,
+    /// fünf alten Chats einzeln auf, jede Änderung mit eigener Auswertung der
+    /// Oberfläche (rund 400 ms). Jetzt eine Änderung für alle, sobald die
+    /// Warteschlange leer ist.
+    func testGivingUpOnSeveralChatsIsOneChange() async throws {
+        let sessions = try (0..<5).map { _ in try makeSession(status: .closed) }
+        let core = AgentWorkspaceStoreRegistry.store(for: storeURL)
+        var changes = 0
+        core.onWorkspaceChanged = { _ in changes += 1 }
+        let namer = makeNamer(clock: { Date(timeIntervalSince1970: 2_000_000) }) {
+            throw AgentTitleGeneratorError.missingTranscript
+        }
+        for session in sessions { namer.generateTitleIfNeeded(session: current(session.id), cwd: "/unused") }
+        while !namer.inFlight.isEmpty { await Task.yield() }
+
+        XCTAssertEqual(changes, 1, "vorher: eine Änderung je Chat")
+        for session in sessions {
+            XCTAssertEqual(current(session.id).autoNameGaveUpAt, session.lastActivityAt)
+            XCTAssertEqual(current(session.id).lastActivityAt, session.lastActivityAt, "sortiert nicht nach oben")
+        }
+        namer.flushGaveUp()
+        XCTAssertEqual(changes, 1, "nichts mehr offen, keine weitere Änderung")
+    }
+
+    /// Ohne Änderung keine Änderung: Schon gemerkte Verzichte schreiben nichts.
+    func testBatchWithoutNewMarksChangesNothing() throws {
+        let session = try makeSession(status: .closed)
+        try store.setAutoNameGaveUp([session.id: session.lastActivityAt])
+        let core = AgentWorkspaceStoreRegistry.store(for: storeURL)
+        var changes = 0
+        core.onWorkspaceChanged = { _ in changes += 1 }
+        try store.setAutoNameGaveUp([session.id: session.lastActivityAt, UUID(): Date()])
+        try store.setAutoNameGaveUp([:])
+        XCTAssertEqual(changes, 0)
+    }
+
     func testChatWithOnlyCommandsGivesUpToo() async throws {
         let session = try makeSession(status: .closed)
         let namer = makeNamer(clock: { Date(timeIntervalSince1970: 2_000_000) }) {

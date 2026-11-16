@@ -232,6 +232,16 @@ final class AgentSessionAutoNamer {
     private let now: () -> Date
     private let isEnabled: () -> Bool
     private let titleLoader: (AgentChatSession, String) async throws -> String
+    /// Verzichte (WM8-53), die noch nicht im Workspace stehen. Nach einem
+    /// App-Start gab der Titel-Geber bei vier, fünf alten Chats in drei
+    /// Sekunden einzeln auf; jede Änderung am Workspace kostete die Oberfläche
+    /// rund 400 ms (WM8-101, Schritt C1). Jetzt gehen sie gesammelt in einer
+    /// Änderung, sobald die Warteschlange leer ist, spätestens nach
+    /// `gaveUpFlushDelay`. Bis dahin hält der Backoff (`failures`, ab 15 s)
+    /// einen neuen Versuch ohnehin auf.
+    private var pendingGaveUp: [UUID: Date] = [:]
+    private var gaveUpFlushTask: Task<Void, Never>?
+    nonisolated static let gaveUpFlushDelay: TimeInterval = 5
 
     static let inFlightDidChangeNotification = Notification.Name("AgentSessionAutoNamer.inFlightDidChange")
 
@@ -377,6 +387,8 @@ final class AgentSessionAutoNamer {
                 }
                 failures.removeValue(forKey: sessionID)
                 completed.insert(sessionID)
+                // Ein noch nicht geschriebener Verzicht gilt nicht mehr.
+                pendingGaveUp.removeValue(forKey: sessionID)
                 if session.autoNameGaveUpAt != nil {
                     try? store.setAutoNameGaveUp(id: sessionID, at: nil)
                 }
@@ -403,7 +415,7 @@ final class AgentSessionAutoNamer {
                 // nur einmal leise loggen statt alle fünf Minuten als Fehler.
                 let givesUp = awaitingTranscript && session.status != .running
                 if givesUp {
-                    try? store.setAutoNameGaveUp(id: sessionID, at: session.lastActivityAt)
+                    noteGaveUp(sessionID, at: session.lastActivityAt)
                     Logger.agentPerformance.info(
                         "auto_naming_gave_up session=\(sessionID.uuidString, privacy: .public) attempt=\(count)"
                     )
@@ -422,10 +434,34 @@ final class AgentSessionAutoNamer {
                 result = .failure(error)
             }
             activeCount -= 1
+            // Vor dem Freigeben: Wer auf `inFlight` wartet, sieht den Verzicht
+            // schon geschrieben, wenn mit diesem Auftrag die Arbeit endet.
+            if activeCount == 0, pending.isEmpty { flushGaveUp() }
             inFlight.remove(sessionID)
             request.onCompletion?(result)
             startPendingRequests()
         }
+    }
+
+    /// Verzicht vormerken; geschrieben wird gesammelt (`flushGaveUp`).
+    private func noteGaveUp(_ sessionID: UUID, at date: Date) {
+        pendingGaveUp[sessionID] = date
+        guard gaveUpFlushTask == nil else { return }
+        gaveUpFlushTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(Self.gaveUpFlushDelay * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            self?.flushGaveUp()
+        }
+    }
+
+    /// Alle vorgemerkten Verzichte in einer Änderung am Workspace.
+    func flushGaveUp() {
+        gaveUpFlushTask?.cancel()
+        gaveUpFlushTask = nil
+        guard !pendingGaveUp.isEmpty else { return }
+        let marks = pendingGaveUp
+        pendingGaveUp = [:]
+        try? store.setAutoNameGaveUp(marks)
     }
 }
 
@@ -440,6 +476,23 @@ extension AgentSessionStore {
                   workspace.sessions[index].autoNameGaveUpAt != date else { return false }
             workspace.sessions[index].autoNameGaveUpAt = date
             return true
+        }
+    }
+
+    /// Mehrere Verzichte in einer Änderung (WM8-101, Schritt C1): ein
+    /// Durchlauf über die Chats statt einer Änderung samt Auswertung der
+    /// Oberfläche je Chat. Unveränderte zählen nicht; ohne Änderung nichts.
+    func setAutoNameGaveUp(_ marks: [UUID: Date]) throws {
+        guard !marks.isEmpty else { return }
+        try mutateWorkspaceIfChanged { workspace in
+            var changed = false
+            for index in workspace.sessions.indices {
+                guard let date = marks[workspace.sessions[index].id],
+                      workspace.sessions[index].autoNameGaveUpAt != date else { continue }
+                workspace.sessions[index].autoNameGaveUpAt = date
+                changed = true
+            }
+            return changed
         }
     }
 }

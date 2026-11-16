@@ -154,6 +154,11 @@ Neustart) und loggt einmal `auto_naming_gave_up` auf Stufe info. Neu versucht
 wird erst, wenn der Verlauf wächst (`lastActivityAt` ändert sich) oder der Chat
 einen Turn beendet; ein Erfolg löscht die Marke. Vorher lief jeder solche Chat
 alle fünf Minuten erneut, mit einer Fehlerzeile je Versuch (WM8-53).
+Geschrieben werden die Verzichte gesammelt in einer Änderung am Workspace,
+sobald die Warteschlange des Auto-Namers leer ist, spätestens nach 5 s
+(`flushGaveUp`). Nach einem App-Start gab er vorher bei vier, fünf alten Chats
+einzeln auf, und jede Änderung kostete die Oberfläche rund 400 ms (WM8-101,
+Schritt C1).
 
 `AgentHeadlessCLI` ist dafür der gemeinsame Kurzprozess-Baustein: Er liefert
 stdout bei Erfolg und vereinheitlicht Timeout, Exit-Code und stderr-Fehler.
