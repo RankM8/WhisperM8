@@ -212,13 +212,17 @@ final class ControllerFeedback {
         let dispatcher = dispatcher
         inputMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown]) { event in
             MainActor.assumeIsolated {
-                guard ui.area == .list || ui.menu != nil || dispatcher.islandState != nil else { return }
+                guard ui.area == .list || ui.menu != nil || dispatcher.islandState != nil
+                    || ui.boardChatFocus != nil else { return }
                 // Die Insel per Tastatur (⌥Tab) bedient ihr eigener Monitor,
                 // auch den Klick, der sie schließt.
                 if dispatcher.isKeyboardIslandOpen || dispatcher.isKeyboardMenuOpen { return }
                 if event.type == .keyDown, ControllerKeyboardBridge.isBridgeEvent(event) { return }
                 ui.leaveList()
                 ui.menu = nil
+                // Auch der Fokus im Board-Chat (Paket 3a): Wer zur Maus oder
+                // Tastatur greift, bedient selbst; der Rahmen geht weg.
+                if ui.boardChatFocus != nil { ui.boardChatFocus = nil }
                 dispatcher.closeIslandForUserInput()
             }
             return event

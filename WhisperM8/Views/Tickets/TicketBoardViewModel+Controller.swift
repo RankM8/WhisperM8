@@ -92,6 +92,10 @@ extension TicketBoardViewModel {
                 return .done
             case .edge(.left):
                 return .leftEdge
+            case .edge(.right):
+                // Rechts aus der Liste (ohne Chats am Ticket) oder aus der
+                // Chat-Zeile: weiter in den Board-Chat (Paket 3a).
+                return .rightEdge
             case .edge:
                 return .nothing
             }
@@ -100,12 +104,14 @@ extension TicketBoardViewModel {
         case .board:
             let step = TicketBoardSelection.step(boardSpot, direction, in: boardColumns)
             if step.edge == .left { return .leftEdge }
+            if step.edge == .right { return .rightEdge }
             guard step.spot != boardSpot else { return .nothing }
             setBoardSpot(step.spot)
             return .done
         case .list:
             let step = TicketBoardSelection.stepInList(selectedKey, direction, keys: listKeys)
             if step.edge == .left { return .leftEdge }
+            if step.edge == .right { return .rightEdge }
             guard step.key != selectedKey else { return .nothing }
             selectedKey = step.key
             return .done

@@ -41,6 +41,13 @@ struct ControllerTicketsPlace: Equatable, Sendable {
     var hasTicket = false
     /// Das gewählte Ticket hat Chats (▶ in der Triage führt dorthin).
     var ticketHasChats = false
+    /// Board-Chat, den die Spalte rechts gerade zeigt (WM8-91 Paket 3a): nur,
+    /// solange er dort sichtbar ist (Ticket-Modus, aufgeklappt, Tab dieses
+    /// Fensters, angemeldet in `BoardChatInputs`). Rechts über den Rand führt
+    /// der Controller nur dann hinein.
+    var boardChatID: UUID?
+    /// Rufname des Board-Chats für Leiste und Kopf („Jarvis“).
+    var boardChatName: String?
 
     /// Was Leiste und Insel nach „Tickets · “ nennen.
     var label: String? { team ?? projectName }
@@ -55,6 +62,25 @@ struct ControllerTicketState: Equatable, Sendable {
     var area: ControllerFocusArea = .content
     /// Ziel von L2 getippt; `nil`, wenn es keinen vorigen Ort gibt.
     var backTarget: ControllerBackTarget?
+    /// Der Controller hat die Tasten im Board-Chat (WM8-91 Paket 3a): dessen
+    /// Zustand, sonst `nil`. Dann gelten die Tasten eines Chats, aber nur für
+    /// diesen sichtbaren Chat; der Chat hinter den Tickets bleibt unerreichbar.
+    var boardChat: ControllerChatState?
+}
+
+/// Wo der Controller seine Tasten hinschickt, solange die Tickets offen sind
+/// (WM8-91 Paket 3a): an den Board-Chat `sessionID` im Fenster `windowID`.
+/// Gilt nur, solange genau dieser Chat in der Spalte dieses Fensters steht.
+struct ControllerBoardChatFocus: Equatable, Sendable {
+    var windowID: UUID
+    var sessionID: UUID
+
+    /// Pur: Ist der Fokus für dieses Fenster noch gültig? Nein, sobald die
+    /// Tickets zu sind, die Spalte einen anderen Chat zeigt oder keinen.
+    func isValid(windowID: UUID, place: ControllerTicketsPlace?) -> Bool {
+        guard self.windowID == windowID, let place else { return false }
+        return place.boardChatID == sessionID
+    }
 }
 
 /// Ein Board im Reiter „Tickets“ der Insel: je eingerichtetem Team mit
@@ -161,6 +187,13 @@ enum ControllerTicketCommand: Equatable, Sendable {
     /// R2 ohne Board-Chat (E4): „geht nicht“ und einmal der Grund in der
     /// Leiste. Kein Diktat, nichts an einen Chat.
     case dictationUnavailable
+    /// Gehaltener Stick seitwärts auf dem Board: bewegt wie `move`, führt am
+    /// Rand aber nie in den Board-Chat (Paket 3a). Hinein geht es nur mit
+    /// einem einzelnen Druck.
+    case repeatMove(ControllerDirection)
+    /// Stick ◀ im Board-Chat (bzw. Steuerkreuz ◀, wo ← im Terminal nichts
+    /// tut): zurück aufs Ticket, auf dem man war. Erledigt der Ausführer.
+    case leaveBoardChat
 }
 
 extension ControllerTicketCommand {
@@ -169,8 +202,10 @@ extension ControllerTicketCommand {
     /// spätere Esc, J oder ⌘C der Tastatur bei Jarvis. „Zum Chat“ verlässt das
     /// Board und braucht das nicht.
     var actsOnBoard: Bool {
-        if case .goToChat = self { return false }
-        return true
+        switch self {
+        case .goToChat, .leaveBoardChat: return false
+        default: return true
+        }
     }
 }
 
@@ -183,6 +218,9 @@ enum ControllerTicketOutcome: Equatable, Sendable {
     case rejected
     /// Links aus der ersten Spalte oder der Liste: weiter in die Seitenleiste.
     case leftEdge
+    /// Rechts über die letzte Spalte, das Ende der Liste oder aus der
+    /// Triage hinaus: weiter in den Board-Chat, falls einer sichtbar ist.
+    case rightEdge
 }
 
 /// Angaben für die Menü-Karte am Ticket (Options im Board).

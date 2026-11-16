@@ -17,15 +17,15 @@ extension ControllerActionDispatcher {
     /// ausgewählt ist. Ist inzwischen ein Dialog da, geht nichts raus
     /// („geht nicht“).
     func confirmWhenSettled() {
-        guard let sessionID = selectedSessionID else { return playHaptic(.rejected) }
+        guard let sessionID = chatInputSessionID else { return playHaptic(.rejected) }
         scheduleOnMain(Self.confirmSettleDelay) { [weak self] in
             self?.finishSettledConfirm(sessionID)
         }
     }
 
     private func finishSettledConfirm(_ sessionID: UUID) {
-        guard selectedSessionID == sessionID,
-              case let .chat(state) = ControllerContextResolver.context(for: snapshot()),
+        guard chatInputSessionID == sessionID,
+              let state = Self.inputChatState(ControllerContextResolver.context(for: snapshot())),
               state.acceptsKeys, ControllerBindingResolver.claudePromptVisible(state)
         else { return playHaptic(.rejected) }
         _ = terminals.sendKey(.enter, to: sessionID)

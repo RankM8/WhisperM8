@@ -25143,6 +25143,46 @@
           }
         }
       }
+    },
+    "Back to the ticket": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "zurück zum Ticket"
+          }
+        }
+      }
+    },
+    "Board chat %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Board-Chat %@"
+          }
+        }
+      }
+    },
+    "Board chat · %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Board-Chat · %@"
+          }
+        }
+      }
+    },
+    "The controller is in the board chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Controller ist im Board-Chat"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

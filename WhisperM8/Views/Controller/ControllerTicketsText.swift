@@ -9,6 +9,13 @@ enum ControllerTicketsText {
         return String(localized: "Tickets · \(label)")
     }
 
+    /// Ort in Leiste und Inselkopf, wenn der Controller im Board-Chat ist
+    /// (Paket 3a): „Board-Chat · Jarvis“.
+    static func boardChatTitle(_ name: String?) -> String {
+        guard let name, !name.isEmpty else { return String(localized: "Board chat") }
+        return String(localized: "Board chat · \(name)")
+    }
+
     /// Kurze Bestätigung nach einer Taste im Board.
     static func notice(_ notice: ControllerTicketNotice) -> String {
         switch notice {

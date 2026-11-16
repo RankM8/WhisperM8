@@ -280,6 +280,11 @@ final class ControllerBindingMatrixTests: XCTestCase {
         for direction in ControllerDirection.allCases {
             table = merge(table, moves(direction, .ticket(.move(direction))))
         }
+        // Paket 3a: Gehalten nach rechts bewegt, führt am Rand aber nie in den
+        // Board-Chat; hinein nur mit einem einzelnen Druck.
+        for source in ControllerMoveSource.allCases {
+            table[.move(.right, source: source, isRepeat: true)] = .ticket(.repeatMove(.right))
+        }
         return table
     }()
 

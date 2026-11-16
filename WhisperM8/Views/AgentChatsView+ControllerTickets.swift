@@ -31,6 +31,12 @@ extension AgentChatsView {
             projectID: project?.id, team: TicketTeamDirectory.shared.team(of: project?.id), projectName: project?.name)
         // Was „Zu den Chats“ zeigt: die sichtbare Auswahl (fällt auf den ersten Tab zurück).
         place.chatBehind = selectedSession?.id
+        // Board-Chat nur, solange die Spalte ihn zeigt (angemeldet; ein Blick
+        // in ein kleines Wörterbuch, Paket 3a).
+        if let boardChat = BoardChatInputs.shared.boardChat(in: windowID) {
+            place.boardChatID = boardChat.sessionID
+            place.boardChatName = boardChat.name
+        }
         guard TicketBoardControllers.shared.hasController(for: windowID) else { return place }
         let controller = TicketBoardControllers.shared.controller(for: windowID)
         let model = controller.viewModel
@@ -75,12 +81,15 @@ extension AgentChatsView {
         // Erster Druck ohne Auswahl: die Start-Auswahl zeigen, noch nicht bewegen.
         let hadSpot = model.triage != nil || controllerHasSelection(model)
         switch command {
-        case .move(let direction):
+        case .move(let direction), .repeatMove(let direction):
             if !hadSpot, direction != .left {
                 model.ensureControllerSelection(preferringChat: selectedSessionID)
                 return controllerHasSelection(model) ? .done : .nothing
             }
-            return model.controllerMove(TicketBoardMove(direction))
+            let outcome = model.controllerMove(TicketBoardMove(direction))
+            // Gehalten rutscht die Auswahl nie über den Rand in den Board-Chat.
+            if case .repeatMove = command, outcome == .rightEdge { return .nothing }
+            return outcome
         case .open:
             if model.triage != nil {
                 guard let chatID = model.focusedChatID else { return .rejected }
@@ -116,7 +125,7 @@ extension AgentChatsView {
         case .goToChat(let chatID):
             guard model.chatLines.contains(where: { $0.chatID == chatID }) else { return .rejected }
             return openChatFromTicket(chatID)
-        case .refresh, .dictationUnavailable:
+        case .refresh, .dictationUnavailable, .leaveBoardChat:
             return .rejected
         }
     }

@@ -8,12 +8,22 @@ import Foundation
 final class ControllerTerminalSpy: ControllerTerminalControlling {
     var states: [UUID: ControllerTerminalState] = [:]
     private(set) var keys: [TerminalControlKey] = []
+    /// Chat je Taste, in derselben Reihenfolge wie `keys`.
+    private(set) var keyTargets: [UUID] = []
+    private(set) var scrolledTargets: [UUID] = []
     private(set) var scrolled: [Int] = []
     private(set) var texts: [(text: String, submit: Bool)] = []
 
     func state(of sessionID: UUID) -> ControllerTerminalState? { states[sessionID] }
-    func sendKey(_ key: TerminalControlKey, to sessionID: UUID) -> Bool { keys.append(key); return true }
-    func scroll(lines: Int, in sessionID: UUID) { scrolled.append(lines) }
+    func sendKey(_ key: TerminalControlKey, to sessionID: UUID) -> Bool {
+        keys.append(key)
+        keyTargets.append(sessionID)
+        return true
+    }
+    func scroll(lines: Int, in sessionID: UUID) {
+        scrolled.append(lines)
+        scrolledTargets.append(sessionID)
+    }
     private(set) var pages: [Int] = []
     private(set) var jumpsToBottom = 0
     func scrollPage(_ step: Int, in sessionID: UUID) { pages.append(step) }

@@ -28,6 +28,7 @@ extension ControllerBindingResolver {
         default: break
         }
         guard state.area == .content else { return ticketsListFallback(gesture) }
+        if let chat = state.boardChat { return ticketsBoardChat(gesture, chat: chat) }
         switch state.place.view {
         case .empty:
             // Kein Stand zum Bedienen: ◀ führt in die Seitenleiste, der Rest ruht.
@@ -44,6 +45,9 @@ extension ControllerBindingResolver {
     private static func ticketsBoard(_ gesture: ControllerGesture, state: ControllerTicketState) -> ControllerAction? {
         if let shared = ticketsShared(gesture, state: state) { return shared }
         switch gesture {
+        // Gehalten seitwärts: bewegt, rutscht am rechten Rand aber nie in den
+        // Board-Chat (Paket 3a). Hinein nur mit einem einzelnen Druck.
+        case let .move(direction, _, true) where direction == .right: return .ticket(.repeatMove(direction))
         case let .move(direction, _, _): return .ticket(.move(direction))
         case .press(.cross): return state.place.hasTicket ? .ticket(.open) : .ticket(.move(.down))
         // Kreis tut auf dem Board nichts (zweimal Kreis aus der Triage wirft
@@ -70,6 +74,40 @@ extension ControllerBindingResolver {
         case .holdBegan(.circle): return .rejected
         case let .scroll(lines): return .ticket(.scroll(lines: lines))
         default: return nil
+        }
+    }
+
+    /// Paket 3a: Der Controller hat die Tasten im Board-Chat. Es gelten die
+    /// Tasten eines Chats mit all seinen Schutzregeln (Ankunftssperre,
+    /// Sperre nach einer Frage, Freigabe-Regeln) — aber nur, was in diesen
+    /// sichtbaren Chat schreibt oder in ihm blättert. Alles, was einen
+    /// anderen Chat wählt, startet oder die Ansicht wechselt, ruht hier.
+    ///
+    /// - L1/R1: voriges/nächstes Ticket (E2), nicht Chatwechsel.
+    /// - Stick ◀: zurück aufs Ticket (Entscheidung 16.11.2026). Steuerkreuz
+    ///   bleibt Pfeiltasten ins Terminal; nur wo ← dort nichts tun darf (leeres
+    ///   Claude-Feld, kein lebendes Terminal), führt auch es zurück.
+    private static func ticketsBoardChat(_ gesture: ControllerGesture, chat: ControllerChatState) -> ControllerAction? {
+        switch gesture {
+        case .tap(.l1): return .ticket(.adjacent(-1))
+        case .tap(.r1): return .ticket(.adjacent(1))
+        case .move(.left, .leftStick, false): return .ticket(.leaveBoardChat)
+        case .move(_, .leftStick, _): return nil
+        case let .move(.left, .dpad, isRepeat):
+            if arrowsAllowed(chat), leftArrowAllowed(chat) { return .chatKey(.left) }
+            return isRepeat ? nil : .ticket(.leaveBoardChat)
+        default:
+            break
+        }
+        guard let action = Self.chat(gesture, state: chat) else { return nil }
+        switch action {
+        case .chatKey, .chatInterrupt, .chatClearInput, .scroll, .scrollToBottom,
+             .holdProgress, .holdProgressCancelled, .rejected:
+            return action
+        default:
+            // Chat starten (über den Kopf der Spalte), Chatwechsel, Liste,
+            // Raster, Kachel groß: nicht aus dem Board-Chat heraus.
+            return nil
         }
     }
 
