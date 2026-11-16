@@ -98,19 +98,24 @@ extension AgentControlRequestHandler {
                 if let message = Self.statusGuardMessage(runtime, allowed: ifStatus, force: force) {
                     return .failure(.conflict, message)
                 }
-                // Ein sichtbar leeres Feld schlägt die Tasten-Schätzung (WM8-64).
+                // Ein sichtbar leeres Feld schlägt die Tasten-Schätzung (WM8-64),
+                // aber nur, wenn die Ansicht unten steht. Sichtbarer Text sperrt
+                // auch hochgescrollt (WM8-123).
                 let profile = controller.command.keyboardProfile
-                let field = controller.controllerScreenSnapshot()?.promptField
+                let reading = controller.composerFieldForSendCheck()
+                // Eine offene Ansicht nähme das Enter (Zurückspulen: „Enter to
+                // continue“), auch mit --force nicht (WM8-123).
+                if reading.openView != nil { return .failure(.conflict, PromptDeliveryGate.viewOpenMessage) }
                 if PromptDeliveryGate.sendBlockedByDraft(
                     mayHaveUnsentInput: controller.composerDraft.mayHaveUnsentInput, force: force,
-                    fieldVisiblyEmpty: PromptSubmitCheck.fieldVisiblyEmpty(field: field, profile: profile)) {
+                    fieldVisiblyEmpty: PromptSubmitCheck.fieldVisiblyEmpty(field: reading.fieldForRelease, profile: profile)) {
                     return .failure(.conflict, PromptDeliveryGate.draftMessage(
                         insertedText: controller.composerDraft.mayHoldInsertedText))
                 }
                 // WM8-100: Was am Bildschirm im Feld steht, zählt auch, wenn die
                 // Schätzung es für abgeschickt hält (liegengebliebener Auftrag).
                 if !force, runtime == .idle, PromptSubmitCheck.visibleDraft(
-                    field: field, profile: profile,
+                    field: reading.field, profile: profile,
                     clearsBeforeSubmit: controller.composerDraft.shouldClearBeforeSubmit) {
                     return .failure(.conflict, PromptSubmitCheck.visibleDraftMessage)
                 }

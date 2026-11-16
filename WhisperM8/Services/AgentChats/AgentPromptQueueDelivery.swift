@@ -75,7 +75,7 @@ final class AgentPromptQueueDelivery {
         let inputPending = coordinator.startupInputPending(sessionID)
         switch Self.gateDecision(
             draft: controller.composerDraft,
-            field: controller.controllerScreenSnapshot()?.promptField,
+            reading: controller.composerFieldForSendCheck(),
             profile: profile,
             runtime: runtime,
             lifecycle: coordinator.lifecycleState(for: sessionID),
@@ -97,6 +97,9 @@ final class AgentPromptQueueDelivery {
         case .draftPending:
             store.markFailed(id: reserved.id, error: Self.draftPendingError(controller.composerDraft), retry: true)
             return
+        case .viewOpen:
+            store.markFailed(id: reserved.id, error: Self.viewOpenError, retry: true)
+            return
         }
         // Freigabe oder Dialog statt des Eingabefelds (Status hinkt hinterher):
         // nie zustellen, der Auftrag bleibt vorgemerkt (WM8-75). Das Rennen
@@ -105,7 +108,7 @@ final class AgentPromptQueueDelivery {
         if DelayedEnterGuard.approvalPending(
             status: coordinator.statusStore.status(for: sessionID),
             lifecycle: coordinator.lifecycleState(for: sessionID),
-            screen: controller.controllerScreenSnapshot()) {
+            screen: controller.sendCheckScreen().snapshot) {
             store.markFailed(id: reserved.id, error: "Freigabe oder Dialog offen — wartet, bis der Chat fertig ist", retry: true)
             return
         }
@@ -146,12 +149,13 @@ final class AgentPromptQueueDelivery {
     }
 
     /// Entscheidung der Warteschlange aus Status, Entwurfs-Schätzung und dem
-    /// am Bildschirm abgelesenen Eingabefeld (`nil` = nicht ablesbar, etwa
-    /// hochgescrollt). Pur und für Tests offen, damit sie genau die
-    /// Zusammensetzung der Zustellung prüfen (WM8-121).
+    /// am Bildschirm abgelesenen Eingabefeld. Pur und für Tests offen, damit
+    /// sie genau die Zusammensetzung der Zustellung prüfen (WM8-121). Sichtbarer
+    /// Text sperrt auch hochgescrollt; ein leeres Feld gibt nur unten frei
+    /// (WM8-123).
     nonisolated static func gateDecision(
         draft: TerminalComposerDraftTracker,
-        field: ControllerPromptField?,
+        reading: ComposerFieldReading,
         profile: TerminalKeyboardProfile,
         runtime: AgentSessionRuntimeStatus?,
         lifecycle: AgentSessionLifecycleState?,
@@ -163,8 +167,22 @@ final class AgentPromptQueueDelivery {
             mayHaveUnsentInput: draft.mayHaveUnsentInput,
             inputPending: inputPending,
             visibleDraft: PromptSubmitCheck.visibleDraft(
-                field: field, profile: profile, clearsBeforeSubmit: draft.shouldClearBeforeSubmit),
-            fieldVisiblyEmpty: PromptSubmitCheck.fieldVisiblyEmpty(field: field, profile: profile))
+                field: reading.field, profile: profile, clearsBeforeSubmit: draft.shouldClearBeforeSubmit),
+            fieldVisiblyEmpty: PromptSubmitCheck.fieldVisiblyEmpty(field: reading.fieldForRelease, profile: profile),
+            viewOpen: reading.openView != nil)
+    }
+
+    /// Wie oben, mit einem Feld, das unten abgelesen wurde (Tests).
+    nonisolated static func gateDecision(
+        draft: TerminalComposerDraftTracker,
+        field: ControllerPromptField?,
+        profile: TerminalKeyboardProfile,
+        runtime: AgentSessionRuntimeStatus?,
+        lifecycle: AgentSessionLifecycleState?,
+        inputPending: Bool
+    ) -> PromptDeliveryGate.Decision {
+        gateDecision(draft: draft, reading: ComposerFieldReading(field: field, atBottom: true), profile: profile,
+                     runtime: runtime, lifecycle: lifecycle, inputPending: inputPending)
     }
 
     /// Grund der Wartezeit für `chats queue`. Eingefügter Text hat einen
@@ -173,6 +191,9 @@ final class AgentPromptQueueDelivery {
     nonisolated static func draftPendingError(_ draft: TerminalComposerDraftTracker) -> String {
         draft.mayHoldInsertedText ? insertedTextError : "Entwurf im Eingabefeld — wartet, bis der Chat fertig ist"
     }
+
+    nonisolated static let viewOpenError = "Ansicht von Claude offen (Transkript, /tasks, Agent-Liste, /config …) — "
+        + "wartet, bis sie geschlossen ist"
 
     nonisolated static let insertedTextError = "Eingefügter, nicht abgeschickter Text im Eingabefeld (Diktat ohne Senden, "
         + "„→ Jarvis“, `send --no-submit`) — wartet, bis er abgeschickt oder gelöscht ist. Ist das Feld leer, "

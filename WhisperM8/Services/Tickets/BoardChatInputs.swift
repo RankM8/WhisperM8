@@ -169,12 +169,9 @@ final class BoardChatInputs {
     /// Was der Bildschirm über das Eingabefeld sagt (wie die Warteschlange).
     @ObservationIgnored var fieldVisibility: (UUID) -> BoardChatFieldVisibility = { sessionID in
         guard let controller = AgentTerminalRegistry.shared.controller(for: sessionID) else { return .unknown }
-        let profile = controller.command.keyboardProfile
-        let field = controller.controllerScreenSnapshot()?.promptField
-        if PromptSubmitCheck.fieldVisiblyEmpty(field: field, profile: profile) { return .empty }
-        if PromptSubmitCheck.visibleDraft(field: field, profile: profile,
-                                          clearsBeforeSubmit: controller.composerDraft.shouldClearBeforeSubmit) { return .hasText }
-        return .unknown
+        return BoardChatFieldVisibility(
+            reading: controller.composerFieldForSendCheck(), profile: controller.command.keyboardProfile,
+            clearsBeforeSubmit: controller.composerDraft.shouldClearBeforeSubmit)
     }
     @ObservationIgnored var now: () -> Date = { Date() }
     @ObservationIgnored var refuseSound: () -> Void = { NSSound.beep() }

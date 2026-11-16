@@ -46,10 +46,11 @@ extension AgentTerminalController {
     func delayedEnterAllowed(statusAtPaste: AgentSessionRuntimeStatus?, questionAtPaste: Bool, text: String) -> Bool {
         let statusNow = statusForDelayedEnter
         // Bildschirm immer lesen: Auch ein „ruhender“ Status kann hinterherhinken,
-        // und bei offener Rückfrage unterscheidet er Frage und Freigabe. Nur
-        // Claude (sonst `nil`), nur ganz unten. Kosten gemessen: rund 5 ms im
+        // und bei offener Rückfrage unterscheidet er Frage und Freigabe. Bei
+        // Claude auch hochgescrollt vom lebendigen Bildschirm (WM8-123); ein
+        // Bildschirm macht hier nur strenger. Kosten gemessen: rund 5 ms im
         // Debug-Build je Lesen der untersten 16 Zeilen, einmal je Senden.
-        let screen = controllerScreenSnapshot()
+        let screen = sendCheckScreen().snapshot
         guard !DelayedEnterGuard.allowsEnter(
             statusAtPaste: statusAtPaste, questionAtPaste: questionAtPaste, statusNow: statusNow, screen: screen,
             textLooksLikeOption: DelayedEnterGuard.looksLikeOption(text)) else {

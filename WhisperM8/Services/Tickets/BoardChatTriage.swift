@@ -75,8 +75,22 @@ struct TriageBatch: Equatable {
 enum BoardChatFieldVisibility: Equatable {
     case empty
     case hasText
-    /// Hochgescrollt, eingeklappter Paste, Codex: nicht ablesbar.
+    /// Kein Feld erkannt (Dialog, Ansicht, Codex), Text ohne Cursor, oder
+    /// hochgescrollt ein leeres Feld: Dann zählt die Schätzung.
     case unknown
+
+    /// Dieselbe Ablesung wie `send` und Warteschlange (WM8-123): Text zählt
+    /// auch hochgescrollt, „leer“ nur, wenn die Ansicht unten steht.
+    init(reading: ComposerFieldReading, profile: TerminalKeyboardProfile, clearsBeforeSubmit: Bool) {
+        if PromptSubmitCheck.fieldVisiblyEmpty(field: reading.fieldForRelease, profile: profile) {
+            self = .empty
+        } else if PromptSubmitCheck.visibleDraft(field: reading.field, profile: profile,
+                                                 clearsBeforeSubmit: clearsBeforeSubmit) {
+            self = .hasText
+        } else {
+            self = .unknown
+        }
+    }
 }
 
 enum TriageBatchRules {

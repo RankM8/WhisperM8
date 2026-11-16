@@ -35,6 +35,47 @@ extension AgentTerminalController {
             detectCodexApproval: profile == .codexChat)
     }
 
+    /// Bildschirm für Prüfungen, die dadurch nur strenger werden (WM8-123):
+    /// Sendesperre bei Text im Feld, Freigabe- und Dialog-Erkennung, offene
+    /// Ansicht. Bei Claude auch hochgescrollt vom lebendigen Bildschirm; der
+    /// Cursor kommt ohnehin von dort (`getCursorLocation` ist `buffer.y`),
+    /// Zeilen und Cursor passen also zusammen. `atBottom`: Die Ansicht steht
+    /// unten; nur dann darf ein leeres Feld etwas freigeben. Einmal je
+    /// Zustellversuch bzw. `send`, nie je Taste.
+    func sendCheckScreen() -> (snapshot: ControllerScreenSnapshot?, atBottom: Bool) {
+        guard let capture = claudeSendCheckLines() else {
+            return (controllerScreenSnapshot(), !isScrolledBack)
+        }
+        return (ControllerScreenReading.read(lines: capture.lines, cursor: capture.cursor, detectViews: true),
+                capture.atBottom)
+    }
+
+    /// Eingabefeld für `send` und Warteschlange (WM8-123), dieselbe Ablesung
+    /// wie `sendCheckScreen`, dazu die Ansichten, die nur die Sendeprüfung
+    /// kennt (`ComposerFieldReading.viewWithoutUsableField`).
+    func composerFieldForSendCheck() -> ComposerFieldReading {
+        guard let capture = claudeSendCheckLines() else { return .unreadable }
+        let snapshot = ControllerScreenReading.read(lines: capture.lines, cursor: capture.cursor, detectViews: true)
+        let view = snapshot.openView?.rawValue
+            ?? ComposerFieldReading.viewWithoutUsableField(capture.lines.map(\.full))
+        return ComposerFieldReading(field: snapshot.promptField, atBottom: capture.atBottom, openView: view)
+    }
+
+    /// Untere Zeilen eines laufenden Claude-Chats: unten wie der Controller,
+    /// hochgescrollt vom lebendigen Bildschirm. `nil` bei Codex und Shell.
+    private func claudeSendCheckLines()
+        -> (lines: [ControllerScreenLine], cursor: (row: Int, col: Int)?, atBottom: Bool)? {
+        guard isRunning, command.keyboardProfile == .claudeCodeChat else { return nil }
+        terminal.flushPendingOutput()
+        PerformanceCounters.shared.count(.controllerScreenRead)
+        if isScrolledBack {
+            let live = ControllerScreenCapture.liveBottomLines(of: terminal.getTerminal())
+            return (live.lines, live.cursor, false)
+        }
+        let capture = terminal.controllerBottomLines()
+        return (capture.lines, capture.cursor, true)
+    }
+
     /// Die Ansicht ist hochgescrollt: normaler Puffer mit Verlauf, und der
     /// Ausschnitt steht nicht ganz unten. Im Alternate-Puffer nie (dort gibt
     /// es keinen Verlauf). Einzige Quelle für „hochgescrollt“: Sendeschutz und
