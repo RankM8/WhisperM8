@@ -199,20 +199,64 @@ final class UISnapshotGallery: XCTestCase {
             }
         }
 
-        /// Leiste über dem Terminal, wenn Meldungen wegen des Eingabefelds
-        /// warten (WM8-123): eine und mehrere, Text im Feld und offene Ansicht.
+        /// Pille oben rechts im Terminal, wenn Meldungen wegen des
+        /// Eingabefelds warten (WM8-123), als Überlagerung über nachgestelltem
+        /// Terminal: langer Chat, kurzer Chat mit dem Feld ganz oben (das
+        /// darf nicht verdeckt sein), Board-Spalte bei Mindestbreite 280 pt
+        /// (Pille kürzt statt umzubrechen) und Codex.
         func queueHoldStrip() -> Fixture {
-            Fixture(name: "warteschlange-hinweis", size: CGSize(width: 640, height: 260)) {
-                AnyView(VStack(alignment: .leading, spacing: 0) {
-                    QueueHoldStripContent(notice: .init(count: 1, reason: .textInField))
-                    Rectangle().fill(AgentTheme.background).frame(height: 26)
-                    QueueHoldStripContent(notice: .init(count: 3, reason: .textInField))
-                    Rectangle().fill(AgentTheme.background).frame(height: 26)
-                    QueueHoldStripContent(notice: .init(count: 1, reason: .viewOpen))
-                    Rectangle().fill(AgentTheme.background).frame(maxHeight: .infinity)
+            let longChat = [
+                "⏺ Die Pille liegt jetzt oben rechts im Terminal und verschiebt nichts.",
+                "  ⎿  Read WhisperM8/Views/QueueHoldStrip.swift (68 lines)",
+                "⏺ Snapshots für hell und dunkel sind gerendert.",
+                "  ⎿  make snapshots ONLY=warteschlange-hinweis",
+                "",
+                "> Bitte noch die Doku zum Snapshot ergänz",
+            ]
+            let shortChat = [
+                "> Bitte noch die Doku zum Snapshot ergänz",
+                "  ? for shortcuts",
+            ]
+            let codex = [
+                "• Ran swift test --filter QueueHoldTests",
+                "  └ Executed 12 tests, with 0 failures",
+                "",
+                "▌ Bitte noch die Doku zum Snapshot ergänz",
+            ]
+            func pane(_ notice: QueueHoldNotices.Notice, lines: [String], width: CGFloat? = nil) -> some View {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                        Text(verbatim: line.isEmpty ? " " : line)
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(AgentTheme.textPrimary)
+                            .lineLimit(1)
+                    }
                 }
+                .padding(.horizontal, 8)
+                .padding(.top, 6)
+                .frame(maxWidth: width ?? .infinity, alignment: .topLeading)
+                .frame(height: 120, alignment: .top)
+                .background(AgentTheme.background)
+                .overlay(alignment: .topTrailing) {
+                    QueueHoldStripContent(notice: notice)
+                        .padding(.top, QueueHoldStripContent.topInset)
+                        .padding(.trailing, QueueHoldStripContent.trailingInset)
+                        .padding(.leading, QueueHoldStripContent.leadingInset)
+                }
+                .clipped()
+            }
+            return Fixture(name: "warteschlange-hinweis", size: CGSize(width: 640, height: 620)) {
+                AnyView(VStack(alignment: .leading, spacing: 12) {
+                    pane(.init(count: 3, reason: .textInField), lines: longChat)
+                    pane(.init(count: 1, reason: .textInField), lines: shortChat)
+                    HStack(alignment: .top, spacing: 12) {
+                        pane(.init(count: 1, reason: .viewOpen), lines: longChat, width: 280)
+                        pane(.init(count: 1, reason: .textInField, fieldReadable: false), lines: codex)
+                    }
+                }
+                .padding(8)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .background(AgentTheme.background))
+                .background(AgentTheme.sidebar))
             }
         }
 

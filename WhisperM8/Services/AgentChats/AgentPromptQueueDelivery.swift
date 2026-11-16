@@ -103,11 +103,11 @@ final class AgentPromptQueueDelivery {
             return
         case .draftPending:
             store.markFailed(id: reserved.id, error: Self.draftPendingError(controller.composerDraft), retry: true)
-            hold(sessionID, reason: .textInField)
+            hold(sessionID, reason: .textInField, profile: profile)
             return
         case .viewOpen:
             store.markFailed(id: reserved.id, error: Self.viewOpenError, retry: true)
-            hold(sessionID, reason: .viewOpen)
+            hold(sessionID, reason: .viewOpen, profile: profile)
             return
         }
         // Freigabe oder Dialog statt des Eingabefelds (Status hinkt hinterher):
@@ -172,9 +172,26 @@ final class AgentPromptQueueDelivery {
 
     /// Meldung wartet wegen Text im Feld oder einer Ansicht: Hinweis am Chat
     /// zeigen und in 30 s wieder nachsehen.
-    private func hold(_ sessionID: UUID, reason: QueueHoldNotices.Reason) {
-        notices.set(.init(count: store.openPrompts(for: sessionID).count, reason: reason), for: sessionID)
+    private func hold(_ sessionID: UUID, reason: QueueHoldNotices.Reason, profile: TerminalKeyboardProfile) {
+        notices.set(.init(count: store.openPrompts(for: sessionID).count, reason: reason,
+                          fieldReadable: Self.fieldReadable(profile)), for: sessionID)
         scheduleHeldRetry(sessionID, after: Self.heldRetrySeconds)
+    }
+
+    /// Das Feld liest die App nur bei Claude-Chats ab (`composerFieldForSendCheck`).
+    nonisolated static func fieldReadable(_ profile: TerminalKeyboardProfile) -> Bool {
+        profile == .claudeCodeChat
+    }
+
+    /// Die Warteschlange des Chats hat sich außerhalb der Zustellung geändert
+    /// (`chats dequeue`): Hinweis sofort nachführen statt erst beim nächsten
+    /// Versuch in bis zu 30 s. Ist nichts mehr offen, verschwindet die Pille
+    /// und der geplante Versuch entfällt. Nur Speicher und ein Lesen der Queue.
+    func noteQueueChanged(_ sessionID: UUID) {
+        guard let current = notices.notices[sessionID] else { return }
+        let next = QueueHoldNotices.notice(current, afterOpenCount: store.openPrompts(for: sessionID).count)
+        notices.set(next, for: sessionID)
+        if next == nil { heldRetryToken[sessionID] = nil }
     }
 
     private func scheduleHeldRetry(_ sessionID: UUID, after seconds: TimeInterval) {
@@ -200,7 +217,7 @@ final class AgentPromptQueueDelivery {
         case .deliver:
             deliverNow(for: sessionID)
         case .hold(let reason):
-            hold(sessionID, reason: reason)
+            hold(sessionID, reason: reason, profile: controller?.command.keyboardProfile ?? .claudeCodeChat)
         case .stop:
             notices.clear(sessionID)
         }
