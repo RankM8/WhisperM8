@@ -210,6 +210,9 @@ final class ControllerUIModel {
     var targetTitle: String?
     /// Womit zuletzt bedient wurde: Danach richtet sich die Legende (WM8-104).
     var lastInput: ControllerIslandInput = .controller
+    /// Kurze Bestätigung in der Leiste im Ticket-Board (WM8-91): „Link
+    /// kopiert“, „Diktat erst mit dem Board-Chat“. Verschwindet nach 2 s.
+    var ticketNotice: ControllerTicketNotice?
 
     @ObservationIgnored var listModel = SidebarNavigationModel()
 

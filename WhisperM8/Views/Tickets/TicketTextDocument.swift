@@ -313,6 +313,8 @@ struct TicketTextView: NSViewRepresentable {
         textView.textStorage?.setAttributedString(document)
         context.coordinator.revision = revision
         context.coordinator.ticketKey = ticketKey
+        // Der Controller blättert hier mit dem rechten Stick (WM8-91).
+        TicketTextScrollRegistry.shared.register(scrollView)
         return scrollView
     }
 

@@ -171,6 +171,8 @@ enum ControllerAction: Equatable, Sendable {
     case bringAppToFront
     /// Rückmeldung „geht nicht“ (drei kleine Ticks).
     case rejected
+    /// Im Ticket-Board (WM8-91): Auswahl, Triage, Link, Linear, Aktualisieren.
+    case ticket(ControllerTicketCommand)
     /// Halte-Fortschritt anzeigen (endliche Animation mit bekannter Dauer).
     case holdProgress(ControllerButton, duration: TimeInterval)
     case holdProgressCancelled(ControllerButton)

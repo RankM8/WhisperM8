@@ -402,9 +402,9 @@ wird. In beiden Rückfragen bestätigt Return (auch mit der Tastatur).
 
 Das Ticket-Board ist ein Ort wie ein Chat oder ein Workspace (WM8-91, Plan
 [`../plans/ticket-board-controller.md`](../plans/ticket-board-controller.md), Entwurf
-[`../design/ticket-board-controller.html`](../design/ticket-board-controller.html)). Gebaut ist Paket 1
-„Öffnen und Umschalten“; das Bedienen des Boards (Auswahl, Triage, Tasten Nr. 8 bis 29) folgt mit Paket 2.
-Alles nur bei eingeschalteter Ticket-Ansicht (`ticketBoardEnabled`).
+[`../design/ticket-board-controller.html`](../design/ticket-board-controller.html)). Gebaut sind Paket 1
+„Öffnen und Umschalten“ und Paket 2 „Bedienen“ (Nr. 1 bis 29 außer allem, was „mit 113“ heißt); die
+Tastatur-Kürzel im Board kommen mit Paket 3. Alles nur bei eingeschalteter Ticket-Ansicht (`ticketBoardEnabled`).
 
 - **Hin:** L2 halten, Reiter **„Tickets“** rechts von „Workspaces & Projekte“ (◀ ▶ gehen jetzt Schritt für
   Schritt, ohne Umlauf). Je eingerichtetem Team mit Projekt eine Zeile: Farbe, Kürzel, Projekt, rechts die
@@ -423,15 +423,38 @@ Alles nur bei eingeschalteter Ticket-Ansicht (`ticketBoardEnabled`).
 - **Kopf und Leiste** nennen statt des Chats den Ort: „Tickets · WM8“.
 
 **Belegung im Ticket-Modus** (Zusammenhang `tickets`, Vorrang nach Menü und Dialog, vor Liste und Chat):
-L2 getippt und gehalten wie im Chat, Options, Create, Touchpad, L1 + R1 wie überall. R1 gehalten zeigt nur
-die App-Raute; die Chat-Raute ist aus („wirkt auf den Board-Chat, den es noch nicht gibt“). L1 gehalten
-gibt es nicht. R2 tut nichts, mit „geht nicht“ (Entscheidung E4). Bis Paket 2 das Board bedient, führt
-dort nur ◀ in die Seitenleiste; die Tasten der Liste gelten erst mit ihrem Fokus, wo ihre Markierung zu
-sehen ist (eine stehen gebliebene Markierung wird nie ungesehen geöffnet, gestartet oder geschlossen).
-Paddles wie in der Liste: Sprünge verlassen das Board, Eingaben in einen Chat „geht nicht“.
+
+| Wo | Taste | Wirkung |
+|---|---|---|
+| überall | L2 getippt / gehalten, Options, Create, Touchpad, L1 + R1 | wie im Chat bzw. wie überall |
+| überall | R1 gehalten | nur die App-Raute; die Chat-Raute ist aus („wirkt auf den Board-Chat, den es noch nicht gibt“) |
+| überall | R2 | „geht nicht“, die Leiste sagt einmal „Diktat erst mit dem Board-Chat“ (E4) |
+| überall | Dreieck | „geht nicht“ (→ Jarvis kommt mit WM8-113); L1 gehalten gibt es nicht |
+| Board, Liste | Stick, Steuerkreuz | Auswahl, mit Wiederholung; unter der letzten gezeigten Karte steht „N weitere“ als eigene Stelle; ◀ aus der ersten Spalte (bzw. der Liste) in die Seitenleiste |
+| Board, Liste | Kreuz | Ticket groß, Liste = die Spalte; auf „N weitere“ beim ersten verborgenen Ticket, wie der Knopf |
+| Board | Kreis | nichts, mit „geht nicht“ (zweimal Kreis aus der Triage wirft nicht aus dem Board) |
+| Board, Triage | Viereck · L1/R1 · L3 · R3 | Link kopieren (Leiste: „Link kopiert“) · voriges/nächstes Ticket (Board in Lesereihenfolge) · In Linear öffnen · Aktualisieren wie ↻ |
+| Triage | ▲ ▼ · ▶ · ◀ | Ticket in der Liste · in „Chats am Ticket“ (nur mit Chats) · zurück bzw. in die Seitenleiste |
+| Triage | Kreuz · Kreis · rechter Stick | in der Liste nichts · zurück zum Board (Auswahl bleibt) · Beschreibung und Verlauf blättern |
+| Chat-Zeile | ▲ ▼ · Kreuz · Kreis | Chat wählen · **Zum Chat** (nur Chats auf diesem Rechner) · zurück in die Liste |
+| Seitenleiste | wie in der Liste | Kreuz öffnet den markierten Chat sichtbar, ▶ zurück ins Board |
+
+Die erste Bewegung zeigt die Start-Auswahl: die Karte des Tickets, an dem der Chat dahinter hängt, sonst
+die erste Karte der ersten Spalte, in der etwas wartet, sonst die erste Karte. **Options** öffnet die
+Menü-Karte an der gewählten Karte bzw. am Kopf des großen Tickets: Ticket (Zum Chat ›, Link kopieren, In
+Linear öffnen), Board (Nur „Wartet auf mich“ an/aus, Liste kopieren, Aktualisieren), Steuerung (Zu den
+Chats, Zwischenablage-Verlauf, Belegung anzeigen, Controller pausieren). Paddles wie in der Liste: Sprünge
+verlassen das Board, Eingaben in einen Chat „geht nicht“. Die Leiste zeigt je Zustand nur die Tasten, die
+dort etwas tun (Board, Triage, Chat-Zeile, Seitenleiste).
+
+Die Regeln liegen pur in `Views/Tickets/TicketBoardSelection.swift` (`step` mit „N weitere“ und Rand als
+Rückgabe, `openKey`, `adjacent`, `stepInList`, `triageStep`, `controllerStart`) und
+`Core/ControllerBindingResolver+Tickets.swift`; `TicketBoardViewModel+Controller.swift` wendet sie an.
 
 **Schutz:** Hinter den Tickets kommt in keinem Chat etwas an — kein Enter, kein Escape, keine Taste, kein
 Diktat, auch nicht über die Insel (L2 + R2 auf „hier“ im Board) oder per Tastatur (Leertaste in ⌥Tab).
+Kreuz springt nie von selbst in einen Chat: Dreimal schnell Kreuz öffnet das Ticket groß und tut dann
+nichts; „Zum Chat“ verlangt die Chat-Zeile (▶, dann Kreuz, E3).
 `ControllerTicketsSafetyTests` prüft das für jede Geste, jede Ebene und jede Paddle-Belegung und spielt
 alle Tasten an einem Chat mit offener Freigabe durch. Das Board schreibt nichts nach Linear.
 
@@ -795,8 +818,10 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
   Notbremse und Belegung im Manager.
 - `swift test --filter ControllerTickets` und `--filter AgentWindowStoreTicketsPlace` — Ticket-Board
   (WM8-91): kein Weg in einen verdeckten Chat, Reiter „Tickets“, Rückweg mit L2, Menü-Einträge, Teams aus
-  der Einrichtung. `make snapshots ONLY=tickets-controller` zeigt „Wohin“ mit dem Reiter (aus einem Chat,
-  im Board, ohne Team, als Pille), R1 im Board und die Leiste im Ticket-Modus.
+  der Einrichtung; `--filter TicketBoardSelection` die Auswahl samt „N weitere“, Rand, Liste und
+  Chat-Zeile. `make snapshots ONLY=tickets-controller` zeigt „Wohin“ mit dem Reiter (aus einem Chat,
+  im Board, ohne Team, als Pille), R1 im Board, die Leiste, das Board mit gewählter Karte und mit
+  „N weitere“, die Triage, die Chat-Zeile und die Menü-Karte am Ticket.
 - `swift test --filter ControllerScroll` — Tempo-Anstieg, Bündelung, Blättern mit R1, Kreis „Ans Ende“
   samt Legende und Ausführer (WM8-116).
 - `swift test --filter Controller` — Kern, Ausführer, Manager, Debug-Kanal; die Ebenen in

@@ -212,6 +212,10 @@ final class AgentChatsCommandCenter {
         /// Board des Projekts eines Chats (Options-Menü, WM8-91); `nil` ohne
         /// Team oder bei ausgeschalteter Ticket-Ansicht.
         var ticketBoardTarget: (UUID) -> ControllerTicketBoardTarget? = { _ in nil }
+        /// Befehl an das Board dieses Fensters (WM8-91, Paket 2).
+        var ticketCommand: (ControllerTicketCommand) -> ControllerTicketOutcome = { _ in .rejected }
+        /// Angaben für die Menü-Karte am Ticket; `nil` ohne Tickets.
+        var ticketMenuInfo: () -> ControllerTicketMenuInfo? = { nil }
     }
 
     struct Token: Equatable {
@@ -296,6 +300,17 @@ final class AgentChatsCommandCenter {
     func ticketBoardTarget(for sessionID: UUID, in windowID: UUID? = nil) -> ControllerTicketBoardTarget? {
         guard let id = windowID ?? activeWindowID else { return nil }
         return handlers[id]?.handler.ticketBoardTarget(sessionID)
+    }
+
+    /// Befehl an das Board; ohne `windowID` im aktiven Fenster.
+    func ticketCommand(_ command: ControllerTicketCommand, in windowID: UUID? = nil) -> ControllerTicketOutcome {
+        guard let id = windowID ?? activeWindowID else { return .rejected }
+        return handlers[id]?.handler.ticketCommand(command) ?? .rejected
+    }
+
+    func ticketMenuInfo(in windowID: UUID? = nil) -> ControllerTicketMenuInfo? {
+        guard let id = windowID ?? activeWindowID else { return nil }
+        return handlers[id]?.handler.ticketMenuInfo()
     }
 
     /// Führt einen Befehl aus. Ohne `windowID` nur im aktiven Fenster, und nur

@@ -12,13 +12,23 @@ final class ControllerTicketsSafetyTests: XCTestCase {
 
     private static let place = ControllerTicketsPlace(projectID: UUID(), team: "WM8")
 
+    /// Jede Ansicht des Boards, mit und ohne Rückweg, dazu die Liste links.
     private static var contexts: [ControllerContext] {
         let back = ControllerBackTarget(kind: .chat, title: "Jarvis", id: UUID())
-        return [
-            .tickets(ControllerTicketState(place: place, area: .content, backTarget: back)),
-            .tickets(ControllerTicketState(place: place, area: .content, backTarget: nil)),
-            .tickets(ControllerTicketState(place: place, area: .list, backTarget: back)),
-        ]
+        var result: [ControllerContext] = []
+        for view in [ControllerTicketView.empty, .board, .list, .triage, .chatLine] {
+            for hasTicket in [false, true] {
+                var shown = place
+                shown.view = view
+                shown.hasTicket = hasTicket
+                shown.ticketHasChats = hasTicket
+                shown.chatLineTitle = view == .chatLine && hasTicket ? "Vic" : nil
+                result.append(.tickets(ControllerTicketState(place: shown, area: .content, backTarget: back)))
+                result.append(.tickets(ControllerTicketState(place: shown, area: .content, backTarget: nil)))
+            }
+        }
+        result.append(.tickets(ControllerTicketState(place: place, area: .list, backTarget: back)))
+        return result
     }
 
     /// Jede Geste, die der Erkenner liefern kann: alle Tasten, Sticks,
@@ -115,6 +125,42 @@ final class ControllerTicketsSafetyTests: XCTestCase {
         }
     }
 
+    /// E3: Dreimal schnell Kreuz führt nie vom Board in einen Chat. Kreuz
+    /// öffnet auf dem Board das Ticket groß, in der Liste der Triage tut es
+    /// nichts; zum Chat führt nur die Chat-Zeile, die man mit ▶ betritt.
+    func testCrossNeverJumpsFromTheBoardIntoAChat() {
+        func cross(_ view: ControllerTicketView, chatTitle: String? = nil) -> ControllerAction? {
+            var shown = Self.place
+            shown.view = view
+            shown.hasTicket = true
+            shown.chatLineTitle = chatTitle
+            return ControllerBindingResolver.action(for: .press(.cross), in: .tickets(ControllerTicketState(place: shown)))
+        }
+        XCTAssertEqual(cross(.board), .ticket(.open), "Board → Ticket groß")
+        XCTAssertEqual(cross(.triage), .rejected, "in der Liste der Triage: nichts")
+        XCTAssertEqual(cross(.chatLine), .rejected, "Chat auf anderem Rechner: kein Ziel")
+        XCTAssertEqual(cross(.chatLine, chatTitle: "Vic"), .ticket(.open), "nur auf der Chat-Zeile: Zum Chat")
+        var shown = Self.place
+        shown.view = .triage
+        shown.hasTicket = true
+        shown.ticketHasChats = true
+        XCTAssertEqual(ControllerBindingResolver.action(
+            for: .move(.right, source: .leftStick, isRepeat: true), in: .tickets(ControllerTicketState(place: shown))), nil,
+            "gehalten springt der Stick nicht auf die Chat-Zeile")
+    }
+
+    /// Kreis auf dem Board tut nichts: Zweimal Kreis aus der Triage wirft
+    /// nicht aus dem Board.
+    func testCircleOnTheBoardDoesNothing() {
+        var shown = Self.place
+        shown.view = .board
+        XCTAssertEqual(ControllerBindingResolver.action(for: .tap(.circle), in: .tickets(ControllerTicketState(place: shown))),
+                       .rejected)
+        shown.view = .triage
+        XCTAssertEqual(ControllerBindingResolver.action(for: .tap(.circle), in: .tickets(ControllerTicketState(place: shown))),
+                       .ticket(.back))
+    }
+
     func testPackageOneBindings() {
         let context = Self.contexts[0]
         func action(_ gesture: ControllerGesture) -> ControllerAction? {
@@ -128,7 +174,7 @@ final class ControllerTicketsSafetyTests: XCTestCase {
         XCTAssertEqual(action(.inLayer(.quickDraw, .move(.right, source: .dpad, isRepeat: false))),
                        .appSlot(.stayAwake), "App-Raute bleibt, wie sie ist")
         XCTAssertNil(action(.layerBegan(.writing)), "L1 „Schreiben“ gibt es erst mit dem Board-Chat")
-        XCTAssertEqual(action(.press(.r2)), .rejected, "E4: R2 tut nichts, mit Rückmeldung")
+        XCTAssertEqual(action(.press(.r2)), .ticket(.dictationUnavailable), "E4: R2 tut nichts, mit Rückmeldung")
         XCTAssertEqual(action(.inLayer(.whereTo, .press(.r2))), .islandCommitAndDictate,
                        "L2 + R2: der Ausführer lehnt ab, solange das Ziel kein Chat ist")
         XCTAssertEqual(action(.press(.options)), .menuToggle)
@@ -303,6 +349,26 @@ final class ControllerTicketsSafetyTests: XCTestCase {
         tap(.r2)
         XCTAssertTrue(dictation.started.isEmpty)
         XCTAssertEqual(haptics.last, .rejected)
+        XCTAssertEqual(ui.ticketNotice, .dictationNeedsBoardChat, "einmal der Grund in der Leiste")
+    }
+
+    /// Auf dem Board gehen die Tasten an das Board, nie an den Chat dahinter;
+    /// links aus der ersten Spalte geht es in die Seitenleiste.
+    func testBoardKeysGoToTheBoard() {
+        var shown = Self.place
+        shown.view = .board
+        shown.hasTicket = true
+        window.tickets = shown
+        tap(.cross)
+        tap(.square)
+        tap(.r1)
+        XCTAssertEqual(window.ticketCommands, [.open, .copyLink, .adjacent(1)])
+        XCTAssertEqual(ui.ticketNotice, .linkCopied)
+        window.ticketOutcome = .leftEdge
+        feed(.button(.dpadLeft, pressed: true))
+        feed(.button(.dpadLeft, pressed: false))
+        XCTAssertEqual(ui.area, .list, "◀ aus der ersten Spalte: Seitenleiste")
+        assertNothingReachedTheChat("Board")
     }
 
     func testR1ShowsOnlyTheAppDiamond() {

@@ -93,4 +93,69 @@ extension UISnapshotGallery {
             Fixture(name: "tickets-controller-leiste-chat-zurueck", size: legendSize) { chatLegend() },
         ]
     }
+
+    /// Paket 2 (WM8-91): Board mit ausgewählter Karte und Leiste, „N weitere“
+    /// gewählt, Triage, Chat-Zeile und die Menü-Karte am Ticket. Das Board ist
+    /// dasselbe wie in `ticketBoardFixtures` (Team WM8, Personen erfunden).
+    @MainActor
+    static func ticketsControllerBoardFixtures(
+        view: @escaping ((TicketBoardViewModel) -> Void) -> AnyView, comments: TicketComments
+    ) -> [Fixture] {
+        let ui = ControllerUIModel.shared
+        func place(_ view: ControllerTicketView, chatLine: String? = nil, chats: Bool = false) -> ControllerContext {
+            var place = ControllerTicketsPlace(projectID: nil, team: "WM8")
+            place.view = view
+            place.hasTicket = true
+            place.ticketHasChats = chats
+            place.chatLineTitle = chatLine
+            return .tickets(ControllerTicketState(
+                place: place, backTarget: ControllerBackTarget(kind: .chat, title: "Jarvis: Supervisor")))
+        }
+        func screen(_ context: ControllerContext, menu: ControllerMenuModel? = nil,
+                    _ configure: @escaping (TicketBoardViewModel) -> Void) -> AnyView {
+            ui.menu = menu
+            return AnyView(VStack(spacing: 0) {
+                view(configure)
+                    .overlayPreferenceValue(ControllerMenuAnchorKey.self) { anchors in
+                        if let menu {
+                            ControllerMenuCardResolver(menu: menu, fallbackTitle: "Tickets · WM8", anchors: anchors, bottomInset: 0)
+                        }
+                    }
+                ControllerLegendBar(
+                    target: .make(context: context, chatTitle: "Tickets · WM8"),
+                    entries: ControllerLegend.entries(for: context))
+            })
+        }
+        var setup = ControllerMenuSetup()
+        setup.ticketsShown = true
+        setup.ticket = ControllerTicketMenuInfo(
+            key: "WM8-81", chats: [.init(id: UUID(), title: "Jon")], hasURL: true, waitingFilterOn: false)
+        let menu = ControllerMenuModel(setup: setup)
+        let size = CGSize(width: 1340, height: 900)
+        return [
+            Fixture(name: "tickets-controller-board", size: size) {
+                screen(place(.board)) { $0.setBoardSpot(.card("WM8-69")) }
+            },
+            // Hoch genug, dass „N weitere“ unter den acht Karten zu sehen ist.
+            Fixture(name: "tickets-controller-board-weitere", size: CGSize(width: 1340, height: 1760)) {
+                screen(place(.board)) { $0.setBoardSpot(.more(column: "s0")) }
+            },
+            Fixture(name: "tickets-controller-triage", size: size) {
+                screen(place(.triage, chats: true)) {
+                    $0.openFromLane("WM8-81")
+                    $0.setComments(.loaded(comments), ticketID: "id-81")
+                }
+            },
+            Fixture(name: "tickets-controller-chat-zeile", size: size) {
+                screen(place(.chatLine, chatLine: "Jon", chats: true)) {
+                    $0.openFromLane("WM8-81")
+                    $0.setComments(.loaded(comments), ticketID: "id-81")
+                    $0.triageFocus = .chat(0)
+                }
+            },
+            Fixture(name: "tickets-controller-menue", size: size) {
+                screen(place(.board), menu: menu) { $0.setBoardSpot(.card("WM8-81")) }
+            },
+        ]
+    }
 }

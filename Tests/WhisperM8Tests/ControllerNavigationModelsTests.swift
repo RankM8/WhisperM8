@@ -157,8 +157,10 @@ final class ControllerMenuModelTests: XCTestCase {
             .removeFromWorkspace, .addToWorkspace, .toggleTileNote, .moveToNewWindow,
             .renameWorkspace, .gridCapacity,
             .restart, .backgroundLogs, .backgroundStop, .backgroundRestart, .stopJob,
-            // Ticket-Board (WM8-91): „Ticket-Board WM8“ bzw. „Zu den Chats“.
-            .toggleNotes, .archiveMode, .ticketBoard, .backToChats, .clipboardHistory, .showBindings, .pause,
+            .toggleNotes, .archiveMode,
+            // Ticket-Board (WM8-91): Menü-Karte am Ticket, „Ticket-Board WM8“, „Zu den Chats“.
+            .ticketChat, .ticketCopyLink, .ticketOpenInLinear, .boardWaitingFilter, .boardCopyList, .boardRefresh,
+            .ticketBoard, .backToChats, .clipboardHistory, .showBindings, .pause,
         ])
         let model = ControllerMenuModel(setup: setup())
         XCTAssertEqual(model.selected, .continueWork)

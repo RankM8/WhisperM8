@@ -68,6 +68,19 @@ extension ControllerLegendLabel {
         case .undo: return String(localized: "Undo")
         case .transcript: return String(localized: "Transcript")
         case .reopenClosed: return String(localized: "Reopen closed chat")
+        case .ticketSelection: return String(localized: "Selection")
+        case .ticketPreviousNext: return String(localized: "Ticket")
+        case .copyLink: return String(localized: "Copy link")
+        case .openInLinear: return String(localized: "Linear")
+        case .refresh: return String(localized: "Refresh")
+        case .backToBoard: return String(localized: "Board")
+        case .read: return String(localized: "Read")
+        case .chatsOnTicket: return String(localized: "Chats on ticket")
+        case .goToChat: return String(localized: "Go to chat")
+        case .backToTicketList: return String(localized: "List")
+        case .chooseChat: return String(localized: "Choose chat")
+        case .openChatLeavesTickets: return String(localized: "Open chat (leaves the tickets)")
+        case .backIntoBoard: return String(localized: "Back into the board")
         case .limitsCard: return String(localized: "Limits")
         case .alertLevel: return String(localized: "Alerts")
         case .stayAwake: return String(localized: "Stay awake")
@@ -140,6 +153,10 @@ extension ControllerLegendEntry {
     /// Marketing“). Lange Namen werden gekürzt, damit die Leiste nicht schon
     /// wegen eines Titels Tasten weglässt.
     var title: String {
+        if label == .goToChat, let name {
+            let short = name.count > 28 ? String(name.prefix(27)) + "…" : name
+            return String(localized: "Go to chat \(short)")
+        }
         guard let backTarget else { return label.title }
         let name = backTarget.title.count > 28 ? String(backTarget.title.prefix(27)) + "…" : backTarget.title
         switch backTarget.kind {

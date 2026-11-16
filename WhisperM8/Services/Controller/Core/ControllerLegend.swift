@@ -33,6 +33,11 @@ enum ControllerLegendLabel: String, CaseIterable, Sendable {
     case limitsCard, alertLevel, stayAwake, clipboardWithR1
     // WM8-116: Kreis im hochgescrollten Chat, R1 + rechter Stick
     case jumpToEnd, pageScroll
+    // Ticket-Board (WM8-91)
+    case ticketSelection, ticketPreviousNext, copyLink, openInLinear, refresh, backToBoard, read, chatsOnTicket
+    /// „Zum Chat Vic“: Name in `ControllerLegendEntry.name`.
+    case goToChat
+    case backToTicketList, chooseChat, openChatLeavesTickets, backIntoBoard
 }
 
 struct ControllerLegendEntry: Equatable, Sendable {
@@ -43,6 +48,8 @@ struct ControllerLegendEntry: Equatable, Sendable {
     var isCombination: Bool = false
     /// Nur bei `lastChat` in der Legende: wohin L2 zurückführt.
     var backTarget: ControllerBackTarget? = nil
+    /// Nur bei `goToChat`: Name des Chats.
+    var name: String? = nil
 }
 
 struct ControllerLegendSection: Equatable, Sendable {
@@ -293,27 +300,61 @@ enum ControllerLegend {
         }
     }
 
-    /// Ticket-Modus (WM8-91, Paket 1): Bis Paket 2 das Board bedient, stehen
-    /// hier die Tasten der Liste links, dazu Menü, der Rückweg mit dem Namen
-    /// des Ziels und die Ebenen. R2 fehlt: Es tut ohne Board-Chat nichts.
+    /// Ticket-Modus (WM8-91): Board, Triage, Chat-Zeile und Liste links,
+    /// jeweils nur mit Tasten, die dort etwas tun (Plan, „Die Leiste unten“).
+    /// R2 und Dreieck fehlen: Sie tun ohne Board-Chat nichts.
     private static func ticketsCandidates(_ state: ControllerTicketState) -> [Candidate] {
         let back: [Candidate] = state.backTarget.map { target in
             [Candidate(entry: ControllerLegendEntry(inputs: [.button(.l2)], label: .lastChat, backTarget: target),
                        probes: [.tap(.l2)])]
         } ?? []
-        return [
-            ControllerLegend.Candidate(
-                entry: ControllerLegendEntry(inputs: [.leftStick, .dpad], label: .move),
-                probes: verticalMoves
-            ),
-            candidate(.button(.cross), .open, [.press(.cross)]),
-            candidate(.button(.options), .menu, [.press(.options)]),
-            candidate(.button(.create), .newChat, [.press(.create)]),
-        ] + back + [
-            Candidate(
-                entry: ControllerLegendEntry(inputs: [.button(.r1), .button(.l2)], label: .layersHold),
-                probes: [.layerBegan(.quickDraw), .layerBegan(.whereTo)]),
-        ]
+        let layers = Candidate(
+            entry: ControllerLegendEntry(inputs: [.button(.r1), .button(.l2)], label: .layersHold),
+            probes: [.layerBegan(.quickDraw), .layerBegan(.whereTo)])
+        let menu = candidate(.button(.options), .menu, [.press(.options)])
+        let link = candidate(.button(.square), .copyLink, [.tap(.square)])
+        let bumpers = candidate(.bumpers, .ticketPreviousNext, [.tap(.l1), .tap(.r1)])
+        let linear = candidate(.button(.l3), .openInLinear, [.press(.l3)])
+        let refresh = candidate(.button(.r3), .refresh, [.tap(.r3)])
+        let stick = ControllerLegend.Candidate(
+            entry: ControllerLegendEntry(inputs: [.leftStick, .dpad], label: .ticketSelection),
+            probes: ControllerDirection.allCases.map { .move($0, source: .leftStick, isRepeat: false) })
+        guard state.area == .content else {
+            return [
+                ControllerLegend.Candidate(
+                    entry: ControllerLegendEntry(inputs: [.leftStick], label: .move), probes: verticalMoves),
+                candidate(.button(.cross), .openChatLeavesTickets, [.press(.cross)]),
+                candidate(.button(.dpadRight), .backIntoBoard, [.move(.right, source: .dpad, isRepeat: false)]),
+            ] + back
+        }
+        switch state.place.view {
+        case .empty:
+            return [menu, candidate(.button(.r3), .refresh, [.tap(.r3)])] + back + [layers]
+        case .board, .list:
+            return [stick, candidate(.button(.cross), .open, [.press(.cross)]), link, bumpers, linear, refresh, menu]
+                + back + [layers]
+        case .triage:
+            let chats: [Candidate] = state.place.ticketHasChats
+                ? [candidate(.button(.dpadRight), .chatsOnTicket, [.move(.right, source: .dpad, isRepeat: false)])] : []
+            return [
+                ControllerLegend.Candidate(
+                    entry: ControllerLegendEntry(inputs: [.leftStick], label: .ticketPreviousNext), probes: verticalMoves),
+                candidate(.button(.circle), .backToBoard, [.tap(.circle)]),
+                link, bumpers,
+                candidate(.rightStick, .read, [.scroll(lines: 1), .scroll(lines: -1)]),
+            ] + chats + [menu] + back
+        case .chatLine:
+            var goTo: [Candidate] = []
+            if let name = state.place.chatLineTitle {
+                goTo = [Candidate(entry: ControllerLegendEntry(inputs: [.button(.cross)], label: .goToChat, name: name),
+                                  probes: [.press(.cross)])]
+            }
+            return goTo + [
+                candidate(.button(.circle), .backToTicketList, [.tap(.circle)]),
+                ControllerLegend.Candidate(
+                    entry: ControllerLegendEntry(inputs: [.leftStick], label: .chooseChat), probes: verticalMoves),
+            ]
+        }
     }
 
     private static func chatCandidates(_ state: ControllerChatState) -> [Candidate] {

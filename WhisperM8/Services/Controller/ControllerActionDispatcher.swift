@@ -64,6 +64,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     /// Zählt Schließ-Vorgänge, damit ein verzögertes Schließen (Markierung
     /// eines Schnellbefehls) eine neu geöffnete Insel nicht trifft.
     var islandGeneration = 0
+    /// Zählt Bestätigungen in der Leiste des Ticket-Boards (WM8-91).
+    var ticketNoticeGeneration = 0
     /// Chat, dessen Eingabe R3 halten leert — gebunden beim Haltebeginn, damit
     /// ein Chatwechsel während des Haltens nicht den falschen Chat leert.
     private var clearInputTarget: UUID?
@@ -383,6 +385,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case .pauseToggle: togglePause()
         case .bringAppToFront: environment.bringAgentChatsToFront()
         case .rejected: playHaptic(.rejected)
+        case let .ticket(command): performTicket(command)
         case let .holdProgress(button, duration):
             if button == .r3 { clearInputTarget = selectedSessionID }
             ui.holdProgress = ControllerHoldProgress(button: button, startedAt: now(), duration: duration)
@@ -695,6 +698,9 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         if !setup.ticketsShown, let sessionID = setup.sessionID {
             setup.ticketBoard = chats.ticketBoardTarget(for: sessionID, in: targetWindowID)
         }
+        // Menü-Karte am Ticket (Paket 2): nur mit dem Board im Fokus, nicht
+        // aus der Liste links (dort gilt das Menü der markierten Chat-Zeile).
+        if setup.ticketsShown, setup.sessionID == nil { setup.ticket = chats.ticketMenuInfo(in: targetWindowID) }
         return setup
     }
 
@@ -749,6 +755,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
                   let sessionID = menu.setup.sessionID else { return playHaptic(.rejected) }
             ui.menu = nil
             command(.addChatToWorkspace(sessionID, workspaceID: workspaceID), orReject: true)
+        case .ticketChats(let list):
+            guard let raw = list.selectedEnabled, let chatID = UUID(uuidString: raw) else { return playHaptic(.rejected) }
+            ui.menu = nil
+            performTicket(.goToChat(chatID))
         case .capacities(let list):
             guard let id = list.selectedEnabled, let context = menu.setup.chat?.shownInWorkspace,
                   let choice = context.capacities.first(where: { $0.id == id }) else { return playHaptic(.rejected) }
@@ -789,8 +799,13 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case .cycleMode:
             guard let sessionID = inputTarget(of: setup) else { return playHaptic(.rejected) }
             terminals.sendKey(.backTab, to: sessionID)
-        case .commands, .switchAccount, .addToWorkspace, .gridCapacity:
+        case .commands, .switchAccount, .addToWorkspace, .gridCapacity, .ticketChat:
             break
+        case .ticketCopyLink: performTicket(.copyLink)
+        case .ticketOpenInLinear: performTicket(.openInLinear)
+        case .boardWaitingFilter: performTicket(.toggleWaitingFilter)
+        case .boardCopyList: performTicket(.copyList)
+        case .boardRefresh: performTicket(.refresh)
         case .redraw:
             guard let sessionID = inputTarget(of: setup) else { return playHaptic(.rejected) }
             if !terminals.sendKey(.redraw, to: sessionID) { playHaptic(.rejected) }
