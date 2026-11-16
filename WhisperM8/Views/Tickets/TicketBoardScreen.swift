@@ -306,12 +306,33 @@ final class TicketBoardControllers {
     static let shared = TicketBoardControllers()
     private var byWindow: [UUID: TicketBoardController] = [:]
 
+    private var mouseMonitor: Any?
+
     func controller(for windowID: UUID) -> TicketBoardController {
         if let known = byWindow[windowID] { return known }
         let fresh = TicketBoardController(environment: .live)
         fresh.viewModel.windowID = windowID
         byWindow[windowID] = fresh
+        watchMouse()
         return fresh
+    }
+
+    /// Ein Mausklick räumt den Kopf (`leaveHeaders`), unabhängig von der
+    /// Controller-Laufzeit: Auch die Tastatur wählt Knöpfe im Kopf (Paket 3c),
+    /// und ein späteres Return nach einem Klick wirkte sonst auf den alten
+    /// Knopf (WM8-91). Erst nach dem Klick geräumt, nicht beim Mausdruck: Ein
+    /// Klick auf einen Eintrag der offenen Liste der Bereiche wählt ihn
+    /// (`chooseProjectByMouse`), statt dass die Liste vorher verschwindet und der
+    /// Klick darunter landet. Einmal je App, sobald es ein Board gibt. Kosten je
+    /// Klick: ein Blick je Fenster mit Board, nie je Taste.
+    private func watchMouse() {
+        guard mouseMonitor == nil else { return }
+        mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { event in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { TicketBoardControllers.shared.leaveHeaders() }
+            }
+            return event
+        }
     }
 
     /// Das Fenster gibt es nicht mehr: Takt beenden, Controller freigeben.

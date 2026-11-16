@@ -115,6 +115,16 @@ extension TicketBoardViewModel {
         return .done
     }
 
+    /// Mausklick auf einen Eintrag der Liste der Bereiche (WM8-91): übernimmt
+    /// ihn und räumt den Kopf, denn die Maus hat übernommen. Wirkt beim
+    /// Mausdruck und unabhängig davon, ob die Liste in diesem Moment noch als
+    /// offen gilt: Das Räumen nach jedem Klick (`TicketBoardControllers`) kann
+    /// schon gelaufen sein. Ein Filter schreibt nichts nach Linear.
+    func chooseProjectByMouse(_ option: String?) {
+        filter.project = option
+        leaveHeader()
+    }
+
     /// Kreis: Liste der Bereiche zu (ohne Änderung), sonst zurück auf die Karte.
     func headerBack() {
         if projectPickerIndex != nil {

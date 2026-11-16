@@ -373,8 +373,8 @@ private struct TicketBoardFilterBar: View {
                         .offset(x: rect.minX, y: rect.maxY + 4)
                 }
             }
-            // Nur Anzeige: Die Maus bedient weiter das Menü selbst.
-            .allowsHitTesting(false)
+            // Nur die Liste nimmt Klicks (ihre Einträge, `chooseProjectByMouse`);
+            // die leere Fläche drumherum lässt sie durch.
         }
     }
 }
