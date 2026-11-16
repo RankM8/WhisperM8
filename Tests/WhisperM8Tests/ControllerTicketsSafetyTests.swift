@@ -197,6 +197,8 @@ final class ControllerTicketsSafetyTests: XCTestCase {
     private var recognizer = ControllerGestureRecognizer()
     private var chat = UUID()
     private var clock: TimeInterval = 0
+    /// Uhr des Ausführers; die Ankunftssperre misst gegen sie.
+    private var nowValue = Date(timeIntervalSince1970: 1_000)
 
     override func setUp() async throws {
         window = ControllerWindowFake()
@@ -212,7 +214,7 @@ final class ControllerTicketsSafetyTests: XCTestCase {
         clock = 0
         dispatcher = ControllerActionDispatcher(
             chats: center, terminals: terminals, dictation: dictation, environment: environment,
-            ui: ui, island: island, now: { Date(timeIntervalSince1970: 1_000) })
+            ui: ui, island: island, now: { [unowned self] in nowValue })
         dispatcher.playHaptic = { [unowned self] in haptics.append($0) }
         dispatcher.togglePause = {}
         dispatcher.titleForSession = { _ in "Jarvis" }
@@ -343,6 +345,67 @@ final class ControllerTicketsSafetyTests: XCTestCase {
         feed(.button(.dpadLeft, pressed: true))
         feed(.button(.dpadLeft, pressed: false))
         XCTAssertEqual(ui.area, .list)
+    }
+
+    // MARK: Ankunftssperre (Prüfung Paket 2)
+
+    /// Ein Chat, in dem seit 60 s eine Freigabe offen ist.
+    private func approvalWaitingSinceAMinute() -> UUID {
+        let target = UUID()
+        terminals.states[target] = ControllerTerminalState(
+            isRunning: true, profile: .claude, status: .awaitingInput,
+            statusSince: nowValue.addingTimeInterval(-60), draftSuspected: false, lastEnterAt: nil, lastEscapeAt: nil)
+        return target
+    }
+
+    /// Chat-Zeile, Kreuz („Zum Chat“), gleich noch einmal Kreuz: Die offene
+    /// Freigabe im Ziel wird nicht bestätigt. Nach der Sperre geht Kreuz wieder.
+    func testCrossAfterGoToChatDoesNotConfirmAnOpenApproval() {
+        let target = approvalWaitingSinceAMinute()
+        var line = Self.place
+        line.view = .chatLine
+        line.hasTicket = true
+        line.chatLineTitle = "Vic"
+        window.tickets = line
+        window.onTicketCommand = { [unowned self] command in
+            guard command == .open else { return }
+            window.tickets = nil
+            window.selected = target
+        }
+        tap(.cross)
+        XCTAssertEqual(window.selected, target, "Zum Chat")
+        tap(.cross)
+        tap(.circle)
+        XCTAssertTrue(terminals.keys.isEmpty, "kein Enter und kein Escape gleich nach der Ankunft: \(terminals.keys)")
+        nowValue = nowValue.addingTimeInterval(ControllerBindingResolver.arrivalLock + 0.1)
+        tap(.cross)
+        XCTAssertEqual(terminals.keys, [.enter], "nach der Sperre gilt wieder die Regel des Chats")
+    }
+
+    /// Dasselbe für L2 getippt aus dem Board zurück in einen Chat.
+    func testCrossAfterL2BackDoesNotConfirmAnOpenApproval() {
+        let target = approvalWaitingSinceAMinute()
+        window.backTarget = ControllerBackTarget(kind: .chat, title: "Vic", id: target)
+        tap(.l2)
+        XCTAssertNil(window.tickets)
+        XCTAssertEqual(window.selected, target)
+        tap(.cross)
+        XCTAssertTrue(terminals.keys.isEmpty, "kein Enter gleich nach L2: \(terminals.keys)")
+    }
+
+    /// „Zu den Chats“ im Options-Menü: der Chat dahinter wird sichtbar, mit Sperre.
+    func testCrossAfterBackToChatsDoesNotConfirm() {
+        let target = approvalWaitingSinceAMinute()
+        window.selected = target
+        tap(.options)
+        guard let menu = ui.menu, menu.top.entries.contains(where: { $0.id == .backToChats }) else {
+            return XCTFail("kein „Zu den Chats“")
+        }
+        ui.menu?.select(.backToChats)
+        tap(.cross)
+        XCTAssertNil(window.tickets)
+        tap(.cross)
+        XCTAssertTrue(terminals.keys.isEmpty, "kein Enter gleich nach „Zu den Chats“: \(terminals.keys)")
     }
 
     func testR2RejectsWithoutDictating() {

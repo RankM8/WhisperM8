@@ -271,6 +271,9 @@ extension ControllerActionDispatcher {
     func go(
         to destination: ControllerWhereToState.Destination, previous: ControllerWhereToState.Destination
     ) -> Bool {
+        // Ankunftssperre für Kreuz und Kreis im Chat, in den das führt (WM8-91).
+        let before = visibleChatID
+        defer { noteArrival(from: before) }
         if destination != .stay, destination == previous { return command(.lastChat, orReject: false) }
         switch destination {
         case .stay: return true

@@ -140,6 +140,8 @@ final class ControllerWindowFake {
     /// Befehle an das Board (WM8-91, Paket 2) und ihr Ergebnis.
     private(set) var ticketCommands: [ControllerTicketCommand] = []
     var ticketOutcome: ControllerTicketOutcome = .done
+    /// Wirkung eines Board-Befehls auf das Fenster (etwa „Zum Chat“).
+    var onTicketCommand: ((ControllerTicketCommand) -> Void)?
     var ticketMenu: ControllerTicketMenuInfo?
     /// Befehle, die „ging nicht“ melden sollen.
     var failing: Set<String> = []
@@ -194,6 +196,7 @@ final class ControllerWindowFake {
             ticketBoardTarget: { [unowned self] _ in ticketBoardTarget },
             ticketCommand: { [unowned self] command in
                 ticketCommands.append(command)
+                onTicketCommand?(command)
                 return ticketOutcome
             },
             ticketMenuInfo: { [unowned self] in tickets == nil ? nil : ticketMenu }

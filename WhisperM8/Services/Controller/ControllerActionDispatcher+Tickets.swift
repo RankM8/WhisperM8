@@ -9,7 +9,10 @@ extension ControllerActionDispatcher {
             playHaptic(.rejected)
             return noteTicket(.dictationNeedsBoardChat)
         }
+        let before = visibleChatID
         let outcome = chats.ticketCommand(command, in: targetWindowID)
+        // „Zum Chat“: Kreuz und Kreis warten im Ziel-Chat (WM8-91).
+        if outcome == .done { noteArrival(from: before) }
         switch outcome {
         case .done:
             switch command {

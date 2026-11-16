@@ -85,8 +85,10 @@ enum ControllerLegend {
         // Sie wird nach dem Sprung neu gelesen und zeigte Kreis sonst gar nicht,
         // bis zur nächsten Eingabe.
         var context = context
-        if case var .chat(state) = context, state.jumpedToEndJustNow {
+        // Ebenso die Sperre nach der Ankunft per Controller (1 s).
+        if case var .chat(state) = context, state.jumpedToEndJustNow || state.secondsSinceControllerArrival != nil {
             state.jumpedToEndJustNow = false
+            state.secondsSinceControllerArrival = nil
             context = .chat(state)
         }
         return candidates(for: context)

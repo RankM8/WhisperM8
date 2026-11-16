@@ -124,12 +124,11 @@ extension AgentChatsView {
         }
     }
 
-    /// „Zum Chat“ wie der Knopf in den Eigenschaften: Der Chat wird sichtbar
-    /// gewählt, die Tickets gehen zu. Es wird nichts in ihn geschickt.
+    /// „Zum Chat“: Der Chat wird sichtbar gewählt wie mit einem Klick in der
+    /// Seitenleiste, die Tickets gehen zu. Es wird nichts in ihn geschickt; im
+    /// Ziel warten Kreuz und Kreis die Ankunftssperre ab.
     private func openChatFromTicket(_ chatID: UUID) -> ControllerTicketOutcome {
-        guard workspaceModel.session(id: chatID) != nil else { return .rejected }
-        WindowRequestCenter.shared.requestSessionFocus(sessionID: chatID)
-        return .done
+        performCommand(.selectSession(chatID)) ? .done : .rejected
     }
 
     /// Zeilen des Reiters „Tickets“. Die Zahl „wartet auf dich“ steht nur

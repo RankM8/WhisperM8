@@ -66,6 +66,8 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     var islandGeneration = 0
     /// Zählt Bestätigungen in der Leiste des Ticket-Boards (WM8-91).
     var ticketNoticeGeneration = 0
+    /// Chat, in den der Controller zuletzt gesprungen ist, und wann (WM8-91).
+    var lastControllerArrival: (sessionID: UUID, at: Date)?
     /// Chat, dessen Eingabe R3 halten leert — gebunden beim Haltebeginn, damit
     /// ein Chatwechsel während des Haltens nicht den falschen Chat leert.
     private var clearInputTarget: UUID?
@@ -200,7 +202,10 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             scrolledBack: terminal.scrolledBack,
             jumpedToEndJustNow: lastJumpToEnd.map {
                 $0.sessionID == sessionID && moment.timeIntervalSince($0.at) < Self.jumpToEndEscapeLock
-            } ?? false
+            } ?? false,
+            secondsSinceControllerArrival: lastControllerArrival.flatMap {
+                $0.sessionID == sessionID ? moment.timeIntervalSince($0.at) : nil
+            }
         )
     }
 
@@ -307,7 +312,12 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case .pasteNewest: pasteNewest()
         // Danach gleich neu lesen: Die Legende nennt sonst noch den Ort, an
         // dem man jetzt ist, als Ziel.
-        case .lastChat: if command(.lastChat, orReject: true) { refreshContext() }
+        case .lastChat:
+            let before = visibleChatID
+            if command(.lastChat, orReject: true) {
+                noteArrival(from: before)
+                refreshContext()
+            }
         case let .moveInContent(direction): moveInContent(direction)
         case let .adjacentChat(step): moveToAdjacentChat(step)
         case .newChat: newChat()
@@ -829,7 +839,11 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             guard let board = setup.ticketBoard else { return playHaptic(.rejected) }
             if command(.showTickets(projectID: board.projectID), orReject: true) { refreshContext() }
         case .backToChats:
-            if command(.showChats, orReject: true) { refreshContext() }
+            let before = visibleChatID
+            if command(.showChats, orReject: true) {
+                noteArrival(from: before)
+                refreshContext()
+            }
         case .clipboardHistory:
             environment.toggleClipboardPanel()
         case .showBindings:
@@ -908,5 +922,22 @@ private extension ControllerDirection {
         case .left: return .left
         case .right: return .right
         }
+    }
+}
+
+// MARK: - Ankunft in einem Chat (WM8-91)
+
+extension ControllerActionDispatcher {
+    /// Chat, den das Fenster gerade zeigt; hinter den Tickets keiner.
+    var visibleChatID: UUID? {
+        guard let window = targetWindowID.flatMap({ chats.snapshot(of: $0) }), window.tickets == nil else { return nil }
+        return window.selectedSessionID
+    }
+
+    /// Der Controller hat einen Chat sichtbar gemacht, der es vorher nicht war:
+    /// Kreuz und Kreis warten dort `arrivalLock` ab.
+    func noteArrival(from before: UUID?) {
+        guard let shown = visibleChatID, shown != before else { return }
+        lastControllerArrival = (shown, now())
     }
 }
