@@ -73,33 +73,72 @@ final class WithheldDeliveryEdgeTests: XCTestCase {
 
     // MARK: Doppeltes Enter im Nachlauf: Blick ins Transcript
 
-    func testAlreadySentNeedsMarkerAndWholePrompt() {
-        let prompt = "Bitte die WM8-Doku zum Snapshot ergänzen."
-        let sent = "[via whisperm8 chats · von Warteschlange · Ben · 14:02]\n" + prompt
-        XCTAssertTrue(AgentPromptQueueDelivery.alreadySent(prompt: prompt, lastUserText: sent))
-        XCTAssertFalse(AgentPromptQueueDelivery.alreadySent(prompt: prompt, lastUserText: prompt),
-                       "ohne Marker schrieb der User selbst")
-        XCTAssertFalse(AgentPromptQueueDelivery.alreadySent(prompt: prompt, lastUserText: "[via whisperm8 chats · von Ben · 14:02]\netwas anderes"))
-        XCTAssertFalse(AgentPromptQueueDelivery.alreadySent(prompt: prompt, lastUserText: nil))
-        XCTAssertFalse(AgentPromptQueueDelivery.alreadySent(prompt: "  ", lastUserText: sent))
+    private let withheldAt = Date(timeIntervalSince1970: 1_794_750_000)
+    private var marked: String { "[via whisperm8 chats · von Warteschlange · Ben · 14:02]\nweiter" }
+
+    func testAlreadySentOnlyForTheExactTextWrittenAfterwards() {
+        let after = withheldAt.addingTimeInterval(20)
+        XCTAssertTrue(AgentPromptQueueDelivery.alreadySent(
+            withheldText: marked, withheldAt: withheldAt, lastUser: (marked, after)))
+        // Giuliano hat vor dem Enter etwas angehängt: zählt.
+        XCTAssertTrue(AgentPromptQueueDelivery.alreadySent(
+            withheldText: marked, withheldAt: withheldAt, lastUser: (marked + " und dann WM8-Doku", after)))
+        // Zeilenenden aus dem Transcript.
+        XCTAssertTrue(AgentPromptQueueDelivery.alreadySent(
+            withheldText: marked, withheldAt: withheldAt,
+            lastUser: (marked.replacingOccurrences(of: "\n", with: "\r\n"), after)))
     }
 
-    func testLastUserTextSkipsToolResults() {
+    /// Auflage der Prüferin (a): Kurzer Auftrag („weiter“), die letzte
+    /// Nachricht war eine andere zugestellte Meldung, in der das Wort vorkommt.
+    func testShortPromptInsideAnotherMessageIsNotSent() {
+        let other = "[via whisperm8 chats · von Jarvis · 14:03]\nBitte weiter mit WM8-122, dann melden."
+        XCTAssertFalse(AgentPromptQueueDelivery.alreadySent(
+            withheldText: marked, withheldAt: withheldAt, lastUser: (other, withheldAt.addingTimeInterval(30))))
+    }
+
+    /// Auflage der Prüferin (b): Derselbe Text kam früher regulär an und ist
+    /// noch die letzte Nachricht; der zurückgehaltene ging nie raus.
+    func testEarlierIdenticalMessageIsNotSent() {
+        XCTAssertFalse(AgentPromptQueueDelivery.alreadySent(
+            withheldText: marked, withheldAt: withheldAt, lastUser: (marked, withheldAt.addingTimeInterval(-60))))
+        XCTAssertFalse(AgentPromptQueueDelivery.alreadySent(
+            withheldText: marked, withheldAt: withheldAt, lastUser: (marked, nil)), "ohne Zeitstempel: nicht gesendet")
+    }
+
+    func testWithoutRememberedTextNothingCountsAsSent() {
+        let after = withheldAt.addingTimeInterval(20)
+        XCTAssertFalse(AgentPromptQueueDelivery.alreadySent(withheldText: nil, withheldAt: withheldAt, lastUser: (marked, after)))
+        XCTAssertFalse(AgentPromptQueueDelivery.alreadySent(withheldText: marked, withheldAt: nil, lastUser: (marked, after)))
+        XCTAssertFalse(AgentPromptQueueDelivery.alreadySent(withheldText: marked, withheldAt: withheldAt, lastUser: nil))
+        XCTAssertFalse(AgentPromptQueueDelivery.alreadySent(withheldText: "weiter", withheldAt: withheldAt,
+                                                            lastUser: ("weiter", after)), "ohne Marker-Zeile nie")
+    }
+
+    func testLastUserMessageSkipsToolResults() {
+        let at = withheldAt.addingTimeInterval(5)
         let messages = [
-            AgentChatMessage(id: UUID(), role: .user, timestamp: nil, blocks: [.text("[via whisperm8 chats · von Ben · 14:02]\nAuftrag")]),
+            AgentChatMessage(id: UUID(), role: .user, timestamp: at, blocks: [.text(marked)]),
             AgentChatMessage(id: UUID(), role: .assistant, timestamp: nil, blocks: [.toolUse(name: "Bash", input: "ls")]),
             AgentChatMessage(id: UUID(), role: .user, timestamp: nil, blocks: [.toolResult(content: "ok", isError: false)]),
         ]
-        XCTAssertEqual(AgentPromptQueueDelivery.lastUserText(in: messages), "[via whisperm8 chats · von Ben · 14:02]\nAuftrag")
-        XCTAssertNil(AgentPromptQueueDelivery.lastUserText(in: []))
+        let last = AgentPromptQueueDelivery.lastUserMessage(in: messages)
+        XCTAssertEqual(last?.text, marked)
+        XCTAssertEqual(last?.at, at)
+        XCTAssertNil(AgentPromptQueueDelivery.lastUserMessage(in: []))
     }
 
     func testQueueFileKeepsTheWithheldMarkAndOldFilesStillLoad() throws {
-        let store = AgentPromptQueueStore(fileURL: tempFile())
+        let url = tempFile()
+        let store = AgentPromptQueueStore(fileURL: url)
         let entry = try store.enqueue(sessionID: UUID(), prompt: "Bitte WM8-Doku prüfen", by: "Test")
-        store.markEnterWithheld(id: entry.id, error: AgentPromptQueueDelivery.withheldError)
+        store.markEnterWithheld(id: entry.id, error: AgentPromptQueueDelivery.withheldError, text: marked, at: withheldAt)
         let stored = try XCTUnwrap(store.all().first)
         XCTAssertTrue(stored.enterWithheld)
+        XCTAssertEqual(stored.withheldText, marked)
+        XCTAssertEqual(stored.withheldAt, withheldAt)
+        let reloaded = AgentPromptQueueStore(fileURL: url)
+        XCTAssertEqual(reloaded.all().first?.withheldText, marked, "übersteht einen Neustart")
         XCTAssertEqual(stored.state, .pending)
 
         let old = try JSONDecoder().decode(QueuedPrompt.self, from: Data(

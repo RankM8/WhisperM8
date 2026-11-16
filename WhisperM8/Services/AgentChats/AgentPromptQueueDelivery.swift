@@ -144,7 +144,7 @@ final class AgentPromptQueueDelivery {
         Task { @MainActor [store] in
             if await AgentTerminalController.enterWasWithheld(
                 sessionID: sessionID, clearedInput: clearedInput, since: sentAt) {
-                store.markEnterWithheld(id: reserved.id, error: Self.withheldError)
+                store.markEnterWithheld(id: reserved.id, error: Self.withheldError, text: marked, at: sentAt)
                 // Mit der ID: `chats submit` verbucht ihn dann als zugestellt (WM8-123).
                 AgentTerminalRegistry.shared.controller(for: sessionID)?.claimWithheldDelivery(queuedPromptID: reserved.id)
                 Logger.agentStore.notice(

@@ -920,9 +920,14 @@ Warteschlange nach dem Start zustellte. Deshalb:
   abschickte, fängt das ein Blick ins Transcript ab: Ein Auftrag, dessen Enter
   einmal zurückgehalten war, trägt `enterWithheld` in der Queue-Datei. Vor
   jeder erneuten Zustellung liest die App abseits des Main Threads die letzten
-  256 KB des Transcripts. Ist die letzte Nachricht des Users dieser Auftrag
-  (Marker-Zeile und ganzer Text), wird er als zugestellt verbucht statt
-  gesendet (Log `queue_already_sent`). Kosten: dieses Lesen nur bei solchen
+  256 KB des Transcripts. Ist die letzte Nachricht des Users dieser Auftrag,
+  wird er als zugestellt verbucht statt gesendet (Log `queue_already_sent`).
+  Dafür merkt sich die Queue beim Zurückhalten genau den eingefügten Text
+  (Marker-Zeile mit Absender und Uhrzeit plus Auftrag, `withheldText`) und
+  den Zeitpunkt (`withheldAt`). Die Nachricht muss danach geschrieben sein und
+  mit genau diesem Text beginnen; ein kurzes „weiter“ in einer anderen Meldung
+  oder eine frühere gleiche Meldung zählen nicht. Im Zweifel kommt der Auftrag
+  lieber noch einmal, als nie anzukommen. Kosten: dieses Lesen nur bei solchen
   Aufträgen, je Zustellversuch einmal. Ein Neustart ohne Chatverlust trägt den Vermerk
   im Manifest weiter (`composerWithheldDelivery`, `composerWithheldQueueID`).
   Hat jemand am Text weitergeschrieben, gehört er (auch) dem User; dann lehnt

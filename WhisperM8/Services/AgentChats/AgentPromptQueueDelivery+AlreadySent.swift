@@ -28,10 +28,11 @@ extension AgentPromptQueueDelivery {
         Task.detached(priority: .utility) { [weak self] in
             let transcript = ClaudeTranscriptReader.readTail(cwd: path, sessionID: externalID,
                                                              tailBytes: Self.alreadySentTailBytes)
-            let lastUserText = Self.lastUserText(in: transcript?.messages ?? [])
+            let lastUser = Self.lastUserMessage(in: transcript?.messages ?? [])
             await MainActor.run { [weak self] in
                 guard let self else { return }
-                if Self.alreadySent(prompt: prompt.prompt, lastUserText: lastUserText),
+                if Self.alreadySent(withheldText: prompt.withheldText, withheldAt: prompt.withheldAt,
+                                    lastUser: lastUser),
                    self.markAlreadySent(prompt.id, sessionID: sessionID) {
                     // Der Nächste in der Schlange darf jetzt.
                     self.deliverNext(for: sessionID)
@@ -58,26 +59,38 @@ extension AgentPromptQueueDelivery {
     /// Das Gesprächsende reicht: Gesucht ist nur die letzte Nachricht des Users.
     nonisolated static let alreadySentTailBytes = 256 * 1024
 
-    /// Text der letzten echten Nachricht des Users (ohne Tool-Ergebnisse, die
-    /// bei Claude ebenfalls als User-Nachricht im Transcript stehen).
-    nonisolated static func lastUserText(in messages: [AgentChatMessage]) -> String? {
+    /// Text und Zeitpunkt der letzten echten Nachricht des Users (ohne
+    /// Tool-Ergebnisse, die bei Claude ebenfalls als User-Nachricht im
+    /// Transcript stehen).
+    nonisolated static func lastUserMessage(in messages: [AgentChatMessage]) -> (text: String, at: Date?)? {
         for message in messages.reversed() where message.role == .user {
             let texts = message.blocks.compactMap { block -> String? in
                 if case .text(let text) = block { return text }
                 return nil
             }
-            if !texts.isEmpty { return texts.joined(separator: "\n") }
+            if !texts.isEmpty { return (texts.joined(separator: "\n"), message.timestamp) }
         }
         return nil
     }
 
-    /// Pur: Ist die letzte Nachricht des Users dieser Auftrag? Sie muss die
-    /// Marker-Zeile der Zustellung tragen (sonst schrieb der User selbst) und
-    /// den ganzen Auftragstext enthalten.
-    nonisolated static func alreadySent(prompt: String, lastUserText: String?) -> Bool {
-        let body = prompt.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let lastUserText, !body.isEmpty,
-              lastUserText.contains(AgentControlRequestHandler.markerPrefix) else { return false }
-        return lastUserText.contains(body)
+    /// Pur: Ist die letzte Nachricht des Users genau dieser Auftrag? Sie muss
+    /// nach dem Einfügen geschrieben sein und mit genau dem eingefügten Text
+    /// beginnen (Marker-Zeile mit Absender und Uhrzeit plus Auftrag; Giuliano
+    /// darf vor dem Enter etwas angehängt haben). Ohne gemerkten Text oder
+    /// Zeitpunkt, oder ohne Zeitstempel im Transcript: nicht gesendet. Im
+    /// Zweifel kommt der Auftrag lieber noch einmal, als nie anzukommen.
+    nonisolated static func alreadySent(withheldText: String?, withheldAt: Date?,
+                                        lastUser: (text: String, at: Date?)?) -> Bool {
+        guard let withheldText, let withheldAt, let lastUser, let writtenAt = lastUser.at,
+              writtenAt >= withheldAt else { return false }
+        let expected = normalized(withheldText)
+        guard expected.hasPrefix(AgentControlRequestHandler.markerPrefix), expected.count > 0 else { return false }
+        return normalized(lastUser.text).hasPrefix(expected)
+    }
+
+    /// Zeilenenden vereinheitlichen, Leerraum am Rand weg.
+    nonisolated static func normalized(_ text: String) -> String {
+        text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

@@ -58,6 +58,13 @@ struct QueuedPrompt: Codable, Equatable, Identifiable {
     /// Nachlauf des Freigabe-Status). Vor einer erneuten Zustellung sieht die
     /// Warteschlange deshalb im Transcript nach. Fehlt in älteren Dateien.
     var enterWithheld: Bool = false
+    /// Genau der eingefügte Text (Marker-Zeile mit Absender und Uhrzeit plus
+    /// Auftrag) und wann er eingefügt wurde. Nur eine Nachricht, die danach
+    /// geschrieben wurde und mit genau diesem Text beginnt, gilt als dieser
+    /// Auftrag; ein kurzes „weiter“ in einer anderen Meldung oder eine frühere
+    /// gleiche Meldung nicht.
+    var withheldText: String?
+    var withheldAt: Date?
 
     /// Wartet noch auf Zustellung. `unknown` gehört bewusst NICHT dazu — es
     /// wird nie zugestellt und dürfte sonst als „wartet" gezählt werden.
@@ -86,6 +93,8 @@ struct QueuedPrompt: Codable, Equatable, Identifiable {
         deliveredAt = try container.decodeIfPresent(Date.self, forKey: .deliveredAt)
         lastError = try container.decodeIfPresent(String.self, forKey: .lastError)
         enterWithheld = try container.decodeIfPresent(Bool.self, forKey: .enterWithheld) ?? false
+        withheldText = try container.decodeIfPresent(String.self, forKey: .withheldText)
+        withheldAt = try container.decodeIfPresent(Date.self, forKey: .withheldAt)
     }
 
     init(id: UUID = UUID(), sequence: Int = 0, sessionID: UUID, prompt: String,
