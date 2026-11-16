@@ -299,7 +299,8 @@ struct TerminalComposerDraftTracker: Equatable {
         // Jede Taste ausser ESC und Navigation kann den zurueckgehaltenen
         // Auftrag veraendert haben (Tippen, Loeschen, Tab, Einfuegen). Enter
         // und Ctrl+C raeumen ihn unten ohnehin.
-        if !Self.textNeutralKeyCodes.contains(keyCode) {
+        let submits = (keyCode == 36 || keyCode == 76) && !flags.contains(.shift) && !flags.contains(.option)
+        if !Self.textNeutralKeyCodes.contains(keyCode), !submits {
             withheldDelivery?.untouched = false
         }
         switch keyCode {
