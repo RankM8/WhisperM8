@@ -219,6 +219,8 @@ enum ChatsChangesCommand {
         if let from = entry.from { dict["from"] = from }
         if let to = entry.to { dict["to"] = to }
         if let backgroundTasks = entry.backgroundTasks { dict["backgroundTasks"] = backgroundTasks }
+        if let repliedTo = entry.repliedTo { dict["repliedTo"] = repliedTo.uuidString }
+        if let messaged = entry.messaged, !messaged.isEmpty { dict["messaged"] = messaged.map(\.uuidString) }
         return dict
     }
 

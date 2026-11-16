@@ -34,7 +34,11 @@ const backgroundWatch = atom({ plugin: 'whisperm8', key: 'backgroundWatch' } as 
  * Schlüssel in `woken` kommt erst beim Ausliefern dazu (Uli zu WM8-64).
  * `at`: eingereiht (Uhr der Engine); `urgent`: „wartet auf dich“.
  */
-export type PendingWake = { id: string; key: string; line: string; at: number; urgent: boolean; name?: string; announced?: boolean }
+export type PendingWake = {
+  id: string; key: string; line: string; at: number; urgent: boolean; name?: string; announced?: boolean
+  /** Zustand, für den die Zeile weckt, und seit wann der Chat in ihm ist (WM8-119). Fehlt bei älteren Zeilen. */
+  state?: string; since?: string | null
+}
 const wakePending = atom({ plugin: 'whisperm8', key: 'wakePending' } as const, [] as PendingWake[])
 const callout = atom({ plugin: 'whisperm8', key: 'callout' } as const, false)
 
@@ -292,6 +296,10 @@ type WatchEvent = {
   to?: string | null
   /** Offene Hintergrund-Befehle beim Turn-Ende (`working → idle`); fehlt = unbekannt (WM8-105). */
   backgroundTasks?: number
+  /** Turn-Ende: Der Turn war eine kurze Antwort auf diesen Chat (höchstens 10 min, WM8-119). */
+  repliedTo?: string
+  /** Turn-Ende: Chats, an die dieser Chat im Turn geschrieben hat (WM8-119). */
+  messaged?: string[]
 }
 
 const sameID = (a: string | undefined, b: string | undefined) =>
@@ -417,11 +425,19 @@ const handleEvent = async ($: EngineInterface, ev: WatchEvent) => {
  * Turn-Ende mit offenem Hintergrund-Befehl ist kein „fertig“: Endet der
  * Befehl, beginnt Claude von selbst einen neuen Turn (WM8-105). Unbekannt
  * (Feld fehlt, ältere App) weckt wie bisher; „wartet auf dich“ immer.
+ *
+ * Auch kein „fertig“ (WM8-119, Entscheidung Giuliano 16.11.2026), wenn der
+ * Turn eine kurze Antwort auf eine Nachricht des Supervisors (`owner`) war
+ * (etwa „Verstanden, ich warte auf die Bahn“; die App setzt `repliedTo` nur
+ * bei Turns bis 10 Minuten, ein langer Auftrag weckt weiter) oder
+ * wenn der Chat ihm im Turn schon geschrieben hat (die Meldung kommt über die
+ * Warteschlange). Am 16.11. waren das 37 von 55 Hinweisen.
  */
-export const wakeReason = (ev: WatchEvent): string | null => {
+export const wakeReason = (ev: WatchEvent, owner: string | null = null): string | null => {
   if (ev.to === 'awaitingInput') return 'wartet auf dich'
-  if (ev.from === 'working' && ev.to === 'idle') return waitsForOwnRun(ev) ? null : 'fertig – prüfen'
-  return null
+  if (ev.from !== 'working' || ev.to !== 'idle' || waitsForOwnRun(ev)) return null
+  if (owner !== null && (sameID(ev.repliedTo, owner) || (ev.messaged ?? []).some(id => sameID(id, owner)))) return null
+  return 'fertig – prüfen'
 }
 
 export const waitsForOwnRun = (ev: WatchEvent) =>
@@ -448,11 +464,11 @@ const considerWake = async ($: EngineInterface, entry: BoardEntry, ev: WatchEven
     await armBackgroundNet($, entry, ev)
     return
   }
-  await wake($, entry, ev.to ?? '', wakeReason(ev))
+  await wake($, entry, ev.to ?? '', wakeReason(ev, sessionID), ev.at ?? null)
 }
 
 /** Reiht eine Weck-Zeile ein, einmal je Chat und Zustand; geparkte Chats wecken nicht. */
-const wake = async ($: EngineInterface, entry: BoardEntry, state: string, reason: string | null) => {
+const wake = async ($: EngineInterface, entry: BoardEntry, state: string, reason: string | null, since: string | null) => {
   if (reason === null || entry.light === 'parked' || wakeMode === 'aus') return
   const id = entry.sessionID.toUpperCase()
   const key = `${id}:${state}`
@@ -464,6 +480,7 @@ const wake = async ($: EngineInterface, entry: BoardEntry, state: string, reason
   const line = `[Board] „${asData(entry.title)}“ (${asData(entry.ref)}): ${reason}`
   const item: PendingWake = {
     id, key, line, at: await $.clock.now(), urgent: state === 'awaitingInput', name: titleParts(entry.title, entry.ref).name,
+    state, since,
   }
   // Je Chat eine Zeile: Ein jüngerer Zustand ersetzt den älteren im selben Prompt.
   await update($, wakePending, list => [...(list ?? []).filter(other => other.id !== id), item].slice(-50))
@@ -541,7 +558,9 @@ const checkBackgroundWatch = async ($: EngineInterface) => {
   if (result.rest.length !== waits.length) await update($, backgroundWatch, () => result.rest)
   for (const id of result.wake) {
     const entry = view.entries.find(e => sameID(e.sessionID, id))
-    if (entry !== undefined) await wake($, entry, 'idle', 'ruht, Hintergrund-Lauf läuft noch – prüfen')
+    // Ohne Zeitpunkt: Dieser Hinweis ist neu (der Lauf hängt seit 30 Minuten),
+    // auch wenn Jarvis die Karte in der Zeit nachgeführt hat.
+    if (entry !== undefined) await wake($, entry, 'idle', 'ruht, Hintergrund-Lauf läuft noch – prüfen', null)
   }
   if (result.next !== null) armBackgroundTimer($, result.next)
 }
@@ -592,6 +611,33 @@ export const holdWake = (
   return left > 0 ? Math.min(left, maxLeft) : null
 }
 
+/**
+ * Welche zurückgehaltenen Weck-Zeilen stimmen beim Ausliefern noch? (WM8-119)
+ * Am 16.11.2026 kamen 17 von 55 „fertig – prüfen“ für Chats, die Jarvis
+ * Sekunden vorher selbst gestoppt, geparkt oder vom Board genommen hatte: Die
+ * Zeile wartete, bis Jarvis ruhte, und ging dann ungeprüft raus. Weg fällt
+ * eine Zeile, wenn der Chat nicht mehr auf dem Board steht, geparkt ist, nicht
+ * mehr läuft (gestoppt, abgestürzt), oder wenn Jarvis
+ * seine Karte nach dem Zustandswechsel geändert hat (dann kennt er ihn; gilt
+ * nicht für „wartet auf dich“). Zeilen von vor dem Feld bleiben. Rein; die
+ * Einträge kommen aus dem Board der Mod, ohne Prozess.
+ */
+export const freshWakes = (pending: PendingWake[], entries: BoardEntry[]): PendingWake[] =>
+  pending.filter(item => {
+    const entry = entries.find(e => sameID(e.sessionID, item.id))
+    if (entry === undefined || entry.light === 'parked') return false
+    // Gestoppt oder abgestürzt: dazu gibt es nichts zu prüfen. Nur diese
+    // Zustände, nicht jeder andere: Der Status im Board kann nach einem
+    // Neulesen kurz hinterherhinken, und „arbeitet wieder“ räumt schon das
+    // Ereignis selbst ab (`considerWake`).
+    if (item.state !== undefined && (entry.status === 'stopped' || entry.status === 'errored')) return false
+    if (item.urgent || !item.since) return true
+    const since = Date.parse(item.since)
+    const card = Date.parse(entry.updatedAt ?? '')
+    // Eine Sekunde Spiel: Journal und Karte tragen ganze Sekunden.
+    return Number.isNaN(since) || Number.isNaN(card) || card < since + 1_000
+  })
+
 const flushWake = async ($: EngineInterface) => {
   wakeTimerArmed = false
   const pending = await read($, wakePending)
@@ -603,12 +649,18 @@ const flushWake = async ($: EngineInterface) => {
     armWakeTimer($, hold)
     return
   }
-  const lines = pending.map(item => item.line)
   const keys = pending.map(item => item.key)
   await update($, wakePending, list => (list ?? []).filter(item => !keys.includes(item.key)))
+  // Was sich seit dem Einreihen erledigt hat, fällt weg (WM8-119): Jarvis hat
+  // den Chat gestoppt, geparkt, vom Board genommen oder seine Karte schon
+  // nachgeführt, während die Zeile auf sein Ruhen wartete.
+  const view = await read($, board)
+  const deliver = view === null ? pending : freshWakes(pending, view.entries)
+  if (deliver.length === 0) return
+  const lines = deliver.map(item => item.line)
   // Erst jetzt als gemeldet merken: Ging die Zeile vorher verloren, darf derselbe
   // Zustand wieder wecken.
-  await update($, woken, list => [...(list ?? []), ...keys].slice(-200))
+  await update($, woken, list => [...(list ?? []), ...deliver.map(item => item.key)].slice(-200))
   lastWakeAt = now
   $.ui.toast(lines.length === 1 ? lines[0]! : `${lines[0]} (+${lines.length - 1})`)
   if (wakeMode !== 'turn') return

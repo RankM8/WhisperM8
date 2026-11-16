@@ -138,6 +138,8 @@ final class AgentPromptQueueDelivery {
         let sentAt = Date()
         let verify = PromptSubmitCheck.applies(submit: true, profile: profile, statusAtSend: runtime)
         let clearedInput = controller.sendPrompt(marked, submit: true)
+        // Wer diesen Turn anstößt, für das Turn-Ende im Journal (WM8-119).
+        TurnContactLedger.shared.noteDelivered(to: sessionID, from: reserved.enqueuedBySessionID, at: sentAt)
         let title = session.title
         // Erst verbuchen, wenn das verzögerte Enter raus ist (WM8-75): Hält die
         // Prüfung es zurück, bleibt der Auftrag vorgemerkt statt „zugestellt“.

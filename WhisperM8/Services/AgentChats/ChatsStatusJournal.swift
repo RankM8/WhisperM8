@@ -50,6 +50,13 @@ struct ChatsStatusJournalEntry: Codable, Equatable {
     /// noch nicht gelesen). Die Board-Mod weckt bei `> 0` nicht mit „fertig“:
     /// Endet der Befehl, beginnt Claude von selbst einen neuen Turn.
     var backgroundTasks: Int? = nil
+    /// Turn-Ende: Chat, dessen Nachricht (`send`, Warteschlange) diesen Turn
+    /// anstieß, wenn er kurz war (höchstens 10 min, eine Antwort; WM8-119).
+    /// Die Board-Mod weckt nicht mit „fertig“, wenn das der Supervisor war.
+    var repliedTo: UUID? = nil
+    /// Turn-Ende: Chats, an die dieser Chat im Turn gesendet oder vorgemerkt
+    /// hat (WM8-119). Steht der Supervisor darunter, hat er die Meldung schon.
+    var messaged: [UUID]? = nil
 
     static let boardKind = "board"
 
@@ -101,13 +108,15 @@ final class ChatsStatusJournal: @unchecked Sendable {
     /// Schreibt einen Übergang. No-op, wenn sich der Status nicht geändert hat —
     /// ein Journal voller identischer Zeilen verdeckt die echten Wechsel.
     func append(sessionID: UUID, from: String?, to: String?, signal: String, source: String,
-                backgroundTasks: Int? = nil, at: Date = Date()) {
+                backgroundTasks: Int? = nil, repliedTo: UUID? = nil, messaged: [UUID]? = nil, at: Date = Date()) {
         guard from != to else { return }
         lock.lock()
         defer { lock.unlock() }
         var entry = ChatsStatusJournalEntry(
             at: at, sessionID: sessionID, from: from, to: to, signal: signal, source: source)
         entry.backgroundTasks = backgroundTasks
+        entry.repliedTo = repliedTo
+        entry.messaged = messaged.flatMap { $0.isEmpty ? nil : $0 }
         writeLocked(entry)
     }
 

@@ -824,6 +824,17 @@ Aufrufer zu brechen.
   der Rest folgt im Hintergrund. Der Turn-Start der App zählt mit 5 s
   Spiel (`turnStartTolerance`), weil Registry und Hook etwas nach Claude
   kommen.
+- **`repliedTo`, `messaged`** (seit WM8-119, nur bei `working → idle`):
+  `repliedTo` ist der Chat, dessen Nachricht (`send` oder Warteschlange, nur
+  mit geprüftem Absender) bis zu 15 s vor dem gesehenen Turn-Start eingefügt
+  wurde, sofern der Turn höchstens 10 Minuten dauerte (eine Antwort, keine
+  Arbeit an einem Auftrag); `messaged` sind die Chats, an die dieser Chat seit
+  dem Turn-Start gesendet oder vorgemerkt hat. Beide fehlen, wenn leer. Die
+  Board-Mod weckt den Supervisor dann nicht mit „fertig – prüfen“, wenn der
+  Chat nur ihm antwortete oder ihm schon schrieb ([jarvis-board.md](jarvis-board.md)).
+  Quelle ist ein Register im Speicher (`TurnContactLedger`), je Senden ein
+  Eintrag, beim Turn-Ende zwei Nachschlagen; nach einem Neustart der App ist
+  es leer, dann wecken die ersten Turn-Enden wie vorher.
 
 ### Zustandsachsen
 
