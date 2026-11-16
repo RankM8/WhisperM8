@@ -104,7 +104,8 @@ extension AgentControlRequestHandler {
                 if PromptDeliveryGate.sendBlockedByDraft(
                     mayHaveUnsentInput: controller.composerDraft.mayHaveUnsentInput, force: force,
                     fieldVisiblyEmpty: PromptSubmitCheck.fieldVisiblyEmpty(field: field, profile: profile)) {
-                    return .failure(.conflict, PromptDeliveryGate.draftMessage)
+                    return .failure(.conflict, PromptDeliveryGate.draftMessage(
+                        insertedText: controller.composerDraft.mayHoldInsertedText))
                 }
                 // WM8-100: Was am Bildschirm im Feld steht, zählt auch, wenn die
                 // Schätzung es für abgeschickt hält (liegengebliebener Auftrag).

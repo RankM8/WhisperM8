@@ -95,7 +95,7 @@ extension AgentTerminalController {
         if manifest.hasComposerDraft != false {
             // Unbekannt zählt als „Entwurf vorhanden“: Queue und `chats send`
             // schreiben sonst in einen halb getippten Text.
-            noteComposerTextInserted()
+            noteComposerDraftAdopted(insertedText: manifest.composerInsertedText == true)
         }
         return true
     }

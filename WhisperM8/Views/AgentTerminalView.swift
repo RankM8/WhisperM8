@@ -658,6 +658,11 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         composerDraft.recordTextInserted()
     }
 
+    /// Übernahme nach dem Neustart: Das Manifest meldet einen Entwurf.
+    func noteComposerDraftAdopted(insertedText: Bool) {
+        composerDraft.recordDraftAdopted(insertedText: insertedText)
+    }
+
     /// Sendet einen Prompt über den Control-Socket (`whisperm8 chats send`) in
     /// die laufende TUI — im Gegensatz zu `sendUserText` mit **Bracketed
     /// Paste** und optionalem Auto-Submit.
@@ -799,7 +804,9 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         }
     }
 
-    /// Ein Turn hat begonnen: der Composer ist abgeschickt (LR-CLI-002).
+    /// Ein Turn hat begonnen: ein getippter Entwurf gilt als abgeschickt
+    /// (LR-CLI-002). Von der App eingefügter Text bleibt stehen — der Chat kann
+    /// den Turn von selbst begonnen haben (WM8-121).
     func noteTurnStarted() {
         composerDraft.recordSubmittedByTurnStart()
     }

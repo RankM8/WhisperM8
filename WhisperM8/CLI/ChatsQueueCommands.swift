@@ -35,7 +35,10 @@ enum ChatsQueueSupport {
         }
         var text = "\(marker) \(head)"
         switch prompt.state {
-        case .pending: text += "  (seit \(age), von \(prompt.enqueuedBy) · id \(shortID(prompt.id)))"
+        case .pending:
+            text += "  (seit \(age), von \(prompt.enqueuedBy) · id \(shortID(prompt.id)))"
+            // Warum er wartet, wenn ein Versuch schon zurückgehalten wurde (WM8-121).
+            if let reason = prompt.lastError { text += "\n     wartet: \(reason)" }
         case .delivering: text += "  (wird gerade zugestellt)"
         case .delivered: text += "  (zugestellt)"
         case .cancelled: text += "  (storniert)"

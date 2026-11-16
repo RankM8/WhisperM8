@@ -73,16 +73,13 @@ final class AgentPromptQueueDelivery {
         let runtime = coordinator.statusStore.status(for: sessionID)
         let profile = controller.command.keyboardProfile
         let inputPending = coordinator.startupInputPending(sessionID)
-        let field = controller.controllerScreenSnapshot()?.promptField
-        switch PromptDeliveryGate.forQueue(
+        switch Self.gateDecision(
+            draft: controller.composerDraft,
+            field: controller.controllerScreenSnapshot()?.promptField,
+            profile: profile,
             runtime: runtime,
             lifecycle: coordinator.lifecycleState(for: sessionID),
-            mayHaveUnsentInput: controller.composerDraft.mayHaveUnsentInput,
-            inputPending: inputPending,
-            visibleDraft: PromptSubmitCheck.visibleDraft(
-                field: field, profile: profile,
-                clearsBeforeSubmit: controller.composerDraft.shouldClearBeforeSubmit),
-            fieldVisiblyEmpty: PromptSubmitCheck.fieldVisiblyEmpty(field: field, profile: profile)
+            inputPending: inputPending
         ) {
         case .deliver:
             break
@@ -98,7 +95,7 @@ final class AgentPromptQueueDelivery {
             if inputPending { retryAfterStartup(sessionID) }
             return
         case .draftPending:
-            store.markFailed(id: reserved.id, error: "Entwurf im Eingabefeld — wartet, bis der Chat fertig ist", retry: true)
+            store.markFailed(id: reserved.id, error: Self.draftPendingError(controller.composerDraft), retry: true)
             return
         }
         // Freigabe oder Dialog statt des Eingabefelds (Status hinkt hinterher):
@@ -147,6 +144,40 @@ final class AgentPromptQueueDelivery {
                 "queue_delivered session=\(sessionID.uuidString, privacy: .public) id=\(reserved.id.uuidString, privacy: .public) clearedInput=\(clearedInput, privacy: .public)")
         }
     }
+
+    /// Entscheidung der Warteschlange aus Status, Entwurfs-Schätzung und dem
+    /// am Bildschirm abgelesenen Eingabefeld (`nil` = nicht ablesbar, etwa
+    /// hochgescrollt). Pur und für Tests offen, damit sie genau die
+    /// Zusammensetzung der Zustellung prüfen (WM8-121).
+    nonisolated static func gateDecision(
+        draft: TerminalComposerDraftTracker,
+        field: ControllerPromptField?,
+        profile: TerminalKeyboardProfile,
+        runtime: AgentSessionRuntimeStatus?,
+        lifecycle: AgentSessionLifecycleState?,
+        inputPending: Bool
+    ) -> PromptDeliveryGate.Decision {
+        PromptDeliveryGate.forQueue(
+            runtime: runtime,
+            lifecycle: lifecycle,
+            mayHaveUnsentInput: draft.mayHaveUnsentInput,
+            inputPending: inputPending,
+            visibleDraft: PromptSubmitCheck.visibleDraft(
+                field: field, profile: profile, clearsBeforeSubmit: draft.shouldClearBeforeSubmit),
+            fieldVisiblyEmpty: PromptSubmitCheck.fieldVisiblyEmpty(field: field, profile: profile))
+    }
+
+    /// Grund der Wartezeit für `chats queue`. Eingefügter Text hat einen
+    /// eigenen: Er wartet nicht auf das Turn-Ende, sondern darauf, dass er
+    /// abgeschickt oder gelöscht wird (WM8-121).
+    nonisolated static func draftPendingError(_ draft: TerminalComposerDraftTracker) -> String {
+        draft.mayHoldInsertedText ? insertedTextError : "Entwurf im Eingabefeld — wartet, bis der Chat fertig ist"
+    }
+
+    nonisolated static let insertedTextError = "Eingefügter, nicht abgeschickter Text im Eingabefeld (Diktat ohne Senden, "
+        + "„→ Jarvis“, `send --no-submit`) — wartet, bis er abgeschickt oder gelöscht ist. Ist das Feld leer, "
+        + "zählt das erst, wenn das Terminal ganz unten steht; dann geht die Meldung beim nächsten Turn-Ende "
+        + "oder `enqueue` raus"
 
     static let stuckError = "Steht im Eingabefeld, nicht abgeschickt — `chats submit` schickt ihn ab"
 
