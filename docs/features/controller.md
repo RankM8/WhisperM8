@@ -439,6 +439,21 @@ Tastatur-Kürzel im Board kommen mit Paket 3. Alles nur bei eingeschalteter Tick
 | Chat-Zeile | ▲ ▼ · Kreuz · Kreis | Chat wählen · **Zum Chat** (nur Chats auf diesem Rechner) · zurück in die Liste |
 | Seitenleiste | wie in der Liste | Kreuz öffnet den markierten Chat sichtbar, ▶ zurück ins Board |
 
+**Board-Chat** (Paket 3a, Entscheidungen vom 16.11.2026): Steuerkreuz oder Stick ▶ über die letzte Spalte, das
+Ende der Liste oder in der Triage aus der Liste (ohne Chats am Ticket) bzw. aus der Chat-Zeile hinaus führt in den
+Board-Chat, den die Spalte rechts zeigt. Nur ein einzelner Druck führt hinein, ein gehaltener Stick bleibt im Board.
+Ohne sichtbaren Board-Chat (keiner, zugeklappt, Tab in einem anderen Fenster) „geht nicht“. Dort gelten die Tasten
+eines Chats mit allen Schutzregeln, und die Ankunftssperre von 1 s hängt an seiner Kennung wie bei „Zum Chat“.
+Anders als im Chat: L1/R1 blättern Tickets (E2), **Stick ◀** führt zurück aufs Ticket, auf dem man war; das
+Steuerkreuz bleibt Pfeiltasten, nur wo ← im Terminal nichts tun darf (leeres Claude-Feld, kein laufender Chat),
+führt auch Steuerkreuz ◀ zurück. Nichts aus dem Board-Chat wählt einen anderen Chat, startet einen oder öffnet die
+Liste. L2 führt wie überall zurück an den vorigen Ort. Sichtbar ist der Fokus am Rahmen in Akzentfarbe um die
+Spalte; die Leiste nennt „Board-Chat · Jarvis“ und seine Tasten. Der Fokus gilt nur, solange genau dieser Chat in
+der Spalte steht (`ControllerBoardChatFocus.isValid`); Tickets zu, anderer Board-Chat, anderes Fenster, Maus oder
+Tastatur beenden ihn, und er lebt beim Zurückkommen nicht wieder auf. Zweite Sicherung: Hinter den Tickets gehen
+Tasten, Scrollen und Leeren nur an `chatInputSessionID`, und das ist dort nur der Board-Chat mit Fokus, sonst
+keiner. Tests: `ControllerBoardChatFocusTests`.
+
 Die erste Bewegung zeigt die Start-Auswahl: die Karte des Tickets, an dem der Chat dahinter hängt, sonst
 die erste Karte der ersten Spalte, in der etwas wartet, sonst die erste Karte. **Options** öffnet die
 Menü-Karte an der gewählten Karte bzw. am Kopf des großen Tickets: Ticket (Zum Chat ›, Link kopieren, In

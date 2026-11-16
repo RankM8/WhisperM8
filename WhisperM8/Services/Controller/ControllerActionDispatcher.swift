@@ -144,14 +144,24 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         snapshot.area = listHasFocus ? .list : .content
         snapshot.chat = chatState(in: window)
         // Tickets statt Chats (WM8-91): eigener Zusammenhang, kein Chat-Ziel.
+        // Einziger Chat darin: der Board-Chat, wenn der Controller seine
+        // Tasten dort hat (Paket 3a) und genau er in der Spalte steht.
         if let place = window.tickets {
-            snapshot.tickets = ControllerTicketState(place: place, backTarget: window.backTarget)
+            var tickets = ControllerTicketState(place: place, backTarget: window.backTarget)
+            if !listHasFocus, let focus = ui.boardChatFocus, focus.isValid(windowID: windowID, place: place) {
+                tickets.boardChat = chatState(for: focus.sessionID, in: window)
+            }
+            snapshot.tickets = tickets
         }
         // Während eines gebundenen Diktats nennt die Legende dessen Ziel, nicht
         // die Auswahl: Die darf wechseln, der Text geht trotzdem dorthin.
         let titleSession = snapshot.recordingTargetBound ? dictation.targetSessionID : window.selectedSessionID
         var title = titleSession.flatMap(titleForSession)
-        if title == nil, let place = window.tickets { title = ControllerTicketsText.placeTitle(place.label) }
+        if let place = window.tickets, snapshot.tickets?.boardChat != nil, !snapshot.recordingTargetBound {
+            title = ControllerTicketsText.boardChatTitle(place.boardChatName)
+        } else if title == nil, let place = window.tickets {
+            title = ControllerTicketsText.placeTitle(place.label)
+        }
         if ui.targetTitle != title { ui.targetTitle = title }
         publish(snapshot)
         return snapshot
@@ -159,6 +169,11 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
 
     func chatState(in window: AgentChatsWindowSnapshot) -> ControllerChatState? {
         guard let sessionID = window.selectedSessionID else { return nil }
+        return chatState(for: sessionID, in: window)
+    }
+
+    /// Zustand eines bestimmten Chats im Fenster (Auswahl oder Board-Chat).
+    func chatState(for sessionID: UUID, in window: AgentChatsWindowSnapshot) -> ControllerChatState {
         guard let terminal = terminals.state(of: sessionID) else {
             return ControllerChatState(status: .ended, profile: .other, gridActive: window.isGridActive,
                                        hasTerminal: false, backTarget: window.backTarget)
@@ -253,6 +268,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         ui.menu = nil
         ui.leaveList()
         ui.holdProgress = nil
+        ui.boardChatFocus = nil
     }
 
     /// Darf eine Aufnahme in diesen Chat mit Kreuz auch gesendet werden? Nur
@@ -300,7 +316,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             // Bei offener Limits-Karte geht R1 + L3 nicht (wie △ □ ○ dort).
             if key == .toggleTranscript, quickDrawSlots?.card != nil {
                 playHaptic(.rejected)
-            } else if key == .enter, case let .chat(state) = context,
+            } else if key == .enter, let state = Self.inputChatState(context),
                       ControllerBindingResolver.confirmRestsOnPromptField(state) {
                 confirmWhenSettled()
             } else {
@@ -331,7 +347,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
             scrollSelected(in: context) { terminals.scrollPage(step, in: $0) }
         case .scrollToBottom:
             // Vor dem Neulesen der Legende merken: Die Sperre gilt ab jetzt.
-            if let sessionID = selectedSessionID { lastJumpToEnd = (sessionID, now()) }
+            if let sessionID = chatInputSessionID { lastJumpToEnd = (sessionID, now()) }
             scrollSelected(in: context) { terminals.scrollToBottom(in: $0) }
 
         // Liste links
@@ -398,7 +414,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         case .rejected: playHaptic(.rejected)
         case let .ticket(command): performTicket(command)
         case let .holdProgress(button, duration):
-            if button == .r3 { clearInputTarget = selectedSessionID }
+            if button == .r3 { clearInputTarget = chatInputSessionID }
             ui.holdProgress = ControllerHoldProgress(button: button, startedAt: now(), duration: duration)
         case let .holdProgressCancelled(button):
             if button == .r3 { clearInputTarget = nil }
@@ -408,6 +424,9 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
         if case .holdProgress = action {} else if case .holdProgressCancelled = action {} else {
             ui.holdProgress = nil
         }
+        // Tickets verlassen, anderer Board-Chat, anderes Fenster: Der Fokus
+        // im Board-Chat endet (Paket 3a) und lebt beim Zurückkommen nicht auf.
+        dropStaleBoardChatFocus()
     }
 
     // MARK: - Befehle an das Fenster
@@ -437,14 +456,15 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     /// Scroll-Gesten bis zu 250 ms alt sein (WM8-101) und löste sonst bei jeder
     /// Geste ein Neulesen aus.
     private func scrollSelected(in context: ControllerContext, _ body: (UUID) -> Void) {
-        guard let sessionID = selectedSessionID else { return }
+        guard let sessionID = chatInputSessionID else { return }
         body(sessionID)
         guard case .chat = context, case let .chat(shown) = ui.context else { return }
         if terminals.isScrolledBack(sessionID) != shown.scrolledBack { refreshContext() }
     }
 
     private func sendKey(_ key: TerminalControlKey) {
-        withSelectedSession { terminals.sendKey(key, to: $0) }
+        guard let sessionID = chatInputSessionID else { return }
+        terminals.sendKey(key, to: sessionID)
     }
 
     /// R3 halten: Eingabe des Chats leeren, der beim Haltebeginn ausgewählt
@@ -453,7 +473,7 @@ final class ControllerActionDispatcher: ControllerActionPerforming {
     private func clearInput() {
         let target = clearInputTarget
         clearInputTarget = nil
-        guard let target, target == selectedSessionID, terminals.clearInput(in: target) else {
+        guard let target, target == chatInputSessionID, terminals.clearInput(in: target) else {
             return playHaptic(.rejected)
         }
         playHaptic(.inputCleared)

@@ -37,19 +37,28 @@ struct ControllerLegendTarget: Equatable {
         case .list:
             return .init(title: String(localized: "List"), detail: nil, tone: .neutral)
         case let .tickets(state):
+            // Der Controller hat die Tasten im Board-Chat (Paket 3a): dessen
+            // Name und Zustand wie bei einem Chat.
+            if let chat = state.boardChat {
+                return chatTarget(ControllerTicketsText.boardChatTitle(state.place.boardChatName), chat)
+            }
             // Statt des Chats der Ort (WM8-91): „Tickets · WM8“, dazu kurz eine Bestätigung.
             return .init(title: ControllerTicketsText.placeTitle(state.place.label),
                          detail: ticketNotice.map(ControllerTicketsText.notice), tone: .neutral)
         case let .chat(state):
-            switch state.status {
-            case .working: return .init(title: title, detail: String(localized: "working"), tone: .working)
-            case .awaitingInput: return .init(title: title, detail: String(localized: "question"), tone: .awaiting)
-            case .idle: return .init(title: title, detail: String(localized: "ready"), tone: .neutral)
-            case .unknown: return .init(title: title, detail: nil, tone: .neutral)
-            case .ended: return .init(title: title, detail: String(localized: "ended"), tone: .neutral)
-            }
+            return chatTarget(title, state)
         case .outsideApp, .otherWindow, .noWindow:
             return .init(title: String(localized: "Another window"), detail: nil, tone: .neutral)
+        }
+    }
+
+    private static func chatTarget(_ title: String, _ state: ControllerChatState) -> ControllerLegendTarget {
+        switch state.status {
+        case .working: return .init(title: title, detail: String(localized: "working"), tone: .working)
+        case .awaitingInput: return .init(title: title, detail: String(localized: "question"), tone: .awaiting)
+        case .idle: return .init(title: title, detail: String(localized: "ready"), tone: .neutral)
+        case .unknown: return .init(title: title, detail: nil, tone: .neutral)
+        case .ended: return .init(title: title, detail: String(localized: "ended"), tone: .neutral)
         }
     }
 }

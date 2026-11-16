@@ -213,6 +213,11 @@ final class ControllerUIModel {
     /// Kurze Bestätigung in der Leiste im Ticket-Board (WM8-91): „Link
     /// kopiert“, „Diktat erst mit dem Board-Chat“. Verschwindet nach 2 s.
     var ticketNotice: ControllerTicketNotice?
+    /// Der Controller hat die Tasten im Board-Chat (WM8-91 Paket 3a); `nil` =
+    /// im Board bzw. in der Triage. Der Rahmen der Spalte liest nur diesen
+    /// Wert. Gültig nur, solange genau dieser Chat in der Spalte steht
+    /// (`ControllerBoardChatFocus.isValid`).
+    var boardChatFocus: ControllerBoardChatFocus?
 
     @ObservationIgnored var listModel = SidebarNavigationModel()
 

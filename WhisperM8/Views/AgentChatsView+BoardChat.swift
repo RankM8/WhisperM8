@@ -89,6 +89,8 @@ extension AgentChatsView {
                 setWidth: { preferencesStore.setWidth($0, for: projectID) },
                 resetWidth: { preferencesStore.setWidth(nil, for: projectID) }))
             .task { preferencesStore.preload() }
+            // Rahmen, solange der Controller die Tasten im Board-Chat hat (WM8-91).
+            .modifier(BoardChatControllerFocusFrame(windowID: windowID))
             // Einmal je gefundenem Jarvis merken (nicht im Body schreiben).
             .task(id: "\(pick.jarvis?.id.uuidString ?? "-")|\(preferencesStore.isLoaded)") {
                 if let jarvis = pick.jarvis, preferencesStore.isLoaded {

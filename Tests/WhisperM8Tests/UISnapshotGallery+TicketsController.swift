@@ -79,6 +79,27 @@ extension UISnapshotGallery {
                     entries: ControllerLegend.entries(for: .chat(state)))
             })
         }
+        // Paket 3a: Board mit sichtbarem Board-Chat (▶ hinein) und der
+        // Board-Chat mit den Tasten des Controllers.
+        func boardChatLegend(focused: Bool) -> AnyView {
+            var place = ControllerTicketsPlace(projectID: wm8, team: "WM8")
+            place.view = .board
+            place.hasTicket = true
+            place.boardChatID = UUID()
+            place.boardChatName = "Jarvis"
+            var state = ControllerTicketState(
+                place: place, backTarget: ControllerBackTarget(kind: .chat, title: "Jarvis: Supervisor WhisperM8"))
+            if focused {
+                state.boardChat = ControllerChatState(status: .idle, profile: .claude, draftSuspected: true, fieldMayHaveText: true)
+            }
+            let context = ControllerContext.tickets(state)
+            return AnyView(VStack(spacing: 0) {
+                Spacer(minLength: 0)
+                ControllerLegendBar(
+                    target: .make(context: context, chatTitle: "Tickets · WM8"),
+                    entries: ControllerLegend.entries(for: context))
+            })
+        }
         let list = CGSize(width: 620, height: 400)
         let legendSize = CGSize(width: 1240, height: 60)
         return [
@@ -91,6 +112,8 @@ extension UISnapshotGallery {
                 legend(ControllerBackTarget(kind: .chat, title: "Jarvis: Supervisor WhisperM8"))
             },
             Fixture(name: "tickets-controller-leiste-chat-zurueck", size: legendSize) { chatLegend() },
+            Fixture(name: "tickets-controller-leiste-board-mit-chat", size: legendSize) { boardChatLegend(focused: false) },
+            Fixture(name: "tickets-controller-leiste-board-chat", size: legendSize) { boardChatLegend(focused: true) },
         ]
     }
 
