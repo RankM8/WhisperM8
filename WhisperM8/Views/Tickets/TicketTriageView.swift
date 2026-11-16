@@ -25,7 +25,7 @@ struct TicketTriageView: View {
                     Rectangle().fill(AgentTheme.border).frame(width: 1)
                 }
                 VStack(spacing: 0) {
-                    TicketTriageBar(model: model, triage: triage, load: load, actions: actions)
+                    TicketTriageBar(model: model, triage: triage, load: load, actions: actions, compact: layout.compactHead)
                         .controllerTicketMenuAnchor(active: true)
                     if let windowID = model.windowID {
                         // Triage-Knöpfe sammeln für den Board-Chat (WM8-113); nur mit sichtbarem Board-Chat.
@@ -69,17 +69,25 @@ struct TicketTriageLayout: Equatable {
     /// dem Ticket mindestens 400 pt).
     static let listFrom: CGFloat = 660
 
+    /// Darunter (Breite der Ticket-Spalte) wird der Kopf knapp: „← Chats“ ohne
+    /// Namen, „Link kopieren“ und „In Linear öffnen“ nur als Symbol (WM8-124).
+    static let fullHeadFrom: CGFloat = 800
+
     var showsList: Bool
     var propertiesInline: Bool
+    var compactHead: Bool
 
-    init(showsList: Bool, propertiesInline: Bool) {
+    init(showsList: Bool, propertiesInline: Bool, compactHead: Bool = false) {
         self.showsList = showsList
         self.propertiesInline = propertiesInline
+        self.compactHead = compactHead
     }
 
     init(width: CGFloat) {
         showsList = width >= Self.listFrom
         propertiesInline = width < Self.propertiesColumnFrom
+        let ticketColumn = width - (showsList ? TicketTriageView.listWidth + 1 : 0)
+        compactHead = ticketColumn < Self.fullHeadFrom
     }
 }
 
@@ -208,9 +216,15 @@ private struct TicketTriageBar: View {
     let triage: TicketTriage
     let load: TicketBoardLoad
     let actions: TicketBoardActions
+    var compact = false
 
     var body: some View {
         HStack(spacing: 8) {
+            if let back = actions.back {
+                // Rückweg zu den Chats (WM8-124), immer ganz zu sehen.
+                TicketsBackLinkButton(link: back, compact: compact)
+                Rectangle().fill(AgentTheme.border).frame(width: 1, height: 16)
+            }
             // Immer sichtbar: Im schmalen Fenster fällt die Liste samt ihrem
             // Schließen-Knopf weg, und Esc wirkt nicht, solange ein Textfeld den Fokus hat.
             Button { model.closeTriage() } label: {
@@ -218,6 +232,7 @@ private struct TicketTriageBar: View {
                     Image(systemName: "chevron.left")
                     Text("Board")
                 }
+                .fixedSize()
             }
             .help(Text("Back to the board (Esc)"))
             .accessibilityLabel(Text("Back to the board"))
@@ -233,28 +248,37 @@ private struct TicketTriageBar: View {
             Text("\(triage.index + 1) of \(triage.keys.count)")
                 .font(.system(size: 11.5).monospacedDigit())
                 .foregroundStyle(AgentTheme.textSecondary)
+                .fixedSize()
             if let content = model.detail {
                 Text(verbatim: content.entry.ticket.key)
                     .font(.system(size: 12, weight: .semibold).monospacedDigit())
                     .foregroundStyle(AgentTheme.textSecondary)
+                    .fixedSize()
                     .padding(.leading, 6)
                 TicketPriorityBars(priority: content.entry.ticket.priority)
             }
+            // Die Tasten (J/K, ⌘C, Esc) stehen in der Leiste unten (WM8-124),
+            // nicht mehr abgeschnitten hier.
             Spacer(minLength: 8)
-            Text("J/K or ↑↓ next · ⌘C link · Esc board")
-                .font(.system(size: 11))
-                .foregroundStyle(AgentTheme.textSecondary)
-                .lineLimit(1)
             if model.detail != nil {
-                TicketCopyButton(kind: .link, copied: model.copied) { model.copyLink() }
+                TicketCopyButton(kind: .link, copied: model.copied, iconOnly: compact) { model.copyLink() }
             }
             if model.detail != nil, let windowID = model.windowID {
                 BoardChatHandOffButton(windowID: windowID)
             }
             if let content = model.detail {
                 if let url = content.url {
-                    Button("Open in Linear") { actions.openURL(url) }
-                        .buttonStyle(SettingsButtonStyle.standard)
+                    Button { actions.openURL(url) } label: {
+                        if compact {
+                            Image(systemName: "arrow.up.right.square")
+                        } else {
+                            Text("Open in Linear")
+                        }
+                    }
+                    .buttonStyle(SettingsButtonStyle.standard)
+                    .fixedSize()
+                    .help(Text("Open in Linear"))
+                    .accessibilityLabel(Text("Open in Linear"))
                 }
             }
             Button { actions.refresh(); model.reloadComments() } label: {
@@ -385,10 +409,11 @@ private struct TicketTriageProperties: View {
 
 // MARK: - Eigenschaften als Zeile (wenig Platz)
 
-/// Status, Priorität, Zugewiesen, „Fertig, wenn“ und Labels in einer Zeile
-/// unter dem Kopf des Tickets; bricht nur um, wenn auch das nicht passt.
-/// Darunter, nur wenn es welche gibt, die Chats am Ticket mit „Zum Chat“:
-/// Controller und Maus erreichen sie hier wie in der Spalte.
+/// Eine Zeile über dem Titel, wenn die Spalte „Eigenschaften“ keinen Platz hat
+/// (Entscheidung Giuliano, 16.11.2026): „In Progress · Hoch · Giuliano ·
+/// Feature · ● Jon [Zum Chat]“. Reicht die Breite nicht, bricht sie um
+/// (Fließ-Anordnung); abgeschnitten wird nichts, auch nicht „Zum Chat“ oder
+/// die Markierung des Controllers auf einer Chat-Zeile.
 private struct TicketTriagePropertyStrip: View {
     let content: TicketDetailContent
     let rule: TicketTeamRule
@@ -400,62 +425,60 @@ private struct TicketTriagePropertyStrip: View {
     private var ticket: Ticket { entry.ticket }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            StatisticsFlowLayout(horizontalSpacing: 14, verticalSpacing: 6) {
-                item("Status") {
-                    Text(verbatim: ticket.status.name)
-                    if entry.waitsForMe {
-                        Text("waits for you").foregroundStyle(AgentTheme.statusAwaiting)
-                    }
-                }
-                item("Priority") {
-                    TicketPriorityBars(priority: ticket.priority)
-                    Text(verbatim: TicketBoardText.priority(ticket.priority))
-                }
-                item("Assignee") {
-                    if let assignee = ticket.assignee { Text(verbatim: assignee.name) } else { Text("Nobody") }
-                }
-                if let criteria = entry.criteria {
-                    item("Done when") {
-                        TicketCriteriaBadge(progress: criteria)
-                        Text("\(criteria.done) of \(criteria.total) done")
-                    }
-                }
-                if !ticket.labels.isEmpty || ticket.isBlocked {
-                    TicketCardTags(ticket: ticket, rule: rule, maxLabels: 8, hidesColumnStatus: true)
+        StatisticsFlowLayout(horizontalSpacing: 6, verticalSpacing: 6) {
+            part(first: true) {
+                Text(verbatim: ticket.status.name)
+                if entry.waitsForMe {
+                    Text("waits for you").foregroundStyle(AgentTheme.statusAwaiting)
                 }
             }
-            if !content.agents.isEmpty || content.localChatID != nil {
-                HStack(spacing: 12) {
-                    Text("Chats on this ticket")
-                        .font(.system(size: 11))
-                        .foregroundStyle(AgentTheme.textSecondary)
-                    ForEach(Array(content.agents.enumerated()), id: \.element.id) { index, line in
-                        TicketAgentRow(entry: line.entry, source: source)
-                            .ticketChatLineFocus(focusedChat == index)
-                    }
-                    if let chatID = content.localChatID {
-                        Button("Go to chat") { actions.openChat(chatID) }
-                            .buttonStyle(SettingsButtonStyle.standard)
-                    }
-                    Spacer(minLength: 0)
+            part {
+                TicketPriorityBars(priority: ticket.priority)
+                Text(verbatim: TicketBoardText.priority(ticket.priority))
+            }
+            part {
+                if let assignee = ticket.assignee { Text(verbatim: assignee.name) } else { Text("Nobody") }
+            }
+            if let criteria = entry.criteria {
+                part { TicketCriteriaBadge(progress: criteria) }
+                    .help(Text("\(criteria.done) of \(criteria.total) done"))
+            }
+            if !ticket.labels.isEmpty || ticket.isBlocked {
+                part { TicketCardTags(ticket: ticket, rule: rule, maxLabels: 8, hidesColumnStatus: true) }
+            }
+            ForEach(Array(content.agents.enumerated()), id: \.element.id) { index, line in
+                part {
+                    TicketAgentRow(entry: line.entry, source: source, compact: true)
+                        .ticketChatLineFocus(focusedChat == index)
                 }
-                .lineLimit(1)
+            }
+            if let chatID = content.localChatID {
+                Button("Go to chat") { actions.openChat(chatID) }
+                    .buttonStyle(SettingsButtonStyle.standard)
+                    .fixedSize()
+            }
+            if entry.isHandedOver {
+                // Wie auf der Karte: abgegeben heißt, es wartet auf den nächsten Schritt (Merge).
+                part { Text("Handed over by \(entry.handedOverBy.joined(separator: ", "))").foregroundStyle(AgentTheme.textSecondary) }
+            } else if !entry.handedOverBy.isEmpty {
+                part { Text("Earlier: \(entry.handedOverBy.joined(separator: ", "))").foregroundStyle(AgentTheme.textSecondary) }
             }
         }
         .font(.system(size: 12))
         .foregroundStyle(AgentTheme.textPrimary)
         .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.vertical, 7)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(AgentTheme.surface)
     }
 
-    private func item<Value: View>(_ label: LocalizedStringKey, @ViewBuilder value: () -> Value) -> some View {
+    /// Ein Teil der Zeile, mit „·“ davor (außer dem ersten). Teile brechen nur
+    /// als Ganzes um.
+    private func part<Value: View>(first: Bool = false, @ViewBuilder value: () -> Value) -> some View {
         HStack(spacing: 5) {
-            Text(label)
-                .font(.system(size: 11))
-                .foregroundStyle(AgentTheme.textSecondary)
+            if !first {
+                Text(verbatim: "·").foregroundStyle(AgentTheme.textTertiary)
+            }
             value()
         }
         .lineLimit(1)

@@ -23,15 +23,20 @@ struct BoardChatPreferencesFile: Codable, Equatable {
     var schema = BoardChatPreferencesFile.currentSchema
     /// Schlüssel: Projekt-ID (Haupt-Projekt, nicht Arbeitsordner).
     var projects: [String: BoardChatProjectPreferences] = [:]
+    /// Die Erklärung unter dem Board-Chat stand schon einmal da (WM8-124);
+    /// danach bleibt nur die Bezug-Marke. Fehlt in älteren Dateien.
+    var introSeen: Bool?
 
-    init(projects: [String: BoardChatProjectPreferences] = [:]) {
+    init(projects: [String: BoardChatProjectPreferences] = [:], introSeen: Bool? = nil) {
         self.projects = projects
+        self.introSeen = introSeen
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         schema = try container.decodeIfPresent(String.self, forKey: .schema) ?? Self.currentSchema
         projects = try container.decodeIfPresent([String: BoardChatProjectPreferences].self, forKey: .projects) ?? [:]
+        introSeen = try container.decodeIfPresent(Bool.self, forKey: .introSeen)
     }
 }
 
@@ -50,6 +55,8 @@ final class BoardChatPreferencesStore {
 
     private(set) var projects: [UUID: BoardChatProjectPreferences] = [:]
     private(set) var isLoaded = false
+    /// Erklärung unter dem Board-Chat schon gezeigt (für alle Projekte).
+    private(set) var introSeen = false
 
     @ObservationIgnored private let read: @Sendable () -> BoardChatPreferencesFile?
     @ObservationIgnored private let write: @Sendable (BoardChatPreferencesFile) -> Void
@@ -108,6 +115,8 @@ final class BoardChatPreferencesStore {
         changedBeforeLoad = []
         let merged = loaded.filter { !$0.value.isEmpty }
         if merged != projects { projects = merged }
+        // Vor dem Laden weggeklickt gilt auch.
+        if file?.introSeen == true, !introSeen { introSeen = true }
         isLoaded = true
         loadTask = nil
     }
@@ -128,6 +137,13 @@ final class BoardChatPreferencesStore {
 
     func setLastJarvis(_ sessionID: UUID, for projectID: UUID) {
         update(projectID) { $0.lastJarvisSessionID = sessionID }
+    }
+
+    /// Die Erklärung unter dem Board-Chat kommt nicht wieder.
+    func markIntroSeen() {
+        guard !introSeen else { return }
+        introSeen = true
+        scheduleSave()
     }
 
     private func update(_ projectID: UUID, _ change: (inout BoardChatProjectPreferences) -> Void) {
@@ -156,8 +172,9 @@ final class BoardChatPreferencesStore {
     /// die Reihenfolge: Ein älterer Stand überholt nie einen neueren.
     func saveNow() {
         saveTask = nil
-        let file = BoardChatPreferencesFile(projects: Dictionary(
-            uniqueKeysWithValues: projects.map { ($0.key.uuidString, $0.value) }))
+        let file = BoardChatPreferencesFile(
+            projects: Dictionary(uniqueKeysWithValues: projects.map { ($0.key.uuidString, $0.value) }),
+            introSeen: introSeen ? true : nil)
         let write = write
         Self.ioQueue.async { write(file) }
     }

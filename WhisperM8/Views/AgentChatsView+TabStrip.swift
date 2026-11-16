@@ -463,7 +463,12 @@ extension AgentChatsView {
             // + Kapazitäts-Picker) den Chat-Header — die Pane-Header tragen
             // die Session-Infos bereits, und der Picker verdeckt so keine
             // Pane mehr (vorher Overlay über der rechten oberen Pane).
-            if isGridActive, let entity = activeGridWorkspaceEntity {
+            // Im Ticket-Modus fällt die Zeile weg (WM8-124): Nichts darin wirkt
+            // auf das Board, und Board und Board-Chat bekommen den Platz. Den
+            // Weg zurück trägt der Kopf des Boards („← Chats · …“).
+            if isTicketsModeActive {
+                EmptyView()
+            } else if isGridActive, let entity = activeGridWorkspaceEntity {
                 gridWorkspaceStatusRow(entity: entity)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)

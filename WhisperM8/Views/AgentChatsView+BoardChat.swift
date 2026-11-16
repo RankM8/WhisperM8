@@ -86,7 +86,8 @@ extension AgentChatsView {
                 storedWidth: preferences.width,
                 isCollapsed: preferences.isCollapsed == true,
                 available: available,
-                setWidth: { preferencesStore.setWidth($0, for: projectID) }))
+                setWidth: { preferencesStore.setWidth($0, for: projectID) },
+                resetWidth: { preferencesStore.setWidth(nil, for: projectID) }))
             .task { preferencesStore.preload() }
             // Einmal je gefundenem Jarvis merken (nicht im Body schreiben).
             .task(id: "\(pick.jarvis?.id.uuidString ?? "-")|\(preferencesStore.isLoaded)") {
@@ -94,8 +95,10 @@ extension AgentChatsView {
                     preferencesStore.setLastJarvis(jarvis.id, for: projectID)
                 }
             }
-            // Klick außerhalb des Terminals gibt den Fokus ans Fenster zurück.
-            .background(BoardChatFocusGuard())
+            // Klick außerhalb des Terminals gibt den Fokus ans Fenster zurück;
+            // ebenso, wenn der Board-Chat aufhört zu laufen.
+            .background(BoardChatFocusGuard(
+                isBoardChatRunning: pick.current.map { terminalRegistry.controller(for: $0.id)?.isRunning == true } ?? false))
         }
     }
 
@@ -112,7 +115,9 @@ extension AgentChatsView {
             canResume: session?.externalSessionID != nil,
             choices: BoardChatRules.choices(
                 jarvis: pick.jarvis.map(Self.boardChatChoiceChat), product: pick.product.map(Self.boardChatChoiceChat),
-                chosen: pick.chosen.map(Self.boardChatChoiceChat), current: session?.id))
+                chosen: pick.chosen.map(Self.boardChatChoiceChat), current: session?.id),
+            showsIntro: !BoardChatPreferencesStore.shared.introSeen,
+            hasCustomWidth: BoardChatPreferencesStore.shared.preferences(for: projectID).width != nil)
         BoardChatColumnView(
             state: state,
             actions: boardChatActions(session: session, placement: placement, projectID: projectID,
@@ -168,13 +173,17 @@ extension AgentChatsView {
         let preferencesStore = BoardChatPreferencesStore.shared
         var actions = BoardChatColumnActions()
         actions.setCollapsed = { preferencesStore.setCollapsed($0, for: projectID) }
+        actions.introSeen = { preferencesStore.markIntroSeen() }
+        actions.resetWidth = { preferencesStore.setWidth(nil, for: projectID) }
         // Wahl je Projekt, gespeichert (Teil c). Der automatische Jarvis heißt
         // „keine Wahl“: Ein neuer Jarvis übernimmt dann von selbst.
         let choose: (UUID) -> Void = { id in
             preferencesStore.setChosenSession(BoardChatRules.storedChoice(after: id, automaticJarvis: automaticJarvis), for: projectID)
         }
         actions.choose = choose
-        let projectName = selectedProject?.name ?? ""
+        // Haupt-Projekt des Boards: Ist ein Arbeitsordner gewählt, nennt die
+        // Ablehnung sonst dessen Namen statt des Projekts, zu dem der Chat gehören muss.
+        let projectName = workspace.projects.first { $0.id == projectID }?.name ?? selectedProject?.name ?? ""
         actions.drop = { [workspaceModel, windowID] id, groupSize in
             guard let dropped = workspaceModel.session(id: id) else { return false }
             // Nur echte Agent-Chats dieses Projekts, einzeln; sonst sichtbar sagen, warum nicht.

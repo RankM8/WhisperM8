@@ -115,7 +115,8 @@ extension RecordingCoordinator {
                 model: model,
                 language: language,
                 rawText: normalizedRawText,
-                postProcessingResult: postProcessingResult
+                postProcessingResult: postProcessingResult,
+                toBoardChat: delivery.target.neverSubmits
             )
             return
         }

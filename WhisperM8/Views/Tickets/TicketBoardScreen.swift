@@ -343,10 +343,15 @@ struct TicketBoardScreen: View, Equatable {
     /// Ohne Angaben gelten die Wege der App; Tests und Bilder setzen eigene ein.
     var source: TicketChatStatusSource?
     var actions: TicketBoardActions?
+    /// „← Chats · …“ im Kopf (WM8-124). Von der App gesetzt, weil nur sie
+    /// weiß, wohin es zurückgeht.
+    var back: TicketsBackLinkModel?
 
     /// Die Closures zählen nicht: Sie tun für dasselbe Fenster immer dasselbe.
+    /// Vom Rückweg zählt nur, was auf dem Knopf steht.
     nonisolated static func == (lhs: TicketBoardScreen, rhs: TicketBoardScreen) -> Bool {
         lhs.projectPath == rhs.projectPath && lhs.projectName == rhs.projectName && lhs.controller === rhs.controller
+            && lhs.back?.destination == rhs.back?.destination
     }
 
     var body: some View {
@@ -396,6 +401,7 @@ struct TicketBoardScreen: View, Equatable {
     private var screenActions: TicketBoardActions {
         var actions = actions ?? .live
         actions.refresh = { [controller] in controller.refresh() }
+        if let back { actions.back = back }
         return actions
     }
 }
@@ -443,6 +449,10 @@ struct TicketBoardEmptyState: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .topLeading) {
+            // Auch ohne Board führt der Kopf zurück zu den Chats (WM8-124).
+            if let back = actions.back { TicketsBackLinkButton(link: back).padding(14) }
+        }
     }
 
     private var symbol: String {
