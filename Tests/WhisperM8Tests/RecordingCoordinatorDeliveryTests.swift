@@ -390,15 +390,19 @@ final class RecordingCoordinatorDeliveryTests: XCTestCase {
     }
 
     /// Offene Ansicht von Claude (WM8-123): nichts ins Terminal, auch nicht
-    /// mit Senden; die Pille bietet kein ⌘V an (es landete im Filter der Ansicht).
+    /// mit Senden; die Pille nennt den Grund und bietet kein ⌘V an (es landete
+    /// im Filter der Ansicht).
     func testOpenViewKeepsTextOnClipboardWithNotice() async throws {
         chatWriter.chatState = .viewOpen
-        _ = try await deliverToChat("Bitte noch prüfen", submit: true)
+        let (coordinator, _) = try await deliverToChat("Bitte noch prüfen", submit: true)
 
         XCTAssertTrue(chatWriter.writes.isEmpty)
         assertClipboardOnly(text: "Bitte noch prüfen", reason: .viewOpen)
-        XCTAssertEqual(RecordingCoordinator.clipboardOnlyPillHint(for: .viewOpen),
-                       RecordingCoordinator.clipboardOnlyPillHint(for: .decisionPending))
+        XCTAssertEqual(coordinator.overlayController.quickActionLabel,
+                       RecordingCoordinator.clipboardOnlyPillHint(for: .viewOpen))
+        XCTAssertNotEqual(RecordingCoordinator.clipboardOnlyPillHint(for: .viewOpen),
+                          RecordingCoordinator.clipboardOnlyPillHint(for: .decisionPending))
+        XCTAssertFalse(RecordingCoordinator.clipboardOnlyPillHint(for: .viewOpen).contains("⌘V"))
     }
 
     func testStoppedChatKeepsTextOnClipboardWithNotice() async throws {

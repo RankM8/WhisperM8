@@ -478,7 +478,8 @@ task for a new session“ sieht wie ein leeres Eingabefeld aus; das Enter
 startete eine neue Hintergrund-Sitzung), `/config` (das Enter wählte eine
 Einstellung) und Verlaufssuche mit Ctrl+R. Dieselbe Ablesung prüfen seit dem
 16.11.2026 auch die Wege, die nur einfügen: Ein Diktat (mit wie ohne Senden)
-bleibt in der Zwischenablage und sagt warum, „→ Jarvis“ (Knopf und Dreieck am
+bleibt in der Zwischenablage und sagt warum (auch die Pille: „In der
+Zwischenablage · Ansicht offen“), „→ Jarvis“ (Knopf und Dreieck am
 Controller) und die Triage-Knöpfe lehnen mit Warnton und einem Satz unter dem
 Terminal ab (`LiveDictationChatWriter.state` → `.viewOpen`,
 `BoardChatInputRules`). Vorher landete ihr Text im Filter der Einstellungen, in
