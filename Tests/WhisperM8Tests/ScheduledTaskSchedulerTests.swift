@@ -422,7 +422,7 @@ final class ScheduledTaskSchedulerTests: XCTestCase {
 
     func testCustomAllowOpensOnlyTheNamedFamily() {
         let bash = ScheduledTaskPermissions(access: .readOnly, extraTools: ["Bash(whisperm8 tickets *)"])
-        let protected = ScheduledTaskPermissions.protectedPaths
+        let protected = ScheduledTaskPermissions.protectedPaths + ScheduledTaskPermissions.gatedTools
         XCTAssertEqual(bash.disallowedTools, ["WebFetch", "WebSearch", "mcp__*"] + protected, "Bash öffnet auch Monitor")
         XCTAssertFalse(bash.allowsMCP)
 
@@ -439,6 +439,29 @@ final class ScheduledTaskSchedulerTests: XCTestCase {
         let monitor = ScheduledTaskPermissions(access: .projectWrite, extraTools: ["Monitor"])
         XCTAssertEqual(monitor.disallowedTools, ["Bash", "WebFetch", "WebSearch", "mcp__*"] + protected,
                        "--allow Monitor öffnet nur Monitor")
+    }
+
+    /// Probelauf 17.11.: Ein Lauf hatte SendMessage, ListAgents, RemoteTrigger,
+    /// CronCreate/CronDelete und PushNotification — Wege nach außen an der
+    /// Bash-Sperre vorbei. Gesperrt in jeder Stufe, offen nur einzeln per --allow.
+    func testOutwardToolsAreBlockedUnlessAllowed() {
+        let outward = ["SendMessage", "ListAgents", "RemoteTrigger", "CronCreate", "CronDelete", "PushNotification"]
+        for permissions in [ScheduledTaskPermissions(access: .projectWrite), ScheduledTaskPermissions(access: .readOnly),
+                            ScheduledTaskPermissions(access: .custom, extraTools: ["Read", "Bash", "mcp__x__y"])] {
+            let args = ScheduledTaskLauncher.claudeArguments(prompt: "x", sessionID: UUID(), name: nil,
+                                                             permissions: permissions)
+            let deny = args.firstIndex(of: "--disallowedTools")!
+            let denied = Array(args[(deny + 1)...].prefix(while: { !$0.hasPrefix("--") }))
+            for tool in outward {
+                XCTAssertTrue(denied.contains(tool), "\(tool) fehlt bei \(permissions.access)")
+            }
+            XCTAssertFalse(denied.contains("Agent"), "Agent bleibt: Subagents erben die Sperren")
+        }
+        let open = ScheduledTaskPermissions(access: .readOnly, extraTools: ["SendMessage", "CronCreate(*)"])
+        XCTAssertFalse(open.disallowedTools.contains("SendMessage"))
+        XCTAssertFalse(open.disallowedTools.contains("CronCreate"))
+        XCTAssertTrue(open.disallowedTools.contains("CronDelete"), "Nur das genannte Werkzeug öffnet")
+        XCTAssertTrue(open.disallowedTools.contains("ListAgents"))
     }
 
     /// Prüfung 17.11.: Ein Lauf darf nichts schreiben, was der nächste Lauf
