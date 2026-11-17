@@ -703,7 +703,9 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         XCTAssertEqual(launch?["CODEX_HOME"], "/Users/x/.codex")
     }
 
-    func testInheritedCodexHomeIsKept() throws {
+    /// Proxy und App müssen dieselbe `models_cache.json` lesen — ein
+    /// geerbtes `CODEX_HOME` aus der Login-Shell wird deshalb überschrieben.
+    func testInheritedCodexHomeIsReplacedByAppPath() throws {
         var launch: [String: String]?
         let manager = makeManager(
             reachability: { _ in launch != nil },
@@ -717,7 +719,7 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         manager.codexHomeResolver = { "/Users/x/.codex" }
 
         try manager.ensureRunning(port: 18_765).get()
-        XCTAssertEqual(launch?["CODEX_HOME"], "/eigenes/codex")
+        XCTAssertEqual(launch?["CODEX_HOME"], "/Users/x/.codex")
     }
 
     func testInstanceOriginForMainDistinguishesSelfStartedExternalAndNotRunning() throws {

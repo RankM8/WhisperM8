@@ -202,8 +202,9 @@ sonst aus `$HOME/.codex`. Aufgenommen werden Einträge mit
 Zusatzkonten laufen mit `HOME` = Profilordner (siehe unten) und fänden dort
 keinen Katalog. Deshalb setzt `launchEnvironment(forProfile:)` für jede
 selbst gestartete Instanz `CODEX_HOME` auf das `~/.codex` der App. Das ist
-dieselbe Datei, die auch der Picker liest. Ein in der Login-Shell gesetztes
-`CODEX_HOME` bleibt stehen. Ohne diese Zeile böte die App ein neues Modell
+dieselbe Datei, die auch Picker und `CodexModelCatalogWatcher` lesen. Ein in
+der Login-Shell gesetztes `CODEX_HOME` wird dafür bewusst überschrieben, sonst
+läsen Proxy und App verschiedene Kataloge. Ohne diese Zeile böte die App ein neues Modell
 an (die Modellliste kommt vom main-Proxy), die Instanz des Zusatzkontos
 lehnte es aber als unbekannt ab.
 
