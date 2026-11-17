@@ -315,6 +315,24 @@ enum ScheduledTaskTexts {
         }
     }
 
+    // MARK: Login vor dem nächsten Lauf (Paket 3)
+
+    /// „Login of PowerUser ends today, before the next run.“
+    static func loginWarningTitle(_ warning: ScheduledTaskLoginWarning, account: String, clock: Clock) -> String {
+        if warning.hasEnded { return String(localized: "Login of \(account) has ended.") }
+        let ends: String
+        switch clock.dayOffset(warning.endsAt) {
+        case 0: ends = String(localized: "today, \(clock.time(warning.endsAt))")
+        case 1: ends = String(localized: "tomorrow, \(clock.time(warning.endsAt))")
+        default: ends = clock.formatter("EEEdMMM").string(from: warning.endsAt)
+        }
+        return String(localized: "Login of \(account) ends \(ends), before the next run.")
+    }
+
+    static func loginWarningDetail(next: Date, clock: Clock) -> String {
+        String(localized: "Without a new login, the next run (\(dateTime(next, clock: clock))) does not start and reports a failure.")
+    }
+
     // MARK: Meldungen des Planers (Prüfung WM8-110, K4)
 
     static func problem(_ problem: ScheduledTaskValidationProblem) -> String {

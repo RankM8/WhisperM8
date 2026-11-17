@@ -27293,6 +27293,36 @@
           }
         }
       }
+    },
+    "Login of %@ has ended.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Login von %@ ist abgelaufen."
+          }
+        }
+      }
+    },
+    "Login of %@ ends %@, before the next run.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Login von %@ endet %@, vor dem nächsten Lauf."
+          }
+        }
+      }
+    },
+    "Without a new login, the next run (%@) does not start and reports a failure.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ohne neuen Login startet der nächste Lauf (%@) nicht und meldet sich als fehlgeschlagen."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

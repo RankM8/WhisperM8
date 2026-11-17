@@ -131,3 +131,19 @@ enum ScheduledTaskOverviewLoader {
         return Snapshot(overviews: overviews)
     }
 }
+
+/// Endet der Login des Kontos vor dem nächsten Termin? Dann startet der Lauf
+/// nicht (der Planer prüft `claude auth status`) und meldet sich als
+/// fehlgeschlagen. Rein, getestet; das Enddatum kommt aus
+/// `ClaudeLoginExpiryStore` (dieselbe Quelle wie die Ablaufanzeige der Konten).
+struct ScheduledTaskLoginWarning: Equatable {
+    var endsAt: Date
+    var next: Date
+    var hasEnded: Bool
+
+    static func check(loginEndsAt: Date?, next: Date?, now: Date) -> ScheduledTaskLoginWarning? {
+        // Pausiert oder ohne Termin: Es startet nichts, das scheitern könnte.
+        guard let loginEndsAt, let next, loginEndsAt <= next else { return nil }
+        return ScheduledTaskLoginWarning(endsAt: loginEndsAt, next: next, hasEnded: loginEndsAt <= now)
+    }
+}

@@ -99,4 +99,24 @@ final class ScheduledTasksMessagesTests: XCTestCase {
         model.finishLoad(.init(), generation: 0)
         XCTAssertNotNil(model.overview(id: created.id), "veraltetes Laden verworfen")
     }
+
+    // MARK: Login vor dem nächsten Lauf
+
+    func testLoginWarningOnlyWhenTheLoginEndsBeforeTheNextRun() {
+        let now = date("2026-11-16 12:00")
+        let next = date("2026-11-17 07:00")
+        XCTAssertNil(ScheduledTaskLoginWarning.check(loginEndsAt: date("2026-11-30 10:00"), next: next, now: now))
+        XCTAssertNil(ScheduledTaskLoginWarning.check(loginEndsAt: nil, next: next, now: now), "Ende unbekannt")
+        XCTAssertNil(ScheduledTaskLoginWarning.check(loginEndsAt: date("2026-11-16 18:00"), next: nil, now: now),
+                     "pausiert: nichts startet")
+        let soon = ScheduledTaskLoginWarning.check(loginEndsAt: date("2026-11-16 18:00"), next: next, now: now)
+        XCTAssertEqual(soon, ScheduledTaskLoginWarning(endsAt: date("2026-11-16 18:00"), next: next, hasEnded: false))
+        XCTAssertEqual(ScheduledTaskLoginWarning.check(loginEndsAt: date("2026-11-15 09:00"), next: next, now: now)?.hasEnded, true)
+
+        let clock = ScheduledTaskTexts.Clock(now: now, calendar: berlin, locale: Locale(identifier: "en_US"))
+        XCTAssertEqual(ScheduledTaskTexts.loginWarningTitle(soon!, account: "PowerUser", clock: clock),
+                       "Login of PowerUser ends today, 18:00, before the next run.")
+        XCTAssertEqual(ScheduledTaskTexts.loginWarningDetail(next: next, clock: clock),
+                       "Without a new login, the next run (tomorrow, 07:00) does not start and reports a failure.")
+    }
 }
