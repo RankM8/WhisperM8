@@ -33,6 +33,27 @@ extension TicketBoardViewModel {
                                             title: activeView?.name ?? String(localized: "List")))
     }
 
+    /// Ein Ticket von außen (`whisperm8 tickets open`, WM8-131): Steht es in
+    /// der gezeigten Liste bzw. Spalte, öffnet die Triage dort, als hätte der
+    /// Nutzer darauf geklickt (J/K blättern weiter). Sonst zeigt sie es
+    /// einzeln; Ansicht, Filter und Board/Liste bleiben, wie sie sind.
+    func openFromOutside(_ entry: TicketBoardEntry) {
+        let key = entry.ticket.key
+        switch mode {
+        case .list:
+            if listKeys.contains(key) { return openFromList(key) }
+        case .board:
+            if presentation.entry(key: key) != nil,
+               presentation.lanes.contains(where: { $0.entries.contains { $0.ticket.key == key } }) {
+                return openFromLane(key)
+            }
+        }
+        outside = entry
+        setTriage(TicketTriage(source: .single(key: key), title: entry.ticket.status.name, keys: [key], current: key))
+        // Schon einzeln offen: Die Triage bleibt gleich, der Stand des Tickets ist neu.
+        refreshSelection()
+    }
+
     func nextInTriage() {
         guard let triage else { return }
         setTriage(TicketBoardSelection.next(triage))
@@ -53,7 +74,12 @@ extension TicketBoardViewModel {
         guard let triage else { return }
         let key = TicketBoardSelection.close(triage)
         setTriage(nil)
-        selectedKey = key
+        // Ein Ticket von außen hat keine Karte, die gewählt bleiben könnte (WM8-131).
+        if case .single = triage.source {
+            selectedKey = nil
+        } else {
+            selectedKey = key
+        }
     }
 
     /// Ein Schritt der Auswahl auf dem Board (Steuerkreuz, Pfeile; WM8-91).
@@ -121,7 +147,7 @@ extension TicketBoardViewModel {
         let sections: [TicketCopyText.Section]
         if let triage {
             sections = [TicketCopyText.Section(title: triage.title,
-                                               tickets: triage.keys.compactMap { presentation.entry(key: $0)?.ticket })]
+                                               tickets: triage.keys.compactMap { entry(key: $0)?.ticket })]
         } else if mode == .board {
             sections = presentation.lanes.map { TicketCopyText.Section(title: $0.status.name, tickets: $0.entries.map(\.ticket)) }
         } else {
@@ -145,6 +171,8 @@ extension TicketBoardViewModel {
             return listKeys
         case .lane(let statusID):
             return presentation.lanes.first { $0.id == statusID }?.entries.map(\.ticket.key) ?? []
+        case .single(let key):
+            return [key]
         }
     }
 }

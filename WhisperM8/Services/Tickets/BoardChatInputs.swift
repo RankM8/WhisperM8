@@ -151,11 +151,11 @@ final class BoardChatInputs {
     /// Das Ticket, das die Triage dieses Fensters gerade zeigt.
     @ObservationIgnored var shownTicket: (UUID) -> BoardChatTicket? = { windowID in
         let model = TicketBoardControllers.shared.controller(for: windowID).viewModel
-        guard let key = model.triage?.current, let entry = model.presentation.entry(key: key) else { return nil }
+        guard let key = model.triage?.current, let entry = model.entry(key: key) else { return nil }
         return BoardChatTicket(entry.ticket)
     }
     @ObservationIgnored var ticketForKey: (UUID, String) -> BoardChatTicket? = { windowID, key in
-        TicketBoardControllers.shared.controller(for: windowID).viewModel.presentation.entry(key: key).map { BoardChatTicket($0.ticket) }
+        TicketBoardControllers.shared.controller(for: windowID).viewModel.entry(key: key).map { BoardChatTicket($0.ticket) }
     }
     @ObservationIgnored var chatState: (UUID) -> DictationChatState = { LiveDictationChatWriter().state(of: $0) }
     @ObservationIgnored var approvalPending: (UUID) -> Bool = { sessionID in

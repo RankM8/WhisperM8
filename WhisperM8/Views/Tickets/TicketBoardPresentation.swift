@@ -171,7 +171,19 @@ final class TicketBoardViewModel {
     /// Zuletzt kopiert; die Knöpfe zeigen kurz „Kopiert“.
     private(set) var copied: TicketCopyFeedback?
 
+    /// Ticket von außen, das im Abzug nicht steht (WM8-131). Nur solange die
+    /// Triage es einzeln zeigt (`TicketTriageSource.single`); gesetzt nur von
+    /// `openFromOutside`, geräumt von `setTriage`.
+    var outside: TicketBoardEntry?
+
     var selected: TicketBoardEntry? { detail?.entry }
+
+    /// Eintrag zu einer Nummer: aus dem Abzug, sonst das Ticket von außen.
+    func entry(key: String?) -> TicketBoardEntry? {
+        if let found = presentation.entry(key: key) { return found }
+        guard let key, let outside, outside.ticket.key == key else { return nil }
+        return outside
+    }
     @ObservationIgnored private var model = TicketBoardModel(entries: [], looseChats: [], supervisors: [])
     /// Wie oft der Inhalt neu gerechnet wurde (für Tests).
     @ObservationIgnored private(set) var rebuilds = 0
@@ -204,7 +216,9 @@ final class TicketBoardViewModel {
         self.model = model
         rebuild()
         // Ein Ticket, das der Filter ausblendet, bleibt gewählt; eines, das es nicht mehr gibt, nicht.
-        if let key = selectedKey, !model.entries.contains(where: { $0.ticket.key == key }) { selectedKey = nil }
+        if let key = selectedKey, key != outside?.ticket.key, !model.entries.contains(where: { $0.ticket.key == key }) {
+            selectedKey = nil
+        }
     }
 
     /// Anderes Projekt oder Team: Filter und Auswahl gehören zum alten.
@@ -239,8 +253,15 @@ final class TicketBoardViewModel {
         guard fresh != triage else { return }
         // Anderes Ticket oder Triage zu: Der Fokus geht zurück in die Liste.
         if fresh?.current != triage?.current, triageFocus != .list { triageFocus = .list }
+        // Das Ticket von außen gilt nur, solange die Triage es einzeln zeigt.
+        var droppedOutside = false
+        if case .single = fresh?.source {} else if outside != nil {
+            outside = nil
+            droppedOutside = true
+        }
         triage = fresh
         if let fresh { selectedKey = fresh.current }
+        if droppedOutside { refreshSelection() }
         refreshTriageTicket()
     }
 
@@ -321,8 +342,8 @@ final class TicketBoardViewModel {
         }
     }
 
-    private func refreshSelection() {
-        guard let entry = presentation.entry(key: selectedKey) else {
+    func refreshSelection() {
+        guard let entry = entry(key: selectedKey) else {
             if detail != nil { detail = nil }
             return
         }

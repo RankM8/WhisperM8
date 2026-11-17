@@ -350,6 +350,8 @@ unerreichbar, 124 wait-Timeout, 130 unterbrochen.
     Prozess ohne Registry-Eintrag sieht lokal weiter die geerbte Identität,
     bei der App kommt er damit aber nicht durch.
 - **Kill-Switch:** `defaults write com.whisperm8.app agentControlServerEnabled -bool NO`.
+- **Andere Befehle über denselben Socket:** `whisperm8 tickets open <Ticket>` (Methode `tickets.open`, WM8-131)
+  holt die App nach vorn und zeigt das Ticket im Board; Doku in [tickets.md](tickets.md).
 
 ## Send-Pipeline (TOCTOU-frei)
 

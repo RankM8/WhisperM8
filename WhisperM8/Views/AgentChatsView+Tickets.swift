@@ -17,7 +17,10 @@ extension AgentChatsView {
         // Tickets zu (L2, „Zu den Chats“, Maus): Auswahl im Kopf weg, damit sie
         // beim Zurückkommen nicht mit einem alten Knopf wieder dasteht (WM8-91).
         if !active, TicketBoardControllers.shared.hasController(for: windowID) {
-            TicketBoardControllers.shared.controller(for: windowID).viewModel.leaveHeader()
+            let controller = TicketBoardControllers.shared.controller(for: windowID)
+            controller.viewModel.leaveHeader()
+            // Ein Ticket von außen, dessen Board noch lud, springt später nicht mehr auf (WM8-131).
+            controller.cancelPendingOpen()
         }
         syncActiveAgentChat()
         if active { refreshTicketTeams() }

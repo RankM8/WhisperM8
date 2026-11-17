@@ -237,6 +237,11 @@ final class AgentChatsCommandCenter {
         return Token(windowID: windowID, serial: nextSerial)
     }
 
+    /// Ist das Fenster angemeldet, also offen und bereit für Befehle?
+    func isRegistered(_ windowID: UUID) -> Bool {
+        handlers[windowID] != nil
+    }
+
     /// Entfernt den Handler nur, wenn er noch der aus `token` ist.
     func unregister(_ token: Token) {
         guard handlers[token.windowID]?.serial == token.serial else { return }

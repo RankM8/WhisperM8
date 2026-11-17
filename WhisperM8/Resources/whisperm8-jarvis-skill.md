@@ -695,6 +695,13 @@ die Tickets zeigen die Arbeit. Du hältst beides deckungsgleich.
   ein Agent beteiligt war. Was das Ticket-Werkzeug selbst anhängt (die
   Verknüpfung „Chat: …“, „Festgehalten von“ bei Entscheidungen), bleibt:
   Board und Ansichten im Ticket-System brauchen es.
+- **`whisperm8 tickets open <Ticket>` nur, wenn der User ausdrücklich
+  darum bittet, ein Ticket gezeigt zu bekommen.** Nicht von dir aus vor
+  einer Frage: Der Befehl holt die App nach vorn und schaltet das zuletzt
+  aktive Fenster aufs Board. Deine Frage ist dann aus dem Blick, und
+  Diktate gehen an den Board-Chat. Ob Tickets bei Fragen von selbst
+  aufgehen, entscheidet der User später. Es ändert nichts und schreibt in
+  keinen Chat.
 - **Was auf den User wartet, ist als solches markiert** und ihm zugewiesen.
   Prüflisten für Handtests stehen als Kästchen im Ticket, nicht nur in
   deiner Meldung.

@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - Methoden der Feature-Erweiterungen
 
-/// Board, Debug, Ansagen und Zwischenablage haben je eine eigene Datei
+/// Board, Debug, Ansagen, Zwischenablage und Tickets haben je eine eigene Datei
 /// (`AgentControlRequestHandler+…`). Ihre Methoden-Sets landen hier, damit der
 /// zentrale Switch nicht mit jedem Feature wächst. `handle(_:)` fragt
 /// `featureRoute` VOR dem zentralen Switch — so kann dort kein Fall eine
@@ -18,6 +18,7 @@ extension AgentControlRequestHandler {
         case order
         case submit
         case schedule
+        case tickets
 
         var methods: Set<String> {
             switch self {
@@ -30,6 +31,7 @@ extension AgentControlRequestHandler {
             case .order: return [AgentControlRequestHandler.sessionOrderMethod, AgentControlRequestHandler.tabOrderMethod]
             case .submit: return [AgentControlRequestHandler.sessionSubmitMethod]
             case .schedule: return AgentControlRequestHandler.scheduleMethods
+            case .tickets: return [AgentControlRequestHandler.ticketsOpenMethod]
             }
         }
     }
@@ -52,6 +54,7 @@ extension AgentControlRequestHandler {
             return request.method == Self.tabOrderMethod ? await tabOrder(request) : await sessionOrder(request)
         case .submit: return await sessionSubmit(request)
         case .schedule: return await scheduleRequest(request)
+        case .tickets: return await ticketsOpen(request)
         }
     }
 }
