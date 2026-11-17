@@ -73,8 +73,10 @@ struct AgentSessionDetailView: View {
     /// Nachgeholter Fokus-Launch (Grid-Fokuswechsel) läuft bereits — schützt
     /// vor doppelter Hook-Vorbereitung bei schnellem Fokus-Hin-und-Her.
     @State private var focusLaunchInFlight = false
-    /// Ein anderer Prozess schreibt gerade in diesen Chat (Mitlesen, WM8-110).
-    @State private var isReadingAlong = false
+    /// Wer gerade in diesen Chat schreibt, ohne dass es der eigene Tab ist
+    /// (Mitlesen, WM8-110); `nil` = niemand.
+    @State private var readAlongWriter: AgentSessionReadAlong.Writer?
+    private var isReadingAlong: Bool { readAlongWriter != nil }
     /// Persistierter Terminal-Stand der beendeten Session (Stufe 1) — zeigt
     /// den echten CLI-Exit inkl. Resume-Hinweis, ohne JSONL zu laden.
     /// Gleicher globaler Modus wie im Container — steuert hier, ob der
@@ -214,7 +216,7 @@ struct AgentSessionDetailView: View {
                 // (Variante E) mit Roh-Umschalter; leere Transcripts landen
                 // im eingebauten Empty-State der Roh-View (z. B. wenn die
                 // JSONL noch nicht existiert).
-                if isReadingAlong { AgentReadAlongBanner() }
+                if let readAlongWriter { AgentReadAlongBanner(writer: readAlongWriter) }
                 AgentTranscriptContainerView(
                     transcript: cachedTranscript,
                     session: session,
@@ -274,20 +276,22 @@ struct AgentSessionDetailView: View {
         .onChange(of: actionRequest) { _, request in
             handleActionRequest(request)
         }
-        // Mitlesen (WM8-110): Status dieses einen Chats, wie die Zeilen der Seitenleiste.
-        .onReceive(AgentSessionStatusCoordinator.shared.statusStore.statusPublisher(for: session.id)) { status in
-            let reading = AgentSessionReadAlong.readsAlong(session: session, hasController: controller != nil, status: status)
-            guard reading != isReadingAlong else { return }
-            isReadingAlong = reading
-            // Lauf zu Ende: letzten Stand holen.
-            if !reading { loadTranscriptIfNeeded() }
+        // Mitlesen (WM8-110): neu prüfen bei Registry-Änderung zu dieser
+        // Sitzung, neuem Stand der geplanten Läufe, Erscheinen oder Ende des
+        // eigenen Prozesses (K1) und im Takt des Nachladens.
+        .onReceive(AgentSessionReadAlong.changes(for: session.externalSessionID)) { _ in
+            refreshReadAlong()
         }
+        .onChange(of: terminalRegistry.controller(for: session.id) != nil) { _, _ in refreshReadAlong() }
+        .onChange(of: session.externalSessionID) { _, _ in refreshReadAlong() }
+        .task(id: session.id) { refreshReadAlong() }
         .task(id: isReadingAlong ? session.id : nil) {
             guard isReadingAlong else { return }
             while !Task.isCancelled {
                 try? await Task.sleep(for: AgentSessionReadAlong.refreshInterval)
                 guard !Task.isCancelled, isReadingAlong else { return }
                 loadTranscriptIfNeeded()
+                refreshReadAlong()
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: HandoverFallbackLaunchQueue.noticeDidChange)) { note in
@@ -523,6 +527,17 @@ struct AgentSessionDetailView: View {
         .background(AgentTheme.background)
     }
 
+    /// Mitlesen neu bewerten. Mitgelesen wird nur ohne eigenen Tab-Prozess
+    /// (`controller == nil`); endet das Mitlesen, kommt der letzte Stand.
+    private func refreshReadAlong() {
+        let writer = controller == nil
+            ? AgentSessionReadAlong.liveWriter(session: session, ownProcessRunning: false) : nil
+        guard writer != readAlongWriter else { return }
+        let wasReading = isReadingAlong
+        readAlongWriter = writer
+        if wasReading, writer == nil { loadTranscriptIfNeeded() }
+    }
+
     private func handleActionRequest(_ request: AgentSessionActionRequest?) {
         guard let request, request.sessionID == session.id else { return }
         switch request.kind {
@@ -565,16 +580,18 @@ struct AgentSessionDetailView: View {
     private func launchAfterCacheWarmup(allowsBackgroundAttach: Bool = true, useStoredSession: Bool = false) {
         // Jeder Start auf anderem Weg (Fokus-Pane, Tab, Knopf, `chats resume`)
         // verwirft den Eintrag aus dem Rückfall: Er gilt genau einmal (Vic).
-        HandoverFallbackLaunchQueue.shared.forget(session.id)
         // Ein anderer Prozess schreibt gerade in diesen Chat (Mitlesen, WM8-110):
-        // kein zweiter Prozess in derselben Sitzung, auf keinem Weg.
-        if AgentSessionReadAlong.readsAlong(
-            session: session, hasController: controller != nil,
-            status: AgentSessionStatusCoordinator.shared.statusStore.status(for: session.id)) {
+        // kein zweiter Prozess in derselben Sitzung, auf keinem Weg. Vor dem
+        // Verwerfen des Rückfall-Eintrags (K2): Der Start soll später noch gehen.
+        if let writer = AgentSessionReadAlong.liveWriter(session: session, ownProcessRunning: controller?.isRunning == true) {
+            readAlongWriter = writer
             errorMessage = AgentSessionReadAlong.blockedStartMessage
             focusLaunchInFlight = false
+            Logger.agentStore.notice(
+                "read_along_start_blocked sessionID=\(session.id.uuidString, privacy: .public) pid=\(writer.pid ?? 0) scheduled=\(writer.scheduledTask != nil)")
             return
         }
+        HandoverFallbackLaunchQueue.shared.forget(session.id)
         // Nach einer geglückten Abgabe nichts mehr vorbereiten (Hook-Datei).
         guard !terminalRegistry.refusesNewStarts else {
             focusLaunchInFlight = false

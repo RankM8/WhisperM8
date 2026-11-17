@@ -41,6 +41,11 @@ final class ScheduledTasksOverviewModel {
     }
 
     private(set) var snapshot = ScheduledTaskOverviewLoader.Snapshot()
+    /// Sitzung (klein) → Name der Aufgabe, für jeden Lauf, der gerade arbeitet.
+    /// Beleg für „Mitlesen“ (WM8-110): Ein `claude -p`-Lauf hat kein PTY in der
+    /// App. Nicht beobachtet; wer ihn braucht, hört auf `activeRunsDidChange`.
+    @ObservationIgnored private(set) var activeRunTasksBySession: [String: String] = [:]
+    nonisolated static let activeRunsDidChange = Notification.Name("ScheduledTasksOverviewModel.activeRunsDidChange")
     /// Stand der Uhr, mit dem die Ansicht Zeiten schreibt („morgen 07:00“).
     /// Wird nur neu gesetzt, wenn sich die Übersicht ändert oder ein neuer Tag
     /// begonnen hat (Prüfung WM8-110, K6b): Die Texte hängen nur am Kalendertag,
@@ -61,6 +66,17 @@ final class ScheduledTasksOverviewModel {
     init(dependencies: Dependencies = .live, calendar: Calendar = .current) {
         self.dependencies = dependencies
         self.calendar = calendar
+    }
+
+    private func updateActiveRuns() {
+        var runs: [String: String] = [:]
+        for overview in snapshot.overviews {
+            guard let session = overview.activeRun?.sessionID else { continue }
+            runs[session.uuidString.lowercased()] = overview.task.name
+        }
+        guard runs != activeRunTasksBySession else { return }
+        activeRunTasksBySession = runs
+        NotificationCenter.default.post(name: Self.activeRunsDidChange, object: self)
     }
 
     func overview(id: UUID) -> ScheduledTaskOverview? {
@@ -105,7 +121,10 @@ final class ScheduledTasksOverviewModel {
         isLoading = false
         if !hasLoaded { hasLoaded = true }
         let changed = snapshot != result
-        if changed { snapshot = result }
+        if changed {
+            snapshot = result
+            updateActiveRuns()
+        }
         if changed || !calendar.isDate(loadedAt, inSameDayAs: date) { loadedAt = date }
         if reloadPending {
             reloadPending = false
@@ -175,6 +194,7 @@ final class ScheduledTasksOverviewModel {
             overviews.append(overview)
         }
         snapshot.overviews = overviews
+        updateActiveRuns()
         hasLoaded = true
         generation += 1
     }

@@ -93,4 +93,23 @@ final class ScheduledTaskArchiveTests: XCTestCase {
         let file = try ScheduledTaskStore.makeDecoder().decode(ScheduledTasksFile.self, from: Data(json.utf8))
         XCTAssertEqual(file.tasks.first?.runArchiveDays, 14)
     }
+
+    // MARK: Prüfung Mara K4
+
+    func testExistingTargetGetsANumberAndCountIsWritten() throws {
+        let store = ScheduledTaskStore(root: root)
+        let task = UUID()
+        let old = try writeRun(store, task: task, created: date("2026-10-01 07:00"))
+        // Gleichnamiger Ordner liegt schon im Archiv.
+        try FileManager.default.createDirectory(at: store.archiveDirectory(for: task).appendingPathComponent(old),
+                                                withIntermediateDirectories: true)
+        let moved = store.archiveRuns(of: task, olderThan: date("2026-11-01 00:00"), keepNewest: 0) { _ in false }
+        XCTAssertEqual(moved, 1, "kein Fehler bei jedem Durchgang")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.archiveDirectory(for: task).appendingPathComponent(old + "-2").path))
+        XCTAssertTrue(store.runDirectories(for: task).isEmpty)
+        XCTAssertEqual(store.archivedRunCount(for: task), 1, "Zahl aus .count, ohne Listing")
+        try writeRun(store, task: task, created: date("2026-10-02 07:00"))
+        store.archiveRuns(of: task, olderThan: date("2026-11-01 00:00"), keepNewest: 0) { _ in false }
+        XCTAssertEqual(store.archivedRunCount(for: task), 2)
+    }
 }

@@ -120,24 +120,66 @@ final class ScheduledTasksMessagesTests: XCTestCase {
                        "Without a new login, the next run (tomorrow, 07:00) does not start and reports a failure.")
     }
 
-    // MARK: Mitlesen
+    // MARK: Mitlesen (über die echten Quellen, Prüfung Mara M1)
 
-    func testReadAlongOnlyForClaudeChatsWithoutTabThatAnotherProcessWorksOn() {
-        let chat = AgentChatSession(provider: .claude, projectID: UUID(), externalSessionID: UUID().uuidString.lowercased(),
-                                    title: "Bericht · 17.11.", model: "", reasoningEffort: "", status: .closed,
-                                    hasLaunchedInitialPrompt: true, createdAt: Date(), lastActivityAt: Date())
-        XCTAssertTrue(AgentSessionReadAlong.readsAlong(session: chat, hasController: false, status: .working))
-        XCTAssertFalse(AgentSessionReadAlong.readsAlong(session: chat, hasController: true, status: .working),
-                       "eigener Tab: das ist der Chat selbst")
-        XCTAssertFalse(AgentSessionReadAlong.readsAlong(session: chat, hasController: false, status: .idle))
-        XCTAssertFalse(AgentSessionReadAlong.readsAlong(session: chat, hasController: false, status: nil))
-        var background = chat
-        background.kind = .backgroundChat
-        XCTAssertFalse(AgentSessionReadAlong.readsAlong(session: background, hasController: false, status: .working),
-                       "Hintergrund-Agents öffnet man gerade durch Anhängen")
-        var codex = chat
-        codex.provider = .codex
-        XCTAssertFalse(AgentSessionReadAlong.readsAlong(session: codex, hasController: false, status: .working))
+    private func runChat(_ external: String) -> AgentChatSession {
+        AgentChatSession(provider: .claude, projectID: UUID(), externalSessionID: external,
+                         title: "Bericht · 17.11.", status: .closed, hasLaunchedInitialPrompt: true)
+    }
+
+    func testReadAlongFromALiveRegistryEntry() {
+        let external = UUID().uuidString.lowercased()
+        let chat = runChat(external)
+        let registry = ClaudeRegistryStatusSource(rootsProvider: { [] })
+        let model = ScheduledTasksOverviewModel(dependencies: .init(load: { .init() }, scheduler: { nil }, afterChange: {}))
+        var changed: [String] = []
+        let subscription = registry.changes.sink { changed.append($0) }
+        defer { subscription.cancel() }
+        XCTAssertNil(AgentSessionReadAlong.liveWriter(session: chat, ownProcessRunning: false, registry: registry, scheduled: model))
+
+        registry.apply(pid: 4711, record: ClaudeSessionRecord(profileName: "Zweitkonto", pid: 4711,
+                                                                 sessionID: external.uppercased(), kind: "interactive"))
+        XCTAssertEqual(changed, [external], "Ansicht prüft bei Registry-Änderungen neu")
+        let writer = AgentSessionReadAlong.liveWriter(session: chat, ownProcessRunning: false, registry: registry, scheduled: model)
+        XCTAssertEqual(writer, AgentSessionReadAlong.Writer(pid: 4711, account: "Zweitkonto", scheduledTask: nil),
+                       "fremder Prozess: Start gesperrt")
+        XCTAssertNil(AgentSessionReadAlong.liveWriter(session: chat, ownProcessRunning: true, registry: registry, scheduled: model),
+                     "eigener Tab-Prozess: das ist der Chat selbst")
+        XCTAssertTrue(AgentSessionReadAlong.bannerText(writer!).contains("4711"), "Leiste nennt den Prozess")
+
+        registry.apply(pid: 4711, record: nil)
+        XCTAssertNil(AgentSessionReadAlong.liveWriter(session: chat, ownProcessRunning: false, registry: registry, scheduled: model),
+                     "Prozess beendet: fortsetzen geht wieder")
+
+        registry.apply(pid: 4712, record: ClaudeSessionRecord(profileName: "main", pid: 4712, sessionID: external, kind: "bg"))
+        XCTAssertNil(AgentSessionReadAlong.liveWriter(session: chat, ownProcessRunning: false, registry: registry, scheduled: model),
+                     "Hintergrund-Agent der Sitzung zählt nicht")
+    }
+
+    func testReadAlongFromAnActiveScheduledRunWithoutRegistryEntry() throws {
+        let session = UUID()
+        let chat = runChat(session.uuidString.lowercased())
+        let registry = ClaudeRegistryStatusSource(rootsProvider: { [] })
+        let model = ScheduledTasksOverviewModel(dependencies: .init(load: { .init() }, scheduler: { nil }, afterChange: {}),
+                                                calendar: berlin)
+        let posted = expectation(forNotification: ScheduledTasksOverviewModel.activeRunsDidChange, object: model)
+        let running = ScheduledTaskRunSummary(id: "r1", createdAt: date("2026-11-17 07:00"), sessionID: session, outcome: .running)
+        model.apply(.init(overviews: [ScheduledTaskOverview(task: task("Bericht"), next: nil, runs: [running], state: .running)]))
+        wait(for: [posted], timeout: 1)
+        XCTAssertEqual(AgentSessionReadAlong.liveWriter(session: chat, ownProcessRunning: false, registry: registry, scheduled: model),
+                       AgentSessionReadAlong.Writer(pid: nil, account: nil, scheduledTask: "Bericht"))
+
+        var other = runChat(UUID().uuidString.lowercased())
+        XCTAssertNil(AgentSessionReadAlong.liveWriter(session: other, ownProcessRunning: false, registry: registry, scheduled: model))
+        other.kind = .backgroundChat
+        XCTAssertNil(AgentSessionReadAlong.writer(session: other, ownProcessRunning: false, registry: [],
+                                                  activeRunTasks: [other.externalSessionID!: "X"]))
+
+        // Lauf zu Ende: Beleg weg.
+        let done = ScheduledTaskRunSummary(id: "r1", createdAt: date("2026-11-17 07:00"), sessionID: session,
+                                           outcome: .succeeded(summary: nil))
+        model.apply(.init(overviews: [ScheduledTaskOverview(task: task("Bericht"), next: nil, runs: [done], state: .succeeded)]))
+        XCTAssertNil(AgentSessionReadAlong.liveWriter(session: chat, ownProcessRunning: false, registry: registry, scheduled: model))
     }
 
     // MARK: Läufe nicht in der Chat-Liste (Entwurf, Variante A „nur hier“)

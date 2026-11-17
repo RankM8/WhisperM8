@@ -27443,6 +27443,26 @@
           }
         }
       }
+    },
+    "The scheduled task “%@” is working in this chat. You are reading along; continuing works once it is done.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die geplante Aufgabe „%@“ arbeitet in diesem Chat. Du liest mit; fortsetzen geht nach dem Ende."
+          }
+        }
+      }
+    },
+    "Another Claude process (PID %@, account %@) is working in this chat. You are reading along; continuing works once it is done.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein anderer Claude-Prozess (PID %@, Konto %@) arbeitet in diesem Chat. Du liest mit; fortsetzen geht nach dem Ende."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

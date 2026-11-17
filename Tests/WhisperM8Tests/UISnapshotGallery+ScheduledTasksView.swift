@@ -69,7 +69,12 @@ extension UISnapshotGallery {
                 detail(fixture.morning.id, loginEndsAt: { _ in fixture.now.addingTimeInterval(4 * 3600) })
             },
             Fixture(name: "geplant-mitlesen-leiste", size: CGSize(width: 820, height: 44), storage: on) {
-                AnyView(AgentReadAlongBanner().frame(maxHeight: .infinity, alignment: .top).background(AgentTheme.background))
+                AnyView(AgentReadAlongBanner(writer: .init(pid: 48211, account: "Zweitkonto", scheduledTask: "Abhängigkeiten prüfen"))
+                    .frame(maxHeight: .infinity, alignment: .top).background(AgentTheme.background))
+            },
+            Fixture(name: "geplant-mitlesen-leiste-fremd", size: CGSize(width: 820, height: 44), storage: on) {
+                AnyView(AgentReadAlongBanner(writer: .init(pid: 48211, account: "Zweitkonto", scheduledTask: nil))
+                    .frame(maxHeight: .infinity, alignment: .top).background(AgentTheme.background))
             },
             Fixture(name: "geplant-blatt-neu", size: sheetSize, storage: on) { sheet(nil) },
             Fixture(name: "geplant-blatt-aendern", size: sheetSize, storage: on) { sheet(fixture.failing) },

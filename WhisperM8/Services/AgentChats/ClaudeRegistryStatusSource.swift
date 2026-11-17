@@ -1,3 +1,4 @@
+import Combine
 import CoreServices
 import Foundation
 import os
@@ -20,6 +21,10 @@ final class ClaudeRegistryStatusSource {
     /// damit der Empfänger die PID prüfen kann: beim Resume leben kurz zwei
     /// Prozesse mit derselben Session-ID.
     var onRemoved: ((ClaudeSessionRecord) -> Void)?
+    /// Session-ID (klein) jedes geänderten oder verschwundenen Eintrags, für
+    /// Ansichten, die einen einzelnen Chat beobachten („Mitlesen“, WM8-110).
+    /// Feuert nur bei echten Änderungen, wie `onRecord`/`onRemoved`.
+    let changes = PassthroughSubject<String, Never>()
 
     private let rootsProvider: () -> [ClaudeSessionRegistry.Root]
     private let isAlive: ClaudeSessionRegistry.LivenessCheck
@@ -137,10 +142,12 @@ final class ClaudeRegistryStatusSource {
             recordsByPID[pid] = nil
             eventTouchedAt[pid] = nil
             onRemoved?(old)
+            changes.send(old.sessionID.lowercased())
         }
         for (pid, record) in fresh where recordsByPID[pid] != record && !touchedLater(pid) {
             recordsByPID[pid] = record
             onRecord?(record)
+            changes.send(record.sessionID.lowercased())
         }
         // Ereignisse vor diesem Scan kann kein späterer Scan mehr überholen.
         eventTouchedAt = eventTouchedAt.filter { $0.value > startedAt }
@@ -153,8 +160,10 @@ final class ClaudeRegistryStatusSource {
             guard recordsByPID[pid] != record else { return }
             recordsByPID[pid] = record
             onRecord?(record)
+            changes.send(record.sessionID.lowercased())
         } else if let old = recordsByPID.removeValue(forKey: pid) {
             onRemoved?(old)
+            changes.send(old.sessionID.lowercased())
         }
     }
 

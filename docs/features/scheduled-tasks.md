@@ -206,7 +206,9 @@ Endet ein Lauf mit Fehler, bricht er ab (Prozess weg ohne Ergebnis) oder startet
 öffnet das Detail der Aufgabe im Hauptfenster; der Knopf „Chat öffnen“ den Chat des Laufs, sofern es einen gibt
 und der Indexer ihn schon kennt (sonst ebenfalls das Detail). Verpasste und übersprungene Termine melden sich
 nicht, ebenso wenig ein von Hand gestarteter Lauf, der gar nicht startet: Ansicht und CLI sagen das sofort selbst.
-Je Lauf höchstens eine Mitteilung.
+Je Lauf höchstens eine Mitteilung. Endet ein Lauf, während die App zu ist (er läuft losgelöst weiter), kommt
+keine Mitteilung: Nach dem Start erkennt die App nur arbeitende Läufe wieder. Der Fehlschlag zeigt sich dann nur
+über die rote Zahl an „Geplant“ und im Detail.
 
 ### Login-Warnung
 
@@ -218,26 +220,42 @@ Ablaufanzeige der Konten (Keychain, stündlich gelesen). Pausierte Aufgaben warn
 
 ### Mitlesen
 
-Ein Claude-Chat ohne Tab, den laut Claudes Registry gerade ein anderer Prozess schreibt, wird nicht fortgesetzt,
-sondern gelesen (`AgentSessionReadAlong`). Das gilt für jeden solchen Chat, nicht nur für geplante Läufe (Plan,
-Teil 1b), aber nur für normale Claude-Chats: Hintergrund-Agents (`claude --bg`) öffnet man gerade durch
-Anhängen, Subagent-Jobs haben ihren eigenen Weg.
+In einen Claude-Chat, dessen Tab keinen laufenden Prozess hat, schreibt gerade ein anderer Prozess: Dann wird
+er nicht fortgesetzt, sondern gelesen (`AgentSessionReadAlong`). Das gilt für jeden solchen Chat, nicht nur für
+geplante Läufe (Plan, Teil 1b), aber nur für normale Claude-Chats: Hintergrund-Agents (`claude --bg`) öffnet man
+gerade durch Anhängen, Subagent-Jobs haben ihren eigenen Weg.
 
-- Der Verlauf steht wie bei jedem geschlossenen Chat (`TranscriptTextView`, ein `NSTextView`), darüber die
-  Leiste „Arbeitet in einem anderen Prozess“, unten der Live-Streifen.
+Der Status-Speicher der Chats taugt dafür nicht: Er nimmt Registry-Einträge nur für Chats mit eigenem PTY an
+(sonst bliebe ein fremder Lauf, der mitten im Turn endet, für immer „arbeitet“). Gezählt werden deshalb zwei
+Belege, jeder reicht:
+
+- **Registry:** ein lebender Eintrag in Claudes Registry zu dieser Sitzung, der kein Hintergrund-Agent ist
+  (`ClaudeRegistryStatusSource.records(forExternalSessionID:)`; die Quelle hält nur Einträge lebender PIDs).
+- **Geplant:** ein Lauf einer geplanten Aufgabe, der mit dieser Sitzung arbeitet
+  (`ScheduledTasksOverviewModel.activeRunTasksBySession`, erkannt an PID und Startzeit aus `run.json`). Das
+  greift auch, wenn `claude -p` keinen Registry-Eintrag schreibt.
+
+Neu geprüft wird bei jeder Registry-Änderung zu dieser Sitzung (`ClaudeRegistryStatusSource.changes`), bei
+einem neuen Stand der laufenden Läufe (`activeRunsDidChange`), wenn der eigene Prozess erscheint oder endet, und
+im Takt des Nachladens.
+
+- Der Verlauf steht wie bei jedem geschlossenen Chat (`TranscriptTextView`, ein `NSTextView`), darüber eine
+  Leiste, die den Schreiber nennt (Aufgabe, sonst PID und Konto), unten der Live-Streifen.
 - Nachgeladen wird alle 3 s über den geteilten Verlaufs-Cache. Der fragt Größe und Änderungszeit der Datei ab
   und liest nur bei einer Änderung; neu gebaut wird der Text nur bei neuen Nachrichten. Endet der Lauf, holt die
   Ansicht den letzten Stand.
-- Jeder Start dieses Chats (Knopf, Tab, `whisperm8 chats resume`, Controller) läuft durch
-  `launchAfterCacheWarmup` und ist dort gesperrt, mit Meldung im Chat. Zwei Prozesse in einer Sitzung gibt es so
-  nicht.
+- Jeder Start dieses Chats (Knopf, Tab, `whisperm8 chats resume`, Controller, Rückfall der Übernahme) läuft durch
+  `launchAfterCacheWarmup` und ist dort mit denselben Belegen gesperrt, mit Meldung im Chat und
+  `read_along_start_blocked` im Log. Ein vorgemerkter Start aus dem Rückfall der Übernahme bleibt dabei stehen.
 
 ### Archiv
 
 Lauf-Ordner gehen nach 14 Tagen (je Aufgabe wählbar: 7 Tage oder behalten) nach
 `scheduled-tasks/archive/<Aufgabe>/`. Der Planer räumt im Durchlauf auf, höchstens einmal je Stunde. Das Alter
 steht im Ordnernamen; gelesen wird nur, was alt genug ist. Ein arbeitender Lauf und die jüngsten drei Ordner
-bleiben immer stehen, die Chats der Läufe ohnehin. Das Detail zeigt die Regel und wie viele Läufe im Archiv liegen.
+bleiben immer stehen, die Chats der Läufe ohnehin. Liegt ein gleichnamiger Ordner schon im Archiv, bekommt der neue
+eine Nummer. Die Zahl im Archiv schreibt das Verschieben nach `archive/<Aufgabe>/.count`; das Detail liest nur
+diese Datei, kein Listing.
 Einstellbar im Blatt („Alte Läufe“) und per `--archive-runs`.
 
 ### Läufe nicht in der Chat-Liste
@@ -265,16 +283,16 @@ Notch und Insel zählen ihn dagegen als „arbeitet“ bzw. „fertig“ mit (di
   Höchstens einmal je Stunde zusätzlich das Archivieren: je Aufgabe ein Verzeichnis-Listing, gelesen und
   verschoben wird nur, was älter als die Frist ist.
 - Ansicht: Laden liest `scheduled-tasks.json` und je Aufgabe bis zu 20 Lauf-Ordner (je `run.json`, `exit`,
-  `result.json`, Ende von `stderr.log`) und ein Listing des Archivs, abseits des Main Threads, nur auf Anlass. Im
+  `result.json`, Ende von `stderr.log`) und die Datei `.count` des Archivs, abseits des Main Threads, nur auf Anlass. Im
   Renderpfad nichts davon: Abschnitt und Detail sind `.equatable()` und beobachten nur die Übersicht, nie den
   Status-Speicher der Chats; das Fenster zahlt je Auswertung eine Wörterbuch-Abfrage. Die Fehler-Zahl an der
   Überschrift ist eine Zählung über die schon geladenen Aufgaben. Das Detail liest zusätzlich die Login-Fristen
   (ändern sich höchstens stündlich).
 - Formatieren: ein `DateFormatter` je Vorlage, Sprache und Zeitzone für die ganze App-Laufzeit.
-- Mitlesen: nur solange ein Chat ohne Tab sichtbar ist, den ein anderer Prozess schreibt. Je 3 s eine
-  Datei-Abfrage; bei neuen Nachrichten das Lesen des Datei-Endes (höchstens 512 KB) und der Neubau des Texts,
-  beides abseits des Main Threads. Der Status kommt über den Publisher dieses einen Chats, wie bei den Zeilen der
-  Seitenleiste.
+- Mitlesen: Jede offene Chat-Ansicht hört auf Registry-Änderungen ihrer eigenen Sitzung (gefilterter Strom) und
+  auf neue laufende Läufe; je Anlass zwei Abfragen im Speicher. Solange mitgelesen wird, je 3 s eine
+  Datei-Abfrage, bei neuen Nachrichten das Lesen des Datei-Endes (höchstens 512 KB) und der Neubau des Texts,
+  beides abseits des Main Threads.
 - Mitteilung: eine je fehlgeschlagenem Lauf.
 - Je Lauf: ein `claude auth status` (rund eine Sekunde) und der Lauf selbst. Ein `claude -p`-Lauf zählt gegen das
   Nutzungslimit des Kontos; der kleinste gemessene kostete rechnerisch 0,48 $ (Plan, Teil 1b).

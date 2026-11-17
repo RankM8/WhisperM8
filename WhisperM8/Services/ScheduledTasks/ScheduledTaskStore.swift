@@ -155,7 +155,9 @@ struct ScheduledTaskStore {
     /// Verschiebt Lauf-Ordner, die vor `cutoff` angelegt wurden, ins Archiv.
     /// Das Alter steht im Ordnernamen (UTC-Zeit vorn), gelesen wird nur, was
     /// alt genug ist. Die jüngsten `keepNewest` Ordner und alles, wofür
-    /// `isActive` gilt, bleiben stehen. Gibt die Zahl der verschobenen zurück.
+    /// `isActive` gilt, bleiben stehen. Gibt die Zahl der verschobenen zurück
+    /// und schreibt die Gesamtzahl nach `archive/<Aufgabe>/.count`, damit die
+    /// Ansicht das Archiv nicht listen muss.
     @discardableResult
     func archiveRuns(of taskID: UUID, olderThan cutoff: Date, keepNewest: Int,
                      isActive: (ScheduledTaskRunFiles) -> Bool) -> Int {
@@ -167,19 +169,40 @@ struct ScheduledTaskStore {
             if let files = readRun(at: directory), isActive(files) { continue }
             do {
                 try Self.ensureDirectory(archive)
-                try FileManager.default.moveItem(at: directory, to: archive.appendingPathComponent(directory.lastPathComponent, isDirectory: true))
+                try FileManager.default.moveItem(at: directory, to: Self.freeDestination(for: directory.lastPathComponent, in: archive))
                 moved += 1
             } catch {
                 Logger.scheduledTasks.error("run_archive_failed run=\(directory.lastPathComponent, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
             }
         }
+        if moved > 0 { writeArchivedCount(archivedRunCount(for: taskID) + moved, for: taskID) }
         return moved
     }
 
-    /// Lauf-Ordner im Archiv (für die Zahl im Detail).
+    /// Ziel im Archiv; gibt es den Namen dort schon (abgebrochenes Verschieben,
+    /// von Hand zurückgelegt), bekommt der Ordner eine Nummer. Sonst schlüge
+    /// das Verschieben bei jedem Durchgang fehl.
+    static func freeDestination(for name: String, in archive: URL) -> URL {
+        var candidate = archive.appendingPathComponent(name, isDirectory: true)
+        var number = 2
+        while FileManager.default.fileExists(atPath: candidate.path) {
+            candidate = archive.appendingPathComponent("\(name)-\(number)", isDirectory: true)
+            number += 1
+        }
+        return candidate
+    }
+
+    /// Lauf-Ordner im Archiv, aus `.count` (eine kleine Datei statt eines Listings).
     func archivedRunCount(for taskID: UUID) -> Int {
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: archiveDirectory(for: taskID).path)) ?? []
-        return names.filter { !$0.hasPrefix(".") }.count
+        let url = archiveDirectory(for: taskID).appendingPathComponent(".count")
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else { return 0 }
+        return Int(text.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+    }
+
+    private func writeArchivedCount(_ count: Int, for taskID: UUID) {
+        let url = archiveDirectory(for: taskID).appendingPathComponent(".count")
+        try? "\(count)\n".write(to: url, atomically: true, encoding: .utf8)
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
     }
 
     /// Anlagezeit aus dem Ordnernamen („20261117T060000Z-ab12cd“).
