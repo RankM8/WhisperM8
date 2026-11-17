@@ -14,7 +14,7 @@ import Foundation
 /// Alles von außen als Closures; Tests ersetzen Einrichtung, Linear und Fenster.
 struct TicketOpenService {
     enum Outcome: Equatable {
-        case opened(board: TicketOpenTarget.Board, ticket: Ticket)
+        case opened(board: TicketOpenTarget.Board, ticket: Ticket, shown: TicketOpenPresenter.Shown)
         case failed(ChatsControlErrorCode, String)
     }
 
@@ -25,7 +25,8 @@ struct TicketOpenService {
     var loadConfig: @Sendable () -> TicketConfig
     var fetch: @Sendable (_ workspace: String, _ key: String) async throws -> TicketContext
     /// Fenster nach vorn, Board des Projekts, Ticket in die Triage.
-    var present: @MainActor (_ board: TicketOpenTarget.Board, _ ticket: Ticket) async -> Result<Void, TicketOpenPresenter.Failure>
+    var present: @MainActor (_ board: TicketOpenTarget.Board, _ ticket: Ticket) async
+        -> Result<TicketOpenPresenter.Shown, TicketOpenPresenter.Failure>
 
     static let disabledMessage =
         "Die Ticket-Ansicht ist aus. Einschalten: Einstellungen › Tickets › „Show tickets in Agent Chats“ (Labs)."
@@ -59,8 +60,8 @@ struct TicketOpenService {
                 + "Mit der neuen Nummer öffnen: whisperm8 tickets open \(context.ticket.key)")
         }
         switch await present(board, context.ticket) {
-        case .success:
-            return .opened(board: board, ticket: context.ticket)
+        case .success(let shown):
+            return .opened(board: board, ticket: context.ticket, shown: shown)
         case .failure(let failure):
             return .failed(.internalError, failure.message)
         }
@@ -101,6 +102,13 @@ struct TicketOpenPresenter {
         }
     }
 
+    /// Steht das Ticket schon in der Triage, oder lädt das Board noch und das
+    /// Ticket springt auf, sobald es steht (höchstens `openTimeout`)?
+    enum Shown: Equatable {
+        case now
+        case pending
+    }
+
     /// So lange darf das Board brauchen, bis es steht; danach verfällt der Wunsch.
     static let openTimeout: TimeInterval = 30
 
@@ -122,7 +130,7 @@ struct TicketOpenPresenter {
         return (primary, !isRegistered(primary))
     }
 
-    func present(board: TicketOpenTarget.Board, ticket: Ticket) async -> Result<Void, Failure> {
+    func present(board: TicketOpenTarget.Board, ticket: Ticket) async -> Result<Shown, Failure> {
         let target = Self.targetWindow(lastActive: lastActiveWindowID(), primary: primaryWindowID(), isRegistered: isRegistered)
         if target.mustOpen {
             openPrimary()
@@ -139,7 +147,8 @@ struct TicketOpenPresenter {
             return .failure(.boardNotShown)
         }
         bringToFront(target.id)
-        return .success(())
+        // Stand das Board schon, hat der Controller den Wunsch sofort eingelöst.
+        return .success(controller.hasPendingOpen ? .pending : .now)
     }
 
     static var live: TicketOpenPresenter {

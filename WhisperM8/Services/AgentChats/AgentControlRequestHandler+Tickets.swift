@@ -13,7 +13,7 @@ extension AgentControlRequestHandler {
         let input = request.params["key"]?.stringValue ?? ""
         let service = await MainActor.run { TicketOpenService.live }
         switch await service.open(input: input) {
-        case .opened(let board, let ticket):
+        case .opened(let board, let ticket, let shown):
             await audit(request.actor, method: "tickets-open", target: ticket.key, outcome: "ok", prompt: nil)
             return .success(requestID: request.requestID, result: .object([
                 "ok": true,
@@ -22,6 +22,7 @@ extension AgentControlRequestHandler {
                 "status": ticket.status.name,
                 "team": board.team,
                 "project": board.projectName,
+                "pending": shown == .pending,
             ]))
         case .failed(let code, let message):
             await audit(request.actor, method: "tickets-open", target: TicketOpenTarget.key(fromInput: input),

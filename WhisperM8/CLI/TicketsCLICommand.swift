@@ -376,9 +376,10 @@ enum TicketsCLICommand {
       whisperm8 tickets open <Ticket> [--json]
                 Zeigt das Ticket in der App: holt WhisperM8 nach vorn, öffnet
                 im zuletzt aktiven Fenster das Ticket-Board des Projekts, zu
-                dessen Team es gehört, und das Ticket groß. Fragst du den Nutzer
-                zu einem Ticket, öffne es vorher damit. Ändert nichts in Linear
-                und schreibt in keinen Chat. Auch die Adresse aus Linear geht.
+                dessen Team es gehört, und das Ticket groß. Nur, wenn der
+                Nutzer ausdrücklich darum bittet. Lädt das Board noch, meldet
+                der Befehl „vorgemerkt“. Ändert nichts in Linear und schreibt
+                in keinen Chat. Auch die Adresse aus Linear geht.
                 Exit: 3 Ticket, Team oder Projekt unbekannt, 4 Ticket-Ansicht
                 aus oder kein Fenster, 5 App oder Linear nicht erreichbar.
       whisperm8 tickets mine [--chat REF] [--json]     Tickets dieses Chats

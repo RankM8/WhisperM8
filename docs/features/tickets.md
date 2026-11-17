@@ -396,8 +396,10 @@ in [`../design/ticket-board/`](../design/ticket-board/).
 
 ### Ticket von außen öffnen (`tickets open`, WM8-131)
 
-`whisperm8 tickets open WM8-12` zeigt ein Ticket in der App, etwa wenn ein Chat den Nutzer dazu fragt und er
-mitlesen soll. Die Kommandozeile reicht nur die Nummer über den Control-Socket weiter (`tickets.open`); prüfen
+`whisperm8 tickets open WM8-12` zeigt ein Ticket in der App, wenn der Nutzer ausdrücklich darum bittet. Die
+Skills `tickets` und `jarvis` rufen es nicht von sich aus vor einer Frage auf: Der Befehl schaltet das zuletzt
+aktive Fenster aufs Board (die Frage im Chat ist dann aus dem Blick) und macht den Board-Chat zum Diktat-Ziel.
+Ob Tickets bei Fragen von selbst aufgehen, entscheidet der Nutzer später. Die Kommandozeile reicht nur die Nummer über den Control-Socket weiter (`tickets.open`); prüfen
 und zeigen macht die App (`TicketOpenService`, `TicketOpenPresenter`). Auch die Adresse aus Linear geht
 (`https://linear.app/<workspace>/issue/WM8-12/…`).
 
@@ -415,7 +417,8 @@ und zeigen macht die App (`TicketOpenService`, `TicketOpenPresenter`). Auch die 
 - **Das Ticket groß:** Steht es in der gezeigten Liste (bzw. im Board in seiner Spalte), öffnet die Triage dort
   wie mit einem Klick, J/K blättern weiter. Sonst (erledigt, in einer anderen Ansicht, in einer zugeklappten
   Gruppe) zeigt die Triage es einzeln; Ansicht, Filter und Board/Liste bleiben, wie sie waren. Lädt das Board
-  erst, wartet der Wunsch bis zu 30 Sekunden; wer vorher zu den Chats zurückgeht, verwirft ihn.
+  erst, wartet der Wunsch bis zu 30 Sekunden; wer vorher zu den Chats zurückgeht, verwirft ihn. Die
+  Kommandozeile sagt dann „vorgemerkt“ statt „offen“ (`--json`: `"pending": true`).
 - **Nichts in einen Chat:** Der Befehl schickt nichts in einen Chat und schreibt nichts nach Linear. Hatte im
   Fenster das Terminal des Board-Chats die Tastatur, gibt das Fenster sie ab: Wer gerade woanders tippte,
   schreibt danach ins Board, nicht in den Board-Chat.
