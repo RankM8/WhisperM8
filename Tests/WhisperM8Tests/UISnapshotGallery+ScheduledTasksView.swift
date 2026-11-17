@@ -1,8 +1,9 @@
 import SwiftUI
 @testable import WhisperM8
 
-/// Fixtures der Ansicht „Geplant“ (WM8-110, Paket 2): Abschnitt in der
-/// Seitenleiste, Detail im Inhaltsbereich, Blatt zum Anlegen und Ändern.
+/// Fixtures der Ansicht „Geplant“ (WM8-110, Pakete 2 und 3): Abschnitt in der
+/// Seitenleiste, Detail im Inhaltsbereich, Blatt zum Anlegen und Ändern,
+/// Login-Warnung und die Leiste beim Mitlesen.
 /// Erfundene Aufgaben, Projekte und Konten (öffentliches Repo).
 extension UISnapshotGallery {
     @MainActor
@@ -23,10 +24,10 @@ extension UISnapshotGallery {
             )
         }
 
-        func detail(_ id: UUID) -> AnyView {
-            AnyView(ScheduledTaskDetailView(
-                taskID: id, model: fixture.model(),
-                loginEndsAt: { $0 == "main" ? fixture.now.addingTimeInterval(14 * 86_400) : fixture.now.addingTimeInterval(4 * 86_400) }))
+        func detail(_ id: UUID, loginEndsAt: @escaping (String) -> Date? = {
+            $0 == "main" ? fixture.now.addingTimeInterval(14 * 86_400) : fixture.now.addingTimeInterval(4 * 86_400)
+        }) -> AnyView {
+            AnyView(ScheduledTaskDetailView(taskID: id, model: fixture.model(), loginEndsAt: loginEndsAt))
         }
 
         func sheet(_ task: ScheduledTask?) -> AnyView {
@@ -63,6 +64,13 @@ extension UISnapshotGallery {
             Fixture(name: "geplant-detail-arbeitet", size: detailSize, storage: on) { detail(fixture.running.id) },
             Fixture(name: "geplant-detail-pausiert", size: detailSize, storage: on) { detail(fixture.paused.id) },
             Fixture(name: "geplant-detail-geklappt", size: detailSize, storage: on) { detail(fixture.morning.id) },
+            // Paket 3: Login endet heute Abend, der nächste Lauf ist morgen früh.
+            Fixture(name: "geplant-detail-login", size: detailSize, storage: on) {
+                detail(fixture.morning.id, loginEndsAt: { _ in fixture.now.addingTimeInterval(4 * 3600) })
+            },
+            Fixture(name: "geplant-mitlesen-leiste", size: CGSize(width: 820, height: 44), storage: on) {
+                AnyView(AgentReadAlongBanner().frame(maxHeight: .infinity, alignment: .top).background(AgentTheme.background))
+            },
             Fixture(name: "geplant-blatt-neu", size: sheetSize, storage: on) { sheet(nil) },
             Fixture(name: "geplant-blatt-aendern", size: sheetSize, storage: on) { sheet(fixture.failing) },
         ]
@@ -131,9 +139,10 @@ struct ScheduledTasksFixtureData {
     func snapshot() -> ScheduledTaskOverviewLoader.Snapshot {
         let hour: TimeInterval = 3600
         let day: TimeInterval = 86_400
-        func overview(_ task: ScheduledTask, next: Date?, runs: [ScheduledTaskRunSummary]) -> ScheduledTaskOverview {
+        func overview(_ task: ScheduledTask, next: Date?, runs: [ScheduledTaskRunSummary],
+                      archived: Int = 0) -> ScheduledTaskOverview {
             ScheduledTaskOverview(task: task, next: next, runs: runs,
-                                  state: ScheduledTaskOverview.state(paused: task.paused, runs: runs))
+                                  state: ScheduledTaskOverview.state(paused: task.paused, runs: runs), archivedCount: archived)
         }
         return .init(overviews: [
             overview(morning, next: now.addingTimeInterval(15 * hour + 10 * 60), runs: [
@@ -141,7 +150,7 @@ struct ScheduledTasksFixtureData {
                 run("m2", day + 7 * hour, .succeeded(summary: "Keine offenen Punkte."), trigger: .catchUp, seconds: 184),
                 run("m3", 2 * day + 8 * hour, .succeededWithNotes(summary: "Bericht geschrieben.", deniedTools: ["Write"]), seconds: 203),
                 run("m4", 3 * day + 8 * hour, .succeeded(summary: nil), seconds: 160),
-            ]),
+            ], archived: 12),
             overview(failing, next: now.addingTimeInterval(day + 100 * 60), runs: [
                 run("f1", 3 * day - 20 * 60, .failed(message: "Die Datei docs/release-notizen.md ist schreibgeschützt."), seconds: 42),
                 run("f2", 4 * day, .succeeded(summary: "Zwei Änderungen eingetragen."), seconds: 95),

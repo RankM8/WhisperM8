@@ -84,6 +84,10 @@ struct ScheduledTasksSidebarSection: View, Equatable {
                             .font(.system(size: 11, weight: .bold).monospacedDigit())
                     }
                     if failed > 0 {
+                        if collapsed, count > 0 {
+                            Text(verbatim: "·")
+                                .font(.system(size: 11, weight: .bold))
+                        }
                         Text("\(failed) failed")
                             .font(.system(size: 11, weight: .semibold).monospacedDigit())
                             .foregroundStyle(AgentTheme.statusError)
