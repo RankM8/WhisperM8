@@ -33,6 +33,9 @@ enum Logger {
     /// Aufbewahrer beim „Neustart ohne Chatverlust“ (`handover-keeper`):
     /// Abgabe, Übernahme, Fristen. Nie Tokens oder Terminal-Inhalte.
     static let handover = os.Logger(subsystem: subsystem, category: "handover")
+    /// Geplante Aufgaben (WM8-110): Termine, Starts, Nachholen, Ende eines Laufs.
+    /// Nie den Auftragstext, nur Aufgaben- und Lauf-IDs.
+    static let scheduledTasks = os.Logger(subsystem: subsystem, category: "scheduled.tasks")
 
     // MARK: - Optional File Logging
 

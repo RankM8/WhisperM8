@@ -90,6 +90,8 @@ enum CLIModeDetector {
         "clipboard",
         // Tickets aus Linear und ihre Chats, siehe docs/features/tickets.md.
         "tickets",
+        // Geplante Aufgaben (WM8-110), siehe docs/features/scheduled-tasks.md.
+        "schedule",
         // Neustart ohne Chatverlust: `app handover-status`, und der interne
         // Modus des Aufbewahrers (argv0 ist dort das App-Binary).
         "app", "handover-keeper",
@@ -160,6 +162,8 @@ enum CLICommand {
             return await ClipboardCLICommand.run(arguments: Array(arguments.dropFirst()))
         case "tickets":
             return await TicketsCLICommand.run(arguments: Array(arguments.dropFirst()))
+        case "schedule":
+            return await ScheduleCLICommand.run(arguments: Array(arguments.dropFirst()))
         case "gpt-router":
             // Interner Dienst-Modus — startet nur ClaudeGPTRouterServiceSupervisor.
             return await GPTRouterCommand.run(arguments: Array(arguments.dropFirst()))
@@ -218,6 +222,7 @@ enum CLIHelp {
       whisperm8 speak "<text>"                    (kurze Ansage über die App vorlesen — siehe `whisperm8 speak --help`)
       whisperm8 clipboard <befehl>                (Zwischenablage-Verlauf lesen, siehe `whisperm8 clipboard --help`)
       whisperm8 tickets <befehl>                  (Tickets aus Linear und ihre Chats, siehe `whisperm8 tickets --help`)
+      whisperm8 schedule <befehl>                 (geplante Claude-Läufe, Labs, siehe `whisperm8 schedule help`)
       whisperm8 app handover-status [--json]      (Stand des Aufbewahrers beim Neustart ohne Chatverlust)
       whisperm8 app handover [--json]             (Chats an den Aufbewahrer abgeben, App beendet sich; startet sie nicht neu, das macht make dev)
       whisperm8 --help | --version

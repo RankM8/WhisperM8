@@ -2551,6 +2551,16 @@
         }
       }
     },
+    "At each scheduled time, WhisperM8 starts claude -p in the task's project folder and account. Each run becomes a normal chat. A run keeps going when WhisperM8 restarts.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zu jedem Termin startet WhisperM8 claude -p im Projektordner und Konto der Aufgabe. Jeder Lauf wird ein normaler Chat. Ein Lauf arbeitet weiter, wenn WhisperM8 neu startet."
+          }
+        }
+      }
+    },
     "Audio Ducking": {
       "localizations": {
         "de": {
@@ -6141,6 +6151,16 @@
         }
       }
     },
+    "Experimental: recurring Claude runs at a set time.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Experimentell: wiederkehrende Claude-Läufe zu einer festen Zeit."
+          }
+        }
+      }
+    },
     "Hide stopped chats": {
       "localizations": {
         "de": {
@@ -6181,6 +6201,16 @@
         }
       }
     },
+    "New and experimental. Off by default. Runs only start while WhisperM8 is running; a run missed while the Mac slept or the app was closed is caught up within 12 hours.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu und experimentell. Ab Werk aus. Läufe starten nur, solange WhisperM8 läuft; ein Lauf, der verpasst wurde, weil der Mac schlief oder die App zu war, wird bis zu 12 Stunden später nachgeholt."
+          }
+        }
+      }
+    },
     "No running chats": {
       "localizations": {
         "de": {
@@ -6197,6 +6227,36 @@
           "stringUnit": {
             "state": "translated",
             "value": "Blättern"
+          }
+        }
+      }
+    },
+    "Recurring Claude runs that WhisperM8 starts at a set time.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wiederkehrende Claude-Läufe, die WhisperM8 zu einer festen Zeit startet."
+          }
+        }
+      }
+    },
+    "Run scheduled tasks": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geplante Aufgaben ausführen"
+          }
+        }
+      }
+    },
+    "Scheduled tasks": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geplante Aufgaben"
           }
         }
       }
@@ -6227,6 +6287,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Tab-Gruppen"
+          }
+        }
+      }
+    },
+    "Tasks are set up with the command line for now: whisperm8 schedule add, list, run, pause and resume. A view in the sidebar follows.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufgaben richtest du vorerst über die Kommandozeile ein: whisperm8 schedule add, list, run, pause und resume. Eine Ansicht in der Seitenleiste folgt."
           }
         }
       }

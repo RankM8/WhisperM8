@@ -21,6 +21,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case controller
     case tickets
     case restart
+    case scheduledTasks = "scheduled-tasks"
 
     var id: String { rawValue }
 
@@ -70,6 +71,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return String(localized: "Tickets")
         case .restart:
             return String(localized: "Restart without losing chats")
+        case .scheduledTasks:
+            return String(localized: "Scheduled tasks")
         }
     }
 
@@ -115,6 +118,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return "ticket"
         case .restart:
             return "arrow.triangle.2.circlepath"
+        case .scheduledTasks:
+            return "clock"
         }
     }
 
@@ -160,6 +165,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
             return String(localized: "Experimental: tickets from Linear and the chats working on them.")
         case .restart:
             return String(localized: "Experimental: running chats keep working while WhisperM8 restarts.")
+        case .scheduledTasks:
+            return String(localized: "Experimental: recurring Claude runs at a set time.")
         }
     }
 }
@@ -369,6 +376,8 @@ struct SettingsView: View {
             TicketsSettingsPage()
         case .restart:
             RestartSettingsPage()
+        case .scheduledTasks:
+            ScheduledTasksSettingsPage()
         }
     }
 

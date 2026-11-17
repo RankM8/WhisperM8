@@ -94,7 +94,7 @@ Doku-Einstieg: [agent-chats](docs/features/agent-chats/README.md); Konten:
 [claude-konten](docs/features/agent-chats/claude-konten.md), [gpt-konten](docs/features/agent-chats/gpt-konten.md);
 CLI: [agent-chats-cli](docs/features/agent-chats-cli.md); Board/Plugin: [jarvis-board](docs/features/jarvis-board.md);
 Ansagen: [Doku](docs/features/speech-callouts.md); Zwischenablage-Verlauf: [Doku](docs/features/clipboard-history.md); Voice Gate: [voice-gate](docs/features/voice-gate.md).
-Notch: [notch](docs/features/notch.md); Statistik: [statistics](docs/features/statistics.md); Controller: [controller](docs/features/controller.md); Tickets: [tickets](docs/features/tickets.md).
+Notch: [notch](docs/features/notch.md); Statistik: [statistics](docs/features/statistics.md); Controller: [controller](docs/features/controller.md); Tickets: [tickets](docs/features/tickets.md); Geplant: [Doku](docs/features/scheduled-tasks.md).
 
 ## Invarianten (nicht brechen)
 
@@ -174,7 +174,7 @@ Notch: [notch](docs/features/notch.md); Statistik: [statistics](docs/features/st
 
 Notbremsen, kein Bedienweg — jede für Nutzer gedachte Einstellung braucht einen UI-Schalter; neue Schlüssel
 bekommen einen UI-Weg oder einen begründeten Eintrag in `PreferenceBedienweg.swift`. Labs-Funktionen gehören in die
-Labs-Gruppe der Einstellungen, erweiterte Agent-Funktionen hinter `agentAdvancedFeaturesEnabled`.
+Labs-Gruppe, erweiterte Agent-Funktionen hinter `agentAdvancedFeaturesEnabled`.
 `agentEventDrivenWatchEnabled`, `claudeRegistryStatusEnabled`, `codexStartGuardEnabled`,
 `agentControlServerEnabled`, `agentCrashRecoveryEnabled`, `subagentJobRetentionEnabled`,
 `claudeCodeProxyAutoUpdateEnabled`, `gptAccountProfilesEnabled`, `chatGPTTranscriptionEnabled`,
@@ -182,10 +182,10 @@ Labs-Gruppe der Einstellungen, erweiterte Agent-Funktionen hinter `agentAdvanced
 `jarvisNotesEnabled`, `agentChatTasksInNotesEnabled`, `speechCalloutsEnabled`, `codexVoiceGateEnabled`, `agentStatusSoftPulseEnabled`, `notchStatusFeatureEnabled`,
 `clipboardHistoryEnabled`, `statisticsEnabled` (beide zugleich UI-Schalter), `controllerFeatureEnabled`, `controllerPaddleHIDEnabled`,
 `unifiedPillEnabled` (vereinte Pille; aus = getrennte Pillen), `claudeNativeNameEnabled`.
-Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`, `ticketBoardEnabled`,
+Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`, `ticketBoardEnabled`, `scheduledTasksEnabled`,
 `mcpAutoSyncEnabled`, `agentStatusPulseEnabled` (alter Puls, nur A/B-Messung), `restartKeepsChatsEnabled`
-(Labs-Schalter „Neustart ohne Chatverlust“: gebaut, Pflichttest Teil a grün, ab Werk aus, wirkt ab
-dem nächsten App-Start; [Plan](docs/plans/neustart-ohne-chatverlust.md)).
+(Labs „Neustart ohne Chatverlust“, wirkt ab nächstem App-Start;
+[Plan](docs/plans/neustart-ohne-chatverlust.md)).
 
 ## Dependencies (Package.swift)
 

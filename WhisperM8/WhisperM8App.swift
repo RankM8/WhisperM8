@@ -384,6 +384,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             // Login-Fristen der Claude-Konten: liest einmal jetzt und danach
             // stündlich den Keychain (ein kurzer `security`-Aufruf je Konto).
             ClaudeLoginExpiryStore.shared.start()
+            // Geplante Aufgaben (Labs, ab Werk aus): Zeitgeber auf den nächsten
+            // Termin, Verpasstes nachholen, laufende Läufe wiedererkennen.
+            ScheduledTaskRuntime.shared.startIfEnabled()
             // Zwischenordner eines Logins, den ein Absturz offen ließ: jetzt
             // gehört kein laufender Login mehr dazu.
             Task.detached(priority: .utility) {
