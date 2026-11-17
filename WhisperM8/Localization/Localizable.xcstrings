@@ -27173,6 +27173,106 @@
           }
         }
       }
+    },
+    "Name, prompt, folder, account and schedule are required.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name, Auftrag, Ordner, Konto und Zeitplan sind Pflicht."
+          }
+        }
+      }
+    },
+    "The folder must be an absolute path.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Ordner muss ein absoluter Pfad sein."
+          }
+        }
+      }
+    },
+    "An allowed tool is empty or spans several lines.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein erlaubtes Werkzeug ist leer oder geht über mehrere Zeilen."
+          }
+        }
+      }
+    },
+    "Weekdays run from 1 (Monday) to 7 (Sunday).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wochentage gehen von 1 (Montag) bis 7 (Sonntag)."
+          }
+        }
+      }
+    },
+    "Scheduled tasks are off. Turn them on under Settings › Labs › Scheduled tasks.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geplante Aufgaben sind aus. Einschalten unter Einstellungen › Labs › Scheduled tasks."
+          }
+        }
+      }
+    },
+    "Another WhisperM8 instance is planning the tasks right now; this one changes nothing.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine andere WhisperM8-Instanz plant die Aufgaben gerade; diese ändert nichts."
+          }
+        }
+      }
+    },
+    "A run of “%@” is still working. Two runs of the same task never run at once.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Lauf von „%@“ arbeitet noch. Zwei Läufe derselben Aufgabe laufen nie gleichzeitig."
+          }
+        }
+      }
+    },
+    "The folder for the run could not be created.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Ordner für den Lauf ließ sich nicht anlegen."
+          }
+        }
+      }
+    },
+    "scheduled-tasks.json can’t be read (%@). WhisperM8 leaves it unchanged.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "scheduled-tasks.json ist nicht lesbar (%@). WhisperM8 ändert sie deshalb nicht."
+          }
+        }
+      }
+    },
+    "scheduled-tasks.json could not be saved: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "scheduled-tasks.json ließ sich nicht speichern: %@"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

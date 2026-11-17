@@ -41,17 +41,26 @@ final class ScheduledTasksOverviewModel {
     }
 
     private(set) var snapshot = ScheduledTaskOverviewLoader.Snapshot()
-    /// Stand der Uhr beim letzten Laden; Zeiten in der Ansicht rechnen damit.
+    /// Stand der Uhr, mit dem die Ansicht Zeiten schreibt („morgen 07:00“).
+    /// Wird nur neu gesetzt, wenn sich die Übersicht ändert oder ein neuer Tag
+    /// begonnen hat (Prüfung WM8-110, K6b): Die Texte hängen nur am Kalendertag,
+    /// und ein neuer Wert ließe Seitenleiste und Detail bei jedem Laden neu rechnen.
     private(set) var loadedAt = Date()
     /// Wurde schon einmal geladen? Vorher zeigt die Ansicht nichts statt „keine Aufgaben“.
     private(set) var hasLoaded = false
 
     @ObservationIgnored private let dependencies: Dependencies
+    @ObservationIgnored private let calendar: Calendar
     @ObservationIgnored private var isLoading = false
     @ObservationIgnored private var reloadPending = false
+    /// Zählt lokale Änderungen (`insertOrReplace`). Ein Laden, das vor einer
+    /// Änderung begann, kommt mit älterem Stand zurück und wird verworfen
+    /// (Prüfung WM8-110, K-C) — sonst verdrängte es eine gerade angelegte Aufgabe.
+    @ObservationIgnored private var generation = 0
 
-    init(dependencies: Dependencies = .live) {
+    init(dependencies: Dependencies = .live, calendar: Calendar = .current) {
         self.dependencies = dependencies
+        self.calendar = calendar
     }
 
     func overview(id: UUID) -> ScheduledTaskOverview? {
@@ -72,18 +81,32 @@ final class ScheduledTasksOverviewModel {
         }
         isLoading = true
         let load = dependencies.load
+        let started = generation
         Task.detached(priority: .utility) {
             let result = load()
-            await MainActor.run { [weak self] in self?.apply(result) }
+            await MainActor.run { [weak self] in self?.finishLoad(result, generation: started) }
         }
+    }
+
+    /// Ergebnis eines Ladens. Gab es seit dem Start eine lokale Änderung,
+    /// ist es veraltet: verwerfen und frisch laden.
+    func finishLoad(_ result: ScheduledTaskOverviewLoader.Snapshot, generation started: Int, at date: Date = Date()) {
+        guard started == generation else {
+            isLoading = false
+            reloadPending = false
+            reload()
+            return
+        }
+        apply(result, at: date)
     }
 
     /// Für Tests und Snapshots: ohne Laden setzen.
     func apply(_ result: ScheduledTaskOverviewLoader.Snapshot, at date: Date = Date()) {
         isLoading = false
-        loadedAt = date
         if !hasLoaded { hasLoaded = true }
-        if snapshot != result { snapshot = result }
+        let changed = snapshot != result
+        if changed { snapshot = result }
+        if changed || !calendar.isDate(loadedAt, inSameDayAs: date) { loadedAt = date }
         if reloadPending {
             reloadPending = false
             reload()
@@ -119,7 +142,7 @@ final class ScheduledTasksOverviewModel {
     /// Anlegen (`id == nil`) oder Ändern. Gibt bei Erfolg die Aufgabe zurück.
     func save(_ draft: ScheduledTaskDraft, id: UUID?) async -> Result<ScheduledTask, ScheduledTaskSaveError> {
         guard let scheduler = dependencies.scheduler() else {
-            return .failure(ScheduledTaskSaveError(message: ScheduledTaskScheduler.SchedulerError.disabled.localizedDescription))
+            return .failure(ScheduledTaskSaveError(message: ScheduledTaskTexts.schedulerError(.disabled)))
         }
         do {
             let task: ScheduledTask
@@ -132,7 +155,7 @@ final class ScheduledTasksOverviewModel {
             afterChange()
             return .success(task)
         } catch {
-            return .failure(ScheduledTaskSaveError(message: error.localizedDescription))
+            return .failure(ScheduledTaskSaveError(message: ScheduledTaskTexts.error(error)))
         }
     }
 
@@ -151,17 +174,18 @@ final class ScheduledTasksOverviewModel {
         }
         snapshot.overviews = overviews
         hasLoaded = true
+        generation += 1
     }
 
     private func perform(_ body: (ScheduledTaskScheduler) async throws -> String?) async -> String? {
         guard let scheduler = dependencies.scheduler() else {
-            return ScheduledTaskScheduler.SchedulerError.disabled.localizedDescription
+            return ScheduledTaskTexts.schedulerError(.disabled)
         }
         let message: String?
         do {
             message = try await body(scheduler)
         } catch {
-            message = error.localizedDescription
+            message = ScheduledTaskTexts.error(error)
         }
         afterChange()
         return message

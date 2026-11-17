@@ -49,7 +49,7 @@ struct ScheduledTaskDetailView: View, Equatable {
     }
 
     private var clock: ScheduledTaskTexts.Clock {
-        ScheduledTaskTexts.Clock(now: model.loadedAt, calendar: .current, locale: .current)
+        ScheduledTaskTexts.Clock(now: model.loadedAt)
     }
 
     private var missing: some View {

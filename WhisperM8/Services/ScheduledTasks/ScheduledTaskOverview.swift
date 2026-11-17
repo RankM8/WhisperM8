@@ -108,7 +108,7 @@ enum ScheduledTaskOverviewLoader {
         do {
             file = try store.load()
         } catch {
-            return Snapshot(loadError: error.localizedDescription)
+            return Snapshot(loadError: ScheduledTaskTexts.error(error))
         }
         let overviews = file.tasks.map { task -> ScheduledTaskOverview in
             var runs = store.recentRuns(for: task.id, limit: runLimit).map { files in

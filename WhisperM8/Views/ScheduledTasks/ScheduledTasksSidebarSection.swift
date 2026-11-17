@@ -110,7 +110,7 @@ struct ScheduledTasksSidebarSection: View, Equatable {
 
     @ViewBuilder
     private func content(_ model: ScheduledTasksOverviewModel) -> some View {
-        let clock = ScheduledTaskTexts.Clock(now: model.loadedAt, calendar: .current, locale: .current)
+        let clock = ScheduledTaskTexts.Clock(now: model.loadedAt)
         if let error = model.snapshot.loadError {
             Text(error)
                 .font(.system(size: 11))

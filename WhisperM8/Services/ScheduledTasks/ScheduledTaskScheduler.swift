@@ -35,13 +35,24 @@ actor ScheduledTaskScheduler {
         var watchExit: (Int32, @escaping @Sendable () -> Void) -> Void
     }
 
+    /// Fehler des Planers als Fälle (Prüfung WM8-110, K4): Die CLI bekommt
+    /// über den Socket `errorDescription` (deutsch wie ihre übrigen Texte),
+    /// die Ansicht übersetzt mit `ScheduledTaskTexts.schedulerError`.
     enum SchedulerError: LocalizedError, Equatable {
         case disabled
         case notLeader
         case notFound(String)
-        case invalid(String)
-        case conflict(String)
-        case storage(String)
+        case invalid(ScheduledTaskValidationProblem)
+        /// Ein Lauf der Aufgabe arbeitet noch.
+        case conflict(taskName: String)
+        case storage(StorageProblem)
+
+        enum StorageProblem: Equatable {
+            /// Der Ordner für einen neuen Lauf ließ sich nicht anlegen.
+            case runFolder
+            case store(ScheduledTaskStore.StoreError)
+            case other(String)
+        }
 
         var errorDescription: String? {
             switch self {
@@ -50,7 +61,12 @@ actor ScheduledTaskScheduler {
             case .notLeader:
                 return "Eine andere WhisperM8-Instanz plant die Aufgaben gerade; diese ändert nichts."
             case .notFound(let ref): return "Keine geplante Aufgabe \(ref)."
-            case .invalid(let message), .conflict(let message), .storage(let message): return message
+            case .invalid(let problem): return problem.cliText
+            case .conflict(let name):
+                return "Ein Lauf von „\(name)“ arbeitet noch. Zwei Läufe derselben Aufgabe gibt es nicht."
+            case .storage(.runFolder): return "Der Lauf-Ordner ließ sich nicht anlegen."
+            case .storage(.store(let error)): return error.errorDescription
+            case .storage(.other(let message)): return message
             }
         }
     }
@@ -195,7 +211,7 @@ actor ScheduledTaskScheduler {
         let now = env.now()
         guard let name = draft.name, let prompt = draft.prompt, let directory = draft.directory,
               let account = draft.account, let schedule = draft.schedule else {
-            throw SchedulerError.invalid("Zum Anlegen fehlen Angaben: Name, Auftrag, Ordner, Konto und Zeitplan sind Pflicht.")
+            throw SchedulerError.invalid(.fieldsMissing)
         }
         var task = ScheduledTask(
             name: name.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -274,10 +290,10 @@ actor ScheduledTaskScheduler {
             throw SchedulerError.notFound(id.uuidString.lowercased())
         }
         guard !isActive(id, now: env.now()) else {
-            throw SchedulerError.conflict("Ein Lauf von „\(task.name)“ arbeitet noch. Zwei Läufe derselben Aufgabe gibt es nicht.")
+            throw SchedulerError.conflict(taskName: task.name)
         }
         guard let record = await launch(task, trigger: .manual, slot: nil) else {
-            throw SchedulerError.storage("Der Lauf-Ordner ließ sich nicht anlegen.")
+            throw SchedulerError.storage(.runFolder)
         }
         return record
     }
@@ -412,23 +428,27 @@ actor ScheduledTaskScheduler {
     }
 
     private func loadFile() throws -> ScheduledTasksFile {
-        do { return try env.store.load() } catch { throw SchedulerError.storage(error.localizedDescription) }
+        do { return try env.store.load() } catch { throw SchedulerError.storage(Self.storageProblem(error)) }
     }
 
     /// Laden, ändern, speichern in einem synchronen Stück (kein `await`).
     private func mutate<T>(_ body: (inout ScheduledTasksFile) throws -> T) throws -> T {
         var file = try loadFile()
         let result = try body(&file)
-        do { try env.store.save(file) } catch { throw SchedulerError.storage(error.localizedDescription) }
+        do { try env.store.save(file) } catch { throw SchedulerError.storage(Self.storageProblem(error)) }
         return result
     }
 
+    private static func storageProblem(_ error: Error) -> SchedulerError.StorageProblem {
+        (error as? ScheduledTaskStore.StoreError).map(SchedulerError.StorageProblem.store) ?? .other(error.localizedDescription)
+    }
+
     private func validate(_ task: ScheduledTask, in file: ScheduledTasksFile) throws {
-        if let message = ScheduledTaskValidation.problem(
+        if let problem = ScheduledTaskValidation.problem(
             in: task, others: file.tasks.filter { $0.id != task.id },
             directoryExists: env.directoryExists,
             accountExists: { self.env.accountEnvironment($0) != nil }) {
-            throw SchedulerError.invalid(message)
+            throw SchedulerError.invalid(problem)
         }
     }
 
@@ -466,30 +486,69 @@ enum ScheduledTaskValidation {
         return URL(fileURLWithPath: expanded).standardizedFileURL.path
     }
 
-    /// Erster Fehler in Klartext oder `nil`.
+    /// Erster Fehler oder `nil`. Text: `cliText` (CLI) bzw.
+    /// `ScheduledTaskTexts.problem` (Ansicht).
     static func problem(in task: ScheduledTask, others: [ScheduledTask],
-                        directoryExists: (String) -> Bool, accountExists: (String) -> Bool) -> String? {
-        if task.name.isEmpty { return "Name fehlt." }
-        if task.name.count > maxNameLength { return "Name ist länger als \(maxNameLength) Zeichen." }
-        if task.name.contains(where: \.isNewline) { return "Name darf keinen Zeilenumbruch enthalten." }
+                        directoryExists: (String) -> Bool, accountExists: (String) -> Bool) -> ScheduledTaskValidationProblem? {
+        if task.name.isEmpty { return .nameMissing }
+        if task.name.count > maxNameLength { return .nameTooLong(maxNameLength) }
+        if task.name.contains(where: \.isNewline) { return .nameMultiline }
         if others.contains(where: { $0.name.caseInsensitiveCompare(task.name) == .orderedSame }) {
-            return "Es gibt schon eine Aufgabe „\(task.name)“."
+            return .nameTaken(task.name)
         }
-        if task.prompt.isEmpty { return "Auftrag fehlt." }
-        if task.prompt.hasPrefix("-") { return "Der Auftrag darf nicht mit „-“ beginnen (Claude läse ihn als Option)." }
-        if !task.directory.hasPrefix("/") { return "Ordner muss ein absoluter Pfad sein." }
-        if !directoryExists(task.directory) { return "Ordner gibt es nicht: \(task.directory)" }
-        if !accountExists(task.account) { return "Claude-Konto „\(task.account)“ gibt es nicht." }
-        if let error = task.schedule.validationError { return error }
+        if task.prompt.isEmpty { return .promptMissing }
+        if task.prompt.hasPrefix("-") { return .promptStartsWithDash }
+        if !task.directory.hasPrefix("/") { return .directoryNotAbsolute }
+        if !directoryExists(task.directory) { return .directoryMissing(task.directory) }
+        if !accountExists(task.account) { return .accountMissing(task.account) }
+        if let problem = task.schedule.validationProblem { return .schedule(problem) }
         if task.permissions.extraTools.contains(where: { $0.contains(where: \.isNewline) || $0.trimmingCharacters(in: .whitespaces).isEmpty }) {
-            return "Ein erlaubtes Werkzeug ist leer oder enthält einen Zeilenumbruch."
+            return .toolEmptyOrMultiline
         }
         if task.permissions.extraTools.contains(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("-") }) {
-            return "Ein erlaubtes Werkzeug darf nicht mit „-“ beginnen (Claude läse es als Option)."
+            return .toolStartsWithDash
         }
         if task.permissions.access == .custom, task.permissions.allowedTools.isEmpty {
-            return "Eigene Liste braucht mindestens ein Werkzeug (--allow)."
+            return .customListEmpty
         }
         return nil
+    }
+}
+
+/// Warum eine Aufgabe so nicht gespeichert wird (Prüfung WM8-110, K4).
+enum ScheduledTaskValidationProblem: Equatable {
+    case fieldsMissing
+    case nameMissing
+    case nameTooLong(Int)
+    case nameMultiline
+    case nameTaken(String)
+    case promptMissing
+    case promptStartsWithDash
+    case directoryNotAbsolute
+    case directoryMissing(String)
+    case accountMissing(String)
+    case schedule(ScheduledTaskSchedule.Problem)
+    case toolEmptyOrMultiline
+    case toolStartsWithDash
+    case customListEmpty
+
+    /// Deutsch für die CLI, wie ihre übrigen Texte.
+    var cliText: String {
+        switch self {
+        case .fieldsMissing: return "Zum Anlegen fehlen Angaben: Name, Auftrag, Ordner, Konto und Zeitplan sind Pflicht."
+        case .nameMissing: return "Name fehlt."
+        case .nameTooLong(let max): return "Name ist länger als \(max) Zeichen."
+        case .nameMultiline: return "Name darf keinen Zeilenumbruch enthalten."
+        case .nameTaken(let name): return "Es gibt schon eine Aufgabe „\(name)“."
+        case .promptMissing: return "Auftrag fehlt."
+        case .promptStartsWithDash: return "Der Auftrag darf nicht mit „-“ beginnen (Claude läse ihn als Option)."
+        case .directoryNotAbsolute: return "Ordner muss ein absoluter Pfad sein."
+        case .directoryMissing(let path): return "Ordner gibt es nicht: \(path)"
+        case .accountMissing(let account): return "Claude-Konto „\(account)“ gibt es nicht."
+        case .schedule(let problem): return problem.cliText
+        case .toolEmptyOrMultiline: return "Ein erlaubtes Werkzeug ist leer oder enthält einen Zeilenumbruch."
+        case .toolStartsWithDash: return "Ein erlaubtes Werkzeug darf nicht mit „-“ beginnen (Claude läse es als Option)."
+        case .customListEmpty: return "Eigene Liste braucht mindestens ein Werkzeug (--allow)."
+        }
     }
 }

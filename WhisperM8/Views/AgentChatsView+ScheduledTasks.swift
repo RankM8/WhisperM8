@@ -38,6 +38,27 @@ extension AgentChatsView {
         .equatable()
         // Meldung, „busy“ und Blatt gehören zu genau dieser Aufgabe.
         .id(taskID)
+        // Detail auf oder zu (Prüfung WM8-110, K-A): Diktat-Ziel und Leiste
+        // des Controllers nachziehen. Das Detail steht genau dann im Fenster,
+        // wenn `scheduledTaskDetailID` gesetzt ist; mit `.id` feuert der
+        // Wechsel zwischen zwei Aufgaben beide Seiten.
+        .onAppear { scheduledTaskDetailVisibilityChanged() }
+        .onDisappear { scheduledTaskDetailVisibilityChanged() }
+    }
+
+    func scheduledTaskDetailVisibilityChanged() {
+        syncActiveAgentChat()
+        controllerLegendMayHaveChanged()
+    }
+
+    /// Etwas verdeckt den Chat. Hinter den Tickets zählt der sichtbare
+    /// Board-Chat; das Detail einer geplanten Aufgabe zeigt keinen Chat, also
+    /// gibt es kein Diktat-Ziel — sonst landete Diktat im verdeckten Chat.
+    func syncHiddenChatAsActiveChat() {
+        if isTicketsModeActive { return syncBoardChatAsActiveChat() }
+        if AppState.shared.activeAgentChat != nil {
+            AppState.shared.activeAgentChat = nil
+        }
     }
 
     /// Projekte der Seitenleiste als Auswahl für den Projektordner, nach Namen.

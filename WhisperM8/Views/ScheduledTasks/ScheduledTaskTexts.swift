@@ -4,28 +4,40 @@ import Foundation
 /// Katalog. Zeiten stehen fest da („morgen 07:00“), nie mitlaufend („in 3 Std“):
 /// Sie ändern sich nur, wenn die Übersicht neu lädt (Plan, Teil 2).
 enum ScheduledTaskTexts {
+    /// Sprache der Datumsangaben: die der App-Texte (englisch oder deutsch),
+    /// Region und Formate aus dem System (Prüfung WM8-110, K5). Mit
+    /// `Locale.current` stünde in einer englischen App auf einem deutsch
+    /// eingestellten Mac „Mo., 16. Nov.“ neben „tomorrow“.
+    static let appLocale: Locale = {
+        let language = Bundle.main.preferredLocalizations.first ?? "en"
+        var components = Locale.Components(locale: .current)
+        components.languageComponents = Locale.Language.Components(identifier: language)
+        return Locale(components: components)
+    }()
+
     struct Clock {
         var now: Date
         var calendar: Calendar
         var locale: Locale
 
-        static var current: Clock { Clock(now: Date(), calendar: .current, locale: .current) }
+        init(now: Date, calendar: Calendar = .current, locale: Locale = ScheduledTaskTexts.appLocale) {
+            self.now = now
+            self.calendar = calendar
+            self.locale = locale
+        }
 
+        static var current: Clock { Clock(now: Date()) }
+
+        /// Formatierer je Vorlage, Sprache und Zeitzone, einmal gebaut
+        /// (Prüfung WM8-110, K6a): Ein `DateFormatter` kostet beim Anlegen
+        /// mehr als hundert Formatierungen, und die Seitenleiste formatiert je
+        /// Aufgabe und Lauf.
         func formatter(_ template: String) -> DateFormatter {
-            let formatter = DateFormatter()
-            formatter.locale = locale
-            formatter.calendar = calendar
-            formatter.timeZone = calendar.timeZone
-            formatter.setLocalizedDateFormatFromTemplate(template)
-            return formatter
+            FormatterCache.shared.formatter(template: template, locale: locale, calendar: calendar)
         }
 
         func time(_ date: Date) -> String {
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.timeZone = calendar.timeZone
-            formatter.dateFormat = "HH:mm"
-            return formatter.string(from: date)
+            FormatterCache.shared.formatter(fixedFormat: "HH:mm", calendar: calendar).string(from: date)
         }
 
         /// 0 = heute, 1 = morgen, -1 = gestern.
@@ -33,6 +45,63 @@ enum ScheduledTaskTexts {
             let from = calendar.startOfDay(for: now)
             let to = calendar.startOfDay(for: date)
             return calendar.dateComponents([.day], from: from, to: to).day ?? 0
+        }
+    }
+
+    /// Gemeinsamer Speicher der Formatierer. `DateFormatter` ist ab macOS 10.9
+    /// zum Formatieren threadsicher; das Wörterbuch schützt ein Lock.
+    final class FormatterCache: @unchecked Sendable {
+        static let shared = FormatterCache()
+
+        private let lock = NSLock()
+        private var formatters: [String: DateFormatter] = [:]
+        private var durationFormatters: [String: DateComponentsFormatter] = [:]
+
+        func formatter(template: String, locale: Locale, calendar: Calendar) -> DateFormatter {
+            let key = "t|\(template)|\(locale.identifier)|\(calendar.identifier)|\(calendar.timeZone.identifier)"
+            return cached(key) {
+                let formatter = DateFormatter()
+                formatter.locale = locale
+                formatter.calendar = calendar
+                formatter.timeZone = calendar.timeZone
+                formatter.setLocalizedDateFormatFromTemplate(template)
+                return formatter
+            }
+        }
+
+        func formatter(fixedFormat: String, calendar: Calendar) -> DateFormatter {
+            let key = "f|\(fixedFormat)|\(calendar.timeZone.identifier)"
+            return cached(key) {
+                let formatter = DateFormatter()
+                formatter.locale = Locale(identifier: "en_US_POSIX")
+                formatter.timeZone = calendar.timeZone
+                formatter.dateFormat = fixedFormat
+                return formatter
+            }
+        }
+
+        func durationFormatter(units: NSCalendar.Unit, locale: Locale) -> DateComponentsFormatter {
+            let key = "\(units.rawValue)|\(locale.identifier)"
+            lock.lock()
+            defer { lock.unlock() }
+            if let formatter = durationFormatters[key] { return formatter }
+            let formatter = DateComponentsFormatter()
+            var calendar = Calendar.current
+            calendar.locale = locale
+            formatter.calendar = calendar
+            formatter.allowedUnits = units
+            formatter.unitsStyle = .abbreviated
+            durationFormatters[key] = formatter
+            return formatter
+        }
+
+        private func cached(_ key: String, make: () -> DateFormatter) -> DateFormatter {
+            lock.lock()
+            defer { lock.unlock() }
+            if let formatter = formatters[key] { return formatter }
+            let formatter = make()
+            formatters[key] = formatter
+            return formatter
         }
     }
 
@@ -70,10 +139,9 @@ enum ScheduledTaskTexts {
         }
     }
 
-    static func duration(_ seconds: Int) -> String {
-        let formatter = DateComponentsFormatter()
-        formatter.allowedUnits = seconds >= 3600 ? [.hour, .minute] : (seconds >= 60 ? [.minute, .second] : [.second])
-        formatter.unitsStyle = .abbreviated
+    static func duration(_ seconds: Int, locale: Locale = appLocale) -> String {
+        let units: NSCalendar.Unit = seconds >= 3600 ? [.hour, .minute] : (seconds >= 60 ? [.minute, .second] : [.second])
+        let formatter = FormatterCache.shared.durationFormatter(units: units, locale: locale)
         return formatter.string(from: TimeInterval(seconds)) ?? "\(seconds) s"
     }
 
@@ -245,5 +313,72 @@ enum ScheduledTaskTexts {
             guard let next = overview.next else { return String(localized: "no date") }
             return nextShort(next, clock: clock)
         }
+    }
+
+    // MARK: Meldungen des Planers (Prüfung WM8-110, K4)
+
+    static func problem(_ problem: ScheduledTaskValidationProblem) -> String {
+        switch problem {
+        case .fieldsMissing:
+            return String(localized: "Name, prompt, folder, account and schedule are required.")
+        case .nameMissing: return String(localized: "The name is missing.")
+        case .nameTooLong(let max): return String(localized: "The name is longer than \(max) characters.")
+        case .nameMultiline: return String(localized: "The name must be a single line.")
+        case .nameTaken(let name): return String(localized: "There is already a task called “\(name)”.")
+        case .promptMissing: return String(localized: "The prompt is missing.")
+        case .promptStartsWithDash:
+            return String(localized: "The prompt must not start with “-” (Claude would read it as an option).")
+        case .directoryNotAbsolute: return String(localized: "The folder must be an absolute path.")
+        case .directoryMissing(let path): return String(localized: "The folder does not exist: \(path)")
+        case .accountMissing(let account): return String(localized: "The Claude account “\(account)” does not exist.")
+        case .schedule(let problem): return scheduleProblem(problem)
+        case .toolEmptyOrMultiline: return String(localized: "An allowed tool is empty or spans several lines.")
+        case .toolStartsWithDash:
+            return String(localized: "A tool must not start with “-” (Claude would read it as an option).")
+        case .customListEmpty: return String(localized: "A custom list needs at least one tool.")
+        }
+    }
+
+    static func scheduleProblem(_ problem: ScheduledTaskSchedule.Problem) -> String {
+        switch problem {
+        case .missingTime: return String(localized: "Enter at least one time, like 07:00.")
+        case .missingWeekday: return String(localized: "Pick at least one weekday.")
+        case .invalidWeekday: return String(localized: "Weekdays run from 1 (Monday) to 7 (Sunday).")
+        case .invalidMinute: return String(localized: "The minute must be 0 to 59.")
+        }
+    }
+
+    static func schedulerError(_ error: ScheduledTaskScheduler.SchedulerError) -> String {
+        switch error {
+        case .disabled:
+            return String(localized: "Scheduled tasks are off. Turn them on under Settings › Labs › Scheduled tasks.")
+        case .notLeader:
+            return String(localized: "Another WhisperM8 instance is planning the tasks right now; this one changes nothing.")
+        case .notFound:
+            return String(localized: "This scheduled task no longer exists.")
+        case .invalid(let problem): return self.problem(problem)
+        case .conflict(let name):
+            return String(localized: "A run of “\(name)” is still working. Two runs of the same task never run at once.")
+        case .storage(.runFolder):
+            return String(localized: "The folder for the run could not be created.")
+        case .storage(.store(let error)): return storeError(error)
+        case .storage(.other(let message)): return message
+        }
+    }
+
+    static func storeError(_ error: ScheduledTaskStore.StoreError) -> String {
+        switch error {
+        case .unreadable(let detail):
+            return String(localized: "scheduled-tasks.json can’t be read (\(detail)). WhisperM8 leaves it unchanged.")
+        case .writeFailed(let detail):
+            return String(localized: "scheduled-tasks.json could not be saved: \(detail)")
+        }
+    }
+
+    /// Beliebiger Fehler aus einer Aktion der Ansicht.
+    static func error(_ error: Error) -> String {
+        if let error = error as? ScheduledTaskScheduler.SchedulerError { return schedulerError(error) }
+        if let error = error as? ScheduledTaskStore.StoreError { return storeError(error) }
+        return error.localizedDescription
     }
 }

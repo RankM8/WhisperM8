@@ -1091,8 +1091,8 @@ struct AgentChatsView: View {
         // key ist (Review-Finding: Hintergrund-Mutationen kaperten sonst
         // das Ziel).
         if let route = windowStore.dictationWindowID, route != windowID { return }
-        // Hinter den Tickets zählt nur der sichtbare Board-Chat (WM8-113).
-        if isTicketsModeActive { return syncBoardChatAsActiveChat() }
+        // Hinter Tickets (Board-Chat, WM8-113) oder Aufgaben-Detail (kein Chat, WM8-110).
+        if hidesChatContent { return syncHiddenChatAsActiveChat() }
         guard let project = selectedProject,
               let session = selectedSession,
               session.status != .archived

@@ -216,7 +216,7 @@ final class ScheduledTasksViewTests: XCTestCase {
         XCTAssertTrue(model.hasLoaded)
         XCTAssertEqual(model.snapshot, snapshot)
         let message = await model.runNow(UUID())
-        XCTAssertEqual(message, ScheduledTaskScheduler.SchedulerError.disabled.localizedDescription,
+        XCTAssertEqual(message, ScheduledTaskTexts.schedulerError(.disabled),
                        "Schalter aus: kein Start, klare Meldung")
     }
 

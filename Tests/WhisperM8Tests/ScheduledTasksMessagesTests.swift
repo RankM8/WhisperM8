@@ -1,0 +1,102 @@
+import Foundation
+import XCTest
+@testable import WhisperM8
+
+/// Geplante Aufgaben, Paket 3 (WM8-110): Meldungen des Planers, Datumsformat,
+/// Laden der Übersicht.
+@MainActor
+final class ScheduledTasksMessagesTests: XCTestCase {
+    private var berlin: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Europe/Berlin")!
+        return calendar
+    }
+
+    private func date(_ text: String) -> Date {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = berlin.timeZone
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        return formatter.date(from: text)!
+    }
+
+    private func task(_ name: String = "Probe") -> ScheduledTask {
+        ScheduledTask(name: name, prompt: "Prüfe etwas.", directory: "/tmp", account: "main",
+                      schedule: ScheduledTaskSchedule(kind: .daily, times: [ScheduledTaskClockTime(hour: 7, minute: 0)!]),
+                      createdAt: date("2026-11-01 08:00"))
+    }
+
+    // MARK: K4 Meldungen als Fälle
+
+    func testValidationReturnsCasesWithGermanCLIAndTranslatedViewText() {
+        var bad = task()
+        bad.name = ""
+        let problem = ScheduledTaskValidation.problem(in: bad, others: [], directoryExists: { _ in true }, accountExists: { _ in true })
+        XCTAssertEqual(problem, .nameMissing)
+        XCTAssertEqual(problem?.cliText, "Name fehlt.", "die CLI bleibt deutsch")
+        XCTAssertEqual(ScheduledTaskTexts.problem(.nameMissing), "The name is missing.", "die Ansicht übersetzt")
+
+        var hourly = task()
+        hourly.schedule = ScheduledTaskSchedule(kind: .hourly, minute: 75)
+        XCTAssertEqual(ScheduledTaskValidation.problem(in: hourly, others: [], directoryExists: { _ in true }, accountExists: { _ in true }),
+                       .schedule(.invalidMinute))
+        XCTAssertEqual(hourly.schedule.validationError, "Stündlich braucht eine Minute 0 bis 59.")
+
+        let taken = ScheduledTaskValidation.problem(in: task("Probe"), others: [task("probe")],
+                                                    directoryExists: { _ in true }, accountExists: { _ in true })
+        XCTAssertEqual(taken, .nameTaken("Probe"))
+    }
+
+    func testSchedulerErrorsTranslateForTheView() {
+        let conflict = ScheduledTaskScheduler.SchedulerError.conflict(taskName: "Bericht")
+        XCTAssertEqual(conflict.errorDescription, "Ein Lauf von „Bericht“ arbeitet noch. Zwei Läufe derselben Aufgabe gibt es nicht.")
+        XCTAssertEqual(ScheduledTaskTexts.schedulerError(conflict),
+                       "A run of “Bericht” is still working. Two runs of the same task never run at once.")
+        XCTAssertEqual(ScheduledTaskTexts.error(ScheduledTaskScheduler.SchedulerError.storage(.store(.writeFailed("voll")))),
+                       "scheduled-tasks.json could not be saved: voll")
+        XCTAssertFalse(ScheduledTaskTexts.schedulerError(.disabled).contains("Geplante"), "kein Deutsch in der englischen Ansicht")
+    }
+
+    // MARK: K5, K6a Datumsformat
+
+    func testClockUsesTheAppLanguageAndCachesFormatters() {
+        let clock = ScheduledTaskTexts.Clock(now: date("2026-11-16 12:00"), calendar: berlin)
+        let appLanguage = Locale(identifier: Bundle.main.preferredLocalizations.first ?? "en").language.languageCode
+        XCTAssertEqual(clock.locale.language.languageCode, appLanguage, "Sprache der App, nicht des Systems")
+        XCTAssertTrue(clock.formatter("dMMM") === clock.formatter("dMMM"), "ein Formatierer je Vorlage")
+        XCTAssertFalse(clock.formatter("dMMM") === clock.formatter("EEE"))
+        var german = clock
+        german.locale = Locale(identifier: "de_DE")
+        XCTAssertFalse(clock.formatter("dMMM") === german.formatter("dMMM"), "je Sprache ein eigener")
+        XCTAssertEqual(clock.time(date("2026-11-16 07:05")), "07:05")
+        XCTAssertEqual(german.formatter("dMMM").string(from: date("2026-11-16 07:05")), "16. Nov.")
+    }
+
+    // MARK: K6b, K-C Laden
+
+    func testLoadedAtOnlyMovesOnChangeOrNewDay() {
+        let model = ScheduledTasksOverviewModel(dependencies: .init(load: { .init() }, scheduler: { nil }, afterChange: {}),
+                                                calendar: berlin)
+        let snapshot = ScheduledTaskOverviewLoader.Snapshot(overviews: [
+            ScheduledTaskOverview(task: task(), next: nil, runs: [], state: .scheduled),
+        ])
+        model.apply(snapshot, at: date("2026-11-16 09:00"))
+        XCTAssertEqual(model.loadedAt, date("2026-11-16 09:00"))
+        model.apply(snapshot, at: date("2026-11-16 18:00"))
+        XCTAssertEqual(model.loadedAt, date("2026-11-16 09:00"), "nichts geändert, selber Tag: Ansicht rechnet nicht neu")
+        model.apply(snapshot, at: date("2026-11-17 00:05"))
+        XCTAssertEqual(model.loadedAt, date("2026-11-17 00:05"), "neuer Tag: „morgen“ wird zu „heute“")
+        model.apply(.init(), at: date("2026-11-17 08:00"))
+        XCTAssertEqual(model.loadedAt, date("2026-11-17 08:00"), "Übersicht geändert")
+    }
+
+    func testOlderLoadDoesNotDisplaceAFreshlySavedTask() {
+        let model = ScheduledTasksOverviewModel(dependencies: .init(load: { .init() }, scheduler: { nil }, afterChange: {}),
+                                                calendar: berlin)
+        // Ein Laden beginnt (Stand 0), dann wird angelegt, dann kommt das Laden ohne die Aufgabe an.
+        let created = task("Neu")
+        model.insertOrReplace(created, now: date("2026-11-16 12:00"), calendar: berlin)
+        model.finishLoad(.init(), generation: 0)
+        XCTAssertNotNil(model.overview(id: created.id), "veraltetes Laden verworfen")
+    }
+}

@@ -270,21 +270,42 @@ struct ScheduledTaskSchedule: Codable, Equatable {
         )
     }
 
-    /// Fehlertext, wenn der Zeitplan nie einen Termin ergäbe.
-    var validationError: String? {
+    /// Warum ein Zeitplan nie einen Termin ergäbe. Die CLI zeigt `cliText`,
+    /// die Ansicht übersetzt den Fall (`ScheduledTaskTexts.problem`).
+    enum Problem: Equatable {
+        case missingTime
+        case missingWeekday
+        case invalidWeekday
+        case invalidMinute
+
+        var cliText: String {
+            switch self {
+            case .missingTime: return "Zeitplan braucht mindestens eine Uhrzeit."
+            case .missingWeekday: return "Wöchentlich braucht mindestens einen Wochentag."
+            case .invalidWeekday: return "Wochentage 1 (Mo) bis 7 (So)."
+            case .invalidMinute: return "Stündlich braucht eine Minute 0 bis 59."
+            }
+        }
+    }
+
+    /// Fall, wenn der Zeitplan nie einen Termin ergäbe.
+    var validationProblem: Problem? {
         switch kind {
         case .daily, .weekdays:
-            return times.isEmpty ? "Zeitplan braucht mindestens eine Uhrzeit." : nil
+            return times.isEmpty ? .missingTime : nil
         case .weekly:
-            if times.isEmpty { return "Zeitplan braucht mindestens eine Uhrzeit." }
-            if days.isEmpty { return "Wöchentlich braucht mindestens einen Wochentag." }
-            if days.contains(where: { !(1...7).contains($0) }) { return "Wochentage 1 (Mo) bis 7 (So)." }
+            if times.isEmpty { return .missingTime }
+            if days.isEmpty { return .missingWeekday }
+            if days.contains(where: { !(1...7).contains($0) }) { return .invalidWeekday }
             return nil
         case .hourly:
-            guard let minute, (0...59).contains(minute) else { return "Stündlich braucht eine Minute 0 bis 59." }
+            guard let minute, (0...59).contains(minute) else { return .invalidMinute }
             return nil
         }
     }
+
+    /// Fehlertext für die CLI.
+    var validationError: String? { validationProblem?.cliText }
 
     // MARK: Text (CLI)
 

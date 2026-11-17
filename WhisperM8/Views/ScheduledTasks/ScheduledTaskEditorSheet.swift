@@ -51,6 +51,14 @@ struct ScheduledTaskEditorSheet: View {
     @State private var accounts: [String]?
     @State private var error: String?
     @State private var isSaving = false
+    /// Der Planer schreibt gerade; dann geht Abbrechen nicht mehr (die
+    /// Änderung käme trotzdem an).
+    @State private var isSubmitting = false
+    /// Abbrechen während der Ordnerprüfung (Prüfung WM8-110, K-B): Der
+    /// laufende Speichern-Schritt sieht den Merker und speichert nicht. Ein
+    /// Objekt statt `@State`-Wert, weil die Prüfung nach dem Schließen des
+    /// Blatts weiterläuft.
+    @State private var cancellation = ScheduledTaskEditorCancellation()
     @State private var confirmDelete = false
 
     init(target: ScheduledTaskEditorTarget, projects: [ScheduledTaskEditorProject], existing: [ScheduledTask],
@@ -70,7 +78,7 @@ struct ScheduledTaskEditorSheet: View {
     }
 
     private var isNew: Bool { target.task == nil }
-    private var clock: ScheduledTaskTexts.Clock { ScheduledTaskTexts.Clock(now: now, calendar: .current, locale: .current) }
+    private var clock: ScheduledTaskTexts.Clock { ScheduledTaskTexts.Clock(now: now) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -328,8 +336,9 @@ struct ScheduledTaskEditorSheet: View {
                     .disabled(isSaving)
             }
             Spacer(minLength: 8)
-            Button { dismiss() } label: { Text("Cancel") }
+            Button { cancel() } label: { Text("Cancel") }
                 .keyboardShortcut(.cancelAction)
+                .disabled(isSubmitting)
             Button { save() } label: {
                 if isNew { Text("Create") } else { Text("Save") }
             }
@@ -349,17 +358,25 @@ struct ScheduledTaskEditorSheet: View {
 
     // MARK: Aktionen
 
+    private func cancel() {
+        cancellation.isCancelled = true
+        dismiss()
+    }
+
     private func save() {
         let others = existing.filter { $0.id != target.task?.id }
         let form = form
         let accounts = accounts
         let exists = dependencies.directoryExists
+        let cancellation = cancellation
         isSaving = true
         Task {
             // Der Ordner wird abseits des Main Threads geprüft (Netzlaufwerke).
             let directory = ScheduledTaskValidation.normalizedDirectory(form.directory)
             let directoryOK = form.directory.isEmpty
                 ? false : await Task.detached(priority: .userInitiated) { exists(directory) }.value
+            // Während der Prüfung abgebrochen: nichts speichern.
+            guard !cancellation.isCancelled else { return }
             if let problem = form.problem(others: others, accounts: accounts, directoryExists: { _ in directoryOK }) {
                 error = problem
                 isSaving = false
@@ -379,7 +396,9 @@ struct ScheduledTaskEditorSheet: View {
                 dismiss()
                 return
             }
+            isSubmitting = true
             let result = await dependencies.save(draft, target.task?.id)
+            isSubmitting = false
             isSaving = false
             switch result {
             case .success(let task):
@@ -405,4 +424,10 @@ struct ScheduledTaskEditorSheet: View {
             }
         }
     }
+}
+
+/// Merker „Blatt abgebrochen“ für einen Speichern-Schritt, der gerade auf die
+/// Ordnerprüfung wartet. Gelesen und gesetzt nur auf dem Main Thread.
+final class ScheduledTaskEditorCancellation: @unchecked Sendable {
+    var isCancelled = false
 }
