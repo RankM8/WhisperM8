@@ -9,6 +9,11 @@ extension AgentChatsView {
         windowStore.scheduledTaskDetail(in: windowID)
     }
 
+    /// Tickets oder Aufgaben-Detail verdecken den gewählten Chat.
+    var hidesChatContent: Bool {
+        windowStore.hidesChatContent(in: windowID)
+    }
+
     /// Kosten je Auswertung des Fensters: eine Wörterbuch-Abfrage und die
     /// schon gerechnete Auswahl; der Abschnitt selbst rechnet nur neu, wenn
     /// sich eine der beiden Markierungen ändert (`.equatable()`).
@@ -31,6 +36,8 @@ extension AgentChatsView {
             onOpenRun: { openScheduledRunChat($0) }
         )
         .equatable()
+        // Meldung, „busy“ und Blatt gehören zu genau dieser Aufgabe.
+        .id(taskID)
     }
 
     /// Projekte der Seitenleiste als Auswahl für den Projektordner, nach Namen.

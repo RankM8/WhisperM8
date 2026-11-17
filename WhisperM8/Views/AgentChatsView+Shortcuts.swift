@@ -123,6 +123,12 @@ extension AgentChatsView {
             windowStore.setTicketsMode(false, in: windowID)
             return nil
         }
+        // Ebenso das Detail einer geplanten Aufgabe: ⌘W schließt das Detail,
+        // nie den Chat-Tab dahinter (WM8-110).
+        if scheduledTaskDetailID != nil {
+            windowStore.closeScheduledTask(in: windowID)
+            return nil
+        }
         guard let session = selectedSession else { return event }
         closeTabByUser(session)
         return nil

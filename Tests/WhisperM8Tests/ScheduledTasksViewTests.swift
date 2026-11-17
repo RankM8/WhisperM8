@@ -253,4 +253,48 @@ final class ScheduledTasksViewTests: XCTestCase {
         store.forgetTickets(of: window)
         XCTAssertNil(store.scheduledTaskDetail(in: window), "Fenster zu: vergessen")
     }
+
+    /// Prüfung M1/M2: Das Detail verdeckt den Chat wie die Tickets. Controller,
+    /// Diktat und ⌘W dürfen den gewählten Chat dahinter nicht treffen.
+    func testDetailHidesTheChatBehindIt() {
+        let store = makeWindowStore()
+        let window = store.primaryWindowID
+        let chat = UUID()
+        store.navigateToSession(chat, in: window)
+        XCTAssertFalse(store.hidesChatContent(in: window))
+        let snapshot = AgentChatsWindowSnapshot(
+            windowID: window, isKeyWindow: true, selectedSessionID: chat, isGridActive: true, canReturnToWorkspace: true,
+            isSwitcherOpen: false, hasSheet: false, isSidebarVisible: true, hasMultiSelection: false, isArchiveMode: false)
+        XCTAssertEqual(snapshot.hidingChats(store.hidesChatContent(in: window)).selectedSessionID, chat)
+
+        store.showScheduledTask(UUID(), in: window)
+        XCTAssertTrue(store.hidesChatContent(in: window))
+        let hidden = snapshot.hidingChats(store.hidesChatContent(in: window))
+        XCTAssertNil(hidden.selectedSessionID, "kein Ziel für Bestätigen, Abbrechen und Diktat")
+        XCTAssertFalse(hidden.isGridActive)
+        XCTAssertEqual(store.selectedSession(in: window), chat, "der Tab dahinter bleibt gewählt")
+
+        store.closeScheduledTask(in: window)
+        store.setTicketsMode(true, in: window)
+        XCTAssertTrue(store.hidesChatContent(in: window), "Tickets verdecken ebenso")
+    }
+
+    /// Prüfung K3: Nach dem Anlegen steht die Aufgabe sofort in der Übersicht,
+    /// nicht erst nach dem Laden („gibt es nicht mehr“ im Detail).
+    func testSavedTaskShowsBeforeReload() {
+        let model = ScheduledTasksOverviewModel(dependencies: .init(load: { .init() }, scheduler: { nil }, afterChange: {}))
+        let created = task("Neu")
+        model.insertOrReplace(created, now: date("2026-11-16 12:00"), calendar: berlin)
+        XCTAssertTrue(model.hasLoaded)
+        XCTAssertEqual(model.overview(id: created.id)?.next, date("2026-11-17 07:00"))
+
+        var renamed = created
+        renamed.name = "Umbenannt"
+        renamed.paused = true
+        model.insertOrReplace(renamed, now: date("2026-11-16 12:00"), calendar: berlin)
+        XCTAssertEqual(model.snapshot.overviews.count, 1)
+        XCTAssertEqual(model.overview(id: created.id)?.task.name, "Umbenannt")
+        XCTAssertEqual(model.overview(id: created.id)?.state, .paused)
+        XCTAssertNil(model.overview(id: created.id)?.next)
+    }
 }

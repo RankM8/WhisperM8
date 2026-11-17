@@ -465,8 +465,9 @@ extension AgentChatsView {
             // Pane mehr (vorher Overlay über der rechten oberen Pane).
             // Im Ticket-Modus fällt die Zeile weg (WM8-124): Nichts darin wirkt
             // auf das Board, und Board und Board-Chat bekommen den Platz. Den
-            // Weg zurück trägt der Kopf des Boards („← Chats · …“).
-            if isTicketsModeActive {
+            // Weg zurück trägt der Kopf des Boards („← Chats · …“). Ebenso beim
+            // Detail einer geplanten Aufgabe: Die Zeile gehörte dem verdeckten Chat.
+            if hidesChatContent {
                 EmptyView()
             } else if isGridActive, let entity = activeGridWorkspaceEntity {
                 gridWorkspaceStatusRow(entity: entity)

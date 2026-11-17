@@ -16,6 +16,13 @@ extension AgentWindowStore {
         scheduledTaskDetailIDs[windowID] = taskID
     }
 
+    /// Verdeckt etwas den gewählten Chat (Tickets oder Detail einer geplanten
+    /// Aufgabe)? Dann dürfen ⌘W, Controller, Diktat und die Statuszeile ihn
+    /// nicht ungesehen treffen (Prüfung WM8-110, M1/M2/K7).
+    func hidesChatContent(in windowID: UUID) -> Bool {
+        isTicketsMode(in: windowID) || scheduledTaskDetail(in: windowID) != nil
+    }
+
     func closeScheduledTask(in windowID: UUID) {
         guard scheduledTaskDetailIDs[windowID] != nil else { return }
         scheduledTaskDetailIDs[windowID] = nil

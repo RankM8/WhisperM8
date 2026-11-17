@@ -19,23 +19,24 @@ struct ScheduledTasksSidebarSection: View, Equatable {
     var onSelectTask: (UUID) -> Void = { _ in }
     /// `false` = Chat nicht gefunden (noch nicht eingelesen).
     var onOpenRun: (UUID) -> Bool = { _ in false }
-    var model: ScheduledTasksOverviewModel = .shared
+    var model: ScheduledTasksOverviewModel
 
     @AppStorage(PreferenceKeys.scheduledTasksEnabled) private var enabled = false
     @AppStorage("scheduledTasksSectionCollapsed") private var collapsed = false
     @State private var expandedTaskIDs: Set<UUID>
     @State private var editor: ScheduledTaskEditorTarget?
 
+    @MainActor
     init(selectedTaskID: UUID?, selectedRunSessionID: String?,
          projects: @escaping () -> [ScheduledTaskEditorProject] = { [] },
          onSelectTask: @escaping (UUID) -> Void = { _ in }, onOpenRun: @escaping (UUID) -> Bool = { _ in false },
-         model: ScheduledTasksOverviewModel = .shared, expandedTaskIDs: Set<UUID> = []) {
+         model: ScheduledTasksOverviewModel? = nil, expandedTaskIDs: Set<UUID> = []) {
         self.selectedTaskID = selectedTaskID
         self.selectedRunSessionID = selectedRunSessionID
         self.projects = projects
         self.onSelectTask = onSelectTask
         self.onOpenRun = onOpenRun
-        self.model = model
+        self.model = model ?? .shared
         _expandedTaskIDs = State(initialValue: expandedTaskIDs)
     }
 

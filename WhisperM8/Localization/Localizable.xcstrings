@@ -26694,16 +26694,6 @@
         }
       }
     },
-    "Bash, web, MCP and the tools that reach other sessions or the cloud (SendMessage, ListAgents, RemoteTrigger, CronCreate, CronDelete, PushNotification) stay blocked, even if the account allows them in its settings. Naming one opens it: Bash(…) also lets the account’s own Bash permissions apply, an mcp__… entry loads all of the account’s MCP servers.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bash, Web, MCP und die Werkzeuge, die andere Sitzungen oder die Cloud erreichen (SendMessage, ListAgents, RemoteTrigger, CronCreate, CronDelete, PushNotification), bleiben gesperrt, auch wenn das Konto sie in seinen Einstellungen erlaubt. Wer eines nennt, öffnet es: Bash(…) lässt auch die Bash-Freigaben des Kontos gelten, ein mcp__…-Eintrag lädt alle MCP-Server des Kontos."
-          }
-        }
-      }
-    },
     "Read, Glob, Grep, Edit and Skill. Reading covers the whole disk, not only the folder. Writing only in the project folder, never in .claude, .git or .mcp.json.": {
       "localizations": {
         "de": {
@@ -27170,6 +27160,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aufgaben stehen unten in der Seitenleiste unter „Geplant“, unter den Chats: anlegen mit +, eine öffnen für ihre Läufe. Die Kommandozeile geht auch: whisperm8 schedule add, list, run, pause und resume."
+          }
+        }
+      }
+    },
+    "Bash, web, MCP and the tools that reach other sessions, the cloud or other folders (SendMessage, ListAgents, RemoteTrigger, CronCreate, CronDelete, PushNotification, DesignSync, EnterWorktree, ExitWorktree) stay blocked, even if the account allows them in its settings. Naming one opens it: Bash(…) also lets the account’s own Bash permissions apply, an mcp__… entry loads all of the account’s MCP servers.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bash, Web, MCP und die Werkzeuge, die andere Sitzungen, die Cloud oder andere Ordner erreichen (SendMessage, ListAgents, RemoteTrigger, CronCreate, CronDelete, PushNotification, DesignSync, EnterWorktree, ExitWorktree), bleiben gesperrt, auch wenn das Konto sie in seinen Einstellungen erlaubt. Wer eines nennt, öffnet es: Bash(…) lässt auch die Bash-Freigaben des Kontos gelten, ein mcp__…-Eintrag lädt alle MCP-Server des Kontos."
           }
         }
       }

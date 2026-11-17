@@ -9,7 +9,8 @@ struct ScheduledTaskEditorSheet: View {
         /// Kontonamen, `main` zuerst. Liest `~/.claude-profiles` — nur abseits des Main Threads.
         var loadAccounts: @Sendable () -> [String]
         var loginEndsAt: @MainActor (String) -> Date?
-        var directoryExists: (String) -> Bool
+        /// Dateisystem-Abfrage: nur abseits des Main Threads aufrufen.
+        var directoryExists: @Sendable (String) -> Bool
         var chooseFolder: @MainActor () -> String?
         var save: @MainActor (ScheduledTaskDraft, UUID?) async -> Result<ScheduledTask, ScheduledTaskSaveError>
         var remove: @MainActor (UUID) async -> String?
@@ -299,7 +300,7 @@ struct ScheduledTaskEditorSheet: View {
                 TextField("", text: $form.extraToolsText, prompt: Text(verbatim: "Bash(whisperm8 tickets *), mcp__linear__get_issue"))
                     .textFieldStyle(.roundedBorder)
             }
-            hint("Bash, web, MCP and the tools that reach other sessions or the cloud (SendMessage, ListAgents, RemoteTrigger, CronCreate, CronDelete, PushNotification) stay blocked, even if the account allows them in its settings. Naming one opens it: Bash(…) also lets the account’s own Bash permissions apply, an mcp__… entry loads all of the account’s MCP servers.")
+            hint("Bash, web, MCP and the tools that reach other sessions, the cloud or other folders (SendMessage, ListAgents, RemoteTrigger, CronCreate, CronDelete, PushNotification, DesignSync, EnterWorktree, ExitWorktree) stay blocked, even if the account allows them in its settings. Naming one opens it: Bash(…) also lets the account’s own Bash permissions apply, an mcp__… entry loads all of the account’s MCP servers.")
         }
     }
 
@@ -350,22 +351,34 @@ struct ScheduledTaskEditorSheet: View {
 
     private func save() {
         let others = existing.filter { $0.id != target.task?.id }
-        if let problem = form.problem(others: others, accounts: accounts, directoryExists: dependencies.directoryExists) {
-            error = problem
-            return
-        }
-        let draft: ScheduledTaskDraft
-        switch form.draft(original: target.task) {
-        case .success(let value): draft = value
-        case .failure(let failure): error = failure.message; return
-        }
-        if let task = target.task, draft.isEmpty {
-            onSaved(task)
-            dismiss()
-            return
-        }
+        let form = form
+        let accounts = accounts
+        let exists = dependencies.directoryExists
         isSaving = true
         Task {
+            // Der Ordner wird abseits des Main Threads geprüft (Netzlaufwerke).
+            let directory = ScheduledTaskValidation.normalizedDirectory(form.directory)
+            let directoryOK = form.directory.isEmpty
+                ? false : await Task.detached(priority: .userInitiated) { exists(directory) }.value
+            if let problem = form.problem(others: others, accounts: accounts, directoryExists: { _ in directoryOK }) {
+                error = problem
+                isSaving = false
+                return
+            }
+            let draft: ScheduledTaskDraft
+            switch form.draft(original: target.task) {
+            case .success(let value): draft = value
+            case .failure(let failure):
+                error = failure.message
+                isSaving = false
+                return
+            }
+            if let task = target.task, draft.isEmpty {
+                isSaving = false
+                onSaved(task)
+                dismiss()
+                return
+            }
             let result = await dependencies.save(draft, target.task?.id)
             isSaving = false
             switch result {

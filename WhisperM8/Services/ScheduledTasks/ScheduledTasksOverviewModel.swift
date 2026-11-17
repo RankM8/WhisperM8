@@ -128,11 +128,29 @@ final class ScheduledTasksOverviewModel {
             } else {
                 task = try await scheduler.add(draft)
             }
+            insertOrReplace(task)
             afterChange()
             return .success(task)
         } catch {
             return .failure(ScheduledTaskSaveError(message: error.localizedDescription))
         }
+    }
+
+    /// Neue oder geänderte Aufgabe sofort zeigen, bis das Laden nachzieht:
+    /// Sonst stünde nach dem Anlegen kurz „gibt es nicht mehr“ im Detail.
+    func insertOrReplace(_ task: ScheduledTask, now: Date = Date(), calendar: Calendar = .current) {
+        var overviews = snapshot.overviews
+        let runs = overviews.first { $0.id == task.id }?.runs ?? []
+        let next = task.paused ? nil : ScheduledTaskCalendar.nextOccurrence(of: task.schedule, after: now, calendar: calendar)
+        let overview = ScheduledTaskOverview(task: task, next: next, runs: runs,
+                                             state: ScheduledTaskOverview.state(paused: task.paused, runs: runs))
+        if let index = overviews.firstIndex(where: { $0.id == task.id }) {
+            overviews[index] = overview
+        } else {
+            overviews.append(overview)
+        }
+        snapshot.overviews = overviews
+        hasLoaded = true
     }
 
     private func perform(_ body: (ScheduledTaskScheduler) async throws -> String?) async -> String? {
