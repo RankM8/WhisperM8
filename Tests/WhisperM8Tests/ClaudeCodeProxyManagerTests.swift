@@ -677,6 +677,51 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         XCTAssertEqual(launch?["CCP_CODEX_TRANSPORT"], "websocket")
     }
 
+    /// WM8-133: Zusatzkonten laufen mit HOME = Profilordner. Der Proxy muss
+    /// den Codex-Katalog trotzdem dort finden, wo auch die App ihn liest.
+    func testProfileInstanceGetsCodexHomeDespiteProfileHome() throws {
+        var launch: [String: String]?
+        let manager = makeManager(
+            reachability: { port in port == 18_775 && launch != nil },
+            launcher: { _, _, environment in
+                launch = environment
+                return Self.processHandle()
+            },
+            environment: { ["PATH": "/bin"] },
+            retryAttempts: 1
+        )
+        manager.mainPortResolver = { 18_765 }
+        manager.portAvailabilityResolver = { _ in true }
+        manager.profileEnvironmentResolver = { _ in
+            ["CCP_CONFIG_DIR": "/profiles/zweit", "HOME": "/profiles/zweit"]
+        }
+        manager.storedAccountIDResolver = { _ in "acct-zweit" }
+        manager.codexHomeResolver = { "/Users/x/.codex" }
+
+        try manager.ensureRunning(profile: "zweit").get()
+        XCTAssertEqual(launch?["HOME"], "/profiles/zweit")
+        XCTAssertEqual(launch?["CODEX_HOME"], "/Users/x/.codex")
+    }
+
+    /// Proxy und App müssen dieselbe `models_cache.json` lesen — ein
+    /// geerbtes `CODEX_HOME` aus der Login-Shell wird deshalb überschrieben.
+    func testInheritedCodexHomeIsReplacedByAppPath() throws {
+        var launch: [String: String]?
+        let manager = makeManager(
+            reachability: { _ in launch != nil },
+            launcher: { _, _, environment in
+                launch = environment
+                return Self.processHandle()
+            },
+            environment: { ["PATH": "/bin", "CODEX_HOME": "/eigenes/codex"] },
+            retryAttempts: 1
+        )
+        manager.codexHomeResolver = { "/Users/x/.codex" }
+
+        try manager.ensureRunning(port: 18_765).get()
+        XCTAssertEqual(launch?["CODEX_HOME"], "/Users/x/.codex")
+    }
+
     func testInstanceOriginForMainDistinguishesSelfStartedExternalAndNotRunning() throws {
         var externalReachable = false
         var launched = false
@@ -1192,6 +1237,8 @@ final class ClaudeCodeProxyManagerTests: XCTestCase {
         manager.storedAccountIDResolver = { _ in nil }
         manager.profilesEnabledResolver = { true }
         manager.transcriptionsAPIEnabledResolver = { true }
+        // Kein echtes `~/.codex` in den Env-Vergleichen; eigene Tests setzen es.
+        manager.codexHomeResolver = { nil }
         // Heutiger Weg (Labs-Schalter aus), unabhängig von den Defaults der Maschine.
         manager.routerModeResolver = { .inApp }
         return manager

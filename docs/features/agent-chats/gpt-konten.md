@@ -1,6 +1,6 @@
 ---
 status: aktiv
-stand: 2026-11-05
+stand: 2026-11-18
 feature: GPT-Konten (mehrere ChatGPT-Konten im GPT-Backend)
 ---
 
@@ -189,6 +189,54 @@ Login gleichzeitig.
 | `defaults write com.whisperm8.app gptAccountProfilesEnabled -bool NO` | Konto-Profile aus: ein Proxy, ein Konto (der Default-Store), Stempel werden beim Start ignoriert, der Router ignoriert den Header. Die Settings-Seite zeigt wieder die alte Sektion „ChatGPT-Konto" mit dem einzelnen Device-Login, das Kontextmenü „GPT-Konto" entfällt, `main` läuft wieder ohne `CCP_CONFIG_DIR`. |
 | Schalter „GPT-Backend aktivieren" (Settings → GPT-Backend) | Aus: alle Claude-Chats verbinden sich direkt mit Anthropic, GPT-Stempel vorhandener Sessions bleiben ungenutzt. |
 
+## Neue Modelle und Proxy-Version
+
+Ein GPT-Modell erscheint in WhisperM8 nur, wenn es der Codex-Katalog
+(`~/.codex/models_cache.json`) **und** der laufende Proxy (`GET /v1/models`)
+kennen. Bis v0.1.47 hatte der Proxy eine fest eingebaute Modellliste, jedes
+neue Modell brauchte also ein Proxy-Update. Ab v0.1.48 (Upstream #130)
+ergänzt der Proxy diese Liste zur Laufzeit aus `$CODEX_HOME/models_cache.json`,
+sonst aus `$HOME/.codex`. Aufgenommen werden Einträge mit
+`supported_in_api: true`, gelistet werden nur die mit `visibility: list`.
+
+Zusatzkonten laufen mit `HOME` = Profilordner (siehe unten) und fänden dort
+keinen Katalog. Deshalb setzt `launchEnvironment(forProfile:)` für jede
+selbst gestartete Instanz `CODEX_HOME` auf das `~/.codex` der App. Das ist
+dieselbe Datei, die auch Picker und `CodexModelCatalogWatcher` lesen. Ein in
+der Login-Shell gesetztes `CODEX_HOME` wird dafür bewusst überschrieben, sonst
+läsen Proxy und App verschiedene Kataloge. Ohne diese Zeile böte die App ein neues Modell
+an (die Modellliste kommt vom main-Proxy), die Instanz des Zusatzkontos
+lehnte es aber als unbekannt ab.
+
+**Stand 18.11.2026 (WM8-133, GPT 6.2 Sol und Astra):** v0.1.48 gibt es nur
+als Tag, nicht als Release mit Programmdatei. Sie wird deshalb aus dem Tag
+gebaut und von Hand in `~/Library/Application Support/WhisperM8/bin/`
+gelegt, zusammen mit dem Versionsstempel `claude-code-proxy.version` =
+`0.1.48`. Das Auto-Update vergleicht `releases/latest` mit diesem Stempel
+und installiert nur echte Upgrades, setzt eine 0.1.48 also nicht auf 0.1.47
+zurück. **Ohne Stempel** gälte das Binary als nicht installiert, und das
+Auto-Update legte beim nächsten App-Start 0.1.47 darüber. Erscheint später
+ein Release ab 0.1.49, ersetzt es die selbst gebaute Datei wie gewohnt.
+Die bekannte Version für die Ersteinrichtung bleibt 0.1.42, weil nur echte
+Releases mit Prüfsumme gepinnt werden.
+
+Welche Modelle WhisperM8 dann anbietet, folgt ohne Codeänderung aus dem
+Katalog: 6.2 Sol (Standardfenster 500k) und 6.2 Astra (272k) gehören mit
+`max_context_window` 872k zur 1M-Klasse und tragen das 900k-Profil; beide
+haben die Fast-Stufe. `auto` zeigt danach auf `gpt-6.2-sol` (höchste
+Version, kleinste `priority`). Das 900k-Profil ist für 6.2 bisher nicht
+gemessen (bei GPT 6 Astra: 905.911 Tokens am 06.09.2026). Die
+Statistik-Preistabelle (`ModelPricing`) kennt 6.2 noch nicht, solche Chats
+erscheinen dort ohne Preis.
+
+Der Austausch wirkt erst, wenn jede Instanz mit der neuen Datei neu
+gestartet ist. Der Proxy wird zur Laufzeit nie neu gestartet. Mit „Neustart
+ohne Chatverlust“ übernimmt die App nach dem Neustart lebende Proxys aus
+dem Register (`gpt-proxies.json`), und der Waisen-Guard ersetzt sie nicht.
+Eine so übernommene Instanz läuft also mit der alten Version weiter, bis
+sie gestoppt wird (Einstellungen → GPT-Backend → „Proxy stoppen“, nur wenn
+gerade kein GPT-Chat arbeitet).
+
 ## Bekannte Grenzen
 
 - **Limit-Anzeige kann leer bleiben.** Die Balken stammen vom
@@ -262,7 +310,7 @@ Inkognito-Fenster, Konto anlegen, Konto aktivieren, Abmelden, Entfernen,
 Wochenlimit, Kontingent, `wham/usage`, Plan-Badge, Pro Lite, Limit erschöpft,
 Token veraltet, Usage-Popover, Statuszeile, `⇄gpt`, Kontextmenü GPT-Konto,
 Session-Stempel, `gptProfileName`, `X-WhisperM8-GPT-Profile`,
-`ANTHROPIC_CUSTOM_HEADERS`, Mix-Router, Router-Port, Backend-Port,
+`ANTHROPIC_CUSTOM_HEADERS`, `CODEX_HOME`, `models_cache.json`, Proxy v0.1.48, GPT 6.2, Mix-Router, Router-Port, Backend-Port,
 Proxy-Instanz, 503, 429, `gptAccountProfilesEnabled`,
 `claudeGPTBackendEnabled`, `GPTAccountProfiles`, `GPTAccountsSection`,
 `ClaudeCodeProxyManager`, `ClaudeGPTMixRouter`, `CodexUsageFetcher`,

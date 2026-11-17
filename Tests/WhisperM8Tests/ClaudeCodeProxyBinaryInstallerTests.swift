@@ -279,6 +279,26 @@ final class ClaudeCodeProxyBinaryInstallerTests: XCTestCase {
         }
     }
 
+    /// WM8-133: Eine selbst gebaute 0.1.48 (Tag ohne Release) mit Stempel
+    /// darf das Auto-Update nicht auf das ältere `releases/latest` zurücksetzen.
+    func testAutoUpdateKeepsNewerSelfBuiltBinary() async throws {
+        try XCTSkipUnless(ClaudeCodeProxyBinaryInstaller.autoUpdateEnabled, "Auto-Update per Defaults aus")
+        let requested = RequestLog()
+        let installer = makeInstaller { url in
+            requested.append(url)
+            return Data(#"{"tag_name":"v0.1.47"}"#.utf8)
+        }
+        try FileManager.default.createDirectory(at: installer.directory, withIntermediateDirectories: true)
+        try Data("#!/bin/sh\n".utf8).write(to: installer.binaryURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: installer.binaryURL.path)
+        try "0.1.48".write(to: installer.versionStampURL, atomically: true, encoding: .utf8)
+
+        await ClaudeCodeProxyManager.autoUpdateManagedBinary(installer: installer)
+
+        XCTAssertEqual(requested.urls.map(\.lastPathComponent), ["latest"])
+        XCTAssertEqual(installer.installedManagedVersion(), "0.1.48")
+    }
+
     // MARK: Release-URLs
 
     func testAssetURLsFollowReleaseNamingScheme() {
@@ -291,5 +311,21 @@ final class ClaudeCodeProxyBinaryInstallerTests: XCTestCase {
             installer.checksumSidecarURL(version: "0.1.42").absoluteString,
             "https://github.com/raine/claude-code-proxy/releases/download/v0.1.42/claude-code-proxy-darwin-arm64.sha256"
         )
+    }
+}
+
+/// Merkt sich die angefragten URLs des Fake-Downloaders (läuft async).
+private final class RequestLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: [URL] = []
+
+    var urls: [URL] {
+        lock.lock(); defer { lock.unlock() }
+        return stored
+    }
+
+    func append(_ url: URL) {
+        lock.lock(); defer { lock.unlock() }
+        stored.append(url)
     }
 }
