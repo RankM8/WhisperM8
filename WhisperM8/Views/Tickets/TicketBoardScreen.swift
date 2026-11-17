@@ -122,6 +122,11 @@ final class TicketBoardController {
     @ObservationIgnored private var chatsTask: Task<Void, Never>?
     @ObservationIgnored private var isVisible = false
     @ObservationIgnored private var commentsTask: Task<Void, Never>?
+    /// Ticket von außen, das die Triage zeigen soll, sobald das Board seines
+    /// Projekts steht (WM8-131).
+    @ObservationIgnored private var pendingOpen: TicketOpenRequest?
+    /// Uhr für die Frist des Wunsches; Tests ersetzen sie.
+    @ObservationIgnored var now: () -> Date = Date.init
 
     init(environment: TicketBoardEnvironment) {
         self.environment = environment
@@ -163,6 +168,39 @@ final class TicketBoardController {
             guard !Task.isCancelled else { return }
             self.viewModel.setComments(load, ticketID: ticket.id)
         }
+    }
+
+    // MARK: Ticket von außen (WM8-131)
+
+    /// Zeigt das Ticket in der Triage, sobald das Board des Projekts steht:
+    /// sofort, wenn es schon steht, sonst nach dem Abruf. Ein neuer Wunsch
+    /// ersetzt den alten.
+    func open(_ request: TicketOpenRequest) {
+        pendingOpen = request
+        applyPendingOpen()
+    }
+
+    /// Der Nutzer hat die Tickets verlassen, bevor das Board stand: Später soll
+    /// nichts mehr aufspringen.
+    func cancelPendingOpen() {
+        pendingOpen = nil
+    }
+
+    var hasPendingOpen: Bool { pendingOpen != nil }
+
+    private func applyPendingOpen() {
+        guard let pending = pendingOpen else { return }
+        guard pending.expires > now() else {
+            pendingOpen = nil
+            return
+        }
+        guard hasModel, phase == .ready, shownProject == pending.projectPath, let active else { return }
+        pendingOpen = nil
+        // Steht es im Abzug, gilt dieser Eintrag (mit den Chats des Abgleichs).
+        let entry = viewModel.presentation.entry(key: pending.ticket.key)
+            ?? TicketBoardBuilder.entry(for: pending.ticket, chats: builtWith ?? [], rule: active.rule,
+                                        viewerID: active.store.snapshot?.viewerID)
+        viewModel.openFromOutside(entry)
     }
 
     /// Die Ansicht ist sichtbar, oder das Projekt hat gewechselt.
@@ -263,6 +301,7 @@ final class TicketBoardController {
                            isLoading: !unavailable && viewID != nil && viewID.flatMap { store.viewTickets[$0] } == nil,
                            isUnavailable: unavailable)
         match(snapshot, projectPath: active.projectPath, rule: active.rule)
+        applyPendingOpen()
     }
 
     /// Gleicht den Abzug mit den Chats ab, wenn einer von beiden neu ist. Den
@@ -292,6 +331,7 @@ final class TicketBoardController {
             self.viewModel.update(model)
             self.hasModel = true
             if self.phase != .ready { self.phase = .ready }
+            self.applyPendingOpen()
         }
     }
 
@@ -321,6 +361,18 @@ final class TicketBoardController {
             self.match(snapshot, projectPath: active.projectPath, rule: active.rule)
         }
     }
+}
+
+/// Ticket von außen (`whisperm8 tickets open`, WM8-131), das die Triage zeigen
+/// soll, sobald das Board seines Projekts steht.
+struct TicketOpenRequest: Equatable {
+    /// Wie Linear es eben geliefert hat; der Abzug des Boards hat Vorrang.
+    var ticket: Ticket
+    /// Projekt der App (Pfad, wie die Ansicht ihn bekommt).
+    var projectPath: String
+    /// Danach verfällt der Wunsch: Ein Board, das erst viel später steht, soll
+    /// nicht unvermittelt ein Ticket aufschlagen.
+    var expires: Date
 }
 
 /// Ansicht und Abruf, für die zuletzt abgeglichen wurde.

@@ -9,6 +9,10 @@ enum TicketTriageSource: Equatable {
     case lane(statusID: String)
     /// Die Liste (alle sichtbaren Tickets in ihrer Reihenfolge).
     case list
+    /// Ein Ticket von außen (`whisperm8 tickets open`, WM8-131), das in der
+    /// gezeigten Liste nicht steht: erledigt, in einer anderen Ansicht oder
+    /// in einer zugeklappten Gruppe. Die Liste links hat nur dieses Ticket.
+    case single(key: String)
 }
 
 /// Die offene Triage: Liste links, gewähltes Ticket groß.

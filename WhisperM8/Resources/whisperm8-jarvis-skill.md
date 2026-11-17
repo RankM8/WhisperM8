@@ -695,6 +695,10 @@ die Tickets zeigen die Arbeit. Du hältst beides deckungsgleich.
   ein Agent beteiligt war. Was das Ticket-Werkzeug selbst anhängt (die
   Verknüpfung „Chat: …“, „Festgehalten von“ bei Entscheidungen), bleibt:
   Board und Ansichten im Ticket-System brauchen es.
+- **Fragst du den User zu einem Ticket, öffne es vorher mit
+  `whisperm8 tickets open <Ticket>`.** Das zeigt ihm das Ticket groß im
+  Ticket-Board der App, während er deine Frage liest. Es ändert nichts und
+  schreibt in keinen Chat.
 - **Was auf den User wartet, ist als solches markiert** und ihm zugewiesen.
   Prüflisten für Handtests stehen als Kästchen im Ticket, nicht nur in
   deiner Meldung.

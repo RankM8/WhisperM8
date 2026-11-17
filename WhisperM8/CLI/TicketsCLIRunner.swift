@@ -96,6 +96,10 @@ enum TicketsCLIRunner {
             return Output(exitCode: report.allSatisfy(\.ok) ? TicketsCLIExit.ok : TicketsCLIExit.unavailable,
                           stdout: TicketsCLIFormatter.doctor(report, json: asJSON))
         }
+        // Zeigen macht die App; die Kommandozeile reicht nur die Nummer weiter (WM8-131).
+        if case .open(let key, let asJSON) = arguments {
+            return TicketsOpenCommand.execute(key: key, json: asJSON, send: env.openInApp)
+        }
         let access = Access(env: env, isWrite: arguments.isWrite, allowOther: otherWorkspace)
         do {
             let text = try await run(arguments, env, access)
@@ -397,6 +401,10 @@ enum TicketsCLIRunner {
         case .doctor(let json):
             // Wird in `execute` behandelt (Bericht immer nach stdout).
             return TicketsCLIFormatter.doctor(await doctor(env), json: json)
+
+        case .open(let key, let json):
+            // Wird in `execute` behandelt (die App zeigt, nicht Linear).
+            return TicketsOpenCommand.execute(key: key, json: json, send: env.openInApp).stdout
         }
     }
 

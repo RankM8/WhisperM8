@@ -1,6 +1,6 @@
 ---
 status: aktiv (Kern, Kommandozeile, Skill, Einstellungen und die lesende Ansicht in der App, Stufe 1)
-updated: 2026-11-16
+updated: 2026-11-17
 ---
 
 # Tickets: Linear und die Chats, die daran arbeiten
@@ -20,7 +20,8 @@ Tickets ändern, gibt es nicht. Stufe 1: [`../plans/ticket-board.md`](../plans/t
 
 - **Die Kommandozeile** liest und schreibt. Jeder Schreibzugriff auf Linear kommt aus einem `tickets`-Befehl.
 - **Die App** liest nur, und nur bei eingeschaltetem Labs-Schalter `ticketBoardEnabled` (ab Werk aus): für die
-  Ticket-Ansicht das Board eines Teams und ein Ticket, für die Einrichtung das Konto und die Teams eines Keys.
+  Ticket-Ansicht das Board eines Teams und ein Ticket, für `tickets open` das eine Ticket, für die Einrichtung das
+  Konto und die Teams eines Keys.
   Sie ändert in Linear nichts. Schalter aus heißt: keine Verbindung zu `api.linear.app`, kein Griff in den
   Schlüsselbund.
 - **Abseits des Main Threads:** Der Key wird über einen blockierenden Kindprozess gelesen. In der App läuft das
@@ -42,6 +43,7 @@ Tickets ändern, gibt es nicht. Stufe 1: [`../plans/ticket-board.md`](../plans/t
 | Wer sitzt woran | `tickets board` |
 | Gefiltert | `tickets list --mine`, `--unassigned`, `--person NAME`, `--no-agent`, `--with-agent`, `--project`, `--status` |
 | Ein Ticket | `tickets show WM8-12` |
+| Ticket in der App zeigen | `tickets open WM8-12` (siehe „Ticket von außen öffnen“) |
 | Chat ans Ticket | `tickets link WM8-12`, `tickets done WM8-12 --built "…" --status "Merge-bereit"`, `tickets unlink WM8-12` |
 | Status und Text | `tickets status`, `tickets note` (Stand-Zeile), `tickets comment` |
 | Entscheidung festhalten | `tickets decide WM8-12 --question "…" --option "A" --option "B" --chosen "A"` |
@@ -391,6 +393,35 @@ in [`../design/ticket-board/`](../design/ticket-board/).
   oder Options „Ticket-Board WM8“, zurück mit L2 getippt. Einzelheiten in
   [controller.md](controller.md#ticket-board). ⌃⌘Pfeil wechselt den Fokus im verdeckten Raster nicht.
 - **Fenster schließen:** gibt Modus und Stand der Ticket-Ansicht dieses Fensters frei.
+
+### Ticket von außen öffnen (`tickets open`, WM8-131)
+
+`whisperm8 tickets open WM8-12` zeigt ein Ticket in der App, etwa wenn ein Chat den Nutzer dazu fragt und er
+mitlesen soll. Die Kommandozeile reicht nur die Nummer über den Control-Socket weiter (`tickets.open`); prüfen
+und zeigen macht die App (`TicketOpenService`, `TicketOpenPresenter`). Auch die Adresse aus Linear geht
+(`https://linear.app/<workspace>/issue/WM8-12/…`).
+
+- **Erst prüfen, dann zeigen.** Ticket-Ansicht an, Nummer lesbar, Team eingerichtet, Projekt der App zum Team,
+  Ticket bei Linear ladbar (eine lesende Abfrage). Scheitert etwas, kommt die Meldung auf stderr, und in der App
+  ändert sich nichts. Exit: 1 Aufruf, 3 Ticket, Team oder Projekt unbekannt, 4 Ticket-Ansicht aus oder kein
+  Fenster, 5 App oder Linear nicht erreichbar, 6 Ausgang unklar.
+- **Welches Board:** das Projekt des Teams aus der Nummer, nach derselben Regel wie der Reiter „Tickets“ des
+  Controllers (`TicketTeamDirectory`): das Projekt, dessen Ordner in `tickets.json` steht, sonst das erste
+  Projekt der App mit diesem Team. Leitet Linear eine alte Nummer auf ein anderes Team um, kommt eine Meldung
+  mit der neuen Nummer statt eines fremden Boards.
+- **Welches Fenster:** das zuletzt aktive Agent-Chats-Fenster (bei vorderer App das vorderste), sonst das
+  Hauptfenster, das dafür auch geöffnet wird. Es wechselt auf das Board dieses Projekts wie mit dem
+  Ticket-Knopf, die App kommt nach vorn, das Fenster wird Schlüsselfenster.
+- **Das Ticket groß:** Steht es in der gezeigten Liste (bzw. im Board in seiner Spalte), öffnet die Triage dort
+  wie mit einem Klick, J/K blättern weiter. Sonst (erledigt, in einer anderen Ansicht, in einer zugeklappten
+  Gruppe) zeigt die Triage es einzeln; Ansicht, Filter und Board/Liste bleiben, wie sie waren. Lädt das Board
+  erst, wartet der Wunsch bis zu 30 Sekunden; wer vorher zu den Chats zurückgeht, verwirft ihn.
+- **Nichts in einen Chat:** Der Befehl schickt nichts in einen Chat und schreibt nichts nach Linear. Hatte im
+  Fenster das Terminal des Board-Chats die Tastatur, gibt das Fenster sie ab: Wer gerade woanders tippte,
+  schreibt danach ins Board, nicht in den Board-Chat.
+- **Kosten:** im Ereignis-Pfad eine Suche über die Projekte der App und ein Lesen von `tickets.json` abseits des
+  Main Threads, dazu eine Abfrage bei Linear. Im Board nichts Neues je Zeichnen; das einzelne Ticket wird mit
+  der Chat-Liste des letzten Abgleichs verknüpft, ohne neuen Durchlauf über die Chats.
 
 ### Board-Chat (Seitenspalte, WM8-113)
 
@@ -767,6 +798,7 @@ Unteraufgaben, Aufklappen, Ansicht im Abgleich), `TicketBoardPresentationTests` 
 Liste, ⌘C, Prüfung der Regel), `TicketTeamRuleTests`
 (Regel je Team, Spalten nach Status, „Wartet auf mich“, Befehl `setup --status`),
 `TicketBoardControllerTests` (Zuordnung, Abruf nur bei sichtbarer Ansicht, Leerzustände, Projektwechsel, überholte
-Antworten), `AgentWindowStoreTicketsModeTests` (Umschalter je Fenster, Rückkehr zu den Chats, Schnappschuss für
+Antworten), `TicketOpenTests` (`tickets open`: Nummer und Adresse, Team → Projekt, nichts offen bei Fehlern,
+Fenster, Triage einzeln oder in der Liste, Wunsch bis das Board steht), `AgentWindowStoreTicketsModeTests` (Umschalter je Fenster, Rückkehr zu den Chats, Schnappschuss für
 den Controller) und `BoardChatRulesTests` (Jarvis wie die CLI, Wahl, Ort je Fenster, Breite, Speicher je Projekt), `BoardChatInputsTests` (Ziel nur sichtbar und vorn, Schutz bei Frage und Freigabe,
 Bezug, Texte) und `RecordingCoordinatorDeliveryTests` (Bezug vor dem Diktat, Umlenken nur vom vorderen Programm). Bilder des Board-Chats: `make snapshots ONLY=board-chat`. Was nur von Hand prüfbar ist, steht als Liste im Plan unter „Tests und Abnahme“.

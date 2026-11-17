@@ -185,6 +185,18 @@ enum TicketBoardBuilder {
         return model
     }
 
+    /// Ein einzelnes Ticket wie im Abzug, auch ein erledigtes: für ein Ticket
+    /// von außen, das im Abzug nicht steht (WM8-131). `chats` ist die Liste
+    /// des letzten Abgleichs; es wird nicht neu über die Chats gelaufen.
+    static func entry(for ticket: Ticket, chats: [TicketChat], rule: TicketTeamRule, viewerID: String?) -> TicketBoardEntry {
+        let wanted = Set(ticket.activeLinks.map(\.chatID))
+        let chatsByID = Dictionary(chats.filter { wanted.contains($0.id) }.map { ($0.id, $0) },
+                                   uniquingKeysWith: { first, _ in first })
+        let agents = ticket.activeLinks.map { TicketAgent(link: $0, chat: chatsByID[$0.chatID]) }
+        return TicketBoardEntry(ticket: ticket, agents: agents, meaning: rule.meaning(of: ticket.status),
+                                waitsForMe: rule.waitsForMe(ticket, viewerID: viewerID))
+    }
+
     static func isSupervisor(_ chat: TicketChat) -> Bool {
         isSupervisor(title: chat.title)
     }

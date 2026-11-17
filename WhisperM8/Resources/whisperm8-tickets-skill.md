@@ -22,9 +22,14 @@ Hilfe: `whisperm8 tickets --help`.
 | Ein Punkt unter „Fertig, wenn“ ist erledigt | `whisperm8 tickets check ABC-12 2` (Nummer oder ein Stück des Textes; ohne Verweis zeigt der Befehl die Kästchen) |
 | Der Nutzer hat etwas entschieden | `whisperm8 tickets decide ABC-12 --question "…" --option "A" --option "B" --chosen "A"` |
 | Gebaut und geprüft, Branch wartet auf den Merge | `whisperm8 tickets done ABC-12 --built "was gebaut wurde" --commit abc1234 --not "was nicht dazugehört" --test "Schritt für den Handtest" --status "Merge-bereit"` |
+| Du fragst den Nutzer zu einem Ticket | vorher `whisperm8 tickets open ABC-12`: zeigt ihm das Ticket groß im Ticket-Board der App, damit er mitlesen kann |
 | Woran hänge ich | `whisperm8 tickets mine` |
 | Falsch verknüpft | `whisperm8 tickets unlink ABC-12` |
 
+- **Fragst du den Nutzer zu einem Ticket, öffne es vorher mit `tickets open`.** Der Befehl holt WhisperM8 nach
+  vorn und zeigt das Ticket im Board seines Projekts. Er ändert nichts in Linear und schreibt in keinen Chat.
+  Geht es nicht (Ticket-Ansicht aus, Team ohne Projekt), steht der Grund auf stderr; frag dann trotzdem und
+  nenn das Ticket mit Inhalt.
 - Meist hat dich der Supervisor beim Auftrag schon angehängt. Prüf es zu Beginn mit `tickets mine`; steht dein
   Ticket nicht da, häng dich selbst an (`link`). Doppelt schadet nicht.
 - `link` setzt ein Ticket, das noch nicht in Arbeit ist, auf „In Progress“. Mit `--no-status` bleibt der Status.

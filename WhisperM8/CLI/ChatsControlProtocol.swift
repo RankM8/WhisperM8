@@ -57,6 +57,9 @@ enum ChatsControlProtocol {
         // Abgabe beim Neustart: Aufbewahrer starten, je Chat ablösen und
         // abgeben, Schlüsselbund, COMMIT. Die App hat eigene Fristen darunter.
         case "app.handover": return 30
+        // Ticket öffnen (WM8-131): Einrichtung lesen, ein Ticket bei Linear
+        // holen (Schlüsselbund beim ersten Mal), Fenster öffnen.
+        case "tickets.open": return 30
         default: return 10
         }
     }

@@ -168,7 +168,7 @@ private struct TicketTriageList: View {
                             }
                         } else {
                             ForEach(triage.keys, id: \.self) { key in
-                                if let entry = model.presentation.entry(key: key) {
+                                if let entry = model.entry(key: key) {
                                     TicketTriageRow(entry: entry, depth: 0, isCurrent: key == triage.current, parentOutside: nil,
                                                     isNarrow: isNarrow, source: source, windowID: model.windowID) { model.selectInTriage(key) }
                                         .id(key)

@@ -8,6 +8,8 @@ enum TicketsCLIArguments: Equatable {
     case board(team: String?, all: Bool, json: Bool)
     case list(team: String?, filter: TicketsListFilter, json: Bool)
     case show(key: String, json: Bool)
+    /// Zeigt das Ticket im Ticket-Board der App (WM8-131); ändert nichts.
+    case open(key: String, json: Bool)
     case mine(chat: String?, json: Bool)
     case link(key: String, chat: String?, keepStatus: Bool)
     case done(key: String, chat: String?, status: String?, note: TicketsText?, force: Bool, summary: TicketsDoneSummary)
@@ -48,13 +50,13 @@ enum TicketsCLIArguments: Equatable {
         case .rule(let request): return !request.isShowOnly
         // Ohne Verweise zeigt `check` nur die Kästchen.
         case .check(_, let references, _, _): return !references.isEmpty
-        case .help, .board, .list, .show, .mine, .doctor: return false
+        case .help, .board, .list, .show, .open, .mine, .doctor: return false
         }
     }
 
     var ticketKey: String? {
         switch self {
-        case .show(let key, _), .link(let key, _, _), .done(let key, _, _, _, _, _), .unlink(let key, _), .status(let key, _, _),
+        case .show(let key, _), .open(let key, _), .link(let key, _, _), .done(let key, _, _, _, _, _), .unlink(let key, _), .status(let key, _, _),
              .note(let key, _), .comment(let key, _), .assign(let key, _), .label(let key, _, _), .decide(let key, _),
              .check(let key, _, _, _):
             return key
@@ -147,6 +149,12 @@ enum TicketsCLIArguments: Equatable {
             return .list(team: team?.uppercased(), filter: filter, json: json)
         case "show":
             return .show(key: try key(try positional(1, "tickets show <Ticket>")[0]), json: json)
+        case "open":
+            let raw = try positional(1, "tickets open <Ticket>")[0]
+            guard let found = TicketOpenTarget.key(fromInput: raw) else {
+                throw ParseError.usage("„\(raw)“ ist keine Ticket-Nummer (erwartet z. B. ABC-12 oder die Adresse aus Linear)")
+            }
+            return .open(key: found, json: json)
         case "mine":
             let chat = try value("--chat")
             _ = try positional(0, "tickets mine [--chat REF] [--json]")
@@ -365,6 +373,14 @@ enum TicketsCLICommand {
                              [--no-agent | --with-agent] [--project VORHABEN]
                              [--status STATUS] [--team T] [--json]
       whisperm8 tickets show <Ticket> [--json]
+      whisperm8 tickets open <Ticket> [--json]
+                Zeigt das Ticket in der App: holt WhisperM8 nach vorn, öffnet
+                im zuletzt aktiven Fenster das Ticket-Board des Projekts, zu
+                dessen Team es gehört, und das Ticket groß. Fragst du den Nutzer
+                zu einem Ticket, öffne es vorher damit. Ändert nichts in Linear
+                und schreibt in keinen Chat. Auch die Adresse aus Linear geht.
+                Exit: 3 Ticket, Team oder Projekt unbekannt, 4 Ticket-Ansicht
+                aus oder kein Fenster, 5 App oder Linear nicht erreichbar.
       whisperm8 tickets mine [--chat REF] [--json]     Tickets dieses Chats
 
     CHAT UND TICKET
@@ -516,10 +532,14 @@ struct TicketsCLIEnvironment {
     var now: () -> Date
     /// Warten zwischen zwei Versuchen (`tickets link` nach `chats new`); Tests zählen nur.
     var sleep: (TimeInterval) async -> Void = { try? await Task.sleep(nanoseconds: UInt64($0 * 1_000_000_000)) }
+    /// `tickets open` (WM8-131): Die laufende App zeigt das Ticket; Tests ersetzen das.
+    var openInApp: (String) -> TicketsOpenReply = { _ in
+        .refused(exitCode: TicketsCLIExit.unavailable, message: "WhisperM8 ist nicht erreichbar.")
+    }
 
     static var live: TicketsCLIEnvironment {
         let configStore = TicketConfigStore.live
-        return TicketsCLIEnvironment(
+        var environment = TicketsCLIEnvironment(
             source: { LinearTicketSource(client: .live(workspace: $0)) },
             config: { configStore.load() },
             saveConfig: { try configStore.save($0) },
@@ -555,6 +575,8 @@ struct TicketsCLIEnvironment {
             fileExists: { FileManager.default.fileExists(atPath: $0) },
             now: Date.init
         )
+        environment.openInApp = TicketsOpenCommand.live
+        return environment
     }
 }
 
