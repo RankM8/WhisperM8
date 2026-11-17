@@ -10,6 +10,13 @@ struct AppPreferences {
 
     private let preferredLanguages: [String]
 
+    /// Einstellungen der App-Domain, auch aus der CLI: Deren `.standard` hängt
+    /// am Namen, unter dem sie gestartet wurde (Symlink `~/.local/bin/whisperm8`
+    /// liest die Domain „whisperm8“), und sähe Schalter der App nie (WM8-110).
+    static func appDomain() -> AppPreferences {
+        AppPreferences(defaults: UserDefaults(suiteName: AppInstance.defaultsDomain) ?? .standard)
+    }
+
     init(defaults: UserDefaults = .standard, preferredLanguages: [String] = Locale.preferredLanguages) {
         self.defaults = defaults
         self.preferredLanguages = preferredLanguages
