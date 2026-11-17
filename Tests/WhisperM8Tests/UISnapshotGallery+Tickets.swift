@@ -37,7 +37,7 @@ extension UISnapshotGallery {
         let size = CGSize(width: 760, height: 900)
         let on: [String: Any] = [PreferenceKeys.ticketBoardEnabled: true]
         return [
-            Fixture(name: "tickets-einstellungen-aus", size: CGSize(width: 760, height: 420)) {
+            Fixture(name: "tickets-einstellungen-aus", size: CGSize(width: 760, height: 640)) {
                 page(workspaces: [], mappings: [])
             },
             Fixture(name: "tickets-einstellungen-leer", size: CGSize(width: 760, height: 640), storage: on) {

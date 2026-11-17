@@ -140,7 +140,7 @@ extension AgentChatsView {
             return model.copyLink() ? .done : .rejected
         case .openInLinear:
             guard let url = model.detail?.url else { return .rejected }
-            NSWorkspace.shared.open(url)
+            LinearLinkOpener.live.openInLinear(url)
             return .done
         case .scroll(let lines):
             guard model.triage != nil else { return .nothing }

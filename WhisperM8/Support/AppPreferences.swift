@@ -561,6 +561,13 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.ticketBoardEnabled) }
     }
 
+    /// Wohin Linear-Links gehen (WM8-132): Ticket-Board, Linear-App oder Browser,
+    /// ab Werk Board. Auswahl in Einstellungen › Tickets.
+    var linearLinkTarget: LinearLinkTarget {
+        get { LinearLinkTarget(stored: defaults.string(forKey: Keys.linearLinkTarget)) }
+        nonmutating set { defaults.set(newValue.rawValue, forKey: Keys.linearLinkTarget) }
+    }
+
     /// Labs „Geplante Aufgaben“ (WM8-110): wiederkehrende `claude -p`-Läufe,
     /// gestartet von der laufenden App. Ab Werk aus; aus = kein Zeitgeber, kein
     /// Start, `whisperm8 schedule` ändert nichts. Schalter in Einstellungen › Labs.
@@ -1210,6 +1217,7 @@ enum PreferenceKeys {
     static let accountSwitchAfterTurnEnabled = "accountSwitchAfterTurnEnabled"
     static let restartKeepsChatsEnabled = "restartKeepsChatsEnabled"
     static let ticketBoardEnabled = "ticketBoardEnabled"
+    static let linearLinkTarget = "linearLinkTarget"
     static let scheduledTasksEnabled = "scheduledTasksEnabled"
     static let mcpAutoSyncEnabled = "mcpAutoSyncEnabled"
     static let mcpSyncExcludedServers = "mcpSyncExcludedServers"

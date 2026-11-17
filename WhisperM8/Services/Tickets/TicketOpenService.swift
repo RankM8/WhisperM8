@@ -31,7 +31,10 @@ struct TicketOpenService {
     static let disabledMessage =
         "Die Ticket-Ansicht ist aus. Einschalten: Einstellungen › Tickets › „Show tickets in Agent Chats“ (Labs)."
 
-    func open(input: String) async -> Outcome {
+    /// - Parameter workspace: Workspace aus einer Linear-Adresse (WM8-132). Ist
+    ///   das Team der Nummer in einem anderen Workspace eingerichtet, wäre es ein
+    ///   anderes Ticket gleicher Nummer: dann nicht öffnen.
+    func open(input: String, workspace expectedWorkspace: String? = nil) async -> Outcome {
         guard let key = TicketOpenTarget.key(fromInput: input) else {
             return .failed(.invalid, TicketOpenTarget.Failure.invalidKey(input).message)
         }
@@ -43,6 +46,10 @@ struct TicketOpenService {
         switch resolved {
         case .success(let found): board = found
         case .failure(let failure): return .failed(.notFound, failure.message)
+        }
+        if let expectedWorkspace, board.workspace.caseInsensitiveCompare(expectedWorkspace) != .orderedSame {
+            return .failed(.notFound, "\(key) liegt im Workspace \(expectedWorkspace.lowercased()), "
+                + "Team \(board.team) ist aber für \(board.workspace) eingerichtet.")
         }
         let context: TicketContext
         do {

@@ -530,11 +530,12 @@ struct TicketBoardScreen: View, Equatable {
 }
 
 extension TicketBoardActions {
-    /// Wege der App: Chat in den Vordergrund, Adresse im Browser, Einstellungen.
+    /// Wege der App: Chat in den Vordergrund, Linear-Adresse in die Linear-App
+    /// (Einstellung „Browser“: im Browser, WM8-132), Einstellungen.
     @MainActor static let live = TicketBoardActions(
         refresh: {},
         openChat: { WindowRequestCenter.shared.requestSessionFocus(sessionID: $0) },
-        openURL: { NSWorkspace.shared.open($0) },
+        openURL: { LinearLinkOpener.live.openInLinear($0) },
         openSettings: { WindowRequestCenter.shared.requestSettings(routeID: SettingsPage.tickets.rawValue) }
     )
 }
