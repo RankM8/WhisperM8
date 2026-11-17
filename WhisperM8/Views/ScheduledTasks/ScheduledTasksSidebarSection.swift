@@ -1,9 +1,11 @@
 import SwiftUI
 
-/// Abschnitt „Geplant“ ganz unten in der Seitenleiste (WM8-110, Entscheidung E1):
-/// zuklappbar wie Workspaces und Chats, je Aufgabe eine Zeile wie ein Chat,
-/// darunter ihre letzten drei Läufe zum Aufklappen. Ein Klick auf die Aufgabe
-/// öffnet ihr Detail, ein Klick auf einen Lauf seinen Chat.
+/// Abschnitt „Geplant“ fest unten in der Seitenleiste, über der Fußzeile
+/// (WM8-110; seit 17.11.2026 angeheftet statt am Ende der Chat-Liste, dort ging
+/// er unter). Zugeklappt eine Zeile, aufgeklappt höchstens `maxListHeight` hoch
+/// mit eigenem Scroll; die Chat-Liste scrollt darüber. Je Aufgabe eine Zeile wie
+/// ein Chat, darunter ihre letzten drei Läufe zum Aufklappen. Ein Klick auf die
+/// Aufgabe öffnet ihr Detail, ein Klick auf einen Lauf seinen Chat.
 ///
 /// Kosten im Renderpfad: Der Abschnitt beobachtet nur
 /// `ScheduledTasksOverviewModel` (ändert sich bei Termin, Lauf-Ende und Aktion)
@@ -15,6 +17,8 @@ struct ScheduledTasksSidebarSection: View, Equatable {
     let selectedTaskID: UUID?
     /// Externe Sitzung des gewählten Chats (klein geschrieben), für die Markierung des Laufs.
     let selectedRunSessionID: String?
+    /// Höchste Höhe der aufgeklappten Liste (`maxListHeight(sidebarHeight:)`).
+    let maxListHeight: CGFloat
     var projects: () -> [ScheduledTaskEditorProject] = { [] }
     var onSelectTask: (UUID) -> Void = { _ in }
     /// `false` = Chat nicht gefunden (noch nicht eingelesen).
@@ -25,14 +29,17 @@ struct ScheduledTasksSidebarSection: View, Equatable {
     @AppStorage("agentScheduledTasksSectionCollapsed") private var collapsed = false
     @State private var expandedTaskIDs: Set<UUID>
     @State private var editor: ScheduledTaskEditorTarget?
+    /// Gemessene Höhe der Liste; bis dahin 0, der Rahmen wächst mit.
+    @State private var listHeight: CGFloat = 0
 
     @MainActor
-    init(selectedTaskID: UUID?, selectedRunSessionID: String?,
+    init(selectedTaskID: UUID?, selectedRunSessionID: String?, maxListHeight: CGFloat = 240,
          projects: @escaping () -> [ScheduledTaskEditorProject] = { [] },
          onSelectTask: @escaping (UUID) -> Void = { _ in }, onOpenRun: @escaping (UUID) -> Bool = { _ in false },
          model: ScheduledTasksOverviewModel? = nil, expandedTaskIDs: Set<UUID> = []) {
         self.selectedTaskID = selectedTaskID
         self.selectedRunSessionID = selectedRunSessionID
+        self.maxListHeight = maxListHeight
         self.projects = projects
         self.onSelectTask = onSelectTask
         self.onOpenRun = onOpenRun
@@ -42,16 +49,34 @@ struct ScheduledTasksSidebarSection: View, Equatable {
 
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.selectedTaskID == rhs.selectedTaskID && lhs.selectedRunSessionID == rhs.selectedRunSessionID
+            && lhs.maxListHeight == rhs.maxListHeight
+    }
+
+    /// Etwa ein Drittel der Seitenleiste, höchstens 240 pt und mindestens
+    /// 120 pt, damit auch ein kleines Fenster zwei, drei Aufgaben zeigt.
+    /// Ungemessen (0) gilt die Obergrenze.
+    nonisolated static func maxListHeight(sidebarHeight: CGFloat) -> CGFloat {
+        guard sidebarHeight > 0 else { return 240 }
+        return min(240, max(120, (sidebarHeight / 3).rounded()))
     }
 
     var body: some View {
         if enabled {
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 0) {
+                Rectangle().fill(AgentTheme.border).frame(height: 1)
                 header(count: model.snapshot.overviews.count,
                        failed: model.snapshot.overviews.reduce(0) { $0 + ($1.state == .failed ? 1 : 0) })
-                if !collapsed { content(model) }
+                if !collapsed {
+                    // Eigener Scroll: so hoch wie die Liste, höchstens `maxListHeight`.
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 2) { content(model) }
+                            .padding(.bottom, 4)
+                            .onGeometryChange(for: CGFloat.self, of: { $0.size.height.rounded(.up) }) { listHeight = $0 }
+                    }
+                    .frame(height: min(listHeight, maxListHeight))
+                    .overlayScrollers()
+                }
             }
-            .padding(.top, 8)
             .task { model.loadIfNeeded() }
             .sheet(item: $editor) { target in
                 ScheduledTaskEditorSheet(target: target, projects: projects(), existing: model.snapshot.overviews.map(\.task)) { saved in
@@ -116,8 +141,7 @@ struct ScheduledTasksSidebarSection: View, Equatable {
         .foregroundStyle(AgentTheme.textTertiary)
         .padding(.leading, 14)
         .padding(.trailing, 8)
-        .padding(.top, 6)
-        .padding(.bottom, 2)
+        .padding(.vertical, 6)
     }
 
     // MARK: Inhalt

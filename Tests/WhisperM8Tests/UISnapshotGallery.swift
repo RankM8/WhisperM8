@@ -366,7 +366,7 @@ final class UISnapshotGallery: XCTestCase {
             + Self.sidebarFooterFixtures() + Self.claudeLoginFixtures() + Self.missingTranscriptFixtures()
             + Self.controllerFixtures() + Self.controllerXboxFixtures() + Self.controllerMenuCardFixtures() + Self.gridFixtures() + Self.dictationPillFixtures()
             + Self.unifiedPillFixtures() + Self.pillMorphFixtures() + Self.noticeBannerFixtures() + Self.workingCopyFixtures()
-            + Self.usageLimitFixtures() + Self.ticketSettingsFixtures() + Self.ticketBoardFixtures() + Self.boardChatFixtures() + Self.restartSettingsFixtures() + Self.scheduledTasksSettingsFixtures() + Self.scheduledTasksViewFixtures()
+            + Self.usageLimitFixtures() + Self.ticketSettingsFixtures() + Self.ticketBoardFixtures() + Self.boardChatFixtures() + Self.restartSettingsFixtures() + Self.scheduledTasksSettingsFixtures() + Self.scheduledTasksViewFixtures() + Self.scheduledTasksPinnedFixtures()
             + Self.sidebarSortedFixtures() + Self.tabWidthFixtures() + Self.sidebarTabBarFixtures()
     }
 

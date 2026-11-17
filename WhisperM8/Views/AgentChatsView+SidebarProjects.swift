@@ -154,3 +154,32 @@ extension AgentChatsView {
         }
     }
 }
+
+extension AgentChatsView {
+    /// „N weitere zeigen“ unter der flachen Liste; lädt in Schritten zu 50.
+    @ViewBuilder
+    func flatShowMoreButton(hiddenCount: Int) -> some View {
+        if hiddenCount > 0 {
+            let nextCount = min(50, hiddenCount)
+            Button {
+                flatVisibleSessionLimit += nextCount
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                    Text("Show \(nextCount) more")
+                        .font(.system(size: 11, weight: .medium))
+                    Spacer(minLength: 0)
+                    Text("\(hiddenCount) left")
+                        .font(.system(size: 11).monospacedDigit())
+                        .foregroundStyle(AgentTheme.textTertiary)
+                }
+                .foregroundStyle(AgentTheme.textSecondary)
+                .padding(.horizontal, 14)
+                .frame(height: 30)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+}

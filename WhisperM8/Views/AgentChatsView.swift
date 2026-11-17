@@ -107,6 +107,7 @@ struct AgentChatsView: View {
     }
     @State var searchText = ""
     @State var flatVisibleSessionLimit = 50
+    @State var sidebarHeight: CGFloat = 0 // Höhe der Seitenleiste, begrenzt „Geplant“ aufgeklappt
     @State var errorMessage: String?
     /// „Neuer Chat" ohne installierte CLI: geführter Installations-Leerzustand (LR-AU-022).
     @State var missingCLIPrompt: MissingCLIPrompt?
@@ -1400,28 +1401,7 @@ struct AgentChatsView: View {
                             }
                         }
 
-                        if snapshot.flatHiddenCount > 0 {
-                            let nextCount = min(50, snapshot.flatHiddenCount)
-                            Button {
-                                flatVisibleSessionLimit += nextCount
-                            } label: {
-                                HStack(spacing: 6) {
-                                    Image(systemName: "chevron.down")
-                                        .font(.system(size: 9, weight: .semibold))
-                                    Text("Show \(nextCount) more")
-                                        .font(.system(size: 11, weight: .medium))
-                                    Spacer(minLength: 0)
-                                    Text("\(snapshot.flatHiddenCount) left")
-                                        .font(.system(size: 11).monospacedDigit())
-                                        .foregroundStyle(AgentTheme.textTertiary)
-                                }
-                                .foregroundStyle(AgentTheme.textSecondary)
-                                .padding(.horizontal, 14)
-                                .frame(height: 30)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                        }
+                        flatShowMoreButton(hiddenCount: snapshot.flatHiddenCount)
                     } else if showChatList {
                         sidebarProjectGroups(
                             snapshot: snapshot,
@@ -1431,7 +1411,6 @@ struct AgentChatsView: View {
                             listProxy: listProxy
                         )
                     }
-                    scheduledTasksSidebarSection // Abschnitt „Geplant“ (WM8-110), blendet sich ohne Schalter aus
                 }
                 .padding(.vertical, 6)
                 .background(ControllerListScrollFollower(proxy: listProxy))
@@ -1444,9 +1423,10 @@ struct AgentChatsView: View {
             }
 
             Spacer(minLength: 0)
-
+            scheduledTasksSidebarSection // „Geplant“ fest über der Fußzeile (WM8-110), ohne Schalter nichts
             sidebarFooter
         }
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.height.rounded() }) { sidebarHeight = $0 }
         .background(AgentTheme.sidebar)
         .environment(\.agentChatsWindowID, windowID)
         .onAppear { refreshMissingTranscripts() }

@@ -14,13 +14,15 @@ extension AgentChatsView {
         windowStore.hidesChatContent(in: windowID)
     }
 
+    /// Fest unten in der Seitenleiste, über der Fußzeile (Entscheidung 17.11.2026).
     /// Kosten je Auswertung des Fensters: eine Wörterbuch-Abfrage und die
     /// schon gerechnete Auswahl; der Abschnitt selbst rechnet nur neu, wenn
-    /// sich eine der beiden Markierungen ändert (`.equatable()`).
+    /// sich eine der Markierungen oder die Höhe der Seitenleiste ändert (`.equatable()`).
     var scheduledTasksSidebarSection: some View {
         ScheduledTasksSidebarSection(
             selectedTaskID: scheduledTaskDetailID,
             selectedRunSessionID: selectedSession?.externalSessionID?.lowercased(),
+            maxListHeight: ScheduledTasksSidebarSection.maxListHeight(sidebarHeight: sidebarHeight),
             projects: { scheduledTaskEditorProjects },
             onSelectTask: { [windowStore, windowID] in windowStore.showScheduledTask($0, in: windowID) },
             onOpenRun: { openScheduledRunChat($0) }
