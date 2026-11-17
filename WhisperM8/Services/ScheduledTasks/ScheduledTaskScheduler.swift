@@ -33,6 +33,8 @@ actor ScheduledTaskScheduler {
         var isProcessAlive: (Int32, Date?) -> Bool
         /// Meldet das Ende eines Prozesses (auch eines fremden Kindes nach Neustart).
         var watchExit: (Int32, @escaping @Sendable () -> Void) -> Void
+        /// Ein Lauf ist fehlgeschlagen (Paket 3): Mitteilung.
+        var notifyFailure: (ScheduledTaskFailureNotice) -> Void = { _ in }
     }
 
     /// Fehler des Planers als Fälle (Prüfung WM8-110, K4): Die CLI bekommt
@@ -324,6 +326,11 @@ actor ScheduledTaskScheduler {
             record.sessionID = nil
             try? env.store.writeRecord(record, in: runDirectory)
             Logger.scheduledTasks.info("run_not_started task=\(task.shortID, privacy: .public) reason=\(reason.rawValue, privacy: .public)")
+            // Von Hand gestartet: Ansicht und CLI melden es sofort selbst.
+            if trigger != .manual, let notice = ScheduledTaskFailureNotice(
+                record: record, outcome: .notStarted(reason, message: message)) {
+                env.notifyFailure(notice)
+            }
             return record
         }
 
@@ -398,6 +405,9 @@ actor ScheduledTaskScheduler {
         guard let files = env.store.readRun(at: runDirectory) else { return }
         let outcome = ScheduledTaskRunEvaluator.outcome(of: files, isProcessAlive: { _, _ in false })
         Logger.scheduledTasks.info("run_ended run=\(runID, privacy: .public) outcome=\(outcome.label, privacy: .public)")
+        if let notice = ScheduledTaskFailureNotice(record: files.record, outcome: outcome) {
+            env.notifyFailure(notice)
+        }
     }
 
     private func reap(_ pid: Int32) {

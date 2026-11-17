@@ -47,7 +47,8 @@ struct ScheduledTasksSidebarSection: View, Equatable {
     var body: some View {
         if enabled {
             VStack(alignment: .leading, spacing: 2) {
-                header(count: model.snapshot.overviews.count)
+                header(count: model.snapshot.overviews.count,
+                       failed: model.snapshot.overviews.reduce(0) { $0 + ($1.state == .failed ? 1 : 0) })
                 if !collapsed { content(model) }
             }
             .padding(.top, 8)
@@ -62,7 +63,9 @@ struct ScheduledTasksSidebarSection: View, Equatable {
 
     // MARK: Kopf
 
-    private func header(count: Int) -> some View {
+    /// `failed`: Aufgaben, deren letzter Lauf fehlschlug. Steht immer da, auch
+    /// aufgeklappt — ein Fehlschlag soll sofort auffallen (Entwurf, Paket 3).
+    private func header(count: Int, failed: Int) -> some View {
         HStack(spacing: 5) {
             Button {
                 withAnimation(.easeOut(duration: 0.15)) { collapsed.toggle() }
@@ -79,6 +82,13 @@ struct ScheduledTasksSidebarSection: View, Equatable {
                     if collapsed, count > 0 {
                         Text("\(count)")
                             .font(.system(size: 11, weight: .bold).monospacedDigit())
+                    }
+                    if failed > 0 {
+                        Text("\(failed) failed")
+                            .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                            .foregroundStyle(AgentTheme.statusError)
+                            .lineLimit(1)
+                            .fixedSize()
                     }
                     Spacer(minLength: 0)
                 }
