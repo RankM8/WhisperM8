@@ -108,7 +108,7 @@ final class ScheduledTaskSchedulerTests: XCTestCase {
         XCTAssertEqual(args[args.firstIndex(of: "--permission-mode")! + 1], "dontAsk")
         XCTAssertEqual(Array(args.suffix(6)), ["--allowedTools", "Read", "Glob", "Grep", "Edit(/**)", "Skill"])
         let deny = args.firstIndex(of: "--disallowedTools")!
-        XCTAssertEqual(Array(args[(deny + 1)...(deny + 4)]), ["Bash", "WebFetch", "WebSearch", "mcp__*"],
+        XCTAssertEqual(Array(args[(deny + 1)...(deny + 5)]), ["Bash", "Monitor", "WebFetch", "WebSearch", "mcp__*"],
                        "Bash, Web und MCP ab Werk gesperrt, auch gegen Freigaben aus settings.json")
         XCTAssertTrue(args.contains("--strict-mcp-config"))
         let name = args[args.firstIndex(of: "--name")! + 1]
@@ -422,11 +422,12 @@ final class ScheduledTaskSchedulerTests: XCTestCase {
 
     func testCustomAllowOpensOnlyTheNamedFamily() {
         let bash = ScheduledTaskPermissions(access: .readOnly, extraTools: ["Bash(whisperm8 tickets *)"])
-        XCTAssertEqual(bash.disallowedTools, ["WebFetch", "WebSearch", "mcp__*"])
+        let protected = ScheduledTaskPermissions.protectedPaths
+        XCTAssertEqual(bash.disallowedTools, ["WebFetch", "WebSearch", "mcp__*"] + protected, "Bash öffnet auch Monitor")
         XCTAssertFalse(bash.allowsMCP)
 
         let mcp = ScheduledTaskPermissions(access: .projectWrite, extraTools: [" mcp__linear__get_issue", "WebSearch"])
-        XCTAssertEqual(mcp.disallowedTools, ["Bash", "WebFetch"])
+        XCTAssertEqual(mcp.disallowedTools, ["Bash", "Monitor", "WebFetch"] + protected)
         XCTAssertTrue(mcp.allowsMCP)
         let args = ScheduledTaskLauncher.claudeArguments(prompt: "x", sessionID: UUID(), name: nil, permissions: mcp)
         XCTAssertFalse(args.contains("--strict-mcp-config"), "MCP freigegeben: Server des Kontos laden")
@@ -434,6 +435,43 @@ final class ScheduledTaskSchedulerTests: XCTestCase {
 
         let bashPrefix = ScheduledTaskPermissions(access: .custom, extraTools: ["BashOutput"])
         XCTAssertEqual(bashPrefix.disallowedTools.first, "Bash", "Nur Bash oder Bash(…) öffnet Bash")
+
+        let monitor = ScheduledTaskPermissions(access: .projectWrite, extraTools: ["Monitor"])
+        XCTAssertEqual(monitor.disallowedTools, ["Bash", "WebFetch", "WebSearch", "mcp__*"] + protected,
+                       "--allow Monitor öffnet nur Monitor")
+    }
+
+    /// Prüfung 17.11.: Ein Lauf darf nichts schreiben, was der nächste Lauf
+    /// ausführt (Hooks, settings.local.json, Git-Hooks, MCP-Server) — auch
+    /// nicht, wenn eine eigene Liste oder das Konto Edit breiter freigibt.
+    func testRunsCannotWriteWhatTheNextRunExecutes() {
+        for permissions in [ScheduledTaskPermissions(access: .projectWrite),
+                            ScheduledTaskPermissions(access: .custom, extraTools: ["Edit", "Write", "Bash"])] {
+            let args = ScheduledTaskLauncher.claudeArguments(prompt: "x", sessionID: UUID(), name: nil,
+                                                             permissions: permissions)
+            let deny = args.firstIndex(of: "--disallowedTools")!
+            let denied = args[(deny + 1)...].prefix(while: { !$0.hasPrefix("--") })
+            for path in ["Edit(/.claude/**)", "Edit(/.git/**)", "Edit(/.mcp.json)"] {
+                XCTAssertTrue(denied.contains(path), "\(path) fehlt bei \(permissions.access)")
+            }
+        }
+    }
+
+    func testLatestStartedRunLooksOnlyAtTheNewestFolders() throws {
+        let store = ScheduledTaskStore(root: root.appendingPathComponent("support", isDirectory: true))
+        let taskID = UUID()
+        func write(_ at: Date, notStarted: ScheduledTaskRunRecord.NotStarted?) throws {
+            let record = ScheduledTaskRunRecord(
+                runID: ScheduledTaskRunRecord.makeRunID(now: at), taskID: taskID, taskName: "Probe",
+                sessionID: notStarted == nil ? UUID() : nil, account: "main", directory: "/tmp", trigger: .schedule,
+                slot: at, createdAt: at, pid: notStarted == nil ? 4100 : nil, notStarted: notStarted)
+            try store.writeRecord(record, in: store.runsDirectory(for: taskID).appendingPathComponent(record.runID))
+        }
+        let start = date("2026-11-10 08:00")
+        try write(start, notStarted: nil)
+        for hour in 1...3 { try write(start.addingTimeInterval(Double(hour) * 3600), notStarted: .loginExpired) }
+        XCTAssertEqual(store.latestStartedRun(for: taskID)?.record.slot, start)
+        XCTAssertNil(store.latestStartedRun(for: taskID, scanLimit: 3), "Nur die jüngsten Ordner, nicht alle")
     }
 
     func testAllowStartingWithDashIsRejected() async throws {

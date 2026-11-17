@@ -35,7 +35,8 @@ Die Rechnung ist rein und getestet: `ScheduledTaskCalendar` (`ScheduledTaskCalen
   da. Das gilt auch über einen App-Neustart, denn die App erkennt laufende Läufe an PID und Prozess-Startzeit
   aus `run.json` wieder.
 - Gezählt wird dabei immer der jüngste **gestartete** Lauf, nicht der jüngste Ordner: Einträge „übersprungen“
-  oder „verpasst“ haben keinen Prozess und liegen oft vor einem Lauf, der noch arbeitet.
+  oder „verpasst“ haben keinen Prozess und liegen oft vor einem Lauf, der noch arbeitet. Gesucht wird in den
+  jüngsten 50 Ordnern; eine Aufgabe, die lange nicht startet, kostet so keine Tausenden Lesezugriffe.
 - `whisperm8 schedule run` verweigert, solange ein Lauf arbeitet oder gerade startet.
 - Termin, Nachholen und Handstart laufen durch einen Actor (`ScheduledTaskScheduler`).
 - Nur eine App-Instanz plant: Sie hält `scheduled-tasks/scheduler.lock` per `flock`. Eine zweite Instanz mit
@@ -51,7 +52,8 @@ Gestartet wird `/bin/sh` mit einem festen Skript, das `claude` aufruft und danac
 
 ```
 claude -p "<Auftrag>" --output-format json --session-id <uuid> --name "<Aufgabe> · <Datum>" \
-       --disallowedTools Bash WebFetch WebSearch "mcp__*" --strict-mcp-config \
+       --disallowedTools Bash Monitor WebFetch WebSearch "mcp__*" "Edit(/.claude/**)" "Edit(/.git/**)" \
+                         "Edit(/.mcp.json)" --strict-mcp-config \
        --permission-mode dontAsk --allowedTools <Werkzeuge…>
 ```
 
@@ -87,6 +89,7 @@ Freigaben aus der `settings.json` des Kontos gelten zusätzlich (dort stehen etw
 | Familie | Sperre | aufgehoben durch |
 |---|---|---|
 | Befehle | `--disallowedTools Bash` | `--allow Bash` oder `--allow "Bash(…)"` |
+| Befehle im Hintergrund | `Monitor` | `--allow Monitor` oder eine Bash-Freigabe |
 | Web | `WebFetch`, `WebSearch` | `--allow WebFetch` bzw. `--allow WebSearch` |
 | MCP | `mcp__*` und `--strict-mcp-config` (lädt keinen MCP-Server) | irgendein `--allow mcp__…` |
 
@@ -103,6 +106,9 @@ Was die Stufen wirklich heißen:
 - **Schreiben** geht nur im Projektordner: `Edit(/**)` deckt Edit und Write, eine Regel mit führendem `/` hängt bei
   CLI-Optionen am Startordner (Claude-Code-Doku „permissions“, „Where a pattern anchors“). Echt gemessen ist das
   noch nicht (Handtest am Ticket).
+- **Nie schreibbar**, in jeder Stufe und gegen jede Freigabe: `.claude/`, `.git/` und `.mcp.json` im
+  Projektordner. Dort stünden Hooks, `settings.local.json`, Git-Hooks und MCP-Server, die der nächste
+  unbeaufsichtigte Lauf ausführte — an der Bash-Sperre vorbei. Edit-Regeln gelten auch für Write.
 - **`read-only` ist nur lesend, solange Bash gesperrt ist.** Mit `--allow "Bash(…)"` kann ein Befehl schreiben.
 
 ## Dateien

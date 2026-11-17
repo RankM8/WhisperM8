@@ -122,8 +122,10 @@ final class ScheduledTaskLauncherTests: XCTestCase {
             let args = ScheduledTaskLauncher.claudeArguments(prompt: "/pm-analyse", sessionID: id, name: nil,
                                                              permissions: ScheduledTaskPermissions(access: access))
             let tail = Array(args.drop(while: { $0 != "--disallowedTools" }))
-            XCTAssertEqual(Array(tail.prefix(8)), ["--disallowedTools", "Bash", "WebFetch", "WebSearch", "mcp__*",
-                                                   "--strict-mcp-config", "--permission-mode", "dontAsk"], "\(access)")
+            XCTAssertEqual(Array(tail.prefix(12)), [
+                "--disallowedTools", "Bash", "Monitor", "WebFetch", "WebSearch", "mcp__*",
+                "Edit(/.claude/**)", "Edit(/.git/**)", "Edit(/.mcp.json)",
+                "--strict-mcp-config", "--permission-mode", "dontAsk"], "\(access)")
             XCTAssertEqual(args.last, "Skill", "--allowedTools bleibt zuletzt")
         }
     }

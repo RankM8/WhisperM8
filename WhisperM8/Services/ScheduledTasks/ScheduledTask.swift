@@ -138,7 +138,15 @@ struct ScheduledTaskPermissions: Codable, Equatable {
     }
 
     /// Werkzeug-Familien, die nur per `--allow` gehen (Befehle und Netz).
-    static let gatedFamilies = ["Bash", "WebFetch", "WebSearch"]
+    /// `Monitor` führt ebenfalls Befehle aus; es öffnet mit Bash oder per
+    /// eigenem `--allow Monitor`.
+    static let gatedFamilies = ["Bash", "Monitor", "WebFetch", "WebSearch"]
+    /// Dateien, die der nächste Lauf ausführen oder als Einstellung lesen
+    /// würde (Hooks, `settings.local.json`, Git-Hooks, MCP-Server). Schriebe
+    /// ein Lauf sie, liefe im nächsten unbeaufsichtigten Lauf beliebiger Code
+    /// an der Bash-Sperre vorbei. Edit-Regeln gelten für alle Werkzeuge, die
+    /// Dateien ändern (Edit, Write, NotebookEdit); führendes `/` = Projektordner.
+    static let protectedPaths = ["Edit(/.claude/**)", "Edit(/.git/**)", "Edit(/.mcp.json)"]
     /// Sperrt die Werkzeuge aller MCP-Server (Claude Code ab 2.1.3xx).
     static let allMCPTools = "mcp__*"
 
@@ -151,18 +159,23 @@ struct ScheduledTaskPermissions: Codable, Equatable {
     /// `extraTools` nicht ausdrücklich freigibt (`Bash` oder `Bash(…)`).
     var disallowedTools: [String] {
         let extras = extraTools.map { $0.trimmingCharacters(in: .whitespaces) }
+        func names(_ family: String) -> Bool {
+            extras.contains { $0 == family || $0.hasPrefix(family + "(") }
+        }
         var result = Self.gatedFamilies.filter { family in
-            !extras.contains { $0 == family || $0.hasPrefix(family + "(") }
+            family == "Monitor" ? !(names("Monitor") || names("Bash")) : !names(family)
         }
         if !allowsMCP { result.append(Self.allMCPTools) }
-        return result
+        // Immer, auch ohne Edit in der Liste: Freigaben des Kontos könnten
+        // Edit öffnen, und eine Sperre schlägt jede Freigabe.
+        return result + Self.protectedPaths
     }
 
     /// Kurzbeschreibung für die CLI.
     var summary: String {
         let label: String
         switch access {
-        case .projectWrite: label = "lesen, im Projektordner schreiben, ohne Bash, Web und MCP"
+        case .projectWrite: label = "lesen, im Projektordner schreiben (nicht .claude, .git), ohne Bash, Web und MCP"
         case .readOnly: label = "nur lesen, ohne Bash, Web und MCP"
         case .custom: label = "eigene Liste"
         }

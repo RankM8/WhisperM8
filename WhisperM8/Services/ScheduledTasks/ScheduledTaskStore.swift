@@ -132,9 +132,12 @@ struct ScheduledTaskStore {
 
     /// Jüngster Lauf, der wirklich gestartet wurde (oder gerade startet).
     /// Einträge ohne Prozess („übersprungen“, „verpasst“, „nicht gestartet“)
-    /// überspringt er; liest dafür nur `run.json` der Ordner davor.
-    func latestStartedRun(for taskID: UUID) -> ScheduledTaskRunFiles? {
-        for directory in runDirectories(for: taskID) {
+    /// überspringt er; liest dafür nur `run.json` der Ordner davor, höchstens
+    /// `scanLimit` Ordner. Eine stündliche Aufgabe, die tagelang nicht startet,
+    /// belastet den Planer so nicht mit Tausenden Dateien; ein Lauf, der 50
+    /// Termine lang arbeitet, gibt es bei stündlich erst nach zwei Tagen.
+    func latestStartedRun(for taskID: UUID, scanLimit: Int = 50) -> ScheduledTaskRunFiles? {
+        for directory in runDirectories(for: taskID, limit: scanLimit) {
             guard let record = readRecord(at: directory) else { continue }
             if record.notStarted == nil { return readRun(at: directory) }
         }
