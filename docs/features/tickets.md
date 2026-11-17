@@ -193,7 +193,8 @@ Die Seite steht in der Gruppe „Labs“ und richtet nach denselben Regeln ein w
 Kommandozeile kann sie einen Key und eine Zuordnung auch entfernen:
 
 - **Schalter „Show tickets in Agent Chats“** (`ticketBoardEnabled`). Solange er aus ist, zeigt die Seite nur
-  ihn und liest nichts.
+  ihn und die Auswahl für Linear-Links und liest nichts.
+- **„Open Linear links in“** (`linearLinkTarget`): Board, Linear-App oder Browser, siehe „Linear-Links öffnen“.
 - **Zugang:** je Workspace eine Zeile mit Zustand (verbunden, kein Key, geht nicht) und den Teams, die der Key
   sieht. Ein neuer Key wird bei Linear geprüft und unter dem Workspace abgelegt, den Linear zu ihm nennt.
   „Remove Key…“ löscht nur den Schlüsselbund-Eintrag. Der Workspace bleibt eingerichtet und steht danach als
@@ -425,6 +426,39 @@ und zeigen macht die App (`TicketOpenService`, `TicketOpenPresenter`). Auch die 
 - **Kosten:** im Ereignis-Pfad eine Suche über die Projekte der App und ein Lesen von `tickets.json` abseits des
   Main Threads, dazu eine Abfrage bei Linear. Im Board nichts Neues je Zeichnen; das einzelne Ticket wird mit
   der Chat-Liste des letzten Abgleichs verknüpft, ohne neuen Durchlauf über die Chats.
+
+### Linear-Links öffnen (WM8-132)
+
+Ein Linear-Link öffnete früher Chrome, und die Linear-Webseite leitete von dort in die App weiter; ein leerer Tab
+blieb stehen. Jetzt entscheidet die App selbst (`LinearLink`, `LinearLinkRoute`, beide pur; ausgeführt von
+`LinearLinkOpener`).
+
+- **Was ein Linear-Link ist:** `https://linear.app/<workspace>/<teil>/…`, wenn `<teil>` eine Seite im Workspace
+  ist (Freigabeliste `LinearLink.appSections`: `issue`, `project`, `view`, `document`, `team`, `initiative`,
+  `settings`, `inbox` …). Website, Doku, Changelog, Unbekanntes, der Workspace allein und fremde Hosts bleiben
+  normale Web-Links.
+- **Linear-App ohne Browser:** Die App meldet sich bei macOS für `linear://`. Laut Linear-Doku („Download Linear“,
+  FAQ) öffnet `linear://` plus der Rest der Adresse die Seite in der App; der Pfad wird 1:1 übernommen, mit Query
+  und Fragment (`linear://whisperm8/issue/WM8-12/titel`). Ob es einen Empfänger gibt, fragt der Klick bei Launch
+  Services (`NSWorkspace.urlForApplication(toOpen:)`); ohne Linear-App geht alles wie früher in den Browser.
+- **Klick im Chat:** Im Terminal öffnet ein Link nur mit ⌘ (SwiftTerm, `linkHighlightMode = .hoverWithModifier`;
+  ein Klick ohne ⌘ markiert Text). Darum: **⌘-Klick** folgt der Einstellung, **⌘⌥-Klick** geht immer in die
+  Linear-App (⌥ heißt im Terminal „anderes Ziel“, bei Dateien „im Finder zeigen“). Entscheidung 17.11.2026.
+- **Einstellung** Einstellungen › Tickets › „Open Linear links in“ (`linearLinkTarget`): *Ticket board* (ab Werk)
+  zeigt ein Ticket über denselben Weg wie `tickets open`; geht das nicht (Ansicht aus, Team ohne Projekt, Ticket
+  nicht ladbar, Workspace der Adresse passt nicht zum Team), öffnet die Linear-App. Projekte, Ansichten und
+  Dokumente gehen nie ins Board. *Linear app* öffnet alles dort, *Browser* alles im Browser wie früher.
+- **„In Linear öffnen“** (Triage, Reiter-Leiste der Ansichten, Controller) öffnet die Linear-App, bei Einstellung
+  *Browser* den Browser.
+- **Fokus:** Nur ein Klick des Nutzers löst das aus, die App nach vorn zu holen ist gewollt. Das Board öffnet im
+  zuletzt aktiven Fenster, also in dem, in dem geklickt wurde; der Nutzer sieht den Wechsel. Wie bei
+  `tickets open` wird dort der Board-Chat zum Diktat-Ziel.
+- **Nur gleich nach dem Klick nach vorn** (`LinearLinkOpener`, `LinearLinkAttempts`): Steht das Board nicht binnen
+  zwei Sekunden (Linear langsam, Abfrage hängt), geht der Klick in die Linear-App, und eine späte Antwort zeigt
+  nichts mehr. Ist WhisperM8 beim Zeigen nicht mehr vorn, kommt weder Board noch Linear-App nach vorn. Ein zweiter
+  Klick, während ein Öffnen läuft, wird verworfen.
+- **Kosten:** je Klick eine Abfrage bei Launch Services; beim Board dieselbe Linear-Abfrage wie `tickets open`
+  (bis das Board steht, vergeht bis zu einer Sekunde). Nichts in einem Body, nichts je Zeichnen.
 
 ### Board-Chat (Seitenspalte, WM8-113)
 
@@ -802,6 +836,6 @@ Liste, ⌘C, Prüfung der Regel), `TicketTeamRuleTests`
 (Regel je Team, Spalten nach Status, „Wartet auf mich“, Befehl `setup --status`),
 `TicketBoardControllerTests` (Zuordnung, Abruf nur bei sichtbarer Ansicht, Leerzustände, Projektwechsel, überholte
 Antworten), `TicketOpenTests` (`tickets open`: Nummer und Adresse, Team → Projekt, nichts offen bei Fehlern,
-Fenster, Triage einzeln oder in der Liste, Wunsch bis das Board steht), `AgentWindowStoreTicketsModeTests` (Umschalter je Fenster, Rückkehr zu den Chats, Schnappschuss für
+Fenster, Triage einzeln oder in der Liste, Wunsch bis das Board steht), `LinearLinkTests` (Linear-Links: Adresse, `linear://`, Board/App/Browser, Rückfall, Klick im Terminal), `AgentWindowStoreTicketsModeTests` (Umschalter je Fenster, Rückkehr zu den Chats, Schnappschuss für
 den Controller) und `BoardChatRulesTests` (Jarvis wie die CLI, Wahl, Ort je Fenster, Breite, Speicher je Projekt), `BoardChatInputsTests` (Ziel nur sichtbar und vorn, Schutz bei Frage und Freigabe,
 Bezug, Texte) und `RecordingCoordinatorDeliveryTests` (Bezug vor dem Diktat, Umlenken nur vom vorderen Programm). Bilder des Board-Chats: `make snapshots ONLY=board-chat`. Was nur von Hand prüfbar ist, steht als Liste im Plan unter „Tests und Abnahme“.

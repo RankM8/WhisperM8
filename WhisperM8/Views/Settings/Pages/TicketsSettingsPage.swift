@@ -8,6 +8,7 @@ import SwiftUI
 /// Linear. Gelesen und geschrieben wird im Modell, abseits des Main Threads.
 struct TicketsSettingsPage: View {
     @AppStorage(PreferenceKeys.ticketBoardEnabled) private var enabled = false
+    @AppStorage(PreferenceKeys.linearLinkTarget) private var linearLinkTarget: LinearLinkTarget = .defaultValue
     @State private var model: TicketsSettingsModel
     @State private var keyText = ""
     @State private var keyRevealed = false
@@ -45,6 +46,8 @@ struct TicketsSettingsPage: View {
             } else {
                 SettingsHelpText("Turn the ticket view on above to set up access and projects.")
             }
+
+            linkSection
         }
         .task(id: enabled) {
             if enabled {
@@ -72,6 +75,28 @@ struct TicketsSettingsPage: View {
             Button("Cancel", role: .cancel) {}
         } message: { workspace in
             Text("WhisperM8 and `whisperm8 tickets` lose access to the workspace \(workspace). Projects stay linked to their teams.")
+        }
+    }
+
+    // MARK: Linear-Links (WM8-132)
+
+    private var linkSection: some View {
+        SettingsSection("Linear links") {
+            SettingsRow(
+                title: "Open Linear links in",
+                subtitle: "For a ⌘-click on a Linear link in a chat. Ticket board shows a ticket there when the ticket view is on and its team is linked to a project; anything else goes to the Linear app."
+            ) {
+                Picker(selection: $linearLinkTarget) {
+                    Text("Ticket board").tag(LinearLinkTarget.board)
+                    Text("Linear app").tag(LinearLinkTarget.app)
+                    Text("Browser").tag(LinearLinkTarget.browser)
+                } label: {
+                    Text("Open Linear links in")
+                }
+                .labelsHidden()
+                .frame(maxWidth: 170)
+            }
+            SettingsHelpText("⌘⌥-click on a Linear link always opens the Linear app, without a browser tab. “Open in Linear” in the ticket board and on the controller opens the Linear app too, or the browser when Browser is selected. Without the Linear app, everything opens in the browser as before.")
         }
     }
 

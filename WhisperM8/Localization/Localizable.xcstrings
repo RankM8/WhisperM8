@@ -27463,6 +27463,66 @@
           }
         }
       }
+    },
+    "Linear links": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linear-Links"
+          }
+        }
+      }
+    },
+    "Open Linear links in": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linear-Links öffnen in"
+          }
+        }
+      }
+    },
+    "For a ⌘-click on a Linear link in a chat. Ticket board shows a ticket there when the ticket view is on and its team is linked to a project; anything else goes to the Linear app.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für einen ⌘-Klick auf einen Linear-Link in einem Chat. „Ticket-Board“ zeigt ein Ticket dort, wenn die Ticket-Ansicht an ist und sein Team einem Projekt zugeordnet ist; alles andere geht in die Linear-App."
+          }
+        }
+      }
+    },
+    "Linear app": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Linear-App"
+          }
+        }
+      }
+    },
+    "Browser": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Browser"
+          }
+        }
+      }
+    },
+    "⌘⌥-click on a Linear link always opens the Linear app, without a browser tab. “Open in Linear” in the ticket board and on the controller opens the Linear app too, or the browser when Browser is selected. Without the Linear app, everything opens in the browser as before.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "⌘⌥-Klick auf einen Linear-Link öffnet immer die Linear-App, ohne Browser-Tab. „In Linear öffnen“ im Ticket-Board und am Controller öffnet ebenfalls die Linear-App, bei Auswahl „Browser“ den Browser. Ohne Linear-App öffnet alles wie bisher im Browser."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

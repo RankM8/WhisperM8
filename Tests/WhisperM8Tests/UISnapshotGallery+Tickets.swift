@@ -34,13 +34,14 @@ extension UISnapshotGallery {
                               projects: projects)
             return AnyView(TicketsSettingsPage(dependencies: dependencies, model: model))
         }
-        let size = CGSize(width: 760, height: 900)
+        // Hoch genug für den Abschnitt „Linear links“ am Ende (WM8-132).
+        let size = CGSize(width: 760, height: 1040)
         let on: [String: Any] = [PreferenceKeys.ticketBoardEnabled: true]
         return [
-            Fixture(name: "tickets-einstellungen-aus", size: CGSize(width: 760, height: 420)) {
+            Fixture(name: "tickets-einstellungen-aus", size: CGSize(width: 760, height: 580)) {
                 page(workspaces: [], mappings: [])
             },
-            Fixture(name: "tickets-einstellungen-leer", size: CGSize(width: 760, height: 640), storage: on) {
+            Fixture(name: "tickets-einstellungen-leer", size: CGSize(width: 760, height: 740), storage: on) {
                 page(workspaces: [], mappings: [])
             },
             Fixture(name: "tickets-einstellungen-eingerichtet", size: size, storage: on) {
@@ -66,7 +67,7 @@ extension UISnapshotGallery {
                     ])
             },
             // Ein Team wurde in Linear gelöscht oder umbenannt: einmal mit Ordner, einmal ohne.
-            Fixture(name: "tickets-einstellungen-team-fehlt", size: CGSize(width: 760, height: 1040), storage: on) {
+            Fixture(name: "tickets-einstellungen-team-fehlt", size: CGSize(width: 760, height: 1260), storage: on) {
                 page(
                     workspaces: [
                         Model.Workspace(name: "dealsupply", hasKey: true, teams: ["ABA", "ABC"]),

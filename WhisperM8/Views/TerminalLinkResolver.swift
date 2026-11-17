@@ -28,6 +28,9 @@ enum TerminalLinkResolver {
     enum Action: Equatable {
         /// http/https/mailto/ssh/… → an den Standard-Handler (Browser/Mail).
         case openWeb(URL)
+        /// Seite eines Linear-Workspaces (WM8-132): Board, Linear-App oder
+        /// Browser entscheidet `LinearLinkRoute`. `alternate` = ⌘⌥-Klick.
+        case openLinear(LinearLink, alternate: Bool)
         /// Code-/Text-/Markdown-Datei → im Editor (PhpStorm) öffnen.
         case openInEditor(URL)
         /// Sonstige Datei (Bild, PDF, Archiv, …) → mit der Standard-App öffnen.
@@ -50,7 +53,8 @@ enum TerminalLinkResolver {
     /// - Parameters:
     ///   - link: Roher String aus SwiftTerm (URL **oder** Dateipfad).
     ///   - workingDirectory: Arbeitsverzeichnis der Session, Basis für relative Pfade.
-    ///   - revealInFinder: `true` ⇒ im Finder zeigen statt öffnen (Cmd+Alt-Klick).
+    ///   - revealInFinder: `true` ⇒ im Finder zeigen statt öffnen (Cmd+Alt-Klick);
+    ///     bei Linear-Links heißt dasselbe „direkt in die Linear-App“.
     ///   - fileStatus: Existenz-/Typ-Probe (injiziert).
     static func resolve(
         link rawLink: String,
@@ -71,11 +75,13 @@ enum TerminalLinkResolver {
         }
 
         // 2. Echte URL mit Autorität (`scheme://…`) oder bekanntes schemeloses
-        //    Scheme (mailto:/tel:/…) → unverändert an den System-Handler.
+        //    Scheme (mailto:/tel:/…) → unverändert an den System-Handler;
+        //    Seiten eines Linear-Workspaces entscheidet `LinearLinkRoute`.
         if hasAuthorityScheme(link)
             || bareSchemes.contains(where: { link.lowercased().hasPrefix($0) }) {
-            if let url = URL(string: link) { return .openWeb(url) }
-            return .reject(reason: "Ungültige URL: \(link)")
+            guard let url = URL(string: link) else { return .reject(reason: "Ungültige URL: \(link)") }
+            if let linear = LinearLink(url: url) { return .openLinear(linear, alternate: revealInFinder) }
+            return .openWeb(url)
         }
 
         // 3. Alles andere = lokaler Pfad (absolut, ~, relativ, wort/wort, path:line).

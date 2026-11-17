@@ -1203,7 +1203,8 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     /// NSWorkspace.open`-Default (das bei Dateipfaden mit `-50` scheitert) routen
     /// wir sauber über den `TerminalLinkResolver`: Web→Browser,
     /// Code/Markdown→PhpStorm, sonstige Datei→Standard-App, Ordner→Finder,
-    /// fehlend→klare Meldung. **Cmd+Alt** zeigt das Ziel nur im Finder.
+    /// fehlend→klare Meldung, Linear→Board/Linear-App. **Cmd+Alt** zeigt das Ziel
+    /// nur im Finder (Linear-Links: direkt in die Linear-App).
     func handleOpenLink(link: String, params: [String: String]) {
         let revealInFinder = NSEvent.modifierFlags.contains(.option)
         let action = TerminalLinkResolver.resolve(
@@ -1235,6 +1236,9 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
             NSWorkspace.shared.open(url)
         case .revealInFinder(let url):
             NSWorkspace.shared.activateFileViewerSelecting([url])
+        case .openLinear(let link, let alternate):
+            // WM8-132: ⌘-Klick nach Einstellung (ab Werk Board), ⌘⌥ in die Linear-App.
+            LinearLinkOpener.live.open(link, gesture: alternate ? .chatAlternateClick : .chatClick)
         case .notFound(let path):
             Logger.terminalSnapshot.debug("terminal_link_not_found path=\(path, privacy: .public)")
             Self.presentLinkAlert(
