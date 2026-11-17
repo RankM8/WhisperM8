@@ -169,8 +169,15 @@ die App „aus“.
 
 ## Ansicht
 
-- **Abschnitt „Geplant“** ganz unten in der Seitenleiste, unter den Chats (Entscheidung E1), nur mit Schalter.
-  Zuklappbar (`agentScheduledTasksSectionCollapsed`), „+“ legt an. Je Aufgabe eine Zeile wie ein Chat: Zustand,
+- **Abschnitt „Geplant“** fest unten in der Seitenleiste, direkt über der Fußzeile und durch eine dünne Linie
+  getrennt; die Chat-Liste scrollt darüber (Entscheidung 17.11.2026 — vorher hing er am Ende der Chat-Liste,
+  wo er bei vielen Chats nicht zu finden war). Nur mit Schalter; ohne Schalter bleibt kein Rand stehen. Im
+  Archiv-Modus der Seitenleiste fehlt er.
+  Zuklappbar (`agentScheduledTasksSectionCollapsed`): zu eine Zeile mit Zahl der Aufgaben und roter Fehlerzahl,
+  auf höchstens ein Drittel der Seitenleiste, auch bei kleinen Fenstern, und nie über 240 pt
+  (`maxListHeight(sidebarHeight:)`, 20-pt-Stufen) mit eigenem Scroll. Die Höhe hält ein kleines Objekt
+  (`ScheduledTasksListHeight`), das nur der Abschnitt liest — eine Höhenänderung wertet nicht das Fenster neu aus. „+“ steht immer im Kopf und legt an. Per Controller ist der Abschnitt wie bisher nicht erreichbar
+  (seine Zeilen sind keine Listenzeilen der Controller-Navigation). Je Aufgabe eine Zeile wie ein Chat: Zustand,
   Name, rechts der nächste Termin als feste Uhrzeit („morgen 07:00“), sonst „läuft“, „Fehler“ oder „pausiert“.
   Der Pfeil klappt die letzten drei Läufe auf; ein Klick auf einen Lauf öffnet seinen Chat, ein Klick auf die
   Aufgabe ihr Detail. Läufe ohne Chat (nicht gestartet) oder solche, die noch arbeiten, führen ins Detail.
