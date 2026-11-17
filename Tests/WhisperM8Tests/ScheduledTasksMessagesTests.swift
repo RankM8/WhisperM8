@@ -119,4 +119,24 @@ final class ScheduledTasksMessagesTests: XCTestCase {
         XCTAssertEqual(ScheduledTaskTexts.loginWarningDetail(next: next, clock: clock),
                        "Without a new login, the next run (tomorrow, 07:00) does not start and reports a failure.")
     }
+
+    // MARK: Mitlesen
+
+    func testReadAlongOnlyForClaudeChatsWithoutTabThatAnotherProcessWorksOn() {
+        let chat = AgentChatSession(provider: .claude, projectID: UUID(), externalSessionID: UUID().uuidString.lowercased(),
+                                    title: "Bericht · 17.11.", model: "", reasoningEffort: "", status: .closed,
+                                    hasLaunchedInitialPrompt: true, createdAt: Date(), lastActivityAt: Date())
+        XCTAssertTrue(AgentSessionReadAlong.readsAlong(session: chat, hasController: false, status: .working))
+        XCTAssertFalse(AgentSessionReadAlong.readsAlong(session: chat, hasController: true, status: .working),
+                       "eigener Tab: das ist der Chat selbst")
+        XCTAssertFalse(AgentSessionReadAlong.readsAlong(session: chat, hasController: false, status: .idle))
+        XCTAssertFalse(AgentSessionReadAlong.readsAlong(session: chat, hasController: false, status: nil))
+        var background = chat
+        background.kind = .backgroundChat
+        XCTAssertFalse(AgentSessionReadAlong.readsAlong(session: background, hasController: false, status: .working),
+                       "Hintergrund-Agents öffnet man gerade durch Anhängen")
+        var codex = chat
+        codex.provider = .codex
+        XCTAssertFalse(AgentSessionReadAlong.readsAlong(session: codex, hasController: false, status: .working))
+    }
 }

@@ -27064,16 +27064,6 @@
         }
       }
     },
-    "Its chat opens when the run is done. Two processes must never write to the same chat.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sein Chat lässt sich öffnen, wenn der Lauf fertig ist. Zwei Prozesse dürfen nie in denselben Chat schreiben."
-          }
-        }
-      }
-    },
     "Nothing starts until you resume. “Run now” stays off too, so pausing really means quiet. Past dates are not caught up after resuming.": {
       "localizations": {
         "de": {
@@ -27120,16 +27110,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "Noch kein Lauf. Der erste startet %@."
-          }
-        }
-      }
-    },
-    "chat after the end": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chat nach dem Ende"
           }
         }
       }
@@ -27320,6 +27300,56 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ohne neuen Login startet der nächste Lauf (%@) nicht und meldet sich als fehlgeschlagen."
+          }
+        }
+      }
+    },
+    "This chat is still working in another process, for example a scheduled run. You can read along; continuing works once it is done.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Chat arbeitet noch in einem anderen Prozess, etwa einem geplanten Lauf. Du kannst mitlesen; fortsetzen geht nach dem Ende."
+          }
+        }
+      }
+    },
+    "Working in another process. You are reading along; continuing works once it is done.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeitet in einem anderen Prozess. Du liest mit; fortsetzen geht nach dem Ende."
+          }
+        }
+      }
+    },
+    "Read along while this run is working": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mitlesen, solange dieser Lauf arbeitet"
+          }
+        }
+      }
+    },
+    "Continuing the chat works once the run is done. Until then you can read along.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fortsetzen geht nach dem Ende des Laufs. Bis dahin kannst du mitlesen."
+          }
+        }
+      }
+    },
+    "Read along": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mitlesen"
           }
         }
       }

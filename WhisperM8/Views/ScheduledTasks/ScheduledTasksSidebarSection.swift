@@ -178,8 +178,9 @@ struct ScheduledTasksSidebarSection: View, Equatable {
                 label: ScheduledTaskTexts.runShort(run.createdAt, clock: clock) + " · " + ScheduledTaskTexts.outcomeShort(run.outcome),
                 isSelected: selectedTaskID == nil && run.sessionID.map { $0.uuidString.lowercased() == selectedRunSessionID } == true,
                 onSelect: {
-                    // Ohne Chat, während er arbeitet, oder noch nicht eingelesen: das Detail erklärt es.
-                    guard let session = run.sessionID, !run.outcome.isActive, onOpenRun(session) else {
+                    // Arbeitet er, öffnet der Chat zum Mitlesen (Paket 3). Ohne
+                    // Chat oder noch nicht eingelesen: das Detail erklärt es.
+                    guard let session = run.sessionID, onOpenRun(session) else {
                         onSelectTask(overview.id)
                         return
                     }
@@ -320,7 +321,13 @@ struct ScheduledTaskRunSidebarRow: View {
         .buttonStyle(.plain)
         .padding(.horizontal, 8)
         .onHover { isHovered = $0 }
-        .help(run.hasChat ? String(localized: "Open the chat of this run") : String(localized: "This run did not start, so there is no chat"))
+        .help(helpText)
+    }
+
+    private var helpText: String {
+        if !run.hasChat { return String(localized: "This run did not start, so there is no chat") }
+        if run.outcome.isActive { return String(localized: "Read along while this run is working") }
+        return String(localized: "Open the chat of this run")
     }
 }
 

@@ -193,10 +193,15 @@ struct ScheduledTaskDetailView: View, Equatable {
                             .font(.system(size: 12, weight: .semibold))
                     }
                 }
-                Text("Its chat opens when the run is done. Two processes must never write to the same chat.")
+                Text("Continuing the chat works once the run is done. Until then you can read along.")
                     .font(.system(size: 12))
                     .foregroundStyle(AgentTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if let session = overview.activeRun?.sessionID {
+                    Button { openChat(session) } label: { Text("Read along") }
+                        .controlSize(.small)
+                        .padding(.top, 4)
+                }
             }
         case .paused:
             box(tint: AgentTheme.textTertiary) {
@@ -334,10 +339,9 @@ struct ScheduledTaskDetailView: View, Equatable {
                 }
             }
             Spacer(minLength: 8)
-            if run.outcome.isActive {
-                Text("chat after the end")
-                    .font(.system(size: 11))
-                    .foregroundStyle(AgentTheme.textTertiary)
+            if run.outcome.isActive, let session = run.sessionID {
+                Button { openChat(session) } label: { Text("Read along") }
+                    .controlSize(.small)
             } else if let session = run.sessionID {
                 Button { openChat(session) } label: { Text("Open chat") }
                     .controlSize(.small)
