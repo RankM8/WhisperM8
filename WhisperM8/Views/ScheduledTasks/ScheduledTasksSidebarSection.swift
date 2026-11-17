@@ -22,7 +22,7 @@ struct ScheduledTasksSidebarSection: View, Equatable {
     var model: ScheduledTasksOverviewModel
 
     @AppStorage(PreferenceKeys.scheduledTasksEnabled) private var enabled = false
-    @AppStorage("scheduledTasksSectionCollapsed") private var collapsed = false
+    @AppStorage("agentScheduledTasksSectionCollapsed") private var collapsed = false
     @State private var expandedTaskIDs: Set<UUID>
     @State private var editor: ScheduledTaskEditorTarget?
 

@@ -53,7 +53,7 @@ extension UISnapshotGallery {
                 sidebar(expanded: [fixture.morning.id], selected: fixture.morning.id)
             },
             Fixture(name: "geplant-seitenleiste-zu", size: CGSize(width: 270, height: 120),
-                    storage: on.merging(["scheduledTasksSectionCollapsed": true]) { a, _ in a }) {
+                    storage: on.merging(["agentScheduledTasksSectionCollapsed": true]) { a, _ in a }) {
                 sidebar(expanded: [])
             },
             Fixture(name: "geplant-seitenleiste-leer", size: CGSize(width: 270, height: 120), storage: on) {

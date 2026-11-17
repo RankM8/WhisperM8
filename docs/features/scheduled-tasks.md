@@ -168,7 +168,7 @@ die App „aus“.
 ## Ansicht
 
 - **Abschnitt „Geplant“** ganz unten in der Seitenleiste, unter den Chats (Entscheidung E1), nur mit Schalter.
-  Zuklappbar (`scheduledTasksSectionCollapsed`), „+“ legt an. Je Aufgabe eine Zeile wie ein Chat: Zustand,
+  Zuklappbar (`agentScheduledTasksSectionCollapsed`), „+“ legt an. Je Aufgabe eine Zeile wie ein Chat: Zustand,
   Name, rechts der nächste Termin als feste Uhrzeit („morgen 07:00“), sonst „läuft“, „Fehler“ oder „pausiert“.
   Der Pfeil klappt die letzten drei Läufe auf; ein Klick auf einen Lauf öffnet seinen Chat, ein Klick auf die
   Aufgabe ihr Detail. Läufe ohne Chat (nicht gestartet) oder solche, die noch arbeiten, führen ins Detail.
