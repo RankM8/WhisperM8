@@ -17,6 +17,7 @@ extension AgentControlRequestHandler {
         case handover
         case order
         case submit
+        case schedule
 
         var methods: Set<String> {
             switch self {
@@ -28,6 +29,7 @@ extension AgentControlRequestHandler {
             case .handover: return [AgentControlRequestHandler.appHandoverMethod]
             case .order: return [AgentControlRequestHandler.sessionOrderMethod, AgentControlRequestHandler.tabOrderMethod]
             case .submit: return [AgentControlRequestHandler.sessionSubmitMethod]
+            case .schedule: return AgentControlRequestHandler.scheduleMethods
             }
         }
     }
@@ -49,6 +51,7 @@ extension AgentControlRequestHandler {
         case .order:
             return request.method == Self.tabOrderMethod ? await tabOrder(request) : await sessionOrder(request)
         case .submit: return await sessionSubmit(request)
+        case .schedule: return await scheduleRequest(request)
         }
     }
 }

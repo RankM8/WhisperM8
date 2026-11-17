@@ -57,6 +57,8 @@ enum ChatsControlProtocol {
         // Abgabe beim Neustart: Aufbewahrer starten, je Chat ablösen und
         // abgeben, Schlüsselbund, COMMIT. Die App hat eigene Fristen darunter.
         case "app.handover": return 30
+        // Handstart einer geplanten Aufgabe: `claude auth status` (bis 20 s) und Start.
+        case "schedule.run": return 30
         default: return 10
         }
     }

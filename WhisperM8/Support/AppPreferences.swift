@@ -554,6 +554,15 @@ struct AppPreferences {
         nonmutating set { defaults.set(newValue, forKey: Keys.ticketBoardEnabled) }
     }
 
+    /// Labs „Geplante Aufgaben“ (WM8-110): wiederkehrende `claude -p`-Läufe,
+    /// gestartet von der laufenden App. Ab Werk aus; aus = kein Zeitgeber, kein
+    /// Start, `whisperm8 schedule` ändert nichts. Schalter in Einstellungen › Labs.
+    /// `defaults write com.whisperm8.app scheduledTasksEnabled -bool YES`
+    var isScheduledTasksEnabled: Bool {
+        get { boolWithDefault(false, forKey: Keys.scheduledTasksEnabled) }
+        nonmutating set { defaults.set(newValue, forKey: Keys.scheduledTasksEnabled) }
+    }
+
     /// MCP-Server beim App-Start über alle Claude-Konten angleichen (nur
     /// ergänzen, per `claude mcp add-json -s user`). Default aus — für neue
     /// Nutzer soll nichts ungefragt in ihre Konten geschrieben werden.
@@ -1194,6 +1203,7 @@ enum PreferenceKeys {
     static let accountSwitchAfterTurnEnabled = "accountSwitchAfterTurnEnabled"
     static let restartKeepsChatsEnabled = "restartKeepsChatsEnabled"
     static let ticketBoardEnabled = "ticketBoardEnabled"
+    static let scheduledTasksEnabled = "scheduledTasksEnabled"
     static let mcpAutoSyncEnabled = "mcpAutoSyncEnabled"
     static let mcpSyncExcludedServers = "mcpSyncExcludedServers"
     static let claudeLoginExpiryWarningEnabled = "claudeLoginExpiryWarningEnabled"

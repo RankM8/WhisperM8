@@ -1,0 +1,332 @@
+import Foundation
+
+// MARK: - Geplante Aufgaben: Datenmodell (WM8-110, Paket 1)
+
+/// Eine geplante Aufgabe: ein wiederkehrender `claude -p`-Lauf in festem
+/// Projektordner und Konto. Steht in `scheduled-tasks.json`; geschrieben wird
+/// nur von der App (`ScheduledTaskScheduler`), die CLI liest von Disk.
+///
+/// Felder nur ergänzen, nie umbenennen: Eine ältere App, die eine neuere Datei
+/// nicht lesen kann, schreibt sie nicht (siehe `ScheduledTaskStore`).
+struct ScheduledTask: Codable, Equatable, Identifiable {
+    var id: UUID
+    var name: String
+    /// Auftrag, wie er nach `claude -p` steht (Text oder `/skill …`).
+    var prompt: String
+    /// Absoluter Projektordner. Hier startet der Lauf, unter diesem Projekt
+    /// steht sein Chat.
+    var directory: String
+    /// Claude-Konto (`main` oder Name eines Profils unter `~/.claude-profiles`).
+    var account: String
+    var schedule: ScheduledTaskSchedule
+    var permissions: ScheduledTaskPermissions
+    /// Verpasste Termine (Mac schlief, App war zu) bis 12 Stunden später nachholen.
+    var catchUp: Bool
+    var paused: Bool
+    var createdAt: Date
+    var updatedAt: Date
+    /// Letzter abgearbeiteter Termin: gestartet, nachgeholt, verpasst oder
+    /// übersprungen. Wird VOR dem Start geschrieben, damit kein Termin zweimal
+    /// läuft (höchstens einmal, auch nach einem Absturz).
+    var lastSlot: Date?
+
+    init(
+        id: UUID = UUID(), name: String, prompt: String, directory: String, account: String,
+        schedule: ScheduledTaskSchedule, permissions: ScheduledTaskPermissions = .init(),
+        catchUp: Bool = true, paused: Bool = false, createdAt: Date, updatedAt: Date? = nil,
+        lastSlot: Date? = nil
+    ) {
+        self.id = id
+        self.name = name
+        self.prompt = prompt
+        self.directory = directory
+        self.account = account
+        self.schedule = schedule
+        self.permissions = permissions
+        self.catchUp = catchUp
+        self.paused = paused
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt ?? createdAt
+        self.lastSlot = lastSlot
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        name = try c.decode(String.self, forKey: .name)
+        prompt = try c.decode(String.self, forKey: .prompt)
+        directory = try c.decode(String.self, forKey: .directory)
+        account = try c.decode(String.self, forKey: .account)
+        schedule = try c.decode(ScheduledTaskSchedule.self, forKey: .schedule)
+        permissions = try c.decodeIfPresent(ScheduledTaskPermissions.self, forKey: .permissions) ?? .init()
+        catchUp = try c.decodeIfPresent(Bool.self, forKey: .catchUp) ?? true
+        paused = try c.decodeIfPresent(Bool.self, forKey: .paused) ?? false
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+        lastSlot = try c.decodeIfPresent(Date.self, forKey: .lastSlot)
+    }
+
+    /// Kurze Kennung für CLI und Logs (erste acht Zeichen der ID).
+    var shortID: String { String(id.uuidString.lowercased().prefix(8)) }
+}
+
+/// Inhalt von `scheduled-tasks.json`.
+struct ScheduledTasksFile: Codable, Equatable {
+    static let currentVersion = 1
+    var version: Int = ScheduledTasksFile.currentVersion
+    var tasks: [ScheduledTask] = []
+}
+
+// MARK: - Rechte eines Laufs
+
+/// Was ein Lauf darf. Ein `-p`-Lauf kann nicht nachfragen; was nicht erlaubt
+/// ist, verweigert Claude (`--permission-mode dontAsk`) und meldet es in
+/// `permission_denials`. Freigaben aus der settings.json des Kontos gelten
+/// zusätzlich, das regelt Claude selbst.
+///
+/// Ab Werk (Entscheidung Giuliano 17.11.2026): lesen und im Projektordner
+/// schreiben. Bash, MCP und Web nur per ausdrücklicher Freigabe je Aufgabe.
+struct ScheduledTaskPermissions: Codable, Equatable {
+    enum Access: String, Codable, CaseIterable {
+        /// Lesen und im Projektordner schreiben.
+        case projectWrite
+        /// Nur lesen.
+        case readOnly
+        /// Nur die Werkzeuge aus `extraTools`.
+        case custom
+    }
+
+    var access: Access = .projectWrite
+    /// Zusätzlich erlaubte Werkzeuge in Claudes Regel-Schreibweise, etwa
+    /// `Bash(whisperm8 tickets *)` oder `mcp__linear__get_issue`.
+    var extraTools: [String] = []
+
+    init(access: Access = .projectWrite, extraTools: [String] = []) {
+        self.access = access
+        self.extraTools = extraTools
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        access = (try? c.decodeIfPresent(Access.self, forKey: .access)) ?? .projectWrite
+        extraTools = try c.decodeIfPresent([String].self, forKey: .extraTools) ?? []
+    }
+
+    /// Lesen. `Skill`, damit ein Auftrag wie `/pm-analyse` seinen Skill laden kann.
+    static let readOnlyTools = ["Read", "Glob", "Grep", "Skill"]
+    /// `Edit(/**)` deckt Edit und Write im Projektordner: Eine Pfadregel mit
+    /// einem führenden `/` hängt bei CLI-Optionen am Startordner der Sitzung
+    /// (Claude-Code-Doku „permissions“, Abschnitt „Where a pattern anchors“).
+    static let projectWriteTools = ["Read", "Glob", "Grep", "Edit(/**)", "Skill"]
+
+    /// Die Liste für `--allowedTools`, ohne Doppelte, Reihenfolge stabil.
+    var allowedTools: [String] {
+        let base: [String]
+        switch access {
+        case .projectWrite: base = Self.projectWriteTools
+        case .readOnly: base = Self.readOnlyTools
+        case .custom: base = []
+        }
+        var seen = Set<String>()
+        return (base + extraTools).compactMap { raw in
+            let tool = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !tool.isEmpty, seen.insert(tool).inserted else { return nil }
+            return tool
+        }
+    }
+
+    /// Kurzbeschreibung für die CLI.
+    var summary: String {
+        let label: String
+        switch access {
+        case .projectWrite: label = "lesen, im Projektordner schreiben"
+        case .readOnly: label = "nur lesen"
+        case .custom: label = "eigene Liste"
+        }
+        guard !extraTools.isEmpty else { return label }
+        return label + " + " + extraTools.joined(separator: ", ")
+    }
+}
+
+// MARK: - Zeitplan
+
+/// Uhrzeit `HH:MM`, als Text gespeichert.
+struct ScheduledTaskClockTime: Codable, Equatable, Hashable, Comparable {
+    var hour: Int
+    var minute: Int
+
+    init?(hour: Int, minute: Int) {
+        guard (0...23).contains(hour), (0...59).contains(minute) else { return nil }
+        self.hour = hour
+        self.minute = minute
+    }
+
+    /// Liest `7:00`, `07:00` und `0730` nicht (bewusst nur mit Doppelpunkt).
+    init?(parsing raw: String) {
+        let parts = raw.trimmingCharacters(in: .whitespaces).split(separator: ":", omittingEmptySubsequences: false)
+        guard parts.count == 2, (1...2).contains(parts[0].count), parts[1].count == 2,
+              let hour = Int(parts[0]), let minute = Int(parts[1]) else { return nil }
+        self.init(hour: hour, minute: minute)
+    }
+
+    var text: String { String(format: "%02d:%02d", hour, minute) }
+
+    static func < (lhs: Self, rhs: Self) -> Bool {
+        (lhs.hour, lhs.minute) < (rhs.hour, rhs.minute)
+    }
+
+    init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        guard let value = Self(parsing: raw) else {
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "Uhrzeit \(raw)"))
+        }
+        self = value
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        try c.encode(text)
+    }
+}
+
+/// Zeitplan wie im Entwurf (Entscheidung Giuliano 17.11.2026): täglich,
+/// werktags, wöchentlich an gewählten Tagen, stündlich zur Minute. Mehrere
+/// Uhrzeiten je Aufgabe sind erlaubt (PM-Analyse: 07:00 und 22:30).
+struct ScheduledTaskSchedule: Codable, Equatable {
+    enum Kind: String, Codable, CaseIterable {
+        case daily, weekdays, weekly, hourly
+    }
+
+    var kind: Kind
+    /// Uhrzeiten für täglich, werktags und wöchentlich (sortiert, ohne Doppelte).
+    var times: [ScheduledTaskClockTime]
+    /// Wochentage für wöchentlich, ISO: 1 = Montag … 7 = Sonntag.
+    var days: [Int]
+    /// Minute für stündlich.
+    var minute: Int?
+
+    init(kind: Kind, times: [ScheduledTaskClockTime] = [], days: [Int] = [], minute: Int? = nil) {
+        self.kind = kind
+        self.times = Array(Set(times)).sorted()
+        self.days = Array(Set(days)).sorted()
+        self.minute = minute
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(
+            kind: try c.decode(Kind.self, forKey: .kind),
+            times: try c.decodeIfPresent([ScheduledTaskClockTime].self, forKey: .times) ?? [],
+            days: try c.decodeIfPresent([Int].self, forKey: .days) ?? [],
+            minute: try c.decodeIfPresent(Int.self, forKey: .minute)
+        )
+    }
+
+    /// Fehlertext, wenn der Zeitplan nie einen Termin ergäbe.
+    var validationError: String? {
+        switch kind {
+        case .daily, .weekdays:
+            return times.isEmpty ? "Zeitplan braucht mindestens eine Uhrzeit." : nil
+        case .weekly:
+            if times.isEmpty { return "Zeitplan braucht mindestens eine Uhrzeit." }
+            if days.isEmpty { return "Wöchentlich braucht mindestens einen Wochentag." }
+            if days.contains(where: { !(1...7).contains($0) }) { return "Wochentage 1 (Mo) bis 7 (So)." }
+            return nil
+        case .hourly:
+            guard let minute, (0...59).contains(minute) else { return "Stündlich braucht eine Minute 0 bis 59." }
+            return nil
+        }
+    }
+
+    // MARK: Text (CLI)
+
+    static let dayAbbreviations = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"]
+
+    /// „werktags 07:00, 22:30“, „wöchentlich Mo, Mi 08:00“, „stündlich :15“.
+    /// Dieselbe Form liest `init(parsing:)` zurück.
+    var text: String {
+        let clock = times.map(\.text).joined(separator: ", ")
+        switch kind {
+        case .daily: return "täglich \(clock)"
+        case .weekdays: return "werktags \(clock)"
+        case .weekly:
+            let names = days.compactMap { (1...7).contains($0) ? Self.dayAbbreviations[$0 - 1] : nil }
+            return "wöchentlich \(names.joined(separator: ", ")) \(clock)"
+        case .hourly: return String(format: "stündlich :%02d", minute ?? 0)
+        }
+    }
+
+    enum ParseError: Error, Equatable {
+        case invalid(String)
+
+        var message: String {
+            switch self { case .invalid(let text): return text }
+        }
+    }
+
+    /// Liest die Zeitplan-Angabe der CLI, deutsch oder englisch:
+    /// `täglich 07:00`, `daily 7:00,22:30`, `werktags 07:00`, `weekdays 07:00`,
+    /// `wöchentlich mo,mi 08:00`, `weekly mon,wed 08:00`, `stündlich :15`,
+    /// `hourly 15`.
+    static func parse(_ raw: String) -> Result<ScheduledTaskSchedule, ParseError> {
+        let tokens = raw.lowercased()
+            .replacingOccurrences(of: ",", with: " ")
+            .split(whereSeparator: { $0.isWhitespace })
+            .map(String.init)
+        guard let head = tokens.first else {
+            return .failure(.invalid("Zeitplan fehlt, etwa \"werktags 07:00\"."))
+        }
+        let rest = Array(tokens.dropFirst())
+        let kind: Kind
+        switch head {
+        case "täglich", "taeglich", "daily": kind = .daily
+        case "werktags", "weekdays": kind = .weekdays
+        case "wöchentlich", "woechentlich", "weekly": kind = .weekly
+        case "stündlich", "stuendlich", "hourly": kind = .hourly
+        default:
+            return .failure(.invalid("Unbekannte Art \"\(head)\": täglich, werktags, wöchentlich oder stündlich."))
+        }
+
+        if kind == .hourly {
+            guard rest.count == 1 else { return .failure(.invalid("Stündlich braucht genau eine Minute, etwa \"stündlich :15\".")) }
+            let digits = rest[0].hasPrefix(":") ? String(rest[0].dropFirst()) : rest[0]
+            guard digits.count <= 2, let minute = Int(digits), (0...59).contains(minute) else {
+                return .failure(.invalid("Minute \"\(rest[0])\" ist ungültig (0 bis 59)."))
+            }
+            return .success(ScheduledTaskSchedule(kind: .hourly, minute: minute))
+        }
+
+        var times: [ScheduledTaskClockTime] = []
+        var days: [Int] = []
+        for token in rest {
+            if token.contains(":") {
+                guard let time = ScheduledTaskClockTime(parsing: token) else {
+                    return .failure(.invalid("Uhrzeit \"\(token)\" ist ungültig, erwartet etwa 07:00."))
+                }
+                times.append(time)
+            } else if kind == .weekly, let day = dayNumber(token) {
+                days.append(day)
+            } else {
+                return .failure(.invalid("\"\(token)\" verstehe ich nicht im Zeitplan."))
+            }
+        }
+        let schedule = ScheduledTaskSchedule(kind: kind, times: times, days: days)
+        if let error = schedule.validationError { return .failure(.invalid(error)) }
+        return .success(schedule)
+    }
+
+    /// Wochentag aus deutschem oder englischem Namen (erste zwei Buchstaben).
+    static func dayNumber(_ token: String) -> Int? {
+        let key = String(token.prefix(2))
+        switch key {
+        case "mo": return 1
+        case "di", "tu": return 2
+        case "mi", "we": return 3
+        case "do", "th": return 4
+        case "fr": return 5
+        case "sa": return 6
+        case "so", "su": return 7
+        default: return nil
+        }
+    }
+}
