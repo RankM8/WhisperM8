@@ -298,11 +298,13 @@ final class ScheduledTasksViewTests: XCTestCase {
         XCTAssertNil(model.overview(id: created.id)?.next)
     }
 
-    /// Angeheftet und aufgeklappt (Entscheidung 17.11.2026): etwa ein Drittel
-    /// der Seitenleiste, zwischen 120 und 240 pt; ungemessen die Obergrenze.
+    /// Angeheftet und aufgeklappt (Entscheidung 17.11.2026): höchstens ein
+    /// Drittel der Seitenleiste, auch klein, in 20-pt-Stufen abgerundet, nie
+    /// über 240 pt; ungemessen die Obergrenze.
     func testPinnedListHeightIsAThirdOfTheSidebarWithinBounds() {
         XCTAssertEqual(ScheduledTasksSidebarSection.maxListHeight(sidebarHeight: 0), 240)
-        XCTAssertEqual(ScheduledTasksSidebarSection.maxListHeight(sidebarHeight: 300), 120)
+        XCTAssertEqual(ScheduledTasksSidebarSection.maxListHeight(sidebarHeight: 300), 100)
+        XCTAssertEqual(ScheduledTasksSidebarSection.maxListHeight(sidebarHeight: 500), 160)
         XCTAssertEqual(ScheduledTasksSidebarSection.maxListHeight(sidebarHeight: 600), 200)
         XCTAssertEqual(ScheduledTasksSidebarSection.maxListHeight(sidebarHeight: 1_200), 240)
     }

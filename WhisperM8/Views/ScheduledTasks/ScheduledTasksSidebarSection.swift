@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Abschnitt „Geplant“ fest unten in der Seitenleiste, über der Fußzeile
 /// (WM8-110; seit 17.11.2026 angeheftet statt am Ende der Chat-Liste, dort ging
-/// er unter). Zugeklappt eine Zeile, aufgeklappt höchstens `maxListHeight` hoch
+/// er unter). Zugeklappt eine Zeile, aufgeklappt höchstens `listHeight.value` hoch
 /// mit eigenem Scroll; die Chat-Liste scrollt darüber. Je Aufgabe eine Zeile wie
 /// ein Chat, darunter ihre letzten drei Läufe zum Aufklappen. Ein Klick auf die
 /// Aufgabe öffnet ihr Detail, ein Klick auf einen Lauf seinen Chat.
@@ -17,8 +17,8 @@ struct ScheduledTasksSidebarSection: View, Equatable {
     let selectedTaskID: UUID?
     /// Externe Sitzung des gewählten Chats (klein geschrieben), für die Markierung des Laufs.
     let selectedRunSessionID: String?
-    /// Höchste Höhe der aufgeklappten Liste (`maxListHeight(sidebarHeight:)`).
-    let maxListHeight: CGFloat
+    /// Höchste Höhe der aufgeklappten Liste, gemessen an der Seitenleiste.
+    let listHeight: ScheduledTasksListHeight
     var projects: () -> [ScheduledTaskEditorProject] = { [] }
     var onSelectTask: (UUID) -> Void = { _ in }
     /// `false` = Chat nicht gefunden (noch nicht eingelesen).
@@ -30,16 +30,16 @@ struct ScheduledTasksSidebarSection: View, Equatable {
     @State private var expandedTaskIDs: Set<UUID>
     @State private var editor: ScheduledTaskEditorTarget?
     /// Gemessene Höhe der Liste; bis dahin 0, der Rahmen wächst mit.
-    @State private var listHeight: CGFloat = 0
+    @State private var contentHeight: CGFloat = 0
 
     @MainActor
-    init(selectedTaskID: UUID?, selectedRunSessionID: String?, maxListHeight: CGFloat = 240,
+    init(selectedTaskID: UUID?, selectedRunSessionID: String?, listHeight: ScheduledTasksListHeight = .init(),
          projects: @escaping () -> [ScheduledTaskEditorProject] = { [] },
          onSelectTask: @escaping (UUID) -> Void = { _ in }, onOpenRun: @escaping (UUID) -> Bool = { _ in false },
          model: ScheduledTasksOverviewModel? = nil, expandedTaskIDs: Set<UUID> = []) {
         self.selectedTaskID = selectedTaskID
         self.selectedRunSessionID = selectedRunSessionID
-        self.maxListHeight = maxListHeight
+        self.listHeight = listHeight
         self.projects = projects
         self.onSelectTask = onSelectTask
         self.onOpenRun = onOpenRun
@@ -49,15 +49,14 @@ struct ScheduledTasksSidebarSection: View, Equatable {
 
     nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.selectedTaskID == rhs.selectedTaskID && lhs.selectedRunSessionID == rhs.selectedRunSessionID
-            && lhs.maxListHeight == rhs.maxListHeight
     }
 
-    /// Etwa ein Drittel der Seitenleiste, höchstens 240 pt und mindestens
-    /// 120 pt, damit auch ein kleines Fenster zwei, drei Aufgaben zeigt.
-    /// Ungemessen (0) gilt die Obergrenze.
+    /// Höchstens ein Drittel der Seitenleiste, auch bei kleinen Fenstern, und
+    /// nie mehr als 240 pt. Abgerundet auf 20-pt-Stufen: Beim Ziehen am Fenster
+    /// ändert sich der Wert nur alle 60 pt Fensterhöhe. Ungemessen (0) gilt 240.
     nonisolated static func maxListHeight(sidebarHeight: CGFloat) -> CGFloat {
         guard sidebarHeight > 0 else { return 240 }
-        return min(240, max(120, (sidebarHeight / 3).rounded()))
+        return min(240, ((sidebarHeight / 3) / 20).rounded(.down) * 20)
     }
 
     var body: some View {
@@ -71,10 +70,10 @@ struct ScheduledTasksSidebarSection: View, Equatable {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 2) { content(model) }
                             .padding(.bottom, 4)
-                            .onGeometryChange(for: CGFloat.self, of: { $0.size.height.rounded(.up) }) { listHeight = $0 }
+                            .onGeometryChange(for: CGFloat.self, of: { $0.size.height.rounded(.up) }) { contentHeight = $0 }
+                            .overlayScrollers() // an den Inhalt, nicht an die ScrollView (OverlayScrollers.swift)
                     }
-                    .frame(height: min(listHeight, maxListHeight))
-                    .overlayScrollers()
+                    .frame(height: min(contentHeight, listHeight.value))
                 }
             }
             .task { model.loadIfNeeded() }
@@ -235,6 +234,18 @@ struct ScheduledTasksSidebarSection: View, Equatable {
             if expandedTaskIDs.contains(id) { expandedTaskIDs.remove(id) } else { expandedTaskIDs.insert(id) }
         }
     }
+}
+
+/// Höchste Höhe der aufgeklappten Liste, von der Seitenleiste gemessen
+/// (`maxListHeight(sidebarHeight:)`). Ein eigenes Objekt statt `@State` am
+/// Fenster: Nur der Abschnitt liest den Wert, eine Höhenänderung wertet also
+/// nicht das ganze Fenster samt Seitenleisten-Snapshot neu aus. Ist der
+/// Schalter aus, liest ihn niemand.
+@Observable
+final class ScheduledTasksListHeight {
+    var value: CGFloat
+
+    init(value: CGFloat = 240) { self.value = value }
 }
 
 // MARK: - Zeilen

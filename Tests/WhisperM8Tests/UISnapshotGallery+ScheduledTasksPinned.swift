@@ -42,7 +42,7 @@ extension UISnapshotGallery {
                 Spacer(minLength: 0)
                 ScheduledTasksSidebarSection(
                     selectedTaskID: nil, selectedRunSessionID: nil,
-                    maxListHeight: ScheduledTasksSidebarSection.maxListHeight(sidebarHeight: size.height),
+                    listHeight: .init(value: ScheduledTasksSidebarSection.maxListHeight(sidebarHeight: size.height)),
                     model: model ?? fixture.model(), expandedTaskIDs: expanded)
                 SidebarFooterBar(onOpenSettings: {}) { sidebarFooterTrailingPlaceholders() }
             }

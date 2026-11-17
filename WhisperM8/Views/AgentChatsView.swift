@@ -107,7 +107,7 @@ struct AgentChatsView: View {
     }
     @State var searchText = ""
     @State var flatVisibleSessionLimit = 50
-    @State var sidebarHeight: CGFloat = 0 // Höhe der Seitenleiste, begrenzt „Geplant“ aufgeklappt
+    @State var scheduledListHeight = ScheduledTasksListHeight() // nur „Geplant“ liest es, nie dieser Body
     @State var errorMessage: String?
     /// „Neuer Chat" ohne installierte CLI: geführter Installations-Leerzustand (LR-AU-022).
     @State var missingCLIPrompt: MissingCLIPrompt?
@@ -1423,10 +1423,10 @@ struct AgentChatsView: View {
             }
 
             Spacer(minLength: 0)
-            scheduledTasksSidebarSection // „Geplant“ fest über der Fußzeile (WM8-110), ohne Schalter nichts
+            if !archiveModeActive { scheduledTasksSidebarSection } // „Geplant“ über der Fußzeile (WM8-110)
             sidebarFooter
         }
-        .onGeometryChange(for: CGFloat.self, of: { $0.size.height.rounded() }) { sidebarHeight = $0 }
+        .onGeometryChange(for: CGFloat.self, of: { ScheduledTasksSidebarSection.maxListHeight(sidebarHeight: $0.size.height) }) { scheduledListHeight.value = $0 }
         .background(AgentTheme.sidebar)
         .environment(\.agentChatsWindowID, windowID)
         .onAppear { refreshMissingTranscripts() }
