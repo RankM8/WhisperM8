@@ -135,6 +135,21 @@ struct ScheduledTaskEditorSheet: View {
                         }
                         .toggleStyle(.checkbox)
                     }
+                    GridRow {
+                        label("Old runs")
+                        VStack(alignment: .leading, spacing: 4) {
+                            Picker(selection: $form.runArchiveDays) {
+                                Text("To the archive after 14 days").tag(14)
+                                Text("To the archive after 7 days").tag(7)
+                                Text("Keep").tag(0)
+                            } label: {
+                                EmptyView()
+                            }
+                            .labelsHidden()
+                            .fixedSize()
+                            hint("The sidebar always keeps the last three runs. The chats of archived runs stay.")
+                        }
+                    }
                 }
                 .padding(.trailing, 4)
             }

@@ -263,6 +263,7 @@ struct ScheduledTaskDetailView: View, Equatable {
             metaRow("Missed runs", task.catchUp
                     ? String(localized: "caught up, up to 12 hours later")
                     : String(localized: "not caught up"))
+            metaRow("Old runs", ScheduledTaskTexts.archive(days: task.runArchiveDays, archived: overview.archivedCount))
         }
     }
 

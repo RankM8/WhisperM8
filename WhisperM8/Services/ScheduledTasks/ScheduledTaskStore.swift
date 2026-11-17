@@ -13,6 +13,7 @@ import Foundation
 ///     result.json   Ausgabe von `claude -p --output-format json` (schreibt der Lauf)
 ///     stderr.log    Fehlerausgabe des Laufs
 ///     exit          „<Exit-Code> <Ende in Unix-Sekunden>“ (schreibt der Lauf zuletzt)
+///   scheduled-tasks/archive/<Aufgabe>/<Lauf>/   ältere Läufe, gleicher Inhalt (Paket 3)
 /// ```
 ///
 /// Ordner 0700, Dateien 0600. Die CLI liest dieselben Pfade, schreibt nie.
@@ -31,6 +32,11 @@ struct ScheduledTaskStore {
     var dataDirectory: URL { root.appendingPathComponent("scheduled-tasks", isDirectory: true) }
     var runsDirectory: URL { dataDirectory.appendingPathComponent("runs", isDirectory: true) }
     var lockURL: URL { dataDirectory.appendingPathComponent("scheduler.lock") }
+    var archiveDirectory: URL { dataDirectory.appendingPathComponent("archive", isDirectory: true) }
+
+    func archiveDirectory(for taskID: UUID) -> URL {
+        archiveDirectory.appendingPathComponent(taskID.uuidString.lowercased(), isDirectory: true)
+    }
 
     func runsDirectory(for taskID: UUID) -> URL {
         runsDirectory.appendingPathComponent(taskID.uuidString.lowercased(), isDirectory: true)
@@ -143,6 +149,51 @@ struct ScheduledTaskStore {
         }
         return nil
     }
+
+    // MARK: Archiv
+
+    /// Verschiebt Lauf-Ordner, die vor `cutoff` angelegt wurden, ins Archiv.
+    /// Das Alter steht im Ordnernamen (UTC-Zeit vorn), gelesen wird nur, was
+    /// alt genug ist. Die jüngsten `keepNewest` Ordner und alles, wofür
+    /// `isActive` gilt, bleiben stehen. Gibt die Zahl der verschobenen zurück.
+    @discardableResult
+    func archiveRuns(of taskID: UUID, olderThan cutoff: Date, keepNewest: Int,
+                     isActive: (ScheduledTaskRunFiles) -> Bool) -> Int {
+        let candidates = runDirectories(for: taskID).dropFirst(keepNewest)
+        let archive = archiveDirectory(for: taskID)
+        var moved = 0
+        for directory in candidates {
+            guard let created = Self.creationDate(ofRunNamed: directory.lastPathComponent), created < cutoff else { continue }
+            if let files = readRun(at: directory), isActive(files) { continue }
+            do {
+                try Self.ensureDirectory(archive)
+                try FileManager.default.moveItem(at: directory, to: archive.appendingPathComponent(directory.lastPathComponent, isDirectory: true))
+                moved += 1
+            } catch {
+                Logger.scheduledTasks.error("run_archive_failed run=\(directory.lastPathComponent, privacy: .public) error=\(error.localizedDescription, privacy: .public)")
+            }
+        }
+        return moved
+    }
+
+    /// Lauf-Ordner im Archiv (für die Zahl im Detail).
+    func archivedRunCount(for taskID: UUID) -> Int {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: archiveDirectory(for: taskID).path)) ?? []
+        return names.filter { !$0.hasPrefix(".") }.count
+    }
+
+    /// Anlagezeit aus dem Ordnernamen („20261117T060000Z-ab12cd“).
+    static func creationDate(ofRunNamed name: String) -> Date? {
+        runNameFormatter.date(from: String(name.prefix(16)))
+    }
+
+    private static let runNameFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "UTC")
+        formatter.dateFormat = "yyyyMMdd'T'HHmmss'Z'"
+        return formatter
+    }()
 
     func readRecord(at directory: URL) -> ScheduledTaskRunRecord? {
         guard let data = try? Data(contentsOf: directory.appendingPathComponent(ScheduledTaskRunFiles.recordName)) else { return nil }

@@ -163,10 +163,12 @@ final class ScheduledTasksOverviewModel {
     /// Sonst stünde nach dem Anlegen kurz „gibt es nicht mehr“ im Detail.
     func insertOrReplace(_ task: ScheduledTask, now: Date = Date(), calendar: Calendar = .current) {
         var overviews = snapshot.overviews
-        let runs = overviews.first { $0.id == task.id }?.runs ?? []
+        let previous = overviews.first { $0.id == task.id }
+        let runs = previous?.runs ?? []
         let next = task.paused ? nil : ScheduledTaskCalendar.nextOccurrence(of: task.schedule, after: now, calendar: calendar)
         let overview = ScheduledTaskOverview(task: task, next: next, runs: runs,
-                                             state: ScheduledTaskOverview.state(paused: task.paused, runs: runs))
+                                             state: ScheduledTaskOverview.state(paused: task.paused, runs: runs),
+                                             archivedCount: previous?.archivedCount ?? 0)
         if let index = overviews.firstIndex(where: { $0.id == task.id }) {
             overviews[index] = overview
         } else {

@@ -315,6 +315,15 @@ enum ScheduledTaskTexts {
         }
     }
 
+    // MARK: Archiv (Paket 3)
+
+    /// „to the archive after 14 days · 12 there“ bzw. „kept“.
+    static func archive(days: Int, archived: Int) -> String {
+        let rule = days > 0 ? String(localized: "to the archive after \(days) days") : String(localized: "kept")
+        guard archived > 0 else { return rule }
+        return rule + " · " + String(localized: "\(archived) in the archive")
+    }
+
     // MARK: Login vor dem nächsten Lauf (Paket 3)
 
     /// „Login of PowerUser ends today, before the next run.“
@@ -354,6 +363,7 @@ enum ScheduledTaskTexts {
         case .toolStartsWithDash:
             return String(localized: "A tool must not start with “-” (Claude would read it as an option).")
         case .customListEmpty: return String(localized: "A custom list needs at least one tool.")
+        case .invalidArchiveDays: return String(localized: "Old runs go to the archive after 14 or 7 days, or never.")
         }
     }
 

@@ -170,4 +170,39 @@ final class ScheduledTaskFailureNoticeTests: XCTestCase {
         XCTAssertNil(ScheduledTaskNotifications.route(userInfo: ["localSessionID": session.uuidString], actionIdentifier: ""),
                      "fremde Mitteilungen bleiben beim alten Weg")
     }
+
+    // MARK: Archiv im Durchlauf (gleiche Attrappe)
+
+    func testEvaluateArchivesOldRunsAtMostHourly() async throws {
+        let fake = Fake(now: date("2026-11-01 12:00"))
+        let (scheduler, store) = makeScheduler(fake, notices: Notices())
+        await scheduler.start()
+        var short = draft()
+        short.runArchiveDays = 7
+        let task = try await scheduler.add(short)
+        // Fünf fertige Läufe am 1. bis 5. November.
+        for day in 1...5 {
+            let created = date("2026-11-0\(day) 07:00")
+            let runID = ScheduledTaskRunRecord.makeRunID(now: created)
+            let dir = store.runsDirectory(for: task.id).appendingPathComponent(runID, isDirectory: true)
+            try store.writeRecord(ScheduledTaskRunRecord(runID: runID, taskID: task.id, taskName: "Bericht", sessionID: UUID(),
+                                                         account: "main", directory: projectDir.path, trigger: .schedule,
+                                                         slot: created, createdAt: created, pid: 1), in: dir)
+            try "0 0\n".write(to: dir.appendingPathComponent("exit"), atomically: true, encoding: .utf8)
+        }
+        fake.now = date("2026-11-10 06:00")
+        await scheduler.evaluate(reason: "test")
+        XCTAssertEqual(store.archivedRunCount(for: task.id), 2, "1. und 2. November; die jüngsten drei bleiben")
+        // Stehen bleiben: der verpasste Termin vom 9., die Läufe vom 5. und 4. (jüngste drei)
+        // und der vom 3. (07:00, noch keine 7 Tage vor dem 10., 06:00).
+        XCTAssertEqual(store.runDirectories(for: task.id).count, 4)
+
+        // Eine Stunde lang kein zweiter Durchgang, danach wieder.
+        fake.now = date("2026-11-10 06:30")
+        await scheduler.evaluate(reason: "test")
+        XCTAssertEqual(store.archivedRunCount(for: task.id), 2)
+        fake.now = date("2026-11-10 07:30")
+        await scheduler.evaluate(reason: "test")
+        XCTAssertEqual(store.archivedRunCount(for: task.id), 3, "jetzt ist der 3. älter als 7 Tage")
+    }
 }

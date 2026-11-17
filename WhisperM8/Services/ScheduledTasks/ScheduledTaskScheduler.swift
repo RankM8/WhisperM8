@@ -81,6 +81,7 @@ actor ScheduledTaskScheduler {
     /// Von uns gestartete Wrapper, die noch abgeholt werden müssen (`waitpid`).
     private var spawnedPIDs: Set<Int32> = []
     private var watchedRunIDs: Set<String> = []
+    private var lastArchivePass: Date?
 
     init(environment: Environment) {
         env = environment
@@ -160,7 +161,28 @@ actor ScheduledTaskScheduler {
             }
         }
         guard let file = try? env.store.load() else { return nil }
+        archiveOldRuns(of: file.tasks, now: env.now())
         return ScheduledTaskCalendar.nextWake(for: file.tasks, after: env.now(), calendar: calendar)
+    }
+
+    // MARK: Archiv (Paket 3)
+
+    /// Höchstens einmal je Stunde: Lauf-Ordner, die älter sind als die Frist
+    /// der Aufgabe, gehen nach `scheduled-tasks/archive/`. So bleibt die
+    /// Liste, die Ansicht und Planer lesen, kurz, und nichts geht verloren.
+    /// Ein arbeitender Lauf und die jüngsten drei bleiben stehen.
+    private func archiveOldRuns(of tasks: [ScheduledTask], now: Date) {
+        if let last = lastArchivePass, now.timeIntervalSince(last) < 3600, now >= last { return }
+        lastArchivePass = now
+        for task in tasks where task.runArchiveDays > 0 {
+            let cutoff = now.addingTimeInterval(-Double(task.runArchiveDays) * 86_400)
+            let moved = env.store.archiveRuns(of: task.id, olderThan: cutoff, keepNewest: 3) { files in
+                ScheduledTaskRunEvaluator.outcome(of: files, now: now, isProcessAlive: env.isProcessAlive).isActive
+            }
+            if moved > 0 {
+                Logger.scheduledTasks.info("runs_archived task=\(task.shortID, privacy: .public) count=\(moved)")
+            }
+        }
     }
 
     private struct Claim {
@@ -221,7 +243,8 @@ actor ScheduledTaskScheduler {
             directory: ScheduledTaskValidation.normalizedDirectory(directory), account: account,
             schedule: schedule,
             permissions: ScheduledTaskPermissions(access: draft.access ?? .projectWrite, extraTools: draft.extraTools ?? []),
-            catchUp: draft.catchUp ?? true, paused: draft.paused ?? false, createdAt: now)
+            catchUp: draft.catchUp ?? true, paused: draft.paused ?? false, createdAt: now,
+            runArchiveDays: draft.runArchiveDays ?? ScheduledTask.defaultRunArchiveDays)
         task.lastSlot = nil
         try mutate { file in
             try self.validate(task, in: file)
@@ -250,6 +273,7 @@ actor ScheduledTaskScheduler {
             if let tools = draft.extraTools { task.permissions.extraTools = tools }
             if let catchUp = draft.catchUp { task.catchUp = catchUp }
             if let paused = draft.paused { task.paused = paused }
+            if let days = draft.runArchiveDays { task.runArchiveDays = days }
             // Neuer Zeitplan oder fortgesetzt: Was schon vorbei ist, startet nicht sofort.
             if task.schedule != old.schedule || (old.paused && !task.paused) {
                 task.lastSlot = ScheduledTaskCalendar.slotMarker(for: task, now: now, calendar: calendar)
@@ -279,6 +303,7 @@ actor ScheduledTaskScheduler {
         }
         if !isActive(id, now: now) {
             try? FileManager.default.removeItem(at: env.store.runsDirectory(for: id))
+            try? FileManager.default.removeItem(at: env.store.archiveDirectory(for: id))
         }
         Logger.scheduledTasks.info("task_removed task=\(removed.shortID, privacy: .public)")
         return removed
@@ -482,6 +507,8 @@ struct ScheduledTaskDraft: Codable, Equatable {
     var extraTools: [String]?
     var catchUp: Bool?
     var paused: Bool?
+    /// Tage bis zum Archiv, 0 = nie.
+    var runArchiveDays: Int?
 
     var isEmpty: Bool { self == ScheduledTaskDraft() }
 }
@@ -521,6 +548,9 @@ enum ScheduledTaskValidation {
         if task.permissions.access == .custom, task.permissions.allowedTools.isEmpty {
             return .customListEmpty
         }
+        if !ScheduledTask.runArchiveDayChoices.contains(task.runArchiveDays) {
+            return .invalidArchiveDays
+        }
         return nil
     }
 }
@@ -541,6 +571,7 @@ enum ScheduledTaskValidationProblem: Equatable {
     case toolEmptyOrMultiline
     case toolStartsWithDash
     case customListEmpty
+    case invalidArchiveDays
 
     /// Deutsch für die CLI, wie ihre übrigen Texte.
     var cliText: String {
@@ -559,6 +590,7 @@ enum ScheduledTaskValidationProblem: Equatable {
         case .toolEmptyOrMultiline: return "Ein erlaubtes Werkzeug ist leer oder enthält einen Zeilenumbruch."
         case .toolStartsWithDash: return "Ein erlaubtes Werkzeug darf nicht mit „-“ beginnen (Claude läse es als Option)."
         case .customListEmpty: return "Eigene Liste braucht mindestens ein Werkzeug (--allow)."
+        case .invalidArchiveDays: return "Alte Läufe gehen nach 14 oder 7 Tagen ins Archiv oder nie (--archive-runs 14|7|never)."
         }
     }
 }

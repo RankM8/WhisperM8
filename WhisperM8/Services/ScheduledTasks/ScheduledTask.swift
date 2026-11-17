@@ -29,12 +29,20 @@ struct ScheduledTask: Codable, Equatable, Identifiable {
     /// übersprungen. Wird VOR dem Start geschrieben, damit kein Termin zweimal
     /// läuft (höchstens einmal, auch nach einem Absturz).
     var lastSlot: Date?
+    /// Lauf-Ordner gehen nach so vielen Tagen ins Archiv
+    /// (`scheduled-tasks/archive/`), 0 = nie (Paket 3). Die jüngsten drei
+    /// bleiben immer, damit die Seitenleiste etwas zu zeigen hat.
+    var runArchiveDays: Int
+
+    static let defaultRunArchiveDays = 14
+    /// Wahl im Blatt und in der CLI (`--archive-runs 14|7|never`).
+    static let runArchiveDayChoices = [14, 7, 0]
 
     init(
         id: UUID = UUID(), name: String, prompt: String, directory: String, account: String,
         schedule: ScheduledTaskSchedule, permissions: ScheduledTaskPermissions = .init(),
         catchUp: Bool = true, paused: Bool = false, createdAt: Date, updatedAt: Date? = nil,
-        lastSlot: Date? = nil
+        lastSlot: Date? = nil, runArchiveDays: Int = ScheduledTask.defaultRunArchiveDays
     ) {
         self.id = id
         self.name = name
@@ -48,6 +56,7 @@ struct ScheduledTask: Codable, Equatable, Identifiable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt ?? createdAt
         self.lastSlot = lastSlot
+        self.runArchiveDays = runArchiveDays
     }
 
     init(from decoder: Decoder) throws {
@@ -64,6 +73,7 @@ struct ScheduledTask: Codable, Equatable, Identifiable {
         createdAt = try c.decode(Date.self, forKey: .createdAt)
         updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
         lastSlot = try c.decodeIfPresent(Date.self, forKey: .lastSlot)
+        runArchiveDays = try c.decodeIfPresent(Int.self, forKey: .runArchiveDays) ?? Self.defaultRunArchiveDays
     }
 
     /// Kurze Kennung für CLI und Logs (erste acht Zeichen der ID).

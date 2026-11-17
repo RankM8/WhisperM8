@@ -27353,6 +27353,96 @@
           }
         }
       }
+    },
+    "Old runs": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alte Läufe"
+          }
+        }
+      }
+    },
+    "To the archive after 14 days": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach 14 Tagen ins Archiv"
+          }
+        }
+      }
+    },
+    "To the archive after 7 days": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach 7 Tagen ins Archiv"
+          }
+        }
+      }
+    },
+    "Keep": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Behalten"
+          }
+        }
+      }
+    },
+    "The sidebar always keeps the last three runs. The chats of archived runs stay.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die letzten drei Läufe bleiben immer stehen. Die Chats archivierter Läufe bleiben erhalten."
+          }
+        }
+      }
+    },
+    "to the archive after %lld days": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nach %lld Tagen ins Archiv"
+          }
+        }
+      }
+    },
+    "kept": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "behalten"
+          }
+        }
+      }
+    },
+    "%lld in the archive": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld im Archiv"
+          }
+        }
+      }
+    },
+    "Old runs go to the archive after 14 or 7 days, or never.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alte Läufe gehen nach 14 oder 7 Tagen ins Archiv oder nie."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

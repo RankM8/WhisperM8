@@ -58,6 +58,8 @@ struct ScheduledTaskOverview: Equatable, Identifiable {
     /// Neueste zuerst.
     var runs: [ScheduledTaskRunSummary]
     var state: State
+    /// Lauf-Ordner im Archiv (Paket 3).
+    var archivedCount = 0
 
     var id: UUID { task.id }
 
@@ -126,7 +128,8 @@ enum ScheduledTaskOverviewLoader {
             let next = task.paused ? nil
                 : ScheduledTaskCalendar.nextOccurrence(of: task.schedule, after: now, calendar: calendar)
             return ScheduledTaskOverview(task: task, next: next, runs: runs,
-                                         state: ScheduledTaskOverview.state(paused: task.paused, runs: runs))
+                                         state: ScheduledTaskOverview.state(paused: task.paused, runs: runs),
+                                         archivedCount: store.archivedRunCount(for: task.id))
         }
         return Snapshot(overviews: overviews)
     }
