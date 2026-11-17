@@ -58,6 +58,8 @@ struct ScheduledTaskOverview: Equatable, Identifiable {
     /// Neueste zuerst.
     var runs: [ScheduledTaskRunSummary]
     var state: State
+    /// Lauf-Ordner im Archiv (Paket 3).
+    var archivedCount = 0
 
     var id: UUID { task.id }
 
@@ -108,7 +110,7 @@ enum ScheduledTaskOverviewLoader {
         do {
             file = try store.load()
         } catch {
-            return Snapshot(loadError: error.localizedDescription)
+            return Snapshot(loadError: ScheduledTaskTexts.error(error))
         }
         let overviews = file.tasks.map { task -> ScheduledTaskOverview in
             var runs = store.recentRuns(for: task.id, limit: runLimit).map { files in
@@ -126,8 +128,25 @@ enum ScheduledTaskOverviewLoader {
             let next = task.paused ? nil
                 : ScheduledTaskCalendar.nextOccurrence(of: task.schedule, after: now, calendar: calendar)
             return ScheduledTaskOverview(task: task, next: next, runs: runs,
-                                         state: ScheduledTaskOverview.state(paused: task.paused, runs: runs))
+                                         state: ScheduledTaskOverview.state(paused: task.paused, runs: runs),
+                                         archivedCount: store.archivedRunCount(for: task.id))
         }
         return Snapshot(overviews: overviews)
+    }
+}
+
+/// Endet der Login des Kontos vor dem nächsten Termin? Dann startet der Lauf
+/// nicht (der Planer prüft `claude auth status`) und meldet sich als
+/// fehlgeschlagen. Rein, getestet; das Enddatum kommt aus
+/// `ClaudeLoginExpiryStore` (dieselbe Quelle wie die Ablaufanzeige der Konten).
+struct ScheduledTaskLoginWarning: Equatable {
+    var endsAt: Date
+    var next: Date
+    var hasEnded: Bool
+
+    static func check(loginEndsAt: Date?, next: Date?, now: Date) -> ScheduledTaskLoginWarning? {
+        // Pausiert oder ohne Termin: Es startet nichts, das scheitern könnte.
+        guard let loginEndsAt, let next, loginEndsAt <= next else { return nil }
+        return ScheduledTaskLoginWarning(endsAt: loginEndsAt, next: next, hasEnded: loginEndsAt <= now)
     }
 }

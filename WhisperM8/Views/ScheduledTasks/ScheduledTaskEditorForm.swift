@@ -30,6 +30,8 @@ struct ScheduledTaskEditorForm: Equatable {
     var access: ScheduledTaskPermissions.Access = .projectWrite
     var extraToolsText = ""
     var catchUp = true
+    /// Tage bis zum Archiv, 0 = behalten.
+    var runArchiveDays = ScheduledTask.defaultRunArchiveDays
 
     init() {}
 
@@ -47,6 +49,7 @@ struct ScheduledTaskEditorForm: Equatable {
         access = task.permissions.access
         extraToolsText = task.permissions.extraTools.joined(separator: ", ")
         catchUp = task.catchUp
+        runArchiveDays = task.runArchiveDays
     }
 
     // MARK: Lesen
@@ -162,6 +165,7 @@ struct ScheduledTaskEditorForm: Equatable {
         if original?.permissions.access != access { draft.access = access }
         if original?.permissions.extraTools != tools { draft.extraTools = tools }
         if original?.catchUp != catchUp { draft.catchUp = catchUp }
+        if original?.runArchiveDays != runArchiveDays { draft.runArchiveDays = runArchiveDays }
         return .success(draft)
     }
 }

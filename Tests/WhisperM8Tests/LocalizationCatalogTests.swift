@@ -300,6 +300,7 @@ final class LocalizationCatalogTests: XCTestCase {
         "WhisperM8/Views/ScheduledTasks/ScheduledTaskDetailView.swift",
         "WhisperM8/Views/ScheduledTasks/ScheduledTaskEditorSheet.swift",
         "WhisperM8/Views/ScheduledTasks/ScheduledTaskEditorForm.swift",
+        "WhisperM8/Views/AgentSessionReadAlong.swift",
     ]
 
     func testChatsFilesContainNoGermanLiterals() throws {

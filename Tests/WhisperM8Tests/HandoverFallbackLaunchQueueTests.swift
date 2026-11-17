@@ -133,14 +133,25 @@ final class HandoverFallbackLaunchQueueTests: XCTestCase {
 
     /// Vic (3): Jeder Start der Ansicht verwirft den Eintrag, nicht nur der
     /// aus der unterdrückten Pane. Alle Startwege laufen über launchAfterCacheWarmup.
+    /// WM8-110 (Mara K2): erst nach der Mitlesen-Sperre — ein gesperrter Start
+    /// soll den vorgemerkten Rückfall-Start nicht verlieren — und vor dem
+    /// eigentlichen Start (`Task.detached`).
     func testEveryLaunchOfTheViewForgetsTheQueueEntry() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent()
         let text = try String(contentsOf: root.appendingPathComponent("WhisperM8/Views/AgentSessionDetailView.swift"),
                               encoding: .utf8)
         let start = try XCTUnwrap(text.range(of: "private func launchAfterCacheWarmup("))
-        let body = text[start.upperBound...].prefix(400)
-        XCTAssertTrue(body.contains("HandoverFallbackLaunchQueue.shared.forget(session.id)"))
+        // Ganzer Funktionsrumpf: bis zur nächsten Funktion auf derselben Ebene.
+        let rest = text[start.upperBound...]
+        let end = rest.range(of: "\n    private func ")?.lowerBound ?? rest.range(of: "\n    func ")?.lowerBound ?? rest.endIndex
+        let body = String(rest[..<end])
+        let forget = try XCTUnwrap(body.range(of: "HandoverFallbackLaunchQueue.shared.forget(session.id)"),
+                                   "launchAfterCacheWarmup verwirft den Rückfall-Eintrag")
+        let guardCheck = try XCTUnwrap(body.range(of: "AgentSessionReadAlong.liveWriter("), "Mitlesen-Sperre im Start")
+        let launch = try XCTUnwrap(body.range(of: "Task.detached"), "eigentlicher Start")
+        XCTAssertLessThan(guardCheck.lowerBound, forget.lowerBound, "forget erst nach der Mitlesen-Sperre")
+        XCTAssertLessThan(forget.lowerBound, launch.lowerBound, "forget vor dem eigentlichen Start")
     }
 
     // MARK: Punkt 11: Rückfall für Chats ohne Sitzungs-ID

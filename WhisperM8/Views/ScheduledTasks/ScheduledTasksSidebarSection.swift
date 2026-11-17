@@ -47,7 +47,8 @@ struct ScheduledTasksSidebarSection: View, Equatable {
     var body: some View {
         if enabled {
             VStack(alignment: .leading, spacing: 2) {
-                header(count: model.snapshot.overviews.count)
+                header(count: model.snapshot.overviews.count,
+                       failed: model.snapshot.overviews.reduce(0) { $0 + ($1.state == .failed ? 1 : 0) })
                 if !collapsed { content(model) }
             }
             .padding(.top, 8)
@@ -62,7 +63,9 @@ struct ScheduledTasksSidebarSection: View, Equatable {
 
     // MARK: Kopf
 
-    private func header(count: Int) -> some View {
+    /// `failed`: Aufgaben, deren letzter Lauf fehlschlug. Steht immer da, auch
+    /// aufgeklappt — ein Fehlschlag soll sofort auffallen (Entwurf, Paket 3).
+    private func header(count: Int, failed: Int) -> some View {
         HStack(spacing: 5) {
             Button {
                 withAnimation(.easeOut(duration: 0.15)) { collapsed.toggle() }
@@ -79,6 +82,17 @@ struct ScheduledTasksSidebarSection: View, Equatable {
                     if collapsed, count > 0 {
                         Text("\(count)")
                             .font(.system(size: 11, weight: .bold).monospacedDigit())
+                    }
+                    if failed > 0 {
+                        if collapsed, count > 0 {
+                            Text(verbatim: "·")
+                                .font(.system(size: 11, weight: .bold))
+                        }
+                        Text("\(failed) failed")
+                            .font(.system(size: 11, weight: .semibold).monospacedDigit())
+                            .foregroundStyle(AgentTheme.statusError)
+                            .lineLimit(1)
+                            .fixedSize()
                     }
                     Spacer(minLength: 0)
                 }
@@ -110,7 +124,7 @@ struct ScheduledTasksSidebarSection: View, Equatable {
 
     @ViewBuilder
     private func content(_ model: ScheduledTasksOverviewModel) -> some View {
-        let clock = ScheduledTaskTexts.Clock(now: model.loadedAt, calendar: .current, locale: .current)
+        let clock = ScheduledTaskTexts.Clock(now: model.loadedAt)
         if let error = model.snapshot.loadError {
             Text(error)
                 .font(.system(size: 11))
@@ -168,8 +182,9 @@ struct ScheduledTasksSidebarSection: View, Equatable {
                 label: ScheduledTaskTexts.runShort(run.createdAt, clock: clock) + " · " + ScheduledTaskTexts.outcomeShort(run.outcome),
                 isSelected: selectedTaskID == nil && run.sessionID.map { $0.uuidString.lowercased() == selectedRunSessionID } == true,
                 onSelect: {
-                    // Ohne Chat, während er arbeitet, oder noch nicht eingelesen: das Detail erklärt es.
-                    guard let session = run.sessionID, !run.outcome.isActive, onOpenRun(session) else {
+                    // Arbeitet er, öffnet der Chat zum Mitlesen (Paket 3). Ohne
+                    // Chat oder noch nicht eingelesen: das Detail erklärt es.
+                    guard let session = run.sessionID, onOpenRun(session) else {
                         onSelectTask(overview.id)
                         return
                     }
@@ -310,7 +325,13 @@ struct ScheduledTaskRunSidebarRow: View {
         .buttonStyle(.plain)
         .padding(.horizontal, 8)
         .onHover { isHovered = $0 }
-        .help(run.hasChat ? String(localized: "Open the chat of this run") : String(localized: "This run did not start, so there is no chat"))
+        .help(helpText)
+    }
+
+    private var helpText: String {
+        if !run.hasChat { return String(localized: "This run did not start, so there is no chat") }
+        if run.outcome.isActive { return String(localized: "Read along while this run is working") }
+        return String(localized: "Open the chat of this run")
     }
 }
 

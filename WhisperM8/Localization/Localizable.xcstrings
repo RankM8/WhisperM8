@@ -27064,16 +27064,6 @@
         }
       }
     },
-    "Its chat opens when the run is done. Two processes must never write to the same chat.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sein Chat lässt sich öffnen, wenn der Lauf fertig ist. Zwei Prozesse dürfen nie in denselben Chat schreiben."
-          }
-        }
-      }
-    },
     "Nothing starts until you resume. “Run now” stays off too, so pausing really means quiet. Past dates are not caught up after resuming.": {
       "localizations": {
         "de": {
@@ -27124,16 +27114,6 @@
         }
       }
     },
-    "chat after the end": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Chat nach dem Ende"
-          }
-        }
-      }
-    },
     "Open chat": {
       "localizations": {
         "de": {
@@ -27170,6 +27150,316 @@
           "stringUnit": {
             "state": "translated",
             "value": "Bash, Web, MCP und die Werkzeuge, die andere Sitzungen, die Cloud oder andere Ordner erreichen (SendMessage, ListAgents, RemoteTrigger, CronCreate, CronDelete, PushNotification, DesignSync, EnterWorktree, ExitWorktree), bleiben gesperrt, auch wenn das Konto sie in seinen Einstellungen erlaubt. Wer eines nennt, öffnet es: Bash(…) lässt auch die Bash-Freigaben des Kontos gelten, ein mcp__…-Eintrag lädt alle MCP-Server des Kontos."
+          }
+        }
+      }
+    },
+    "Name, prompt, folder, account and schedule are required.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name, Auftrag, Ordner, Konto und Zeitplan sind Pflicht."
+          }
+        }
+      }
+    },
+    "The folder must be an absolute path.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Ordner muss ein absoluter Pfad sein."
+          }
+        }
+      }
+    },
+    "An allowed tool is empty or spans several lines.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein erlaubtes Werkzeug ist leer oder geht über mehrere Zeilen."
+          }
+        }
+      }
+    },
+    "Weekdays run from 1 (Monday) to 7 (Sunday).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wochentage gehen von 1 (Montag) bis 7 (Sonntag)."
+          }
+        }
+      }
+    },
+    "Scheduled tasks are off. Turn them on under Settings › Labs › Scheduled tasks.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geplante Aufgaben sind aus. Einschalten unter Einstellungen › Labs › Scheduled tasks."
+          }
+        }
+      }
+    },
+    "Another WhisperM8 instance is planning the tasks right now; this one changes nothing.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine andere WhisperM8-Instanz plant die Aufgaben gerade; diese ändert nichts."
+          }
+        }
+      }
+    },
+    "A run of “%@” is still working. Two runs of the same task never run at once.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Lauf von „%@“ arbeitet noch. Zwei Läufe derselben Aufgabe laufen nie gleichzeitig."
+          }
+        }
+      }
+    },
+    "The folder for the run could not be created.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Ordner für den Lauf ließ sich nicht anlegen."
+          }
+        }
+      }
+    },
+    "scheduled-tasks.json can’t be read (%@). WhisperM8 leaves it unchanged.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "scheduled-tasks.json ist nicht lesbar (%@). WhisperM8 ändert sie deshalb nicht."
+          }
+        }
+      }
+    },
+    "scheduled-tasks.json could not be saved: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "scheduled-tasks.json ließ sich nicht speichern: %@"
+          }
+        }
+      }
+    },
+    "Scheduled task failed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geplante Aufgabe fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "Show task": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufgabe zeigen"
+          }
+        }
+      }
+    },
+    "Login of %@ has ended.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Login von %@ ist abgelaufen."
+          }
+        }
+      }
+    },
+    "Login of %@ ends %@, before the next run.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Login von %@ endet %@, vor dem nächsten Lauf."
+          }
+        }
+      }
+    },
+    "Without a new login, the next run (%@) does not start and reports a failure.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ohne neuen Login startet der nächste Lauf (%@) nicht und meldet sich als fehlgeschlagen."
+          }
+        }
+      }
+    },
+    "This chat is still working in another process, for example a scheduled run. You can read along; continuing works once it is done.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Chat arbeitet noch in einem anderen Prozess, etwa einem geplanten Lauf. Du kannst mitlesen; fortsetzen geht nach dem Ende."
+          }
+        }
+      }
+    },
+    "Working in another process. You are reading along; continuing works once it is done.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeitet in einem anderen Prozess. Du liest mit; fortsetzen geht nach dem Ende."
+          }
+        }
+      }
+    },
+    "Read along while this run is working": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mitlesen, solange dieser Lauf arbeitet"
+          }
+        }
+      }
+    },
+    "Continuing the chat works once the run is done. Until then you can read along.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fortsetzen geht nach dem Ende des Laufs. Bis dahin kannst du mitlesen."
+          }
+        }
+      }
+    },
+    "Read along": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mitlesen"
+          }
+        }
+      }
+    },
+    "Old runs": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alte Läufe"
+          }
+        }
+      }
+    },
+    "To the archive after 14 days": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach 14 Tagen ins Archiv"
+          }
+        }
+      }
+    },
+    "To the archive after 7 days": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach 7 Tagen ins Archiv"
+          }
+        }
+      }
+    },
+    "Keep": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Behalten"
+          }
+        }
+      }
+    },
+    "The sidebar always keeps the last three runs. The chats of archived runs stay.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die letzten drei Läufe bleiben immer stehen. Die Chats archivierter Läufe bleiben erhalten."
+          }
+        }
+      }
+    },
+    "to the archive after %lld days": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nach %lld Tagen ins Archiv"
+          }
+        }
+      }
+    },
+    "kept": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "behalten"
+          }
+        }
+      }
+    },
+    "%lld in the archive": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld im Archiv"
+          }
+        }
+      }
+    },
+    "Old runs go to the archive after 14 or 7 days, or never.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alte Läufe gehen nach 14 oder 7 Tagen ins Archiv oder nie."
+          }
+        }
+      }
+    },
+    "The scheduled task “%@” is working in this chat. You are reading along; continuing works once it is done.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die geplante Aufgabe „%@“ arbeitet in diesem Chat. Du liest mit; fortsetzen geht nach dem Ende."
+          }
+        }
+      }
+    },
+    "Another Claude process (PID %@, account %@) is working in this chat. You are reading along; continuing works once it is done.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein anderer Claude-Prozess (PID %@, Konto %@) arbeitet in diesem Chat. Du liest mit; fortsetzen geht nach dem Ende."
           }
         }
       }
