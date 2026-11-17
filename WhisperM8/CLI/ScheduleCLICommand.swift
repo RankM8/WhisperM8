@@ -27,7 +27,8 @@ enum ScheduleCLICommand {
     auf: --allow "Bash(whisperm8 tickets *)" öffnet Bash (dann gelten auch die Bash-Freigaben des Kontos),
     --allow mcp__linear__get_issue öffnet MCP (dann lädt der Lauf die MCP-Server des Kontos).
     Ebenso gesperrt, offen nur einzeln per --allow: SendMessage, ListAgents (andere lokale Sitzungen),
-    RemoteTrigger (Cloud-Routinen), CronCreate, CronDelete, PushNotification.
+    RemoteTrigger (Cloud-Routinen), CronCreate, CronDelete, PushNotification, DesignSync,
+    EnterWorktree, ExitWorktree (anderer Arbeitsordner).
     Läufe starten nur, solange WhisperM8 läuft; Verpasstes wird bis 12 Stunden später nachgeholt.
     """
 

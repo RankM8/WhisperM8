@@ -445,7 +445,8 @@ final class ScheduledTaskSchedulerTests: XCTestCase {
     /// CronCreate/CronDelete und PushNotification — Wege nach außen an der
     /// Bash-Sperre vorbei. Gesperrt in jeder Stufe, offen nur einzeln per --allow.
     func testOutwardToolsAreBlockedUnlessAllowed() {
-        let outward = ["SendMessage", "ListAgents", "RemoteTrigger", "CronCreate", "CronDelete", "PushNotification"]
+        let outward = ["SendMessage", "ListAgents", "RemoteTrigger", "CronCreate", "CronDelete", "PushNotification",
+                       "DesignSync", "EnterWorktree", "ExitWorktree"]
         for permissions in [ScheduledTaskPermissions(access: .projectWrite), ScheduledTaskPermissions(access: .readOnly),
                             ScheduledTaskPermissions(access: .custom, extraTools: ["Read", "Bash", "mcp__x__y"])] {
             let args = ScheduledTaskLauncher.claudeArguments(prompt: "x", sessionID: UUID(), name: nil,
@@ -462,6 +463,7 @@ final class ScheduledTaskSchedulerTests: XCTestCase {
         XCTAssertFalse(open.disallowedTools.contains("CronCreate"))
         XCTAssertTrue(open.disallowedTools.contains("CronDelete"), "Nur das genannte Werkzeug öffnet")
         XCTAssertTrue(open.disallowedTools.contains("ListAgents"))
+        XCTAssertTrue(open.disallowedTools.contains("EnterWorktree"))
     }
 
     /// Prüfung 17.11.: Ein Lauf darf nichts schreiben, was der nächste Lauf

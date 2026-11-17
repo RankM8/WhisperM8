@@ -92,7 +92,7 @@ Freigaben aus der `settings.json` des Kontos gelten zusätzlich (dort stehen etw
 | Befehle im Hintergrund | `Monitor` | `--allow Monitor` oder eine Bash-Freigabe |
 | Web | `WebFetch`, `WebSearch` | `--allow WebFetch` bzw. `--allow WebSearch` |
 | MCP | `mcp__*` und `--strict-mcp-config` (lädt keinen MCP-Server) | irgendein `--allow mcp__…` |
-| Wege nach außen | `SendMessage`, `ListAgents` (andere lokale Claude-Sitzungen, die Bash haben), `RemoteTrigger` (Cloud-Routinen), `CronCreate`, `CronDelete`, `PushNotification` | je Werkzeug `--allow <Name>`; `Agent` und `Workflow` bleiben offen, Subagents erben die Sperren |
+| Wege nach außen | `SendMessage`, `ListAgents` (andere lokale Claude-Sitzungen, die Bash haben), `RemoteTrigger` (Cloud-Routinen), `CronCreate`, `CronDelete`, `PushNotification`, `DesignSync`, `EnterWorktree`, `ExitWorktree` (anderer Arbeitsordner verschöbe die Schreibregeln) | je Werkzeug `--allow <Name>`; `Agent` und `Workflow` bleiben offen, Subagents erben die Sperren |
 
 Eine Sperre schlägt jede Freigabe, auch die des Kontos und die eines Skills. Ist eine Familie per `--allow`
 offen, gelten für sie auch die Freigaben des Kontos: `--allow "Bash(whisperm8 tickets *)"` erlaubt also
