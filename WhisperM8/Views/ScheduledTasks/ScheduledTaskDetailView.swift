@@ -16,6 +16,8 @@ struct ScheduledTaskDetailView: View, Equatable {
     var model: ScheduledTasksOverviewModel = .shared
     var editorDependencies: ScheduledTaskEditorSheet.Dependencies = .live
     var loginEndsAt: (String) -> Date? = { ClaudeLoginExpiryStore.shared.entries[$0]?.endsAt }
+    /// „Login erneuern…“: Konten-Seite der Einstellungen, dort steht die Erneuerung.
+    var onRenewLogin: () -> Void = { WindowRequestCenter.shared.request(.settingsClaudeAccounts) }
 
     @AppStorage(PreferenceKeys.scheduledTasksEnabled) private var enabled = false
     @State private var editor: ScheduledTaskEditorTarget?
@@ -49,7 +51,7 @@ struct ScheduledTaskDetailView: View, Equatable {
     }
 
     private var clock: ScheduledTaskTexts.Clock {
-        ScheduledTaskTexts.Clock(now: model.loadedAt, calendar: .current, locale: .current)
+        ScheduledTaskTexts.Clock(now: model.loadedAt)
     }
 
     private var missing: some View {
@@ -100,6 +102,7 @@ struct ScheduledTaskDetailView: View, Equatable {
                 }
 
                 stateBox(overview)
+                loginBox(overview)
 
                 meta(overview)
                     .padding(.bottom, 14)
@@ -190,10 +193,15 @@ struct ScheduledTaskDetailView: View, Equatable {
                             .font(.system(size: 12, weight: .semibold))
                     }
                 }
-                Text("Its chat opens when the run is done. Two processes must never write to the same chat.")
+                Text("Continuing the chat works once the run is done. Until then you can read along.")
                     .font(.system(size: 12))
                     .foregroundStyle(AgentTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
+                if let session = overview.activeRun?.sessionID {
+                    Button { openChat(session) } label: { Text("Read along") }
+                        .controlSize(.small)
+                        .padding(.top, 4)
+                }
             }
         case .paused:
             box(tint: AgentTheme.textTertiary) {
@@ -206,6 +214,28 @@ struct ScheduledTaskDetailView: View, Equatable {
             }
         case .scheduled, .succeeded, .succeededWithNotes:
             EmptyView()
+        }
+    }
+
+    /// Login des Kontos endet vor dem nächsten Termin (Paket 3): Der Lauf
+    /// startete dann nicht und meldete sich als fehlgeschlagen.
+    @ViewBuilder
+    private func loginBox(_ overview: ScheduledTaskOverview) -> some View {
+        if let warning = ScheduledTaskLoginWarning.check(
+            loginEndsAt: loginEndsAt(overview.task.account), next: overview.next, now: clock.now) {
+            box(tint: AgentTheme.statusAwaiting) {
+                Text(verbatim: "◆ " + ScheduledTaskTexts.loginWarningTitle(warning, account: overview.task.account, clock: clock))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(AgentTheme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(verbatim: ScheduledTaskTexts.loginWarningDetail(next: warning.next, clock: clock))
+                    .font(.system(size: 12))
+                    .foregroundStyle(AgentTheme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button { onRenewLogin() } label: { Text("Renew login…") }
+                    .controlSize(.small)
+                    .padding(.top, 4)
+            }
         }
     }
 
@@ -233,6 +263,7 @@ struct ScheduledTaskDetailView: View, Equatable {
             metaRow("Missed runs", task.catchUp
                     ? String(localized: "caught up, up to 12 hours later")
                     : String(localized: "not caught up"))
+            metaRow("Old runs", ScheduledTaskTexts.archive(days: task.runArchiveDays, archived: overview.archivedCount))
         }
     }
 
@@ -309,10 +340,9 @@ struct ScheduledTaskDetailView: View, Equatable {
                 }
             }
             Spacer(minLength: 8)
-            if run.outcome.isActive {
-                Text("chat after the end")
-                    .font(.system(size: 11))
-                    .foregroundStyle(AgentTheme.textTertiary)
+            if run.outcome.isActive, let session = run.sessionID {
+                Button { openChat(session) } label: { Text("Read along") }
+                    .controlSize(.small)
             } else if let session = run.sessionID {
                 Button { openChat(session) } label: { Text("Open chat") }
                     .controlSize(.small)

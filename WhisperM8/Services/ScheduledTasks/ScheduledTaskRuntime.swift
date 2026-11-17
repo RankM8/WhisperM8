@@ -67,6 +67,7 @@ final class ScheduledTaskRuntime {
                 Task { @MainActor in ScheduledTaskRuntime.shared.tick(reason: "clock") }
             })
         }
+        ScheduledTaskNotifications.registerCategories()
         let scheduler = scheduler
         Task {
             await scheduler.start()
@@ -170,7 +171,8 @@ extension ScheduledTaskScheduler.Environment {
                     // Ende eines Laufs: Ergebnis in Seitenleiste und Detail.
                     Task { @MainActor in ScheduledTasksOverviewModel.shared.reload() }
                 }
-            }
+            },
+            notifyFailure: { notice in ScheduledTaskNotifications.post(notice) }
         )
     }
 }

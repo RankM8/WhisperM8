@@ -14,6 +14,7 @@ enum ScheduleCLICommand {
       add  --name N --dir ORDNER --account KONTO --schedule "werktags 07:00"
            (--prompt TEXT | --prompt-file DATEI)
            [--access project|read-only|custom] [--allow WERKZEUG]… [--no-catch-up] [--paused]
+           [--archive-runs 14|7|never]  alte Läufe nach so vielen Tagen ins Archiv (ab Werk 14)
       edit <aufgabe> [dieselben Optionen] [--catch-up] [--clear-allow]
       remove <aufgabe>              Aufgabe löschen; die Chats ihrer Läufe bleiben
       run <aufgabe>                 jetzt starten (nicht, solange ein Lauf arbeitet)
@@ -304,6 +305,16 @@ enum ScheduleCLIArguments: Equatable {
             case "--clear-allow":
                 guard !forAdd else { throw ParseError(message: "--clear-allow gibt es nur bei edit.") }
                 clearAllow = true
+            case "--archive-runs":
+                let raw = try value(flag)
+                switch raw {
+                case "never", "nie", "0": options.draft.runArchiveDays = 0
+                default:
+                    guard let days = Int(raw), ScheduledTask.runArchiveDayChoices.contains(days) else {
+                        throw ParseError(message: "--archive-runs: 14, 7 oder never, nicht „\(raw)“.")
+                    }
+                    options.draft.runArchiveDays = days
+                }
             case "--catch-up": options.draft.catchUp = true
             case "--no-catch-up": options.draft.catchUp = false
             case "--paused":
@@ -433,6 +444,9 @@ enum ScheduleCLIFormatter {
             "Ordner:          \(task.directory)",
             "Darf:            \(task.permissions.summary)",
             "Verpasst:        " + (task.catchUp ? "nachholen, bis 12 Std. später" : "nicht nachholen"),
+            "Alte Läufe:      " + (task.runArchiveDays > 0
+                ? "nach \(task.runArchiveDays) Tagen ins Archiv (\(context.store.archiveDirectory(for: task.id).path))"
+                : "behalten"),
             "Auftrag:         \(task.prompt)",
             "",
             "Läufe (neueste zuerst):",
@@ -474,6 +488,7 @@ enum ScheduleCLIFormatter {
             "directory": task.directory,
             "paused": task.paused,
             "catchUp": task.catchUp,
+            "runArchiveDays": task.runArchiveDays,
             "allowedTools": task.permissions.allowedTools,
             "disallowedTools": task.permissions.disallowedTools,
             "next": nextText(task, context: context),

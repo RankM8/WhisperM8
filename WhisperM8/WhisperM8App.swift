@@ -640,7 +640,10 @@ extension AppDelegate: UNUserNotificationCenterDelegate {
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let userInfo = response.notification.request.content.userInfo
-        if let raw = userInfo[UNAgentUserNotificationPoster.localSessionIDUserInfoKey] as? String,
+        if let route = ScheduledTaskNotifications.route(userInfo: userInfo, actionIdentifier: response.actionIdentifier) {
+            // Fehlschlag einer geplanten Aufgabe: Detail oder Chat des Laufs.
+            Task { @MainActor in ScheduledTaskNotifications.open(route) }
+        } else if let raw = userInfo[UNAgentUserNotificationPoster.localSessionIDUserInfoKey] as? String,
            let sessionID = UUID(uuidString: raw) {
             Task { @MainActor in
                 WindowRequestCenter.shared.requestSessionFocus(sessionID: sessionID)
