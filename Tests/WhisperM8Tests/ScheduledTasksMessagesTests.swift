@@ -139,4 +139,34 @@ final class ScheduledTasksMessagesTests: XCTestCase {
         codex.provider = .codex
         XCTAssertFalse(AgentSessionReadAlong.readsAlong(session: codex, hasController: false, status: .working))
     }
+
+    // MARK: Läufe nicht in der Chat-Liste (Entwurf, Variante A „nur hier“)
+
+    /// Ein Lauf ist ein `claude -p`-Chat, den der Indexer findet; in der App
+    /// angelegt ist er nicht (`createdManually` leer). Die Chat-Liste zeigt nur
+    /// in der App angelegte Chats — der Lauf steht also nur unter seiner
+    /// Aufgabe, auch wenn er gerade arbeitet, offen ist oder die Suche ihn träfe.
+    func testScheduledRunsStayOutOfTheChatListCountsAndSearch() {
+        let project = AgentProject(name: "whisperm8", path: "/tmp/whisperm8", createdManually: true)
+        let chat = AgentChatSession(provider: .claude, projectID: project.id, externalSessionID: UUID().uuidString.lowercased(),
+                                    title: "Bericht vorbereiten", status: .closed, hasLaunchedInitialPrompt: true,
+                                    createdManually: true)
+        let run = AgentChatSession(provider: .claude, projectID: project.id, externalSessionID: UUID().uuidString.lowercased(),
+                                   title: "Bericht · 17.11.", status: .closed, hasLaunchedInitialPrompt: true)
+        let workspace = AgentWorkspace(projects: [project], sessions: [chat, run])
+        for layout in [SidebarLayout.grouped, .flat] {
+            for query in ["", "Bericht"] {
+                let snapshot = AgentSidebarModelBuilder.snapshot(
+                    workspace: workspace, pinnedSessionIDs: [],
+                    scope: SidebarScopeFilter(scope: .all, runningSessionIDs: [run.id], openTabIDs: [run.id],
+                                              now: Date(), recentWindow: SidebarScopeFilter.defaultRecentWindow),
+                    layout: layout, query: query, flatVisibleLimit: 50, selectedSessionID: nil)
+                let listed = snapshot.visibleFlatSessions.map(\.id) + snapshot.sessionsByProject.values.flatMap { $0.map(\.id) }
+                XCTAssertTrue(listed.contains(chat.id), "\(layout) „\(query)“")
+                XCTAssertFalse(listed.contains(run.id), "\(layout) „\(query)“: Lauf steht nicht unter dem Projekt")
+                XCTAssertEqual(snapshot.scopeCounts.all, 1, "Zähler ohne Lauf")
+                XCTAssertFalse(snapshot.activeSessionIDsByProject[project.id]?.contains(run.id) ?? false)
+            }
+        }
+    }
 }
