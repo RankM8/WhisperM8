@@ -1431,6 +1431,7 @@ struct AgentChatsView: View {
                             listProxy: listProxy
                         )
                     }
+                    scheduledTasksSidebarSection // Abschnitt „Geplant“ (WM8-110), blendet sich ohne Schalter aus
                 }
                 .padding(.vertical, 6)
                 .background(ControllerListScrollFollower(proxy: listProxy))
@@ -1453,24 +1454,6 @@ struct AgentChatsView: View {
         .onChange(of: sidebarScope) { _, _ in flatVisibleSessionLimit = 50 }
         .onChange(of: sidebarLayout) { _, _ in flatVisibleSessionLimit = 50 }
         .onChange(of: searchText) { _, _ in flatVisibleSessionLimit = 50 }
-    }
-
-    /// Kleines Uppercase-Label über einer Sidebar-Sektion („Gepinnt", „Chats").
-    private func sidebarSectionLabel(_ text: String, systemImage: String? = nil) -> some View {
-        HStack(spacing: 5) {
-            if let systemImage {
-                Image(systemName: systemImage)
-                    .font(.system(size: 8, weight: .bold))
-            }
-            Text(text.uppercased())
-                .font(.system(size: 11, weight: .bold))
-                .tracking(0.6)
-            Spacer(minLength: 0)
-        }
-        .foregroundStyle(AgentTheme.textTertiary)
-        .padding(.horizontal, 14)
-        .padding(.top, 6)
-        .padding(.bottom, 2)
     }
 
     /// Klappbarer „Chats"-Header (Chevron + Anzahl) — blendet die komplette
@@ -1988,6 +1971,7 @@ struct AgentChatsView: View {
 
             if isTicketsModeActive {
                 ticketsWorkspace
+            } else if let taskID = scheduledTaskDetailID { scheduledTaskDetail(taskID) // Geplante Aufgabe (WM8-110)
             } else if isGridActive {
                 // Split-Grid: alle offenen Tabs als bündige Panes — ersetzt
                 // nur den Detail-Bereich; Sidebar/Tab-Strip bleiben

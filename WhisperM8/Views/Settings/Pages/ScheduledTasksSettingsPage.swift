@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Einstellungen › Labs › Geplante Aufgaben (WM8-110, Paket 1). Ein Schalter,
-/// ab Werk aus. Die Ansicht in der Seitenleiste kommt mit Paket 2; bis dahin
-/// werden Aufgaben über `whisperm8 schedule` angelegt und gesehen.
+/// Einstellungen › Labs › Geplante Aufgaben (WM8-110). Ein Schalter, ab Werk
+/// aus. Aufgaben stehen im Abschnitt „Geplant“ der Seitenleiste (Paket 2) und
+/// in `whisperm8 schedule`.
 struct ScheduledTasksSettingsPage: View {
     @AppStorage(PreferenceKeys.scheduledTasksEnabled) private var enabled = false
 
@@ -21,7 +21,7 @@ struct ScheduledTasksSettingsPage: View {
                 )
             }
 
-            SettingsHelpText("Tasks are set up with the command line for now: whisperm8 schedule add, list, run, pause and resume. A view in the sidebar follows.")
+            SettingsHelpText("Tasks appear at the bottom of the sidebar under Scheduled, below the chats: add them with +, open one for its runs. The command line works too: whisperm8 schedule add, list, run, pause and resume.")
         }
         .onChange(of: enabled) { _, isOn in
             ScheduledTaskRuntime.shared.settingChanged(enabled: isOn)
