@@ -26,6 +26,9 @@ enum ScheduleCLICommand {
     sind gesperrt, auch wenn das Konto sie in seiner settings.json erlaubt. Eine Familie geht nur ausdrücklich
     auf: --allow "Bash(whisperm8 tickets *)" öffnet Bash (dann gelten auch die Bash-Freigaben des Kontos),
     --allow mcp__linear__get_issue öffnet MCP (dann lädt der Lauf die MCP-Server des Kontos).
+    Ebenso gesperrt, offen nur einzeln per --allow: SendMessage, ListAgents (andere lokale Sitzungen),
+    RemoteTrigger (Cloud-Routinen), CronCreate, CronDelete, PushNotification, DesignSync,
+    EnterWorktree, ExitWorktree (anderer Arbeitsordner).
     Läufe starten nur, solange WhisperM8 läuft; Verpasstes wird bis 12 Stunden später nachgeholt.
     """
 
@@ -41,7 +44,7 @@ enum ScheduleCLICommand {
             return ChatsCLIExit.usage
         }
         let output = execute(parsed, store: ScheduledTaskStore(), now: Date(), calendar: .current,
-                             enabled: AppPreferences.shared.isScheduledTasksEnabled,
+                             enabled: AppPreferences.appDomain().isScheduledTasksEnabled,
                              send: sendViaSocket)
         if !output.stdout.isEmpty { CLIIO.out(output.stdout) }
         if !output.stderr.isEmpty { CLIIO.err(output.stderr) }

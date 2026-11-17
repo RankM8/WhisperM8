@@ -6291,16 +6291,6 @@
         }
       }
     },
-    "Tasks are set up with the command line for now: whisperm8 schedule add, list, run, pause and resume. A view in the sidebar follows.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aufgaben richtest du vorerst über die Kommandozeile ein: whisperm8 schedule add, list, run, pause und resume. Eine Ansicht in der Seitenleiste folgt."
-          }
-        }
-      }
-    },
     "The selected chat is in this workspace – click to show it": {
       "localizations": {
         "de": {
@@ -25850,6 +25840,1336 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ansicht nicht verfügbar. Vielleicht wurde sie in Linear gelöscht."
+          }
+        }
+      }
+    },
+    "tomorrow %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "morgen %@"
+          }
+        }
+      }
+    },
+    "today, %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "heute, %@"
+          }
+        }
+      }
+    },
+    "tomorrow, %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "morgen, %@"
+          }
+        }
+      }
+    },
+    "yesterday, %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "gestern, %@"
+          }
+        }
+      }
+    },
+    "today %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "heute %@"
+          }
+        }
+      }
+    },
+    "yesterday %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "gestern %@"
+          }
+        }
+      }
+    },
+    "Daily %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "täglich %@"
+          }
+        }
+      }
+    },
+    "Weekdays %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "werktags %@"
+          }
+        }
+      }
+    },
+    "Weekly %@ %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "wöchentlich %@ %@"
+          }
+        }
+      }
+    },
+    "Hourly at :%@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "stündlich :%@"
+          }
+        }
+      }
+    },
+    "Read (whole disk) and write in the project folder, never in .claude, .git or .mcp.json": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lesen (ganze Platte) und im Projektordner schreiben, nie in .claude, .git oder .mcp.json"
+          }
+        }
+      }
+    },
+    "Read only (whole disk)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur lesen (ganze Platte)"
+          }
+        }
+      }
+    },
+    "Only the listed tools": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur die genannten Werkzeuge"
+          }
+        }
+      }
+    },
+    "also %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "dazu %@"
+          }
+        }
+      }
+    },
+    "no %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ohne %@"
+          }
+        }
+      }
+    },
+    "web": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Web"
+          }
+        }
+      }
+    },
+    "starting": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "startet"
+          }
+        }
+      }
+    },
+    "succeeded": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "geklappt"
+          }
+        }
+      }
+    },
+    "with notes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "mit Hinweis"
+          }
+        }
+      }
+    },
+    "aborted": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "abgebrochen"
+          }
+        }
+      }
+    },
+    "missed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "verpasst"
+          }
+        }
+      }
+    },
+    "skipped": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "übersprungen"
+          }
+        }
+      }
+    },
+    "not started": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nicht gestartet"
+          }
+        }
+      }
+    },
+    "Starting": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Startet"
+          }
+        }
+      }
+    },
+    "Succeeded with notes (%lld tools denied)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geklappt mit Hinweis (%lld Werkzeuge verweigert)"
+          }
+        }
+      }
+    },
+    "Aborted": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abgebrochen"
+          }
+        }
+      }
+    },
+    "Missed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verpasst"
+          }
+        }
+      }
+    },
+    "Skipped, the previous run was still working": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Übersprungen, der vorige Lauf arbeitete noch"
+          }
+        }
+      }
+    },
+    "Not started: login expired": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht gestartet: Login abgelaufen"
+          }
+        }
+      }
+    },
+    "Not started: account missing": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht gestartet: Konto fehlt"
+          }
+        }
+      }
+    },
+    "Not started: folder missing": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht gestartet: Ordner fehlt"
+          }
+        }
+      }
+    },
+    "Not started: Claude Code not found": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht gestartet: Claude Code nicht gefunden"
+          }
+        }
+      }
+    },
+    "Denied: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verweigert: %@"
+          }
+        }
+      }
+    },
+    "The process ended without a result (Mac restarted or the run was quit).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Prozess endete ohne Ergebnis (Mac neu gestartet oder Lauf beendet)."
+          }
+        }
+      }
+    },
+    "Too long ago to catch up, or catching up is off.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zu lange her zum Nachholen, oder Nachholen ist aus."
+          }
+        }
+      }
+    },
+    "Renew the login under Settings › Accounts. There is no chat for this run.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Login erneuern unter Einstellungen › Konten. Zu diesem Lauf gibt es keinen Chat."
+          }
+        }
+      }
+    },
+    "The Claude account no longer exists. There is no chat for this run.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Claude-Konto gibt es nicht mehr. Zu diesem Lauf gibt es keinen Chat."
+          }
+        }
+      }
+    },
+    "The project folder no longer exists. There is no chat for this run.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Den Projektordner gibt es nicht mehr. Zu diesem Lauf gibt es keinen Chat."
+          }
+        }
+      }
+    },
+    "Claude Code is not installed or not in the PATH.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Claude Code ist nicht installiert oder nicht im PATH."
+          }
+        }
+      }
+    },
+    "caught up": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nachgeholt"
+          }
+        }
+      }
+    },
+    "started by hand": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "von Hand gestartet"
+          }
+        }
+      }
+    },
+    "paused": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "pausiert"
+          }
+        }
+      }
+    },
+    "no date": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kein Termin"
+          }
+        }
+      }
+    },
+    "SCHEDULED": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GEPLANT"
+          }
+        }
+      }
+    },
+    "Show scheduled tasks": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geplante Aufgaben zeigen"
+          }
+        }
+      }
+    },
+    "Hide scheduled tasks": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geplante Aufgaben ausblenden"
+          }
+        }
+      }
+    },
+    "New scheduled task…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neue geplante Aufgabe…"
+          }
+        }
+      }
+    },
+    "No runs yet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch kein Lauf"
+          }
+        }
+      }
+    },
+    "%lld older in the detail": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ältere im Detail"
+          }
+        }
+      }
+    },
+    "Hide runs": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Läufe ausblenden"
+          }
+        }
+      }
+    },
+    "Show runs": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Läufe zeigen"
+          }
+        }
+      }
+    },
+    "no chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "kein Chat"
+          }
+        }
+      }
+    },
+    "Open the chat of this run": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat dieses Laufs öffnen"
+          }
+        }
+      }
+    },
+    "This run did not start, so there is no chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Lauf ist nicht gestartet, deshalb gibt es keinen Chat"
+          }
+        }
+      }
+    },
+    "Succeeded with notes": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geklappt mit Hinweis"
+          }
+        }
+      }
+    },
+    "Paused": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pausiert"
+          }
+        }
+      }
+    },
+    "New scheduled task": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neue geplante Aufgabe"
+          }
+        }
+      }
+    },
+    "Edit scheduled task": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geplante Aufgabe ändern"
+          }
+        }
+      }
+    },
+    "Morning status of the project": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stand des Projekts am Morgen"
+          }
+        }
+      }
+    },
+    "Prompt": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auftrag"
+          }
+        }
+      }
+    },
+    "Text, or a skill like /my-skill with its arguments. The run cannot ask questions: what it may not do (below), it skips and reports.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text oder ein Skill wie /mein-skill mit Argumenten. Der Lauf kann nicht nachfragen: Was er nicht darf (unten), lässt er aus und meldet es."
+          }
+        }
+      }
+    },
+    "Project folder": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projektordner"
+          }
+        }
+      }
+    },
+    "The run starts here, and its chat appears under this project.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hier startet der Lauf, und unter diesem Projekt steht sein Chat."
+          }
+        }
+      }
+    },
+    "Schedule": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeitplan"
+          }
+        }
+      }
+    },
+    "Missed runs": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verpasste Termine"
+          }
+        }
+      }
+    },
+    "Catch up if the Mac slept or WhisperM8 was closed (up to 12 hours later)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nachholen, wenn der Mac schlief oder WhisperM8 zu war (bis 12 Std. später)"
+          }
+        }
+      }
+    },
+    "Delete “%@”?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@“ löschen?"
+          }
+        }
+      }
+    },
+    "The chats of its runs stay. Its run records are removed unless a run is working.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Chats ihrer Läufe bleiben. Ihre Lauf-Einträge werden gelöscht, sofern gerade keiner arbeitet."
+          }
+        }
+      }
+    },
+    "Other folder…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anderer Ordner…"
+          }
+        }
+      }
+    },
+    "Choose a folder…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordner wählen…"
+          }
+        }
+      }
+    },
+    "%@ (missing)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (fehlt)"
+          }
+        }
+      }
+    },
+    "%@ · login expired": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Login abgelaufen"
+          }
+        }
+      }
+    },
+    "%@ · login until %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · Login bis %@"
+          }
+        }
+      }
+    },
+    "Daily": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Täglich"
+          }
+        }
+      }
+    },
+    "Weekdays": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Werktags"
+          }
+        }
+      }
+    },
+    "Weekly": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wöchentlich"
+          }
+        }
+      }
+    },
+    "Hourly": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stündlich"
+          }
+        }
+      }
+    },
+    "at minute": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "zur Minute"
+          }
+        }
+      }
+    },
+    "at": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "um"
+          }
+        }
+      }
+    },
+    "Several times separated by commas.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mehrere Uhrzeiten mit Komma trennen."
+          }
+        }
+      }
+    },
+    "Read, and write in the project folder": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lesen und im Projektordner schreiben"
+          }
+        }
+      }
+    },
+    "Read only": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur lesen"
+          }
+        }
+      }
+    },
+    "Only the tools listed below": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur die unten genannten Werkzeuge"
+          }
+        }
+      }
+    },
+    "Allowed tools": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erlaubte Werkzeuge"
+          }
+        }
+      }
+    },
+    "Also allow": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zusätzlich erlauben"
+          }
+        }
+      }
+    },
+    "Read, Glob, Grep, Edit and Skill. Reading covers the whole disk, not only the folder. Writing only in the project folder, never in .claude, .git or .mcp.json.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read, Glob, Grep, Edit und Skill. Lesen gilt für die ganze Platte, nicht nur den Ordner. Schreiben nur im Projektordner, nie in .claude, .git oder .mcp.json."
+          }
+        }
+      }
+    },
+    "Read, Glob, Grep and Skill. Reading covers the whole disk. Read only holds only while Bash stays blocked.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read, Glob, Grep und Skill. Lesen gilt für die ganze Platte. Nur lesend bleibt es nur, solange Bash gesperrt ist."
+          }
+        }
+      }
+    },
+    "Only the tools you list. Permissions from the account’s settings.json still apply, except for what stays blocked.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur die Werkzeuge, die du nennst. Freigaben aus der settings.json des Kontos gelten zusätzlich, außer für das, was gesperrt bleibt."
+          }
+        }
+      }
+    },
+    "Create": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anlegen"
+          }
+        }
+      }
+    },
+    "Paused: nothing starts until you resume.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pausiert: Es startet nichts, bis du fortsetzt."
+          }
+        }
+      }
+    },
+    "No next run yet.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch kein nächster Termin."
+          }
+        }
+      }
+    },
+    "Next run: %@, in account %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nächster Lauf: %@, im Konto %@"
+          }
+        }
+      }
+    },
+    "The minute must be 0 to 59.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Minute muss zwischen 0 und 59 liegen."
+          }
+        }
+      }
+    },
+    "Enter at least one time, like 07:00.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mindestens eine Uhrzeit angeben, etwa 07:00."
+          }
+        }
+      }
+    },
+    "“%@” is not a time. Write it like 07:00.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@“ ist keine Uhrzeit. Schreib sie wie 07:00."
+          }
+        }
+      }
+    },
+    "Pick at least one weekday.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mindestens einen Wochentag wählen."
+          }
+        }
+      }
+    },
+    "The name is missing.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Name fehlt."
+          }
+        }
+      }
+    },
+    "The name is longer than %lld characters.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Name ist länger als %lld Zeichen."
+          }
+        }
+      }
+    },
+    "The name must be a single line.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Name darf nur eine Zeile haben."
+          }
+        }
+      }
+    },
+    "There is already a task called “%@”.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es gibt schon eine Aufgabe „%@“."
+          }
+        }
+      }
+    },
+    "The prompt is missing.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Auftrag fehlt."
+          }
+        }
+      }
+    },
+    "The prompt must not start with “-” (Claude would read it as an option).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Auftrag darf nicht mit „-“ beginnen (Claude läse ihn als Option)."
+          }
+        }
+      }
+    },
+    "Choose a project folder.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Projektordner wählen."
+          }
+        }
+      }
+    },
+    "The folder does not exist: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Den Ordner gibt es nicht: %@"
+          }
+        }
+      }
+    },
+    "The Claude account “%@” does not exist.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Claude-Konto „%@“ gibt es nicht."
+          }
+        }
+      }
+    },
+    "A tool must not start with “-” (Claude would read it as an option).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Werkzeug darf nicht mit „-“ beginnen (Claude läse es als Option)."
+          }
+        }
+      }
+    },
+    "A custom list needs at least one tool.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine eigene Liste braucht mindestens ein Werkzeug."
+          }
+        }
+      }
+    },
+    "This scheduled task no longer exists.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese geplante Aufgabe gibt es nicht mehr."
+          }
+        }
+      }
+    },
+    "Close and go back to the chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schließen und zurück zum Chat"
+          }
+        }
+      }
+    },
+    "Runs": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Läufe"
+          }
+        }
+      }
+    },
+    "The sidebar shows the last three runs under the task.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In der Seitenleiste stehen die letzten drei Läufe unter der Aufgabe."
+          }
+        }
+      }
+    },
+    "Run now": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jetzt starten"
+          }
+        }
+      }
+    },
+    "Resume runs": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fortsetzen"
+          }
+        }
+      }
+    },
+    "Pause runs": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pausieren"
+          }
+        }
+      }
+    },
+    "Edit…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ändern…"
+          }
+        }
+      }
+    },
+    "A run is working. Two runs of the same task never run at once.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Lauf arbeitet. Zwei Läufe derselben Aufgabe gibt es nie gleichzeitig."
+          }
+        }
+      }
+    },
+    "Paused tasks do not start, not even by hand.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pausierte Aufgaben starten nicht, auch nicht von Hand."
+          }
+        }
+      }
+    },
+    "Start a run now, outside the schedule.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Jetzt einen Lauf starten, außerhalb des Zeitplans."
+          }
+        }
+      }
+    },
+    "Failed · %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fehlgeschlagen · %@"
+          }
+        }
+      }
+    },
+    "Open the run’s chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zum Chat des Laufs"
+          }
+        }
+      }
+    },
+    "Run again": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneut starten"
+          }
+        }
+      }
+    },
+    "Working since %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Arbeitet seit %@"
+          }
+        }
+      }
+    },
+    "Its chat opens when the run is done. Two processes must never write to the same chat.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sein Chat lässt sich öffnen, wenn der Lauf fertig ist. Zwei Prozesse dürfen nie in denselben Chat schreiben."
+          }
+        }
+      }
+    },
+    "Nothing starts until you resume. “Run now” stays off too, so pausing really means quiet. Past dates are not caught up after resuming.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es startet nichts, bis du fortsetzt. Auch „Jetzt starten“ bleibt aus, damit Pausieren wirklich Ruhe heißt. Vergangene Termine werden nach dem Fortsetzen nicht nachgeholt."
+          }
+        }
+      }
+    },
+    "Next run": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nächster Termin"
+          }
+        }
+      }
+    },
+    "caught up, up to 12 hours later": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nachholen, bis 12 Std. später"
+          }
+        }
+      }
+    },
+    "not caught up": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "nicht nachholen"
+          }
+        }
+      }
+    },
+    "No runs yet. The first one starts %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Noch kein Lauf. Der erste startet %@."
+          }
+        }
+      }
+    },
+    "chat after the end": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat nach dem Ende"
+          }
+        }
+      }
+    },
+    "Open chat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zum Chat"
+          }
+        }
+      }
+    },
+    "This chat is not in the list yet. WhisperM8 picks it up within a few seconds; try again shortly.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dieser Chat steht noch nicht in der Liste. WhisperM8 liest ihn in wenigen Sekunden ein; gleich noch einmal versuchen."
+          }
+        }
+      }
+    },
+    "Tasks appear at the bottom of the sidebar under Scheduled, below the chats: add them with +, open one for its runs. The command line works too: whisperm8 schedule add, list, run, pause and resume.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufgaben stehen unten in der Seitenleiste unter „Geplant“, unter den Chats: anlegen mit +, eine öffnen für ihre Läufe. Die Kommandozeile geht auch: whisperm8 schedule add, list, run, pause und resume."
+          }
+        }
+      }
+    },
+    "Bash, web, MCP and the tools that reach other sessions, the cloud or other folders (SendMessage, ListAgents, RemoteTrigger, CronCreate, CronDelete, PushNotification, DesignSync, EnterWorktree, ExitWorktree) stay blocked, even if the account allows them in its settings. Naming one opens it: Bash(…) also lets the account’s own Bash permissions apply, an mcp__… entry loads all of the account’s MCP servers.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bash, Web, MCP und die Werkzeuge, die andere Sitzungen, die Cloud oder andere Ordner erreichen (SendMessage, ListAgents, RemoteTrigger, CronCreate, CronDelete, PushNotification, DesignSync, EnterWorktree, ExitWorktree), bleiben gesperrt, auch wenn das Konto sie in seinen Einstellungen erlaubt. Wer eines nennt, öffnet es: Bash(…) lässt auch die Bash-Freigaben des Kontos gelten, ein mcp__…-Eintrag lädt alle MCP-Server des Kontos."
           }
         }
       }

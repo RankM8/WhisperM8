@@ -1,5 +1,5 @@
 ---
-status: aktiv (Paket 1: Kern und Kommandozeile, ohne Ansicht; Labs, ab Werk aus)
+status: aktiv (Paket 1 Kern und Kommandozeile, Paket 2 Ansicht; Labs, ab Werk aus)
 updated: 2026-11-17
 ---
 
@@ -10,9 +10,9 @@ Projektordner und Konto, zu festen Zeiten. Jeder Lauf ist ein normaler `claude -
 anderen findet. Plan und Entscheidungen: [`../plans/geplante-aufgaben.md`](../plans/geplante-aufgaben.md),
 Entwurf der Ansicht: [`../design/geplante-aufgaben.html`](../design/geplante-aufgaben.html).
 
-Stand Paket 1 (WM8-110): Kern, Starter, Nachholen, Kommandozeile `whisperm8 schedule`, Schalter unter
-Einstellungen › Labs › Scheduled tasks. Die Ansicht in der Seitenleiste (Paket 2), Mitteilungen bei Fehlschlag
-und „Mitlesen“ (Paket 3) fehlen noch.
+Stand (WM8-110): Kern, Starter, Nachholen, Kommandozeile `whisperm8 schedule`, Schalter unter
+Einstellungen › Labs › Scheduled tasks (Paket 1); Abschnitt „Geplant“ in der Seitenleiste, Detail und Blatt zum
+Anlegen (Paket 2). Mitteilungen bei Fehlschlag und „Mitlesen“ (Paket 3) fehlen noch.
 
 ## Wann ein Lauf startet
 
@@ -92,6 +92,7 @@ Freigaben aus der `settings.json` des Kontos gelten zusätzlich (dort stehen etw
 | Befehle im Hintergrund | `Monitor` | `--allow Monitor` oder eine Bash-Freigabe |
 | Web | `WebFetch`, `WebSearch` | `--allow WebFetch` bzw. `--allow WebSearch` |
 | MCP | `mcp__*` und `--strict-mcp-config` (lädt keinen MCP-Server) | irgendein `--allow mcp__…` |
+| Wege nach außen | `SendMessage`, `ListAgents` (andere lokale Claude-Sitzungen, die Bash haben), `RemoteTrigger` (Cloud-Routinen), `CronCreate`, `CronDelete`, `PushNotification`, `DesignSync`, `EnterWorktree`, `ExitWorktree` (anderer Arbeitsordner verschöbe die Schreibregeln) | je Werkzeug `--allow <Name>`; `Agent` und `Workflow` bleiben offen, Subagents erben die Sperren |
 
 Eine Sperre schlägt jede Freigabe, auch die des Kontos und die eines Skills. Ist eine Familie per `--allow`
 offen, gelten für sie auch die Freigaben des Kontos: `--allow "Bash(whisperm8 tickets *)"` erlaubt also
@@ -164,16 +165,49 @@ Zeichen. `list` und `show` lesen von Disk und gehen auch ohne App; alles andere 
 (`schedule.*`, `AgentControlRequestHandler+Schedule`), die App schreibt. Mit ausgeschaltetem Schalter antwortet
 die App „aus“.
 
+## Ansicht
+
+- **Abschnitt „Geplant“** ganz unten in der Seitenleiste, unter den Chats (Entscheidung E1), nur mit Schalter.
+  Zuklappbar (`agentScheduledTasksSectionCollapsed`), „+“ legt an. Je Aufgabe eine Zeile wie ein Chat: Zustand,
+  Name, rechts der nächste Termin als feste Uhrzeit („morgen 07:00“), sonst „läuft“, „Fehler“ oder „pausiert“.
+  Der Pfeil klappt die letzten drei Läufe auf; ein Klick auf einen Lauf öffnet seinen Chat, ein Klick auf die
+  Aufgabe ihr Detail. Läufe ohne Chat (nicht gestartet) oder solche, die noch arbeiten, führen ins Detail.
+- **Detail** im Inhaltsbereich statt des Chats (je Fenster, flüchtig, `AgentWindowStore+ScheduledTasks`):
+  Jetzt starten, Pausieren/Fortsetzen, Ändern; ein Kasten für Fehler, Arbeit oder Pause; Zeitplan, nächster
+  Termin, Konto mit Login-Ende, Projekt, Rechte, Nachholen, Auftrag und die letzten 20 Läufe. Jede Navigation
+  zu einem Chat oder Workspace und die Ticket-Ansicht schließen es. „Jetzt starten“ ist aus, solange ein Lauf
+  arbeitet oder die Aufgabe pausiert ist.
+- **Chat eines Laufs:** gesucht über die Sitzungs-ID des Laufs (`--session-id`). Steht er noch nicht in der
+  Liste, stößt der Klick einen Scan an und das Detail sagt es. Solange ein Lauf arbeitet, öffnet nichts seinen
+  Chat (zwei Prozesse in einer Sitzung); „Mitlesen“ kommt mit Paket 3.
+- **Blatt** zum Anlegen und Ändern: dieselben Felder und Prüfungen wie `schedule add|edit`
+  (`ScheduledTaskEditorForm`), Meldungen übersetzt; der Planer prüft beim Speichern noch einmal. Beim Ändern
+  gehen nur geänderte Felder an den Planer, ein unveränderter Zeitplan behält so seinen Stand. Löschen mit
+  Rückfrage, die Chats bleiben.
+- **Laden** (`ScheduledTasksOverviewModel`): abseits des Main Threads, nur auf Anlass — erstes Erscheinen,
+  jeder Durchlauf des Planers (Termin, Aufwachen, CLI-Änderung), Ende eines Laufs, Aktion in der Ansicht. Kein
+  Polling, kein Datei-Beobachter.
+- **Schalter von außen:** `defaults write com.whisperm8.app scheduledTasksEnabled -bool YES|NO` startet oder hält
+  den Zeitgeber an (KVO auf genau diesen Schlüssel). Die CLI liest den Schalter aus der Domain der App, nicht aus
+  der des Aufrufs (`AppPreferences.appDomain()`); vorher meldete `schedule list` über den Symlink
+  `~/.local/bin/whisperm8` immer „aus“.
+
 ## Kosten
 
 - Ruhend: ein Wall-Clock-Timer, drei Beobachter (Aufwachen, Uhr, Zeitzone). Kein Polling, nichts im Renderpfad.
 - Je Durchlauf: `scheduled-tasks.json` lesen und je Aufgabe den jüngsten Lauf-Ordner, abseits des Main Threads.
+- Ansicht: Laden liest `scheduled-tasks.json` und je Aufgabe bis zu 20 Lauf-Ordner (je `run.json`, `exit`,
+  `result.json`, Ende von `stderr.log`), abseits des Main Threads, nur auf Anlass. Im Renderpfad nichts davon:
+  Abschnitt und Detail sind `.equatable()` und beobachten nur die Übersicht, nie den Status-Speicher der Chats;
+  das Fenster zahlt je Auswertung eine Wörterbuch-Abfrage.
 - Je Lauf: ein `claude auth status` (rund eine Sekunde) und der Lauf selbst. Ein `claude -p`-Lauf zählt gegen das
   Nutzungslimit des Kontos; der kleinste gemessene kostete rechnerisch 0,48 $ (Plan, Teil 1b).
 
 ## Offen für spätere Pakete
 
-- Ansicht „Geplant“ in der Seitenleiste, Blatt zum Anlegen (Paket 2).
+- Läufe zusätzlich aus der Chat-Liste unter ihrem Projekt ausblenden (Entwurf, Variante A): noch nicht gebaut,
+  sie stehen heute unter der Aufgabe und unter dem Projekt.
+- Auswahl „Skill oder Text“ und „Alte Läufe ins Archiv“ aus dem Entwurf fehlen im Blatt (Archiv: Paket 3).
 - Mitteilung bei Fehlschlag, Login-Warnung vor dem nächsten Lauf, Mitlesen statt Fortsetzen, Archiv (Paket 3).
 - Aufräumen alter Lauf-Ordner: Bis Paket 3 bleiben sie liegen (wenige KB je Lauf).
 - Übernahme der PM-Analyse (Paket 4, braucht Giulianos Ja). Ihr launchd-Eintrag bleibt bis dahin unberührt.

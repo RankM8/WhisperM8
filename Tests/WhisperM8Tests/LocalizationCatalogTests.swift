@@ -294,6 +294,12 @@ final class LocalizationCatalogTests: XCTestCase {
         "WhisperM8/Services/AgentChats/AgentSessionStateMachine.swift",
         "WhisperM8/Services/AgentChats/AgentTranscriptActivityExtractor.swift",
         "WhisperM8/Views/AgentChatsView+ProjectManagement.swift",
+        "WhisperM8/Views/AgentChatsView+ScheduledTasks.swift",
+        "WhisperM8/Views/ScheduledTasks/ScheduledTaskTexts.swift",
+        "WhisperM8/Views/ScheduledTasks/ScheduledTasksSidebarSection.swift",
+        "WhisperM8/Views/ScheduledTasks/ScheduledTaskDetailView.swift",
+        "WhisperM8/Views/ScheduledTasks/ScheduledTaskEditorSheet.swift",
+        "WhisperM8/Views/ScheduledTasks/ScheduledTaskEditorForm.swift",
     ]
 
     func testChatsFilesContainNoGermanLiterals() throws {

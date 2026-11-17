@@ -23,12 +23,15 @@ final class ScheduledTaskRuntime {
     let scheduler = ScheduledTaskScheduler(environment: .live)
     private var timer: DispatchSourceTimer?
     private var observers: [NSObjectProtocol] = []
+    private var switchObservation: NSKeyValueObservation?
     private(set) var isRunning = false
 
     private init() {}
 
-    /// App-Start. Ohne Schalter passiert nichts.
+    /// App-Start. Beobachtet den Schalter, auch wenn er aus ist; ohne Schalter
+    /// startet sonst nichts.
     func startIfEnabled() {
+        observeSwitch()
         guard AppPreferences.shared.isScheduledTasksEnabled else { return }
         start()
     }
@@ -36,6 +39,20 @@ final class ScheduledTaskRuntime {
     /// Schalter in den Einstellungen.
     func settingChanged(enabled: Bool) {
         enabled ? start() : stop()
+        ScheduledTasksOverviewModel.shared.reload()
+    }
+
+    /// Auch ein Umschalten von außen (`defaults write`) startet oder hält den
+    /// Zeitgeber an. KVO meldet nur Änderungen dieses einen Schlüssels.
+    private func observeSwitch() {
+        guard switchObservation == nil else { return }
+        switchObservation = UserDefaults.standard.observe(\.scheduledTasksEnabled, options: [.new]) { _, _ in
+            Task { @MainActor in
+                let enabled = AppPreferences.shared.isScheduledTasksEnabled
+                guard enabled != ScheduledTaskRuntime.shared.isRunning else { return }
+                ScheduledTaskRuntime.shared.settingChanged(enabled: enabled)
+            }
+        }
     }
 
     func start() {
@@ -75,7 +92,11 @@ final class ScheduledTaskRuntime {
         let scheduler = scheduler
         Task {
             let next = await scheduler.evaluate(reason: reason)
-            await MainActor.run { ScheduledTaskRuntime.shared.arm(next: next) }
+            await MainActor.run {
+                ScheduledTaskRuntime.shared.arm(next: next)
+                // Gestartete oder eingetragene Läufe, neuer nächster Termin.
+                ScheduledTasksOverviewModel.shared.reload()
+            }
         }
     }
 
@@ -143,7 +164,13 @@ extension ScheduledTaskScheduler.Environment {
             spawn: { plan in try ScheduledTaskLauncher.spawnDetached(plan) },
             processStartTime: { ProcessAncestry.startTime(for: $0) },
             isProcessAlive: { ScheduledTaskRunEvaluator.isProcessAlive(pid: $0, startedAt: $1) },
-            watchExit: { pid, handler in ScheduledTaskExitWatcher.shared.watch(pid: pid, handler: handler) }
+            watchExit: { pid, handler in
+                ScheduledTaskExitWatcher.shared.watch(pid: pid) {
+                    handler()
+                    // Ende eines Laufs: Ergebnis in Seitenleiste und Detail.
+                    Task { @MainActor in ScheduledTasksOverviewModel.shared.reload() }
+                }
+            }
         )
     }
 }
@@ -199,4 +226,9 @@ final class ScheduledTaskExitWatcher: @unchecked Sendable {
             return true
         }
     }
+}
+
+extension UserDefaults {
+    /// Für KVO auf den Labs-Schalter; Name = Schlüssel (`PreferenceKeys.scheduledTasksEnabled`).
+    @objc dynamic var scheduledTasksEnabled: Bool { bool(forKey: PreferenceKeys.scheduledTasksEnabled) }
 }

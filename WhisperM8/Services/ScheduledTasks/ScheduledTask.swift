@@ -147,6 +147,18 @@ struct ScheduledTaskPermissions: Codable, Equatable {
     /// an der Bash-Sperre vorbei. Edit-Regeln gelten für alle Werkzeuge, die
     /// Dateien ändern (Edit, Write, NotebookEdit); führendes `/` = Projektordner.
     static let protectedPaths = ["Edit(/.claude/**)", "Edit(/.git/**)", "Edit(/.mcp.json)"]
+    /// Einzelne Werkzeuge, die an der Bash-Sperre vorbei nach außen wirken
+    /// (Probelauf 17.11.2026): Nachrichten an andere lokale Claude-Sitzungen,
+    /// die Bash haben (`SendMessage`, `ListAgents`), Cloud-Routinen auf
+    /// claude.ai (`RemoteTrigger`), Zeitpläne in Claude Code (`CronCreate`,
+    /// `CronDelete`), Mitteilungen aufs Telefon (`PushNotification`), das
+    /// Design-Werkzeug von claude.ai (`DesignSync`) und der Wechsel in einen
+    /// anderen Arbeitsordner (`EnterWorktree`, `ExitWorktree`), der die
+    /// Projekt-Anker der Schreibregeln verschöbe (Prüfung 17.11.2026).
+    /// Gesperrt, solange `extraTools` sie nicht nennt. `Agent` und `Workflow`
+    /// bleiben: Subagents erben die Sperren des Laufs.
+    static let gatedTools = ["SendMessage", "ListAgents", "RemoteTrigger", "CronCreate", "CronDelete", "PushNotification",
+                             "DesignSync", "EnterWorktree", "ExitWorktree"]
     /// Sperrt die Werkzeuge aller MCP-Server (Claude Code ab 2.1.3xx).
     static let allMCPTools = "mcp__*"
 
@@ -168,7 +180,7 @@ struct ScheduledTaskPermissions: Codable, Equatable {
         if !allowsMCP { result.append(Self.allMCPTools) }
         // Immer, auch ohne Edit in der Liste: Freigaben des Kontos könnten
         // Edit öffnen, und eine Sperre schlägt jede Freigabe.
-        return result + Self.protectedPaths
+        return result + Self.protectedPaths + Self.gatedTools.filter { !names($0) }
     }
 
     /// Kurzbeschreibung für die CLI.

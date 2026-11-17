@@ -12,6 +12,8 @@ final class SettingsSourceGuardTests: XCTestCase {
             "agentPinnedSectionCollapsed",
             "agentWorkspacesSectionCollapsed",
             "agentChatsSectionCollapsed",
+            // Abschnitt „Geplant“ zugeklappt (WM8-110): reiner Ansichtszustand.
+            "agentScheduledTasksSectionCollapsed",
             "agentProjectOpenTarget",
             "agentSidebarScope",
             "agentSidebarLayout",

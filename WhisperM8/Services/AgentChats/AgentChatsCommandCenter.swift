@@ -170,6 +170,11 @@ struct AgentChatsWindowSnapshot: Equatable {
         copy.canReturnToWorkspace = false
         return copy
     }
+
+    /// `withChatsHidden()`, wenn etwas den Chat verdeckt (`hidesChatContent`).
+    func hidingChats(_ hidden: Bool) -> AgentChatsWindowSnapshot {
+        hidden ? withChatsHidden() : self
+    }
 }
 
 /// Eine Zeile der Liste links, so wie die Navigation sie braucht.

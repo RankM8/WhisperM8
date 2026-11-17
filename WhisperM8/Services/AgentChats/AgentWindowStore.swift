@@ -75,6 +75,10 @@ final class AgentWindowStore {
     var ticketsModeWindowIDs: Set<UUID> = []
     /// Über null, solange eine Auswahl aus dem Steuerkanal läuft (`keepingTicketsMode`).
     @ObservationIgnored var ticketsModeHoldDepth = 0
+    /// Fenster, die im Inhaltsbereich das Detail einer geplanten Aufgabe
+    /// zeigen (Fenster → Aufgabe). Flüchtig. Geschrieben nur von
+    /// `AgentWindowStore+ScheduledTasks`.
+    var scheduledTaskDetailIDs: [UUID: UUID] = [:]
 
     /// Offene Tabs ALLER Fenster zum App-Start — Snapshot BEVOR Restore/
     /// User-Interaktion den State verändern. Basis des Summary-Start-Abgleichs

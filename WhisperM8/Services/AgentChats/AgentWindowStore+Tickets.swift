@@ -33,6 +33,7 @@ extension AgentWindowStore {
 
     /// Der Nutzer schaltet um (Knopf, ⌘W), oder der Schalter ging aus.
     func setTicketsMode(_ active: Bool, in windowID: UUID) {
+        if active { closeScheduledTask(in: windowID) }
         // Nur schreiben, wenn sich etwas ändert: Sonst wertete jede
         // Navigation die Ansichten neu aus, die den Modus lesen.
         guard ticketsModeWindowIDs.contains(windowID) != active else { return }
@@ -46,7 +47,10 @@ extension AgentWindowStore {
 
     /// Eine Navigation will einen Chat oder Workspace zeigen.
     func leaveTicketsForNavigation(in windowID: UUID) {
-        guard ticketsModeHoldDepth == 0, ticketsModeWindowIDs.contains(windowID) else { return }
+        guard ticketsModeHoldDepth == 0 else { return }
+        // Auch das Detail einer geplanten Aufgabe weicht dem Chat oder Workspace.
+        closeScheduledTask(in: windowID)
+        guard ticketsModeWindowIDs.contains(windowID) else { return }
         setTicketsModeFlag(false, in: windowID)
         // Der neue Ort kommt mit der Navigation; bis dahin bleibt das Board
         // das Rücksprungziel (nicht der Chat dahinter).
@@ -65,6 +69,7 @@ extension AgentWindowStore {
     /// (samt letztem Abzug) werden freigegeben.
     func forgetTickets(of windowID: UUID) {
         ticketsModeWindowIDs.remove(windowID)
+        scheduledTaskDetailIDs[windowID] = nil
         ticketPlaces.lastProjectIDs[windowID] = nil
         TicketBoardControllers.shared.forget(windowID)
     }

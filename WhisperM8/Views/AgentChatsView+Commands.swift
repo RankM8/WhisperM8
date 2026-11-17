@@ -58,9 +58,9 @@ extension AgentChatsView {
             backTarget: controllerBackTarget(),
             tickets: controllerTicketsPlace()
         )
-        // Tickets verdecken den Chat: Bestätigen, Abbrechen und Diktat dürfen
-        // ihn dann nicht ungesehen treffen.
-        return isTicketsModeActive ? snapshot.withChatsHidden() : snapshot
+        // Tickets oder das Detail einer geplanten Aufgabe verdecken den Chat:
+        // Bestätigen, Abbrechen und Diktat dürfen ihn dann nicht ungesehen treffen.
+        return snapshot.hidingChats(hidesChatContent)
     }
 
     // MARK: - Zurück (L2 getippt)

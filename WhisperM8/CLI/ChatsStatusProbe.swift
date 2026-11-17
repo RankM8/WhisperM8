@@ -63,8 +63,11 @@ enum ChatsStatusProbe {
 
     // MARK: - Claudes Registry
 
-    /// Kill-Switch wie in der App (`claudeRegistryStatusEnabled`).
-    static var registryEnabled: () -> Bool = { AppPreferences().isClaudeRegistryStatusEnabled }
+    /// Kill-Switch wie in der App (`claudeRegistryStatusEnabled`), aus der
+    /// Domain der App gelesen, nicht aus der des CLI-Aufrufs.
+    /// Einmal je Prozess angelegt, nicht je Abfrage.
+    private static let appPreferences = AppPreferences.appDomain()
+    static var registryEnabled: () -> Bool = { appPreferences.isClaudeRegistryStatusEnabled }
 
     static let registryCache = ChatsRegistryCache {
         ClaudeSessionRegistry.indexBySessionID(ClaudeSessionRegistry.scan(roots: ClaudeSessionRegistry.roots()))
