@@ -180,11 +180,11 @@ Labs-Gruppe, erweiterte Agent-Funktionen hinter `agentAdvancedFeaturesEnabled`.
 `claudeCodeProxyAutoUpdateEnabled`, `gptAccountProfilesEnabled`, `chatGPTTranscriptionEnabled`,
 `claudeSharedMemoryEnabled`, `accountSwitchAfterTurnEnabled`, `claudePluginEnabled`, `jarvisBoardEnabled`,
 `jarvisNotesEnabled`, `agentChatTasksInNotesEnabled`, `speechCalloutsEnabled`, `codexVoiceGateEnabled`, `agentStatusSoftPulseEnabled`, `notchStatusFeatureEnabled`,
-`clipboardHistoryEnabled`, `statisticsEnabled` (zugleich UI-Schalter), `controllerFeatureEnabled`, `controllerPaddleHIDEnabled`,
+`clipboardHistoryEnabled`, `statisticsEnabled` (beide zugleich UI-Schalter), `controllerFeatureEnabled`, `controllerPaddleHIDEnabled`,
 `unifiedPillEnabled` (vereinte Pille; aus = getrennte Pillen), `claudeNativeNameEnabled`.
 Opt-in (`-bool YES`): `agentTerminalMetalEnabled`, `agentPerfDetailEnabled`, `debugControlEnabled`, `ticketBoardEnabled`, `scheduledTasksEnabled`,
 `mcpAutoSyncEnabled`, `agentStatusPulseEnabled` (alter Puls, nur A/B-Messung), `restartKeepsChatsEnabled`
-(Labs „Neustart ohne Chatverlust“, wirkt ab dem nächsten App-Start;
+(Labs „Neustart ohne Chatverlust“, wirkt ab nächstem App-Start;
 [Plan](docs/plans/neustart-ohne-chatverlust.md)).
 
 ## Dependencies (Package.swift)

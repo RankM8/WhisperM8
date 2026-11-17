@@ -21,8 +21,11 @@ enum ScheduleCLICommand {
 
     <aufgabe>: Name, ID oder ID-Anfang (mindestens 4 Zeichen).
     Zeitplan: täglich 07:00 · werktags 07:00, 22:30 · wöchentlich mo, mi 08:00 · stündlich :15
-    Rechte ab Werk (--access project): lesen und im Projektordner schreiben (Read, Glob, Grep,
-    Edit(/**), Skill). Mehr nur ausdrücklich: --allow "Bash(whisperm8 tickets *)", --allow mcp__linear__get_issue.
+    Rechte ab Werk (--access project): lesen (Read gilt für die ganze Platte, nicht nur den Ordner) und im
+    Projektordner schreiben: Read, Glob, Grep, Edit(/**), Skill. Bash, WebFetch, WebSearch und alle MCP-Werkzeuge
+    sind gesperrt, auch wenn das Konto sie in seiner settings.json erlaubt. Eine Familie geht nur ausdrücklich
+    auf: --allow "Bash(whisperm8 tickets *)" öffnet Bash (dann gelten auch die Bash-Freigaben des Kontos),
+    --allow mcp__linear__get_issue öffnet MCP (dann lädt der Lauf die MCP-Server des Kontos).
     Läufe starten nur, solange WhisperM8 läuft; Verpasstes wird bis 12 Stunden später nachgeholt.
     """
 
@@ -350,7 +353,13 @@ enum ScheduleCLIFormatter {
         var calendar: Calendar
         var isProcessAlive: (Int32, Date?) -> Bool
 
+        /// Arbeitet ein Lauf, zählt er (auch wenn danach Termine übersprungen
+        /// wurden); sonst der jüngste Eintrag, auch „verpasst“.
         func latestRun(_ task: ScheduledTask) -> (files: ScheduledTaskRunFiles, outcome: ScheduledTaskRunOutcome)? {
+            if let started = store.latestStartedRun(for: task.id) {
+                let outcome = ScheduledTaskRunEvaluator.outcome(of: started, now: now, isProcessAlive: isProcessAlive)
+                if outcome.isActive { return (started, outcome) }
+            }
             guard let files = store.recentRuns(for: task.id, limit: 1).first else { return nil }
             return (files, ScheduledTaskRunEvaluator.outcome(of: files, now: now, isProcessAlive: isProcessAlive))
         }
@@ -463,6 +472,7 @@ enum ScheduleCLIFormatter {
             "paused": task.paused,
             "catchUp": task.catchUp,
             "allowedTools": task.permissions.allowedTools,
+            "disallowedTools": task.permissions.disallowedTools,
             "next": nextText(task, context: context),
         ]
         if let latest = context.latestRun(task) {

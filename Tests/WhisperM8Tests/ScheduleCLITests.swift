@@ -82,6 +82,31 @@ final class ScheduleCLITests: XCTestCase {
         XCTAssertTrue(output.stderr.contains("aus"), "Hinweis, wenn der Labs-Schalter aus ist")
     }
 
+    func testListShowsTheWorkingRunNotTheSkipAfterIt() throws {
+        let store = ScheduledTaskStore(root: root)
+        let pm = task("PM-Tagesbericht")
+        try store.save(ScheduledTasksFile(tasks: [pm]))
+        let started = ScheduledTaskCalendarTests.date("2026-11-17 07:00")
+        let working = ScheduledTaskRunRecord(
+            runID: ScheduledTaskRunRecord.makeRunID(now: started), taskID: pm.id, taskName: pm.name,
+            sessionID: UUID(), account: "main", directory: "/tmp", trigger: .schedule, slot: started,
+            createdAt: started, pid: 4242, processStartedAt: started)
+        let skipAt = ScheduledTaskCalendarTests.date("2026-11-17 08:00")
+        let skip = ScheduledTaskRunRecord(
+            runID: ScheduledTaskRunRecord.makeRunID(now: skipAt), taskID: pm.id, taskName: pm.name, sessionID: nil,
+            account: "main", directory: "/tmp", trigger: .schedule, slot: skipAt, createdAt: skipAt,
+            notStarted: .stillRunning, message: "übersprungen")
+        for record in [working, skip] {
+            try store.writeRecord(record, in: store.runsDirectory(for: pm.id).appendingPathComponent(record.runID))
+        }
+        let context = ScheduleCLIFormatter.Context(store: store, now: skipAt, calendar: ScheduledTaskCalendarTests.calendar,
+                                                   isProcessAlive: { pid, _ in pid == 4242 })
+        XCTAssertEqual(context.latestRun(pm)?.outcome, .running)
+        let ended = ScheduleCLIFormatter.Context(store: store, now: skipAt, calendar: ScheduledTaskCalendarTests.calendar,
+                                                 isProcessAlive: { _, _ in false })
+        XCTAssertEqual(ended.latestRun(pm)?.files.record.notStarted, .stillRunning, "Ohne laufenden Lauf: jüngster Eintrag")
+    }
+
     func testAddSendsDraftAsJSONTextKeepingSmallNumbers() throws {
         let store = ScheduledTaskStore(root: root)
         var sent: (String, [String: Any])?

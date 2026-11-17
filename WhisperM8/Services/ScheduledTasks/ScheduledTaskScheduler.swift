@@ -103,7 +103,9 @@ actor ScheduledTaskScheduler {
     private func recognizeActiveRuns() {
         guard let file = try? env.store.load() else { return }
         for task in file.tasks {
-            for run in env.store.recentRuns(for: task.id, limit: 3) {
+            // Je Aufgabe arbeitet höchstens ein Lauf, und nur ein gestarteter;
+            // Einträge „übersprungen“ oder „verpasst“ dahinter zählen nicht.
+            if let run = env.store.latestStartedRun(for: task.id) {
                 let outcome = ScheduledTaskRunEvaluator.outcome(of: run, now: env.now(), isProcessAlive: env.isProcessAlive)
                 guard outcome == .running, let pid = run.record.pid else { continue }
                 Logger.scheduledTasks.info("run_recognized task=\(task.shortID, privacy: .public) run=\(run.record.runID, privacy: .public) pid=\(pid)")
@@ -328,13 +330,14 @@ actor ScheduledTaskScheduler {
         }
 
         guard let sessionID = record.sessionID else { return record }
+        for key in ScheduledTaskLauncher.inheritedChatEnvironmentKeys { environment.removeValue(forKey: key) }
         environment[ScheduledTaskLauncher.taskIDEnvironmentKey] = task.id.uuidString.lowercased()
         environment[ScheduledTaskLauncher.runIDEnvironmentKey] = runID
         let name = env.supportsNativeName() ? ScheduledTaskLauncher.sessionName(taskName: task.name, date: now) : nil
         let plan = ScheduledTaskLauncher.SpawnPlan(
             claudePath: claudePath,
             claudeArguments: ScheduledTaskLauncher.claudeArguments(
-                prompt: task.prompt, sessionID: sessionID, name: name, allowedTools: task.permissions.allowedTools),
+                prompt: task.prompt, sessionID: sessionID, name: name, permissions: task.permissions),
             environment: environment, workingDirectory: task.directory, runDirectory: runDirectory)
         let pid: Int32
         do {
@@ -397,7 +400,9 @@ actor ScheduledTaskScheduler {
     /// Arbeitet gerade ein Lauf der Aufgabe (oder startet er)?
     private func isActive(_ taskID: UUID, now: Date) -> Bool {
         if launching.contains(taskID) { return true }
-        guard let latest = env.store.recentRuns(for: taskID, limit: 1).first else { return false }
+        // Der jüngste Ordner ist oft ein „übersprungen“ ohne Prozess; zählt
+        // nur der jüngste gestartete Lauf.
+        guard let latest = env.store.latestStartedRun(for: taskID) else { return false }
         return ScheduledTaskRunEvaluator.outcome(of: latest, now: now, isProcessAlive: env.isProcessAlive).isActive
     }
 
@@ -478,6 +483,9 @@ enum ScheduledTaskValidation {
         if let error = task.schedule.validationError { return error }
         if task.permissions.extraTools.contains(where: { $0.contains(where: \.isNewline) || $0.trimmingCharacters(in: .whitespaces).isEmpty }) {
             return "Ein erlaubtes Werkzeug ist leer oder enthält einen Zeilenumbruch."
+        }
+        if task.permissions.extraTools.contains(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("-") }) {
+            return "Ein erlaubtes Werkzeug darf nicht mit „-“ beginnen (Claude läse es als Option)."
         }
         if task.permissions.access == .custom, task.permissions.allowedTools.isEmpty {
             return "Eigene Liste braucht mindestens ein Werkzeug (--allow)."

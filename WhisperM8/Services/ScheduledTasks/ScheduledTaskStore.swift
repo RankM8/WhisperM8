@@ -114,9 +114,7 @@ struct ScheduledTaskStore {
 
     /// Liest Eintrag und Ergebnis eines Lauf-Ordners.
     func readRun(at directory: URL) -> ScheduledTaskRunFiles? {
-        let runFile = directory.appendingPathComponent(ScheduledTaskRunFiles.recordName)
-        guard let data = try? Data(contentsOf: runFile),
-              let record = try? Self.makeDecoder().decode(ScheduledTaskRunRecord.self, from: data) else { return nil }
+        guard let record = readRecord(at: directory) else { return nil }
         let exitText = try? String(contentsOf: directory.appendingPathComponent(ScheduledTaskRunFiles.exitName), encoding: .utf8)
         return ScheduledTaskRunFiles(
             directory: directory,
@@ -130,6 +128,22 @@ struct ScheduledTaskStore {
     /// Die letzten Läufe einer Aufgabe, neueste zuerst.
     func recentRuns(for taskID: UUID, limit: Int) -> [ScheduledTaskRunFiles] {
         runDirectories(for: taskID, limit: limit).compactMap(readRun(at:))
+    }
+
+    /// Jüngster Lauf, der wirklich gestartet wurde (oder gerade startet).
+    /// Einträge ohne Prozess („übersprungen“, „verpasst“, „nicht gestartet“)
+    /// überspringt er; liest dafür nur `run.json` der Ordner davor.
+    func latestStartedRun(for taskID: UUID) -> ScheduledTaskRunFiles? {
+        for directory in runDirectories(for: taskID) {
+            guard let record = readRecord(at: directory) else { continue }
+            if record.notStarted == nil { return readRun(at: directory) }
+        }
+        return nil
+    }
+
+    func readRecord(at directory: URL) -> ScheduledTaskRunRecord? {
+        guard let data = try? Data(contentsOf: directory.appendingPathComponent(ScheduledTaskRunFiles.recordName)) else { return nil }
+        return try? Self.makeDecoder().decode(ScheduledTaskRunRecord.self, from: data)
     }
 
     func writeRecord(_ record: ScheduledTaskRunRecord, in directory: URL) throws {

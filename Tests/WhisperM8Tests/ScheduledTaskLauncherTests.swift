@@ -116,6 +116,18 @@ final class ScheduledTaskLauncherTests: XCTestCase {
             .contains("--name"))
     }
 
+    func testDefaultPermissionsDenyBashWebAndMCP() {
+        let id = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
+        for access in [ScheduledTaskPermissions.Access.projectWrite, .readOnly] {
+            let args = ScheduledTaskLauncher.claudeArguments(prompt: "/pm-analyse", sessionID: id, name: nil,
+                                                             permissions: ScheduledTaskPermissions(access: access))
+            let tail = Array(args.drop(while: { $0 != "--disallowedTools" }))
+            XCTAssertEqual(Array(tail.prefix(8)), ["--disallowedTools", "Bash", "WebFetch", "WebSearch", "mcp__*",
+                                                   "--strict-mcp-config", "--permission-mode", "dontAsk"], "\(access)")
+            XCTAssertEqual(args.last, "Skill", "--allowedTools bleibt zuletzt")
+        }
+    }
+
     func testSessionNameUsesShortDate() {
         let name = ScheduledTaskLauncher.sessionName(
             taskName: "PM-Tagesbericht", date: ScheduledTaskCalendarTests.date("2026-11-17 07:00"),

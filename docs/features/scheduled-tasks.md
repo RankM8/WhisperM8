@@ -34,6 +34,8 @@ Die Rechnung ist rein und getestet: `ScheduledTaskCalendar` (`ScheduledTaskCalen
 - Arbeitet der vorige Lauf derselben Aufgabe noch, startet kein zweiter: Der Termin steht als „übersprungen“
   da. Das gilt auch über einen App-Neustart, denn die App erkennt laufende Läufe an PID und Prozess-Startzeit
   aus `run.json` wieder.
+- Gezählt wird dabei immer der jüngste **gestartete** Lauf, nicht der jüngste Ordner: Einträge „übersprungen“
+  oder „verpasst“ haben keinen Prozess und liegen oft vor einem Lauf, der noch arbeitet.
 - `whisperm8 schedule run` verweigert, solange ein Lauf arbeitet oder gerade startet.
 - Termin, Nachholen und Handstart laufen durch einen Actor (`ScheduledTaskScheduler`).
 - Nur eine App-Instanz plant: Sie hält `scheduled-tasks/scheduler.lock` per `flock`. Eine zweite Instanz mit
@@ -49,6 +51,7 @@ Gestartet wird `/bin/sh` mit einem festen Skript, das `claude` aufruft und danac
 
 ```
 claude -p "<Auftrag>" --output-format json --session-id <uuid> --name "<Aufgabe> · <Datum>" \
+       --disallowedTools Bash WebFetch WebSearch "mcp__*" --strict-mcp-config \
        --permission-mode dontAsk --allowedTools <Werkzeuge…>
 ```
 
@@ -60,14 +63,16 @@ claude -p "<Auftrag>" --output-format json --session-id <uuid> --name "<Aufgabe>
 - Startordner ist der Projektordner der Aufgabe; unter diesem Projekt steht der Chat.
 - Umgebung wie bei Chats: Login-Shell-PATH, Plugin `whisperm8`, `CLAUDE_CONFIG_DIR` für Nicht-`main`-Konten.
   Dazu `WHISPERM8_SCHEDULED_TASK_ID` und `WHISPERM8_SCHEDULED_RUN_ID`, an denen Hooks und Mods einen geplanten
-  Lauf erkennen (etwa um ihm keine Supervisor-Hinweise einzuschieben, WM8-130).
+  Lauf erkennen (etwa um ihm keine Supervisor-Hinweise einzuschieben, WM8-130). `WHISPERM8_SESSION_ID` und
+  `WHISPERM8_SESSION_TOKEN` entfernt der Starter: Ein Lauf spricht nie mit der Kennung eines Chats.
 - Kein `--model`: Welches Modell läuft, entscheidet Claude Code.
 
 ### Rechte
 
 Ein `-p`-Lauf kann nicht nachfragen. `--permission-mode dontAsk` verweigert alles, was nicht erlaubt ist; Claude
-meldet das in `permission_denials`, und der Lauf gilt als „geklappt mit Hinweis“. Freigaben aus der
-`settings.json` des Kontos gelten zusätzlich.
+meldet das in `permission_denials`, und der Lauf gilt als „geklappt mit Hinweis“.
+
+Erlaubt wird per `--allowedTools`:
 
 | `--access` | Werkzeuge |
 |---|---|
@@ -75,9 +80,30 @@ meldet das in `permission_denials`, und der Lauf gilt als „geklappt mit Hinwei
 | `read-only` | `Read`, `Glob`, `Grep`, `Skill` |
 | `custom` | nur die mit `--allow` genannten |
 
-`Edit(/**)` deckt Edit und Write im Projektordner: Eine Regel mit einem führenden `/` hängt bei CLI-Optionen am
-Startordner (Claude-Code-Doku „permissions“, „Where a pattern anchors“). Bash, MCP und Web gibt es nur per
-`--allow`, etwa `--allow "Bash(whisperm8 tickets *)"` oder `--allow mcp__linear__get_issue`.
+Freigaben aus der `settings.json` des Kontos gelten zusätzlich (dort stehen etwa `Bash(git:*)`), ebenso
+`allowed-tools` eines Skills. Damit Bash, Web und MCP trotzdem nur per ausdrücklicher Freigabe je Aufgabe gehen
+(Entscheidung 17.11.2026), sperrt jeder Lauf diese Familien:
+
+| Familie | Sperre | aufgehoben durch |
+|---|---|---|
+| Befehle | `--disallowedTools Bash` | `--allow Bash` oder `--allow "Bash(…)"` |
+| Web | `WebFetch`, `WebSearch` | `--allow WebFetch` bzw. `--allow WebSearch` |
+| MCP | `mcp__*` und `--strict-mcp-config` (lädt keinen MCP-Server) | irgendein `--allow mcp__…` |
+
+Eine Sperre schlägt jede Freigabe, auch die des Kontos und die eines Skills. Ist eine Familie per `--allow`
+offen, gelten für sie auch die Freigaben des Kontos: `--allow "Bash(whisperm8 tickets *)"` erlaubt also
+zusätzlich alles, was die `settings.json` an Bash freigibt, und eine MCP-Freigabe lädt alle MCP-Server des Kontos.
+`--strict-mcp-config` hält auch dann, wenn eine ältere Claude-Version das Muster `mcp__*` nicht kennt.
+
+Was die Stufen wirklich heißen:
+
+- **Lesen ist nicht auf den Projektordner begrenzt.** Ein nacktes `Read` (ebenso `Glob`, `Grep`) liest die ganze
+  Platte, soweit der Nutzer sie lesen darf; ein Lauf mit Auftrag aus fremder Quelle könnte also Dateien außerhalb
+  des Projekts lesen. Ins Netz bringt er sie ohne Bash, Web und MCP nicht.
+- **Schreiben** geht nur im Projektordner: `Edit(/**)` deckt Edit und Write, eine Regel mit führendem `/` hängt bei
+  CLI-Optionen am Startordner (Claude-Code-Doku „permissions“, „Where a pattern anchors“). Echt gemessen ist das
+  noch nicht (Handtest am Ticket).
+- **`read-only` ist nur lesend, solange Bash gesperrt ist.** Mit `--allow "Bash(…)"` kann ein Befehl schreiben.
 
 ## Dateien
 

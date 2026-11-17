@@ -82,10 +82,12 @@ struct ScheduledTasksFile: Codable, Equatable {
 /// Was ein Lauf darf. Ein `-p`-Lauf kann nicht nachfragen; was nicht erlaubt
 /// ist, verweigert Claude (`--permission-mode dontAsk`) und meldet es in
 /// `permission_denials`. Freigaben aus der settings.json des Kontos gelten
-/// zusätzlich, das regelt Claude selbst.
+/// zusätzlich (etwa `Bash(git:*)`), ebenso `allowed-tools` eines Skills.
 ///
 /// Ab Werk (Entscheidung Giuliano 17.11.2026): lesen und im Projektordner
-/// schreiben. Bash, MCP und Web nur per ausdrücklicher Freigabe je Aufgabe.
+/// schreiben. Bash, MCP und Web nur per ausdrücklicher Freigabe je Aufgabe —
+/// deshalb sperrt jeder Lauf diese Familien per `--disallowedTools`, solange
+/// `extraTools` sie nicht nennt. Eine Sperre schlägt jede Freigabe.
 struct ScheduledTaskPermissions: Codable, Equatable {
     enum Access: String, Codable, CaseIterable {
         /// Lesen und im Projektordner schreiben.
@@ -135,12 +137,33 @@ struct ScheduledTaskPermissions: Codable, Equatable {
         }
     }
 
+    /// Werkzeug-Familien, die nur per `--allow` gehen (Befehle und Netz).
+    static let gatedFamilies = ["Bash", "WebFetch", "WebSearch"]
+    /// Sperrt die Werkzeuge aller MCP-Server (Claude Code ab 2.1.3xx).
+    static let allMCPTools = "mcp__*"
+
+    /// Nennt `extraTools` ein MCP-Werkzeug oder einen MCP-Server?
+    var allowsMCP: Bool {
+        extraTools.contains { $0.trimmingCharacters(in: .whitespaces).hasPrefix("mcp__") }
+    }
+
+    /// Die Liste für `--disallowedTools`: jede gesperrte Familie, die
+    /// `extraTools` nicht ausdrücklich freigibt (`Bash` oder `Bash(…)`).
+    var disallowedTools: [String] {
+        let extras = extraTools.map { $0.trimmingCharacters(in: .whitespaces) }
+        var result = Self.gatedFamilies.filter { family in
+            !extras.contains { $0 == family || $0.hasPrefix(family + "(") }
+        }
+        if !allowsMCP { result.append(Self.allMCPTools) }
+        return result
+    }
+
     /// Kurzbeschreibung für die CLI.
     var summary: String {
         let label: String
         switch access {
-        case .projectWrite: label = "lesen, im Projektordner schreiben"
-        case .readOnly: label = "nur lesen"
+        case .projectWrite: label = "lesen, im Projektordner schreiben, ohne Bash, Web und MCP"
+        case .readOnly: label = "nur lesen, ohne Bash, Web und MCP"
         case .custom: label = "eigene Liste"
         }
         guard !extraTools.isEmpty else { return label }

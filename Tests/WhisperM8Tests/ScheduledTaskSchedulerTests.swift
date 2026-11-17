@@ -46,7 +46,10 @@ final class ScheduledTaskSchedulerTests: XCTestCase {
                 guard fake.accounts.contains(account) else { return nil }
                 return account == "main" ? [:] : ["CLAUDE_CONFIG_DIR": "/profiles/\(account)"]
             },
-            baseEnvironment: { ["PATH": "/usr/bin:/bin"] },
+            baseEnvironment: {
+                // Läuft die App selbst aus einem Chat (Test-Instanz), stehen dessen Kennungen hier.
+                ["PATH": "/usr/bin:/bin", "WHISPERM8_SESSION_ID": "chat-1", "WHISPERM8_SESSION_TOKEN": "geheim"]
+            },
             authStatus: { _, _, _ in
                 fake.authCalls += 1
                 return fake.auth
@@ -97,11 +100,17 @@ final class ScheduledTaskSchedulerTests: XCTestCase {
         XCTAssertEqual(plan.environment["CLAUDE_CONFIG_DIR"], "/profiles/Zweitkonto")
         XCTAssertEqual(plan.environment["WHISPERM8_SCHEDULED_TASK_ID"], task.id.uuidString.lowercased())
         XCTAssertNotNil(plan.environment["WHISPERM8_SCHEDULED_RUN_ID"])
+        XCTAssertNil(plan.environment["WHISPERM8_SESSION_ID"], "Ein Lauf erbt nie die Kennung eines Chats")
+        XCTAssertNil(plan.environment["WHISPERM8_SESSION_TOKEN"])
         let args = plan.claudeArguments
         XCTAssertEqual(Array(args.prefix(2)), ["-p", "Prüfe die Abhängigkeiten."])
         XCTAssertTrue(args.contains("--session-id"))
         XCTAssertEqual(args[args.firstIndex(of: "--permission-mode")! + 1], "dontAsk")
         XCTAssertEqual(Array(args.suffix(6)), ["--allowedTools", "Read", "Glob", "Grep", "Edit(/**)", "Skill"])
+        let deny = args.firstIndex(of: "--disallowedTools")!
+        XCTAssertEqual(Array(args[(deny + 1)...(deny + 4)]), ["Bash", "WebFetch", "WebSearch", "mcp__*"],
+                       "Bash, Web und MCP ab Werk gesperrt, auch gegen Freigaben aus settings.json")
+        XCTAssertTrue(args.contains("--strict-mcp-config"))
         let name = args[args.firstIndex(of: "--name")! + 1]
         XCTAssertTrue(name.hasPrefix("Abhängigkeiten prüfen · "), name)
 
@@ -139,6 +148,40 @@ final class ScheduledTaskSchedulerTests: XCTestCase {
         XCTAssertEqual(fake.plans.count, 1, "Kein zweiter Lauf, solange der erste arbeitet")
         let latest = try XCTUnwrap(store.recentRuns(for: task.id, limit: 1).first)
         XCTAssertEqual(latest.record.notStarted, .stillRunning)
+    }
+
+    /// Prüfung 17.11.: Nach einem „übersprungen“ ist der jüngste Ordner ein
+    /// Eintrag ohne Prozess. Der nächste Termin darf trotzdem nicht neben dem
+    /// noch arbeitenden Lauf starten.
+    func testTwoSlotsInARowWhileTheFirstRunLives() async throws {
+        let fake = Fake(now: date("2026-11-16 09:30"))
+        let (scheduler, store) = makeScheduler(fake)
+        await scheduler.start()
+        let task = try await scheduler.add(draft(schedule: "stündlich :00"))
+        fake.now = date("2026-11-16 10:00")
+        await scheduler.evaluate(reason: "timer")
+        XCTAssertEqual(fake.plans.count, 1)
+
+        for slot in ["11:00", "12:00", "13:00", "14:00"] {
+            fake.now = date("2026-11-16 \(slot)")
+            await scheduler.evaluate(reason: "timer")
+            XCTAssertEqual(fake.plans.count, 1, "\(slot): Lauf von 10:00 arbeitet noch")
+        }
+        let skips = store.recentRuns(for: task.id, limit: 4).map(\.record.notStarted)
+        XCTAssertEqual(skips, Array(repeating: .stillRunning, count: 4))
+        XCTAssertEqual(store.latestStartedRun(for: task.id)?.record.slot, date("2026-11-16 10:00"))
+        do {
+            _ = try await scheduler.runNow(id: task.id)
+            XCTFail("Handstart neben dem arbeitenden Lauf")
+        } catch let error as ScheduledTaskScheduler.SchedulerError {
+            guard case .conflict = error else { return XCTFail("\(error)") }
+        }
+
+        // Lauf endet: Der nächste Termin startet wieder.
+        fake.alivePIDs.removeAll()
+        fake.now = date("2026-11-16 15:00")
+        await scheduler.evaluate(reason: "timer")
+        XCTAssertEqual(fake.plans.count, 2)
     }
 
     func testMissedSlotIsRecordedWithoutStarting() async throws {
@@ -346,5 +389,64 @@ final class ScheduledTaskSchedulerTests: XCTestCase {
         await after.evaluate(reason: "timer")
         XCTAssertEqual(fake.plans.count, 1, "Lauf aus der Zeit vor dem Neustart arbeitet noch: kein zweiter")
         XCTAssertEqual(store.recentRuns(for: taskID, limit: 1).first?.record.notStarted, .stillRunning)
+    }
+
+    func testRestartRecognizesARunBehindSeveralSkips() async throws {
+        let fake = Fake(now: date("2026-11-16 09:30"))
+        var pid: Int32 = 0
+        var taskID = UUID()
+        do {
+            let (before, _) = makeScheduler(fake)
+            await before.start()
+            let task = try await before.add(draft(schedule: "stündlich :00"))
+            taskID = task.id
+            fake.now = date("2026-11-16 10:00")
+            await before.evaluate(reason: "timer")
+            XCTAssertEqual(fake.plans.count, 1)
+            pid = fake.nextPID
+            for slot in ["11:00", "12:00", "13:00"] {
+                fake.now = date("2026-11-16 \(slot)")
+                await before.evaluate(reason: "timer")
+            }
+        }
+        fake.exitHandlers.removeAll()
+
+        let (after, store) = makeScheduler(fake)
+        _ = await after.start()
+        XCTAssertNotNil(fake.exitHandlers[pid], "Lauf hinter drei „übersprungen“ wird wiedererkannt")
+        fake.now = date("2026-11-16 14:00")
+        await after.evaluate(reason: "timer")
+        XCTAssertEqual(fake.plans.count, 1)
+        XCTAssertEqual(store.recentRuns(for: taskID, limit: 1).first?.record.notStarted, .stillRunning)
+    }
+
+    func testCustomAllowOpensOnlyTheNamedFamily() {
+        let bash = ScheduledTaskPermissions(access: .readOnly, extraTools: ["Bash(whisperm8 tickets *)"])
+        XCTAssertEqual(bash.disallowedTools, ["WebFetch", "WebSearch", "mcp__*"])
+        XCTAssertFalse(bash.allowsMCP)
+
+        let mcp = ScheduledTaskPermissions(access: .projectWrite, extraTools: [" mcp__linear__get_issue", "WebSearch"])
+        XCTAssertEqual(mcp.disallowedTools, ["Bash", "WebFetch"])
+        XCTAssertTrue(mcp.allowsMCP)
+        let args = ScheduledTaskLauncher.claudeArguments(prompt: "x", sessionID: UUID(), name: nil, permissions: mcp)
+        XCTAssertFalse(args.contains("--strict-mcp-config"), "MCP freigegeben: Server des Kontos laden")
+        XCTAssertFalse(args.contains("mcp__*"))
+
+        let bashPrefix = ScheduledTaskPermissions(access: .custom, extraTools: ["BashOutput"])
+        XCTAssertEqual(bashPrefix.disallowedTools.first, "Bash", "Nur Bash oder Bash(…) öffnet Bash")
+    }
+
+    func testAllowStartingWithDashIsRejected() async throws {
+        let fake = Fake(now: date("2026-11-16 12:00"))
+        let (scheduler, _) = makeScheduler(fake)
+        await scheduler.start()
+        var bad = draft()
+        bad.extraTools = ["--dangerously-skip-permissions"]
+        do {
+            _ = try await scheduler.add(bad)
+            XCTFail("Werkzeug mit „-“ wäre eine Option")
+        } catch let error as ScheduledTaskScheduler.SchedulerError {
+            guard case .invalid = error else { return XCTFail("\(error)") }
+        }
     }
 }

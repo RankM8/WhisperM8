@@ -32,15 +32,31 @@ enum ScheduledTaskLauncher {
     """
 
     /// Argumente für `claude`. Der Auftrag steht direkt nach `-p` (wie im
-    /// launchd-Skript der PM-Analyse belegt); `--allowedTools` ist variadisch
-    /// und deshalb zuletzt.
-    static func claudeArguments(prompt: String, sessionID: UUID, name: String?, allowedTools: [String]) -> [String] {
+    /// launchd-Skript der PM-Analyse belegt). `--disallowedTools` und
+    /// `--allowedTools` sind variadisch und stehen deshalb hinten, getrennt
+    /// durch eine Option. Ohne MCP-Freigabe lädt der Lauf zusätzlich keinen
+    /// MCP-Server (`--strict-mcp-config` ohne `--mcp-config`) — das hält auch
+    /// dann, wenn eine ältere Claude-Version `mcp__*` nicht kennt.
+    static func claudeArguments(prompt: String, sessionID: UUID, name: String?, allowedTools: [String],
+                                disallowedTools: [String] = [], loadsMCPServers: Bool = true) -> [String] {
         var args = ["-p", prompt, "--output-format", "json", "--session-id", sessionID.uuidString.lowercased()]
         if let name, !name.isEmpty { args += ["--name", name] }
+        if !disallowedTools.isEmpty { args += ["--disallowedTools"] + disallowedTools }
+        if !loadsMCPServers { args += ["--strict-mcp-config"] }
         args += ["--permission-mode", "dontAsk"]
         if !allowedTools.isEmpty { args += ["--allowedTools"] + allowedTools }
         return args
     }
+
+    static func claudeArguments(prompt: String, sessionID: UUID, name: String?,
+                                permissions: ScheduledTaskPermissions) -> [String] {
+        claudeArguments(prompt: prompt, sessionID: sessionID, name: name, allowedTools: permissions.allowedTools,
+                        disallowedTools: permissions.disallowedTools, loadsMCPServers: permissions.allowsMCP)
+    }
+
+    /// Kennungen eines Chats, die ein Lauf nie erben darf: Sonst spräche er
+    /// über die CLI als dieser Chat (etwa als Supervisor).
+    static let inheritedChatEnvironmentKeys = ["WHISPERM8_SESSION_ID", "WHISPERM8_SESSION_TOKEN"]
 
     /// Name des Chats: „<Aufgabe> · <Datum>“, Datum in der Sprache des Systems.
     static func sessionName(taskName: String, date: Date, locale: Locale = .current, timeZone: TimeZone = .current) -> String {
