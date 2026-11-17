@@ -21,13 +21,15 @@ struct LinearLink: Equatable, Sendable {
     /// Dieselbe Seite für die Linear-App.
     var desktopURL: URL
 
-    /// Erste Pfadteile von `linear.app`, die keine Workspaces sind (Website,
-    /// Doku, Anmeldung). Sie gehören in den Browser, nie in App oder Board.
-    static let reservedPaths: Set<String> = [
-        "about", "blog", "brand", "careers", "changelog", "contact", "customers", "developers",
-        "docs", "download", "enterprise", "features", "homepage", "integrations", "join", "legal",
-        "login", "logout", "method", "now", "oauth", "partners", "pricing", "privacy", "readme",
-        "security", "signup", "startups", "terms",
+    /// Zweite Pfadteile, die eine Seite in einem Workspace sind
+    /// (`linear.app/<workspace>/<teil>/…`). Alles andere, also Website, Doku,
+    /// Changelog und Unbekanntes, bleibt im Browser: lieber ein Tab zu viel als
+    /// eine leere Seite in der Linear-App.
+    static let appSections: Set<String> = [
+        "customer", "customers", "cycle", "dashboard", "dashboards", "document", "documents",
+        "inbox", "initiative", "initiatives", "issue", "my-issues", "project", "projects", "pulse",
+        "release", "releases", "review", "reviews", "roadmap", "search", "settings", "team", "teams",
+        "triage", "view", "views",
     ]
 
     /// `nil`, wenn die Adresse keine Seite eines Linear-Workspaces ist.
@@ -38,8 +40,8 @@ struct LinearLink: Equatable, Sendable {
         else { return nil }
         let parts = url.path.split(separator: "/").map(String.init)
         // Nur der Workspace allein (`/whisperm8`) ist keine Seite darin; ohne
-        // zweiten Teil bleibt es beim Browser.
-        guard parts.count >= 2, !Self.reservedPaths.contains(parts[0].lowercased()) else { return nil }
+        // bekannten zweiten Teil bleibt es beim Browser.
+        guard parts.count >= 2, Self.appSections.contains(parts[1].lowercased()) else { return nil }
         workspace = parts[0].lowercased()
         if parts[1].lowercased() == "issue", parts.count >= 3, Self.isKey(parts[2]) {
             issueKey = parts[2].uppercased()

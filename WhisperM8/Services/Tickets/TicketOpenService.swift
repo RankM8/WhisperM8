@@ -28,13 +28,19 @@ struct TicketOpenService {
     var present: @MainActor (_ board: TicketOpenTarget.Board, _ ticket: Ticket) async
         -> Result<TicketOpenPresenter.Shown, TicketOpenPresenter.Failure>
 
+    static let declinedMessage = "Zu spät oder die App ist nicht mehr vorn: Das Ticket wird nicht mehr gezeigt."
+
     static let disabledMessage =
         "Die Ticket-Ansicht ist aus. Einschalten: Einstellungen › Tickets › „Show tickets in Agent Chats“ (Labs)."
 
     /// - Parameter workspace: Workspace aus einer Linear-Adresse (WM8-132). Ist
     ///   das Team der Nummer in einem anderen Workspace eingerichtet, wäre es ein
     ///   anderes Ticket gleicher Nummer: dann nicht öffnen.
-    func open(input: String, workspace expectedWorkspace: String? = nil) async -> Outcome {
+    /// - Parameter shouldPresent: letzte Frage direkt vor dem Zeigen (WM8-132):
+    ///   Ist der Klick zu lange her oder die App nicht mehr vorn, holt nichts
+    ///   die App nach vorn.
+    func open(input: String, workspace expectedWorkspace: String? = nil,
+              shouldPresent: (@MainActor @Sendable () -> Bool)? = nil) async -> Outcome {
         guard let key = TicketOpenTarget.key(fromInput: input) else {
             return .failed(.invalid, TicketOpenTarget.Failure.invalidKey(input).message)
         }
@@ -65,6 +71,9 @@ struct TicketOpenService {
         guard context.team.isEmpty || context.team.caseInsensitiveCompare(board.team) == .orderedSame else {
             return .failed(.notFound, "\(key) gehört in Linear zu Team \(context.team), nicht zu \(board.team). "
                 + "Mit der neuen Nummer öffnen: whisperm8 tickets open \(context.ticket.key)")
+        }
+        if let shouldPresent, !(await shouldPresent()) {
+            return .failed(.conflict, Self.declinedMessage)
         }
         switch await present(board, context.ticket) {
         case .success(let shown):

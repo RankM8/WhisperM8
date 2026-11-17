@@ -433,9 +433,10 @@ Ein Linear-Link öffnete früher Chrome, und die Linear-Webseite leitete von dor
 blieb stehen. Jetzt entscheidet die App selbst (`LinearLink`, `LinearLinkRoute`, beide pur; ausgeführt von
 `LinearLinkOpener`).
 
-- **Was ein Linear-Link ist:** `https://linear.app/<workspace>/<mehr>`, also Ticket, Projekt, Ansicht, Dokument.
-  Die Website (`/docs`, `/changelog`, `/pricing` …, Liste `LinearLink.reservedPaths`), der Workspace allein und
-  fremde Hosts bleiben normale Web-Links.
+- **Was ein Linear-Link ist:** `https://linear.app/<workspace>/<teil>/…`, wenn `<teil>` eine Seite im Workspace
+  ist (Freigabeliste `LinearLink.appSections`: `issue`, `project`, `view`, `document`, `team`, `initiative`,
+  `settings`, `inbox` …). Website, Doku, Changelog, Unbekanntes, der Workspace allein und fremde Hosts bleiben
+  normale Web-Links.
 - **Linear-App ohne Browser:** Die App meldet sich bei macOS für `linear://`. Laut Linear-Doku („Download Linear“,
   FAQ) öffnet `linear://` plus der Rest der Adresse die Seite in der App; der Pfad wird 1:1 übernommen, mit Query
   und Fragment (`linear://whisperm8/issue/WM8-12/titel`). Ob es einen Empfänger gibt, fragt der Klick bei Launch
@@ -452,6 +453,10 @@ blieb stehen. Jetzt entscheidet die App selbst (`LinearLink`, `LinearLinkRoute`,
 - **Fokus:** Nur ein Klick des Nutzers löst das aus, die App nach vorn zu holen ist gewollt. Das Board öffnet im
   zuletzt aktiven Fenster, also in dem, in dem geklickt wurde; der Nutzer sieht den Wechsel. Wie bei
   `tickets open` wird dort der Board-Chat zum Diktat-Ziel.
+- **Nur gleich nach dem Klick nach vorn** (`LinearLinkOpener`, `LinearLinkAttempts`): Steht das Board nicht binnen
+  zwei Sekunden (Linear langsam, Abfrage hängt), geht der Klick in die Linear-App, und eine späte Antwort zeigt
+  nichts mehr. Ist WhisperM8 beim Zeigen nicht mehr vorn, kommt weder Board noch Linear-App nach vorn. Ein zweiter
+  Klick, während ein Öffnen läuft, wird verworfen.
 - **Kosten:** je Klick eine Abfrage bei Launch Services; beim Board dieselbe Linear-Abfrage wie `tickets open`
   (bis das Board steht, vergeht bis zu einer Sekunde). Nichts in einem Body, nichts je Zeichnen.
 
