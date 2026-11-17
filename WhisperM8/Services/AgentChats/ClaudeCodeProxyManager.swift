@@ -225,6 +225,11 @@ final class ClaudeCodeProxyManager {
     /// auch `auto`). WhisperM8 setzt `http`, siehe `launchEnvironment`.
     static let transportEnvironmentKey = "CCP_CODEX_TRANSPORT"
 
+    /// Ab v0.1.48 ergänzt der Proxy seine Modellliste aus
+    /// `$CODEX_HOME/models_cache.json` (sonst `$HOME/.codex`). nil = nicht setzen.
+    static let codexHomeEnvironmentKey = "CODEX_HOME"
+    var codexHomeResolver: () -> String? = { AppInstance.home.appendingPathComponent(".codex").path }
+
     /// Kill-Switch der ChatGPT-Abo-Transkription: aus → selbst gestartete
     /// Instanzen bekommen das Flag nicht (eine geerbte Variable wird entfernt).
     var transcriptionsAPIEnabledResolver: () -> Bool = { AppPreferences.shared.isChatGPTTranscriptionEnabled }
@@ -842,6 +847,12 @@ final class ClaudeCodeProxyManager {
         // bewusst geerbter Wert (Login-Shell) bleibt stehen.
         if environment[Self.transportEnvironmentKey]?.isEmpty ?? true {
             environment[Self.transportEnvironmentKey] = "http"
+        }
+        // Zusatzkonten laufen mit HOME = Profilordner und fänden dort keinen
+        // Codex-Katalog; neue Modelle (6.2) fehlten dann nur auf diesem Konto
+        // (WM8-133). Deshalb dieselbe Datei wie in der App. Ein geerbter Wert bleibt.
+        if environment[Self.codexHomeEnvironmentKey]?.isEmpty ?? true, let codexHome = codexHomeResolver() {
+            environment[Self.codexHomeEnvironmentKey] = codexHome
         }
         // Transkriptions-Route (`/v1/audio/transcriptions`) fuer den Diktat-
         // Anbieter „ChatGPT-Abo". Bei JEDER selbst gestarteten Instanz, nicht
