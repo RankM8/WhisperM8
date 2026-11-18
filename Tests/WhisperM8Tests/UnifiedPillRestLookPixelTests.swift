@@ -145,21 +145,23 @@ final class UnifiedPillRestLookPixelTests: XCTestCase {
         }
     }
 
-    /// Kamera-Insel: Das Ruhebild ist der Hals um die Kamera mit der Zeile
-    /// der Zähler bzw. des Hinweises darunter, wie die Anzeige dort.
+    /// Kamera-Insel: Das Ruhebild ist die Kapsel mit Zeichen und Zahl, beim
+    /// Hinweis samt Zeile unter der Menüleiste, wie die Anzeige dort.
     func testIslandRestLookMatchesTheIslandStatus() throws {
         let screen = NotchScreenInfo(
             displayID: 1, frame: CGRect(x: 0, y: 0, width: 1736, height: 1133),
             visibleFrame: CGRect(x: 0, y: 0, width: 1736, height: 1088),
             safeAreaTop: 40, auxiliaryLeftWidth: 838.5, auxiliaryRightWidth: 838.5, isBuiltIn: true)
-        let band = NotchIslandGeometry.band(screen: screen)
+        let neck = NotchIslandGeometry.band(screen: screen)
+        let band = NotchIslandGeometry.band(
+            screen: screen, occupancy: NotchMenuBarOccupancy(frames: []), presentation: .compact)
         let size = CGSize(width: OverlayFrameResolver.panelSize.width, height: band.neckHeight + 40 + 24)
         let summary = summary
         let alerts = alerts
         let view = VStack(spacing: 0) {
             ForEach(Array(alerts.enumerated()), id: \.offset) { _, alert in
                 let mode: NotchPanelMode = alert == nil ? .compact(chipCount: summary.chipCount) : .alert
-                let layout = NotchGeometry.layout(screen: screen, mode: mode)
+                let layout = NotchGeometry.layout(screen: screen, mode: mode, islandBand: band)
                 let display = NotchDisplay(
                     style: .island(band), summary: summary, alert: alert, isExpanded: false, sections: [])
                 HStack(spacing: 0) {
@@ -170,7 +172,8 @@ final class UnifiedPillRestLookPixelTests: XCTestCase {
                         Spacer(minLength: 0)
                     }, size)
                     Self.cell(RecordingOverlayView(controller: Self.restController(
-                        .island(band), .notch(summary: summary, alert: alert, bodyWidth: layout.body.width)))
+                        .island(neck),
+                        .island(summary: summary, alert: alert, band: band, bodyWidth: alert == nil ? nil : layout.body.width)))
                         .environment(\.colorScheme, .dark), size)
                 }
             }

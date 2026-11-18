@@ -7,9 +7,10 @@ struct NotchDisplay: Equatable {
     enum Style: Equatable {
         /// An der Notch: schwarz, bündig an der Oberkante.
         case notch(width: CGFloat, height: CGFloat)
-        /// An einer Kamera-Insel (Dynamic Island): schwarz, ein schmaler Hals
-        /// um die Kamera, Zähler und alles Weitere hängen unter der
-        /// Menüleiste (`NotchIslandGeometry`).
+        /// An einer Kamera-Insel (Dynamic Island): schwarz. In Ruhe nur die
+        /// Kapsel um die Kamera, seitlich um Zeichen und Zahl verbreitert;
+        /// Hinweis und Liste hängen unter der Menüleiste
+        /// (`NotchIslandGeometry`).
         case island(NotchIslandBand)
         /// Ohne Notch: Pille im dunklen Glas der Diktat-Pille, immer dunkel,
         /// verschiebbar.
@@ -26,6 +27,10 @@ struct NotchDisplay: Equatable {
     var opensUpward = false
     /// Mit der Tastatur markierte Zeile (Hotkey „Statusliste öffnen“).
     var selectedRowID: UUID?
+    /// Nur Kamera-Insel: Mitte der Kamera gegenüber der Mitte des Fensters.
+    /// Ungleich 0, wenn das Band nur auf einer Seite einen Flügel hat und
+    /// das Fenster genau so breit ist wie das Band.
+    var cameraOffset: CGFloat = 0
 
     /// An der Hardware (Notch oder Kamera-Insel): schwarz, nicht verschiebbar.
     var isNotch: Bool {
@@ -33,11 +38,16 @@ struct NotchDisplay: Equatable {
         return true
     }
 
-    /// Höhe des Bands über der Zeile mit den Zählern (0 ohne Notch).
+    /// Kamera-Insel: Unter der Menüleiste hängt etwas (Hinweis oder Liste).
+    /// In Ruhe steht nur die Kapsel in der Leiste.
+    var hasIslandBody: Bool { alert != nil || isExpanded }
+
+    /// Höhe des Bands über der Zeile mit den Zählern (0 ohne Notch). An der
+    /// Insel in Ruhe die Kapsel, sonst der Hals bis unter die Menüleiste.
     var bandHeight: CGFloat {
         switch style {
         case .notch(_, let height): return height
-        case .island(let band): return band.neckHeight
+        case .island(let band): return hasIslandBody ? band.neckHeight : band.capsuleHeight
         case .pill: return 0
         }
     }
@@ -144,9 +154,12 @@ struct NotchStatusView: View {
                 bottomRadius: display.isExpanded ? 18 : 11))
         }
         if case .island(let band) = display.style {
+            // Neben Apples aktiver Insel: ein eigener kleiner Kreis.
+            if band.detachedFrame != nil, !display.hasIslandBody { return AnyShape(Capsule()) }
             return AnyShape(NotchHangingShape(
-                bandWidth: band.width, bandHeight: band.neckHeight,
-                bottomRadius: display.isExpanded ? 18 : 11, topRadius: band.topRadius))
+                bandWidth: band.width, bandHeight: display.bandHeight,
+                bottomRadius: display.isExpanded ? 18 : 11, topRadius: band.topRadius,
+                bandOffset: display.cameraOffset + band.centerOffset))
         }
         if display.isExpanded {
             return AnyShape(RoundedRectangle(cornerRadius: PillGlass.cornerRadius, style: .continuous))
@@ -159,10 +172,29 @@ struct NotchStatusView: View {
     @ViewBuilder
     private var header: some View {
         switch display.style {
-        case .notch, .island:
+        case .island(let band):
             VStack(spacing: 0) {
-                // Die Aussparung selbst bzw. der Hals um die Kamera-Insel:
-                // schwarz, ohne Inhalt.
+                if band.detachedFrame != nil, !display.hasIslandBody {
+                    NotchIslandBandRow.glyph(NotchIslandSignal(summary: display.summary))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    // Die Kapsel um die Kamera: links das Zeichen, rechts die Zahl.
+                    NotchIslandBandRow(band: band, signal: NotchIslandSignal(summary: display.summary))
+                        .frame(height: band.capsuleHeight)
+                        .offset(x: display.cameraOffset + band.centerOffset)
+                }
+                if display.hasIslandBody {
+                    Color.clear.frame(height: max(0, band.neckHeight - band.capsuleHeight))
+                    headerRow
+                        .padding(.horizontal, 12)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: NotchGeometry.chinHeight)
+                        .transition(.opacity)
+                }
+            }
+        case .notch:
+            VStack(spacing: 0) {
+                // Die Aussparung selbst: schwarz, ohne Inhalt.
                 Color.clear.frame(height: display.bandHeight)
                 headerRow
                     .padding(.horizontal, 12)
@@ -259,16 +291,22 @@ struct NotchHangingShape: Shape {
     /// Kamera-Insel: Das Band schwebt unter der Oberkante, seine oberen Ecken
     /// sind rund; ohne Körper ist es eine Kapsel. 0 an der Notch.
     var topRadius: CGFloat = 0
+    /// Kamera-Insel: Mitte des Bands gegenüber der Mitte des Rahmens (ein
+    /// einzelner Flügel, oder das Fenster ist nur so breit wie das Band).
+    var bandOffset: CGFloat = 0
 
     /// Der untere Radius gleitet mit (Notch-Anzeige auf und zu, Diktat-Zeile
     /// aus dem Ruhebild und zurück), statt am Anfang zu springen. An der
-    /// Insel gleitet auch die Höhe des Bands (Kapsel wird zum Hals bis unter
-    /// die Menüleiste); an der Notch ändert sie sich nie.
-    var animatableData: AnimatablePair<CGFloat, CGFloat> {
-        get { AnimatablePair(bottomRadius, bandHeight) }
+    /// Insel gleiten auch Höhe, Breite und Lage des Bands (Kapsel wird
+    /// seitlich breiter bzw. zum Hals bis unter die Menüleiste); an der
+    /// Notch ändern sie sich nie.
+    var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>> {
+        get { AnimatablePair(AnimatablePair(bottomRadius, bandHeight), AnimatablePair(bandWidth, bandOffset)) }
         set {
-            bottomRadius = newValue.first
-            bandHeight = newValue.second
+            bottomRadius = newValue.first.first
+            bandHeight = newValue.first.second
+            bandWidth = newValue.second.first
+            bandOffset = newValue.second.second
         }
     }
 
@@ -318,8 +356,11 @@ struct NotchHangingShape: Shape {
         let bandH = min(bandHeight, rect.height)
         let bodyH = rect.height - bandH
         let minX = rect.minX, maxX = rect.maxX, minY = rect.minY, maxY = rect.maxY
-        let side = (rect.width - bandW) / 2
-        let bandMinX = minX + side, bandMaxX = bandMinX + bandW
+        let slack = (rect.width - bandW) / 2
+        // Das Band bleibt im Rahmen, auch mitten in einer Animation.
+        let bandMinX = minX + min(max(0, slack + bandOffset), rect.width - bandW)
+        let bandMaxX = bandMinX + bandW
+        let left = bandMinX - minX, right = maxX - bandMaxX
         let bodyTop = minY + bandH
 
         guard bodyH >= 0.5 else {
@@ -329,21 +370,21 @@ struct NotchHangingShape: Shape {
 
         let crown = max(0, min(topRadius, bandH, bandW / 2))
         let bottom = max(0, min(bottomRadius, bodyH / 2, rect.width / 2))
-        let fillet = max(0, min(6, side / 2, bandH - crown))
-        let top = max(0, min(8, side - fillet, bodyH - bottom))
+        func fillet(_ side: CGFloat) -> CGFloat { max(0, min(6, side / 2, bandH - crown)) }
+        func top(_ side: CGFloat) -> CGFloat { max(0, min(8, side - fillet(side), bodyH - bottom)) }
 
         var path = Path()
         path.move(to: CGPoint(x: bandMinX + crown, y: minY))
         corner(&path, CGPoint(x: bandMaxX, y: minY), CGPoint(x: bandMaxX, y: bodyTop), crown)
-        if side >= 0.5 {
-            corner(&path, CGPoint(x: bandMaxX, y: bodyTop), CGPoint(x: maxX, y: bodyTop), fillet)
-            corner(&path, CGPoint(x: maxX, y: bodyTop), CGPoint(x: maxX, y: maxY), top)
+        if right >= 0.5 {
+            corner(&path, CGPoint(x: bandMaxX, y: bodyTop), CGPoint(x: maxX, y: bodyTop), fillet(right))
+            corner(&path, CGPoint(x: maxX, y: bodyTop), CGPoint(x: maxX, y: maxY), top(right))
         }
         corner(&path, CGPoint(x: maxX, y: maxY), CGPoint(x: minX, y: maxY), bottom)
         corner(&path, CGPoint(x: minX, y: maxY), CGPoint(x: minX, y: bodyTop), bottom)
-        if side >= 0.5 {
-            corner(&path, CGPoint(x: minX, y: bodyTop), CGPoint(x: bandMinX, y: bodyTop), top)
-            corner(&path, CGPoint(x: bandMinX, y: bodyTop), CGPoint(x: bandMinX, y: minY), fillet)
+        if left >= 0.5 {
+            corner(&path, CGPoint(x: minX, y: bodyTop), CGPoint(x: bandMinX, y: bodyTop), top(left))
+            corner(&path, CGPoint(x: bandMinX, y: bodyTop), CGPoint(x: bandMinX, y: minY), fillet(left))
         }
         corner(&path, CGPoint(x: bandMinX, y: minY), CGPoint(x: bandMaxX, y: minY), crown)
         path.closeSubpath()
@@ -387,6 +428,67 @@ struct NotchStatusDot: View {
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
+    }
+}
+
+/// Inhalt der Kapsel an der Kamera-Insel: links das Zeichen des wichtigsten
+/// Zustands, rechts seine Zahl, beides dicht an der Kamera wie bei Apples
+/// kompakter Darstellung. Mit nur einem Flügel steht dort allein das Zeichen
+/// (minimal). Geteilt mit dem Ruhebild der Diktat-Pille.
+struct NotchIslandBandRow: View {
+    let band: NotchIslandBand
+    let signal: NotchIslandSignal?
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Group {
+                if band.hasLeadingContent { Self.glyph(signal) }
+            }
+            .padding(.trailing, 5)
+            .frame(width: band.leadingContent, alignment: .trailing)
+            Color.clear.frame(width: max(0, band.width - band.leadingContent - band.trailingContent))
+            Group {
+                if band.hasTrailingContent, let signal {
+                    if band.hasLeadingContent {
+                        Text(verbatim: signal.text)
+                            .font(.system(size: 12, weight: .semibold))
+                            .monospacedDigit()
+                            .foregroundStyle(color(signal.kind))
+                            .fixedSize()
+                    } else {
+                        Self.glyph(signal)
+                    }
+                }
+            }
+            .padding(.leading, 5)
+            .frame(width: band.trailingContent, alignment: .leading)
+        }
+        .frame(width: band.width)
+        .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    static func glyph(_ signal: NotchIslandSignal?) -> some View {
+        switch signal?.kind {
+        case nil: EmptyView()
+        case .waiting: NotchStatusDot(status: .awaitingInput, palette: .notch, size: 9)
+        case .errored: NotchStatusDot(status: .errored, palette: .notch, size: 9)
+        case .working: NotchStatusDot(status: .working, palette: .notch, size: 9)
+        case .done:
+            Image(systemName: "checkmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(NotchPalette.notch.secondary)
+                .frame(width: 9, height: 9)
+        }
+    }
+
+    private func color(_ kind: NotchIslandSignal.Kind) -> Color {
+        switch kind {
+        case .waiting: return NotchPalette.notch.awaiting
+        case .errored: return NotchPalette.notch.error
+        case .working: return NotchPalette.notch.working
+        case .done: return NotchPalette.notch.secondary
+        }
     }
 }
 

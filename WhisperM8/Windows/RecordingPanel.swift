@@ -480,6 +480,8 @@ class OverlayController: ObservableObject {
     var unifiedGeneration = 0
     var unifiedScreen: NotchScreenInfo?
     var badgeCancellable: AnyCancellable?
+    /// Kamera-Insel: folgt der Breite von Apples Insel (`followSystemIsland`).
+    var islandCancellable: AnyCancellable?
     var unifiedScreenObserver: NSObjectProtocol?
     /// Breite der zugeklappten Pille: Darüberfahren klappt nur nach links auf.
     var collapsedPillWidth: CGFloat?

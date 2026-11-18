@@ -49,24 +49,31 @@ extension NotchStatusController {
         }
         let expandedHere = expandedKind == slot.kind
         let isPill = slot.kind == .pill
+        // Kamera-Insel: In der Menüleiste steht nur, wofür die Messung Platz
+        // belegt (kompakt, minimal oder nichts).
+        let island = screen.hasIsland ? islandState(slot, screen: screen, summary: summary) : nil
         // Die Pille steht immer da, wie die Notch selbst; an der Notch
         // erscheint die Anzeige nur, wenn etwas los ist. Vereint macht die
         // Notch dem Diktat Platz, das dann selbst dort hängt.
-        guard !slot.isFullscreenHidden, !isDictationShown(on: screen),
-              isPill || NotchStatusModel.isVisible(summary: summary, isExpanded: expandedHere, alert: alert) else {
+        guard !slot.isFullscreenHidden, !isDictationShown(on: screen) else { return hide(slot) }
+        if let island, !expandedHere, alert == nil, island.presentation == .hidden {
+            return retractIsland(slot, screen: screen)
+        }
+        guard isPill || NotchStatusModel.isVisible(summary: summary, isExpanded: expandedHere, alert: alert) else {
             return hide(slot)
         }
 
         let mode = NotchStatusModel.panelMode(
             isExpanded: expandedHere, alert: alert, rows: rows, sections: expandedHere ? sections : [])
         let pillCenter = isPill ? pillCenter(on: screen) : nil
+        let frame = NotchGeometry.panelFrame(screen: screen, mode: mode, pillCenter: pillCenter, islandBand: island?.band)
         let display = NotchDisplay(
-            style: Self.displayStyle(screen: screen),
+            style: Self.displayStyle(screen: screen, islandBand: island?.band),
             summary: summary, alert: alert, isExpanded: expandedHere,
             sections: expandedHere ? sections : [],
             opensUpward: pillCenter.map { NotchPillPlacement.opensUpward(center: $0, on: screen) } ?? false,
-            selectedRowID: expandedHere ? keyboardSelection : nil)
-        let frame = NotchGeometry.panelFrame(screen: screen, mode: mode, pillCenter: pillCenter)
+            selectedRowID: expandedHere ? keyboardSelection : nil,
+            cameraOffset: island == nil || frame == island?.band.detachedFrame ? 0 : screen.notchCenterX - frame.midX)
 
         let panel = ensurePanel(slot)
         // Ohne Notch ein Fensterschatten: Ein im Fenster gezeichneter Schatten
@@ -74,9 +81,17 @@ extension NotchStatusController {
         // in die Fenster darunter abfinge.
         panel.hasShadow = !screen.hasNotch
         let wasVisible = panel.isVisible
+        slot.shrinkTask?.cancel()
+        slot.shrinkTask = nil
         if display != slot.lastDisplay {
             slot.lastDisplay = display
-            setDisplay(display, on: slot, wasVisible: wasVisible)
+            if let island, island.band.detachedFrame == nil, !wasVisible, !display.hasIslandBody,
+               !slot.returnsFromDictation,
+               !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+                growIsland(slot, screen: screen, to: display)
+            } else {
+                setDisplay(display, on: slot, wasVisible: wasVisible)
+            }
         }
         updatePillMouse(slot, display: display)
         // Während des Ziehens bestimmt die Maus die Lage.
@@ -98,13 +113,68 @@ extension NotchStatusController {
         slot.returnsFromDictation = false
     }
 
-    /// Notch: Band in der Aussparung. Kamera-Insel: Hals um die Kamera.
-    /// Sonst die Pille.
-    nonisolated static func displayStyle(screen: NotchScreenInfo) -> NotchDisplay.Style {
+    /// Notch: Band in der Aussparung. Kamera-Insel: die Kapsel um die Kamera
+    /// (`islandBand`, ohne Angabe der schmale Hals). Sonst die Pille.
+    nonisolated static func displayStyle(screen: NotchScreenInfo, islandBand: NotchIslandBand? = nil) -> NotchDisplay.Style {
         switch screen.cutout {
         case .none: return .pill
         case .notch: return .notch(width: screen.notchWidth, height: screen.safeAreaTop)
-        case .island: return .island(NotchIslandGeometry.band(screen: screen))
+        case .island: return .island(islandBand ?? NotchIslandGeometry.band(screen: screen))
+        }
+    }
+
+    // MARK: Kamera-Insel
+
+    /// Stufe und Band der Anzeige an der Insel aus Zählern und letzter
+    /// Messung. Ändert sich, was gezeigt werden soll, wird neu gemessen
+    /// (kein eigener Beobachter; die Antwort zeichnet bei Bedarf neu).
+    func islandState(
+        _ slot: NotchSlot, screen: NotchScreenInfo, summary: NotchSummary
+    ) -> (presentation: NotchIslandPresentation, band: NotchIslandBand) {
+        let signal = NotchIslandSignal(summary: summary)
+        if slot.lastIslandSignal != signal {
+            slot.lastIslandSignal = signal
+            if signal != nil { NotchIslandMonitor.shared.measure([screen]) }
+        }
+        let occupancy = islandOccupancy[screen.displayID]
+        let presentation = NotchIslandGeometry.presentation(signal: signal, screen: screen, occupancy: occupancy)
+        let band = NotchIslandGeometry.band(
+            screen: screen, occupancy: occupancy, presentation: presentation, digits: signal?.digits ?? 1)
+        return (presentation, band)
+    }
+
+    /// Erscheinen an der Insel: erst nur die Kapsel um die Kamera (deckt sich
+    /// mit Apples Insel), dann wächst sie im nächsten Bild seitlich auf.
+    private func growIsland(_ slot: NotchSlot, screen: NotchScreenInfo, to display: NotchDisplay) {
+        var start = display
+        start.style = .island(NotchIslandGeometry.band(screen: screen, occupancy: islandOccupancy[screen.displayID]))
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { slot.viewModel.display = start }
+        DispatchQueue.main.async { [weak slot] in
+            guard let slot, slot.lastDisplay == display else { return }
+            slot.viewModel.display = display
+        }
+    }
+
+    /// Nichts mehr zu zeigen: Die Flügel ziehen sich in die Insel zurück,
+    /// dann geht das Fenster.
+    private func retractIsland(_ slot: NotchSlot, screen: NotchScreenInfo) {
+        guard let panel = slot.panel, panel.isVisible, var display = slot.lastDisplay, !display.hasIslandBody,
+              case .island(let shown) = display.style, shown.detachedFrame == nil,
+              !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
+            // Schon im Rückzug: laufen lassen.
+            if slot.shrinkTask != nil, slot.lastDisplay == nil { return }
+            return hide(slot)
+        }
+        display.style = .island(NotchIslandGeometry.band(screen: screen, occupancy: islandOccupancy[screen.displayID]))
+        slot.lastDisplay = nil
+        slot.viewModel.display = display
+        slot.shrinkTask?.cancel()
+        slot.shrinkTask = Task { [weak self, weak slot] in
+            try? await Task.sleep(for: .milliseconds(240))
+            guard !Task.isCancelled, let self, let slot, slot.lastDisplay == nil else { return }
+            self.hide(slot)
         }
     }
 
@@ -203,6 +273,9 @@ extension NotchStatusController {
         guard config.isActive else { return }
         let placements = placements()
         guard !placements.isEmpty else { return }
+        // Zu denselben Ereignissen: was neben einer Kamera-Insel in der
+        // Menüleiste steht (Menüs der neuen vorderen App, Apples Insel).
+        NotchIslandMonitor.shared.measure(placements.map(\.screen))
         let primaryHeight = NSScreen.screens.first?.frame.height ?? placements[0].screen.frame.height
         let targets = placements.map { placement in
             (kind: placement.kind,

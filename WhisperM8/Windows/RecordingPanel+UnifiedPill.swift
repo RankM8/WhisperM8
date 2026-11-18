@@ -136,8 +136,10 @@ extension OverlayController {
         switch placement {
         case .notch(let screen):
             presentation = screen.hasIsland
-                ? .island(NotchIslandGeometry.band(screen: screen))
+                ? .island(NotchIslandGeometry.band(
+                    screen: screen, occupancy: NotchIslandMonitor.shared.occupancy[screen.displayID]))
                 : .notch(width: screen.notchWidth, height: screen.safeAreaTop)
+            if screen.hasIsland { followSystemIsland(on: screen) }
             let frame = UnifiedPillGeometry.notchDictationPanelFrame(
                 screen: screen, panelWidth: OverlayFrameResolver.panelSize.width)
             panel = RecordingPanel(initialOrigin: frame.origin, size: frame.size)
@@ -192,6 +194,23 @@ extension OverlayController {
     }
 
     /// Raute für wartende Chats und Fehler, solange das Diktat steht.
+    /// Kamera-Insel: Mit dem Mikrofon wird Apples Insel breiter (Hinweis
+    /// rechts der Kamera) und nach einigen Sekunden wieder schmaler. Der Hals
+    /// der Diktat-Pille ist so breit wie sie, damit beides eine Form ist.
+    /// Gemessen wird nur ein paarmal nach dem Erscheinen, nicht laufend.
+    private func followSystemIsland(on screen: NotchScreenInfo) {
+        islandCancellable = NotchIslandMonitor.shared.$occupancy
+            .dropFirst()
+            .sink { [weak self] occupancy in
+                guard let self, case .island(let current) = self.presentation, self.unifiedScreen == screen else { return }
+                let band = NotchIslandGeometry.band(screen: screen, occupancy: occupancy[screen.displayID])
+                guard band != current else { return }
+                withAnimation(.pill) { self.presentation = .island(band) }
+            }
+        NotchIslandMonitor.shared.measure(
+            [screen], followUps: [.milliseconds(700), .milliseconds(2500), .seconds(7)])
+    }
+
     func observeUnifiedBadge() {
         statusBadge = UnifiedPillHub.shared.badge
         badgeCancellable = UnifiedPillHub.shared.$badge
@@ -285,6 +304,7 @@ extension OverlayController {
     func tearDownUnified(keepingWindow: Bool = false) {
         unifiedGeneration += 1
         badgeCancellable = nil
+        islandCancellable = nil
         if statusBadge != nil { statusBadge = nil }
         guard !keepingWindow else { return }
         if let unifiedScreenObserver {

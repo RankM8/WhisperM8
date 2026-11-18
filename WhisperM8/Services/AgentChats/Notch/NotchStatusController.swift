@@ -138,6 +138,8 @@ final class NotchSlot {
     /// Das Diktat auf diesem Bildschirm ist gerade gegangen: Beim
     /// Wiedererscheinen den aktuellen Wert ohne Animation zeigen.
     var returnsFromDictation = false
+    /// Kamera-Insel: Zeichen und Zahl, für die zuletzt gemessen wurde.
+    var lastIslandSignal: NotchIslandSignal?
 
     init(kind: NotchPlacement.Kind) {
         self.kind = kind
@@ -219,6 +221,10 @@ final class NotchStatusController {
     var cachedPlacements: [NotchPlacement]?
     /// Zählt Vollbild-Prüfungen, damit eine überholte Antwort verworfen wird.
     var fullscreenGeneration = 0
+    /// Letzte Messung der Menüleiste je Bildschirm mit Kamera-Insel
+    /// (`NotchIslandMonitor`); ohne Eintrag bleibt die Anzeige dort aus der
+    /// Menüleiste heraus.
+    var islandOccupancy: [UInt32: NotchMenuBarOccupancy] = [:]
 
     private var generalCancellables = Set<AnyCancellable>()
     var activeCancellables = Set<AnyCancellable>()
@@ -342,6 +348,17 @@ final class NotchStatusController {
             .sink { [weak self] _ in self?.scheduleFullscreenCheck() }
             .store(in: &activeCancellables)
 
+        // `@Published` meldet im willSet: den neuen Wert übernehmen, dann zeichnen.
+        islandOccupancy = NotchIslandMonitor.shared.occupancy
+        NotchIslandMonitor.shared.$occupancy
+            .dropFirst()
+            .sink { [weak self] occupancy in
+                guard let self, self.islandOccupancy != occupancy else { return }
+                self.islandOccupancy = occupancy
+                self.render()
+            }
+            .store(in: &activeCancellables)
+
         observeAgentWindowScreen()
         observeDictation()
         scheduleFullscreenCheck()
@@ -368,6 +385,9 @@ final class NotchStatusController {
             slot.lastFrame = nil
             slot.isFullscreenHidden = false
             slot.dragOrigin = nil
+            slot.lastIslandSignal = nil
+            slot.shrinkTask?.cancel()
+            slot.shrinkTask = nil
             slot.panel?.orderOut(nil)
         }
     }

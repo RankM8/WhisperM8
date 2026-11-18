@@ -137,8 +137,10 @@ enum NotchGeometry {
     // MARK: Fenster-Rahmen
 
     /// Rahmen des Fensters in globalen Cocoa-Koordinaten (Ursprung unten links).
-    static func panelFrame(screen: NotchScreenInfo, mode: NotchPanelMode, pillCenter: CGPoint? = nil) -> CGRect {
-        layout(screen: screen, mode: mode, pillCenter: pillCenter).frame
+    static func panelFrame(
+        screen: NotchScreenInfo, mode: NotchPanelMode, pillCenter: CGPoint? = nil, islandBand: NotchIslandBand? = nil
+    ) -> CGRect {
+        layout(screen: screen, mode: mode, pillCenter: pillCenter, islandBand: islandBand).frame
     }
 
     /// Mit Notch: Oben deckt ein schwarzes Band genau die Aussparung (sie ist
@@ -149,10 +151,13 @@ enum NotchGeometry {
     /// in der unteren Bildschirmhälfte nach oben (`NotchPillPlacement`).
     ///
     /// An einer Kamera-Insel (`NotchScreenInfo.cutout`) gilt
-    /// `NotchIslandGeometry.layout`: statt des Bands ein Hals um die Kamera,
-    /// der Körper hängt genauso unter der Menüleiste.
-    static func layout(screen: NotchScreenInfo, mode: NotchPanelMode, pillCenter: CGPoint? = nil) -> NotchLayout {
-        if screen.hasIsland { return NotchIslandGeometry.layout(screen: screen, mode: mode) }
+    /// `NotchIslandGeometry.layout`: in Ruhe nur die Kapsel um die Kamera
+    /// (`islandBand`, seitlich verbreitert, wo Platz ist), Hinweis und Liste
+    /// hängen unter der Menüleiste.
+    static func layout(
+        screen: NotchScreenInfo, mode: NotchPanelMode, pillCenter: CGPoint? = nil, islandBand: NotchIslandBand? = nil
+    ) -> NotchLayout {
+        if screen.hasIsland { return NotchIslandGeometry.layout(screen: screen, mode: mode, band: islandBand) }
         if screen.hasNotch {
             let bandHeight = screen.safeAreaTop
             let notchWidth = screen.notchWidth

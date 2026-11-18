@@ -277,18 +277,34 @@ private struct PillChrome: ViewModifier {
         }
     }
 
-    /// Kamera-Insel: Die Zeile hängt an einem schmalen Hals um die Kamera
-    /// unter der Menüleiste. Steht noch keine Zeile da (Ruhebild ohne
-    /// Anzeige), ist das Band nur die Kapsel um die Kamera; es wächst dann
-    /// mit bis unter die Menüleiste.
+    /// Kamera-Insel: Die Zeile hängt an einem Hals um die Kamera unter der
+    /// Menüleiste. Im Ruhebild ist das Band die Kapsel der Status-Anzeige
+    /// samt Zeichen und Zahl (bzw. nur die Kapsel um die Kamera); es wächst
+    /// dann zum Hals bis unter die Menüleiste.
     private func island(content: Content, band: NotchIslandBand) -> some View {
-        let bandHeight = restLook == .notchBand ? band.capsuleHeight : band.neckHeight
+        var drawn = band
+        var summary: NotchSummary?
+        if case .island(let restSummary, _, let restBand, _) = restLook {
+            drawn = restBand
+            summary = restSummary
+        }
+        let capsuleOnly = restLook != nil && restLook?.rowHeight == 0
+        let bandHeight = capsuleOnly ? drawn.capsuleHeight : drawn.neckHeight
         let shape = NotchHangingShape(
-            bandWidth: band.width, bandHeight: bandHeight, bottomRadius: bottomRadius, topRadius: band.topRadius)
+            bandWidth: drawn.width, bandHeight: bandHeight, bottomRadius: bottomRadius,
+            topRadius: drawn.topRadius, bandOffset: drawn.centerOffset)
         return content
-            .frame(minWidth: band.width)
+            .frame(minWidth: drawn.width + 2 * abs(drawn.centerOffset))
             .padding(.top, bandHeight)
             .background { shape.fill(Color.black) }
+            .overlay(alignment: .top) {
+                if let summary {
+                    NotchIslandBandRow(band: drawn, signal: NotchIslandSignal(summary: summary))
+                        .frame(height: drawn.capsuleHeight)
+                        .offset(x: drawn.centerOffset)
+                        .transition(.pillRestContent)
+                }
+            }
             // Wie die Status-Anzeige auf die Form zugeschnitten: gleiche
             // Kanten im Ruhebild.
             .clipShape(shape)

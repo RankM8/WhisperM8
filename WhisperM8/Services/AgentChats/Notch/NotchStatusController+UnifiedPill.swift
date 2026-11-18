@@ -42,6 +42,9 @@ extension NotchStatusController {
         }
         if displayID != nil, expandedKind != nil { collapse(rebuildAfter: false) }
         if displayID == nil { replayAlertAfterDictation() }
+        // Mit dem Mikrofon ändert Apples Insel ihre Breite, erst nach und nach.
+        NotchIslandMonitor.shared.measure(
+            placements().map(\.screen), followUps: displayID == nil ? [.milliseconds(1200), .seconds(4)] : [])
         render()
     }
 
@@ -94,6 +97,14 @@ extension NotchStatusController {
             let visible = UnifiedPillGeometry.statusVisibleFrame(mode: mode, center: pillCenter(on: screen), screen: screen)
             return UnifiedPillRestSnapshot(
                 look: .pill(summary: summary, alert: shownAlert), center: CGPoint(x: visible.midX, y: visible.midY))
+        case .notch where screen.hasIsland:
+            // Kapsel mit Zeichen und Zahl, beim Hinweis samt Zeile darunter.
+            let island = islandState(slot, screen: screen, summary: summary)
+            guard shownAlert != nil || island.presentation != .hidden else { return nil }
+            let bodyWidth = shownAlert == nil
+                ? nil : NotchGeometry.layout(screen: screen, mode: mode, islandBand: island.band).body.width
+            return UnifiedPillRestSnapshot(
+                look: .island(summary: summary, alert: shownAlert, band: island.band, bodyWidth: bodyWidth), center: nil)
         case .notch:
             guard NotchStatusModel.isVisible(summary: summary, isExpanded: false, alert: shownAlert) else { return nil }
             let body = NotchGeometry.layout(screen: screen, mode: mode).body
