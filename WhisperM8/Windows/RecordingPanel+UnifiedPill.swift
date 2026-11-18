@@ -13,10 +13,25 @@ enum OverlayPresentation: Equatable {
     /// Vereinte Pille an der Notch: schwarz, die Zeile hängt unter der
     /// Aussparung, nicht verschiebbar.
     case notch(width: CGFloat, height: CGFloat)
+    /// Vereinte Pille an einer Kamera-Insel (Dynamic Island): Die Zeile hängt
+    /// an einem schmalen Hals um die Kamera unter der Menüleiste.
+    case island(NotchIslandBand)
 
+    /// An der Hardware (Notch oder Kamera-Insel): schwarz, nicht verschiebbar.
     var isNotch: Bool {
-        if case .notch = self { return true }
-        return false
+        switch self {
+        case .notch, .island: return true
+        case .classic, .pill: return false
+        }
+    }
+
+    /// Höhe des Bands über der Zeile (0 ohne Notch).
+    var bandHeight: CGFloat {
+        switch self {
+        case .notch(_, let height): return height
+        case .island(let band): return band.neckHeight
+        case .classic, .pill: return 0
+        }
     }
 
     var isUnified: Bool { self != .classic }
@@ -120,7 +135,11 @@ extension OverlayController {
         let panel: RecordingPanel
         switch placement {
         case .notch(let screen):
-            presentation = .notch(width: screen.notchWidth, height: screen.safeAreaTop)
+            presentation = screen.hasIsland
+                ? .island(NotchIslandGeometry.band(
+                    screen: screen, occupancy: NotchIslandMonitor.shared.occupancy[screen.displayID]))
+                : .notch(width: screen.notchWidth, height: screen.safeAreaTop)
+            if screen.hasIsland { followSystemIsland(on: screen) }
             let frame = UnifiedPillGeometry.notchDictationPanelFrame(
                 screen: screen, panelWidth: OverlayFrameResolver.panelSize.width)
             panel = RecordingPanel(initialOrigin: frame.origin, size: frame.size)
@@ -175,6 +194,23 @@ extension OverlayController {
     }
 
     /// Raute für wartende Chats und Fehler, solange das Diktat steht.
+    /// Kamera-Insel: Mit dem Mikrofon wird Apples Insel breiter (Hinweis
+    /// rechts der Kamera) und nach einigen Sekunden wieder schmaler. Der Hals
+    /// der Diktat-Pille ist so breit wie sie, damit beides eine Form ist.
+    /// Gemessen wird nur ein paarmal nach dem Erscheinen, nicht laufend.
+    private func followSystemIsland(on screen: NotchScreenInfo) {
+        islandCancellable = NotchIslandMonitor.shared.$occupancy
+            .dropFirst()
+            .sink { [weak self] occupancy in
+                guard let self, case .island(let current) = self.presentation, self.unifiedScreen == screen else { return }
+                let band = NotchIslandGeometry.band(screen: screen, occupancy: occupancy[screen.displayID])
+                guard band != current else { return }
+                withAnimation(.pill) { self.presentation = .island(band) }
+            }
+        NotchIslandMonitor.shared.measure(
+            [screen], followUps: [.milliseconds(700), .milliseconds(2500), .seconds(7)])
+    }
+
     func observeUnifiedBadge() {
         statusBadge = UnifiedPillHub.shared.badge
         badgeCancellable = UnifiedPillHub.shared.$badge
@@ -268,6 +304,7 @@ extension OverlayController {
     func tearDownUnified(keepingWindow: Bool = false) {
         unifiedGeneration += 1
         badgeCancellable = nil
+        islandCancellable = nil
         if statusBadge != nil { statusBadge = nil }
         guard !keepingWindow else { return }
         if let unifiedScreenObserver {

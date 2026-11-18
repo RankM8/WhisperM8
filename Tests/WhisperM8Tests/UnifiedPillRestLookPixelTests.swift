@@ -144,4 +144,49 @@ final class UnifiedPillRestLookPixelTests: XCTestCase {
             XCTAssertLessThan(mismatch(image, row: row), 0.001, "Ruhebild weicht von der Notch-Anzeige ab (Zeile \(row))")
         }
     }
+
+    /// Kamera-Insel: Das Ruhebild ist die Kapsel mit Zeichen und Zahl, beim
+    /// Hinweis samt Zeile unter der Menüleiste, wie die Anzeige dort.
+    func testIslandRestLookMatchesTheIslandStatus() throws {
+        let screen = NotchScreenInfo(
+            displayID: 1, frame: CGRect(x: 0, y: 0, width: 1736, height: 1133),
+            visibleFrame: CGRect(x: 0, y: 0, width: 1736, height: 1088),
+            safeAreaTop: 40, auxiliaryLeftWidth: 838.5, auxiliaryRightWidth: 838.5, isBuiltIn: true)
+        let neck = NotchIslandGeometry.band(screen: screen)
+        let band = NotchIslandGeometry.band(
+            screen: screen, occupancy: NotchMenuBarOccupancy(frames: []), presentation: .compact(.leading))
+        let size = CGSize(width: OverlayFrameResolver.panelSize.width, height: band.neckHeight + 40 + 24)
+        let summary = summary
+        let alerts = alerts
+        let view = VStack(spacing: 0) {
+            ForEach(Array(alerts.enumerated()), id: \.offset) { _, alert in
+                let mode: NotchPanelMode = alert == nil ? .compact(chipCount: summary.chipCount) : .alert
+                let layout = NotchGeometry.layout(screen: screen, mode: mode, islandBand: band)
+                // Die Kamera sitzt in der Mitte der Zelle; das Fenster der
+                // Anzeige liegt in Ruhe links davon (Kapsel wächst nach links).
+                let shift = layout.frame.midX - screen.notchCenterX
+                let display = NotchDisplay(
+                    style: .island(band), summary: summary, alert: alert, isExpanded: false, sections: [],
+                    cameraOffset: -shift)
+                HStack(spacing: 0) {
+                    Self.cell(HStack {
+                        Spacer(minLength: 0)
+                        NotchStatusView(display: display)
+                            .frame(width: layout.frame.width, height: layout.frame.height)
+                            .offset(x: shift)
+                        Spacer(minLength: 0)
+                    }, size)
+                    Self.cell(RecordingOverlayView(controller: Self.restController(
+                        .island(neck),
+                        .island(summary: summary, alert: alert, band: band, bodyWidth: alert == nil ? nil : layout.body.width)))
+                        .environment(\.colorScheme, .dark), size)
+                }
+            }
+        }
+        let image = try render(view, cell: size, name: "insel")
+        for row in alerts.indices {
+            XCTAssertGreaterThan(darkPixels(image, row: row), 2000, "kein Hals mit Zeile gezeichnet (Zeile \(row))")
+            XCTAssertLessThan(mismatch(image, row: row), 0.001, "Ruhebild weicht von der Anzeige an der Insel ab (Zeile \(row))")
+        }
+    }
 }

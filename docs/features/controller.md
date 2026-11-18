@@ -337,7 +337,8 @@ Fokus, auf der du dort zuletzt warst (gemerkt beim Verlassen, nur für den laufe
 einmal aufgebaut, danach nur ein- und ausgeblendet. Sie erscheint auf dem Bildschirm des
 Agent-Chats-Fensters, auf dem der Controller wirkt — unabhängig von der Bildschirmwahl der
 Notch-Anzeige. Mit Notch wächst sie als schwarzes Band in Notch-Breite mit Körper darunter
-(`NotchHangingShape`). Ohne Notch wächst sie aus der Pille der Notch-Anzeige, die dort immer steht
+(`NotchHangingShape`). An einer Kamera-Insel (Dynamic Island der Hardware) hängt sie an einem Hals um
+die Kamera unter der Menüleiste ([notch.md](notch.md), Abschnitt „Kamera-Insel“). Ohne Notch wächst sie aus der Pille der Notch-Anzeige, die dort immer steht
 (siehe [notch.md](notch.md)): genau an ihrer Stelle (ist sie sichtbar, zählt ihr tatsächlicher
 Mittelpunkt, auch bei automatisch ausgeblendeter Menüleiste), im dunklen Glas der Diktat-Pille
 (`PillGlassBackground`, gleicher Rand und Schatten), immer dunkel. Sitzt die Pille in der oberen

@@ -20,7 +20,8 @@ struct NotchScreenInfo: Equatable {
     /// Schlüssel für die gemerkte Lage der Pille auf diesem Bildschirm.
     var pillStorageKey: String { uuid ?? "display-\(displayID)" }
 
-    /// Notch vorhanden: Sicherheitsrand oben und beide freien Bereiche daneben.
+    /// Aussparung vorhanden (Notch oder Kamera-Insel, siehe `cutout`):
+    /// Sicherheitsrand oben und beide freien Bereiche daneben.
     var hasNotch: Bool {
         safeAreaTop > 0 && auxiliaryLeftWidth != nil && auxiliaryRightWidth != nil
     }
@@ -136,8 +137,10 @@ enum NotchGeometry {
     // MARK: Fenster-Rahmen
 
     /// Rahmen des Fensters in globalen Cocoa-Koordinaten (Ursprung unten links).
-    static func panelFrame(screen: NotchScreenInfo, mode: NotchPanelMode, pillCenter: CGPoint? = nil) -> CGRect {
-        layout(screen: screen, mode: mode, pillCenter: pillCenter).frame
+    static func panelFrame(
+        screen: NotchScreenInfo, mode: NotchPanelMode, pillCenter: CGPoint? = nil, islandBand: NotchIslandBand? = nil
+    ) -> CGRect {
+        layout(screen: screen, mode: mode, pillCenter: pillCenter, islandBand: islandBand).frame
     }
 
     /// Mit Notch: Oben deckt ein schwarzes Band genau die Aussparung (sie ist
@@ -146,7 +149,15 @@ enum NotchGeometry {
     /// bleibt frei. Ohne Notch sitzt eine Pille um `pillCenter` (ohne Angabe
     /// oben mittig unter der Menüleiste); Alarm und Liste wachsen aus ihr,
     /// in der unteren Bildschirmhälfte nach oben (`NotchPillPlacement`).
-    static func layout(screen: NotchScreenInfo, mode: NotchPanelMode, pillCenter: CGPoint? = nil) -> NotchLayout {
+    ///
+    /// An einer Kamera-Insel (`NotchScreenInfo.cutout`) gilt
+    /// `NotchIslandGeometry.layout`: in Ruhe nur die Kapsel um die Kamera
+    /// (`islandBand`, seitlich verbreitert, wo Platz ist), Hinweis und Liste
+    /// hängen unter der Menüleiste.
+    static func layout(
+        screen: NotchScreenInfo, mode: NotchPanelMode, pillCenter: CGPoint? = nil, islandBand: NotchIslandBand? = nil
+    ) -> NotchLayout {
+        if screen.hasIsland { return NotchIslandGeometry.layout(screen: screen, mode: mode, band: islandBand) }
         if screen.hasNotch {
             let bandHeight = screen.safeAreaTop
             let notchWidth = screen.notchWidth
@@ -193,9 +204,14 @@ enum NotchGeometry {
     /// Bereich der Menüleiste neben der Notch, den die Anzeige nicht berühren
     /// darf (links und rechts der Aussparung). Ohne Notch die ganze Leiste.
     static func menuBarItemAreas(screen: NotchScreenInfo) -> [CGRect] {
-        let menuBarHeight = screen.hasNotch
-            ? screen.safeAreaTop
-            : max(0, screen.frame.maxY - screen.visibleFrame.maxY)
+        let menuBarHeight: CGFloat
+        if screen.hasIsland {
+            menuBarHeight = NotchIslandGeometry.bodyTop(screen)
+        } else if screen.hasNotch {
+            menuBarHeight = screen.safeAreaTop
+        } else {
+            menuBarHeight = max(0, screen.frame.maxY - screen.visibleFrame.maxY)
+        }
         let bar = CGRect(
             x: screen.frame.minX, y: screen.frame.maxY - menuBarHeight,
             width: screen.frame.width, height: menuBarHeight)
@@ -233,10 +249,15 @@ enum NotchFullscreenDetector {
     ///   System meldet nur die aktive App; mit zwei Bildschirmen ist das oft
     ///   eine andere als die Vollbild-App unter der Kamera.
     ///
+    /// An einer Kamera-Insel beginnt das Fenster je nach Menüleiste an der
+    /// Unterkante der Kamera oder erst unter der Leiste: `maxTopInset` nennt
+    /// die untere der beiden Kanten, alles dazwischen zählt.
+    ///
     /// Ein bloß maximiertes Fenster lässt die Menüleiste frei und zählt nicht.
     static func isFullscreen(
         screenFrameQuartz: CGRect,
         safeAreaTop: CGFloat = 0,
+        maxTopInset: CGFloat? = nil,
         windows: [NotchWindowSample],
         ownPID: Int32,
         systemReportsFullScreen: Bool = false,
@@ -250,7 +271,9 @@ enum NotchFullscreenDetector {
                   close(window.bounds.width, screenFrameQuartz.width),
                   close(window.bounds.maxY, screenFrameQuartz.maxY) else { return false }
             if close(window.bounds.minY, screenFrameQuartz.minY) { return true }
-            guard safeAreaTop > 0, close(window.bounds.minY, screenFrameQuartz.minY + safeAreaTop) else { return false }
+            let inset = window.bounds.minY - screenFrameQuartz.minY
+            guard safeAreaTop > 0, inset >= safeAreaTop - tolerance,
+                  inset <= max(safeAreaTop, maxTopInset ?? safeAreaTop) + tolerance else { return false }
             // Nur Kandidaten mit genau diesen Maßen fragen (Accessibility kostet).
             return systemReportsFullScreen || windowIsFullScreen(window)
         }

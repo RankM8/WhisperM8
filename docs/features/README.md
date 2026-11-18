@@ -25,7 +25,7 @@ Features, die quer zu den Säulen liegen und (noch) keinen eigenen Unterordner h
 |---|---|
 | [`agent-chats-cli.md`](agent-chats-cli.md) | `whisperm8 chats` — Agent-Sessions aus einem Chat heraus sehen und steuern |
 | [`voice-gate.md`](voice-gate.md) | Codewort-Steuerung der Codex-Sprachsitzung („Codex Voice Agent") |
-| [`notch.md`](notch.md) | Statusanzeige an der Notch: Zähler, „braucht dich", Liste mit Sprung in den Chat |
+| [`notch.md`](notch.md) | Statusanzeige an der Notch und an der Kamera-Insel (Dynamic Island): Zähler, „braucht dich", Liste mit Sprung in den Chat |
 | [`clipboard-history.md`](clipboard-history.md) | Zwischenablage-Verlauf (Maccy-Ersatz) mit Hotkey-Fenster, Datenschutz-Regeln, `whisperm8 clipboard` und Plugin-Tool |
 | [`statistics.md`](statistics.md) | Statistik-Seite: aktive Zeit, Agenten-Zeit, Token je Modell, API-Gegenwert in Euro, Limits, Chats, Diktate, Git |
 | [`keyboard-cleaning.md`](keyboard-cleaning.md) | Tastatur zum Reinigen per Mausklick sperren: Event-Tap, Entsperr-Panel, Auto-Entsperren |

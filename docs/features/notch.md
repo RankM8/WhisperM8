@@ -1,13 +1,14 @@
 ---
-status: umgesetzt, wartet auf make-dev-QA; vereinte Pille neu (12.11.2026, Kill-Switch unifiedPillEnabled), Übergang ins Diktat ohne Sprung
-stand: 2026-11-13
+status: umgesetzt, wartet auf make-dev-QA; vereinte Pille neu (12.11.2026, Kill-Switch unifiedPillEnabled), Übergang ins Diktat ohne Sprung; Kamera-Insel (Dynamic Island) seit 18.11.2026
+stand: 2026-11-18
 feature: Statusanzeige an der Notch und vereinte Pille
 ---
 
 # Statusanzeige an der Notch
 
-Eine kleine Anzeige an der MacBook-Notch (auf einem Bildschirm ohne Notch eine
-dunkle Pille, die immer dasteht) zeigt, wie es den Agent Chats geht: wie viele arbeiten,
+Eine kleine Anzeige an der MacBook-Notch (an einer Kamera-Insel wird die Insel selbst
+seitlich breiter, wie bei Apple, auf einem Bildschirm ohne Notch ist sie eine dunkle
+Pille, die immer dasteht) zeigt, wie es den Agent Chats geht: wie viele arbeiten,
 wie viele auf dich warten, wie viele gerade fertig wurden. Wer woanders
 arbeitet, sieht auf einen Blick, ob er gebraucht wird, und springt mit einem
 Klick in den passenden Chat. Prototyp der Zustände:
@@ -236,6 +237,218 @@ Status-Pille (Fensterschatten, Bildschirmwahl) wie vor dem 12.11.2026, die
 Einstellungen stehen wieder an den alten Stellen. Wirkt für die Status-Pille
 sofort, für das Diktat beim nächsten Erscheinen.
 
+## Kamera-Insel (Dynamic Island) am MacBook Pro
+
+Neuere MacBook Pro haben statt der Notch eine Kamera-Insel: eine kleine
+schwarze Kapsel, die frei in der Menüleiste schwebt. Die Anzeige verhält sich
+dort wie Apples eigene Insel und folgt deren drei Darstellungen der Live
+Activities (kompakt, minimal, expandiert): In Ruhe wird die Insel nur seitlich
+breiter, nach unten wächst sie erst auf einen Klick oder kurz bei einem Hinweis.
+
+| Stufe | An der Insel |
+|---|---|
+| Kompakt (Ruhe, etwas los) | Die schwarze Kapsel wird auf einer Seite der Kamera 40 pt breiter (102 pt gesamt), gleiche Höhe, gleiche Oberkante, nichts unter der Menüleiste. Dort stehen zusammen ein Zeichen für den wichtigsten Zustand und seine Zahl: gelbe Raute, wenn ein Chat wartet; sonst roter Ring bei einem Fehler; sonst grüner Punkt, wenn einer arbeitet; sonst ein Haken für frisch fertig. Mit zweistelliger Zahl 8 pt mehr. Links der Kamera; reichen die Menüs heran, rechts |
+| Minimal | Passen Zeichen und Zahl auf keiner Seite neben Menüs und Statussymbole, steht nur das Zeichen auf der Seite mit Platz (Flügel 26 pt). Zeigt Apples Insel gerade selbst etwas (Mikrofon, Kamera, Live Activity), steht das Zeichen als eigener kleiner Kreis mit 6 pt Abstand neben ihr, so hoch wie sie |
+| Nichts | Nichts los, auf keiner Seite Platz oder keine Messung möglich: Von der Anzeige ist nichts zu sehen, nur Apples Insel |
+| Expandiert: Hinweis | „Braucht dich“ klappt rund vier Sekunden nach unten auf: Das Band läuft als Hals bis unter die Menüleiste, darunter hängt die Zeile mit Chat-Name und Wort. Danach zurück auf kompakt |
+| Expandiert: Liste | Ein Klick auf die Kapsel (oder der Hotkey) klappt die Liste unter der Menüleiste auf; über ihr stehen alle Zähler |
+| Diktat | Die Diktat-Zeile hängt an einem Hals um die Kamera unter der Menüleiste. Mit dem Mikrofon wird Apples Insel breiter; der Hals ist dann so breit wie sie, damit beides eine Form ist |
+| Dynamic Island des Controllers | Hängt am Hals wie bisher, zu ist sie nur die Kapsel um die Kamera |
+
+Im Vollbild ist die Anzeige wie bisher ausgeblendet, Diktat und Controller
+erscheinen trotzdem.
+
+**Menüs werden nie verdeckt.** Links und rechts der Kamera gehört die Leiste
+den Menüs und Statussymbolen (`auxiliaryTop…Area` reicht bis an die Kamera).
+Die Kapsel wird deshalb nur dort breiter, wo eine Messung freien Platz belegt,
+und hält 6 pt Abstand zum nächsten Menü oder Symbol (siehe „Was neben der
+Kamera steht“). Hinweis und Liste hängen unter der Menüleiste; in der Leiste
+bleibt es bei der Breite der Kapsel.
+
+**Diktat bleibt expandiert.** Geprüft gegen Apples Regeln: Kompakt ist für
+Vorgänge gedacht, die im Hintergrund laufen und deren Bedienung in der App
+liegt. Das Diktat dauert Sekunden, steht im Vordergrund, und die Pille ist
+seine einzige Bedienfläche (fertig, abbrechen, Ausgabemodus, Pegel als
+Rückmeldung „ich höre dich“). Dass ein Mikrofon läuft, zeigt macOS in der Insel
+ohnehin selbst. Dazu käme: Wo Menüs bis an die Kamera reichen, gäbe es für
+eine kompakte Aufnahme keinen Platz, und eine laufende Aufnahme ohne sichtbare
+Anzeige darf es nicht geben.
+
+Frühere Fassungen: alle Zähler fest neben der Kamera ohne Messung, das
+verdeckte Menüs; danach nur ein Hals um die Kamera mit den Zählern in einer
+Zeile unter der Menüleiste, das hing in Ruhe wie ein schwarzes Stück unter der
+Kamera; dann Zeichen links und Zahl rechts der Kamera, das las sich
+schlechter als beides nebeneinander und brauchte auf beiden Seiten Platz.
+
+### Was Apple vorgibt
+
+Quellen, Stand 18.11.2026:
+
+- [HIG, Layout](https://developer.apple.com/design/human-interface-guidelines/layout):
+  Den Sicherheitsbereich einhalten, damit Hardware und System wie die Dynamic
+  Island keine Inhalte verdecken. Für macOS: keine Inhalte hinter dem
+  Kameragehäuse am oberen Rand.
+- [HIG, Live Activities](https://developer.apple.com/design/human-interface-guidelines/live-activities):
+  Die Insel ist deckend schwarz. Inhalte stehen dicht an der Kamera, links und
+  rechts ähnlich breit, so schmal wie möglich; reicht eine Seite, bleibt die
+  andere leer. Nichts bis an den Rand zeichnen, Ränder konzentrisch zur
+  Außenform. Die große Form ist eine vergrößerte kleine: Elemente behalten
+  ihren Platz. Bewegung nur als Wachsen und Schrumpfen, höchstens zwei
+  Sekunden. Für den Mac gelten die Maße des iPhone (Inhalte passen notfalls in
+  einen Kreis von 28 pt). Apps sollen nichts einbauen, das auf die Insel
+  aufmerksam macht.
+- [`NSScreen`](https://developer.apple.com/documentation/appkit/nsscreen):
+  Öffentlich gibt es nur
+  [`safeAreaInsets`](https://developer.apple.com/documentation/appkit/nsscreen/safeareainsets)
+  (der vom Kameragehäuse verdeckte Rand) und `auxiliaryTopLeftArea` /
+  `auxiliaryTopRightArea` (die freien Bereiche daneben), beide seit macOS 12.
+  Eine öffentliche Angabe zu Form, Höhe oder Inhalt der Insel gibt es nicht,
+  auch nicht in den
+  [Release Notes zu macOS 27](https://developer.apple.com/documentation/macos-release-notes/macos-27-release-notes).
+- [ActivityKit](https://developer.apple.com/documentation/activitykit) und
+  [`DynamicIsland`](https://developer.apple.com/documentation/widgetkit/dynamicisland):
+  Der offizielle Weg in die Insel selbst sind Live Activities. Für Mac-Apps
+  gibt es sie erst ab macOS 27.3 (zum Stand Beta), über eine Widget-Erweiterung.
+  Das System bestimmt dort Form und Platz; eine Liste, ein Diktat mit Knöpfen
+  oder die Controller-Insel lassen sich so nicht zeigen.
+- [Apple Support 120684](https://support.apple.com/en-us/120684): Live
+  Activities erscheinen in der Insel um die Kamera, ein Klick zeigt mehr,
+  Wischen oder Control-Klick blendet aus.
+- [`NSPrefersDisplaySafeAreaCompatibilityMode`](https://developer.apple.com/documentation/bundleresources/information-property-list/nsprefersdisplaysafeareacompatibilitymode):
+  betrifft nur Vollbild-Fenster einer App, nicht diese Anzeige.
+
+Die drei Darstellungen einer Live Activity nach den HIG, an denen sich die
+Anzeige ausrichtet:
+
+- **Kompakt:** ein Element links, eines rechts der Kamera, zusammen eine
+  Aussage, so schmal wie möglich; reicht eine Seite, bleibt die andere leer.
+  Die Anzeige nutzt eine Seite und lässt die Kapsel nur dorthin wachsen.
+- **Minimal:** Sind zwei Activities aktiv, zeigt jede nur noch ein Zeichen;
+  eine hängt an der Insel, die andere steht abgesetzt daneben.
+- **Expandiert:** auf eine Geste hin, und kurz von selbst, wenn sich etwas
+  Wichtiges ändert.
+
+Daraus folgt für die Anzeige: schwarz und deckend, in Ruhe nur seitlich
+breiter, nach unten erst auf Klick oder kurz beim Hinweis, nichts liegt auf
+der Insel selbst. Anders als eine Live Activity bekommt ein eigenes Fenster
+den Platz neben der Kamera nicht vom System zugeteilt; es nimmt ihn nur, wenn
+er nachweislich frei ist.
+
+### Messung auf einem MacBook Pro mit Insel (18.11.2026)
+
+macOS 27.2.1, eingebauter Bildschirm 3472 × 2266 Pixel, Standard-Skalierung
+(1736 × 1133 pt, Faktor 2), gebaut mit dem SDK von Xcode 26.2:
+
+| Wert | Ergebnis |
+|---|---|
+| `frame` | 1736 × 1133 |
+| `visibleFrame` | 1736 × 1088, die Menüleiste ist 45 pt hoch |
+| `safeAreaInsets.top` | 40 |
+| `auxiliaryTopLeftArea` / `auxiliaryTopRightArea` | je 838,5 × 40, dazwischen 59 pt Aussparung |
+| Insel im Bildschirmfoto | schwarze Kapsel 59 × 32 pt, 8 pt unter der Oberkante, Unterkante bei 40 pt |
+| Reihenfolge der Fenster | Das Fenster der System-Insel (Prozess `MenuBarAgent`, bildschirmfüllend) liegt vor einem eigenen Fenster auf Ebene `mainMenu + 3` und auch `mainMenu + 6` |
+| Vollbild-Fenster | beginnt bei 45 pt (unter der Menüleiste), nicht bei 40 pt |
+| Apples Insel mit Mikrofon | 111,5 pt breit, um die Kamera zentriert, oranger Punkt rechts; in den ersten Sekunden mit Mikrofon-Zeichen 143 pt |
+| Apples Insel mit Kamera (Videoanruf) | 143 × 34 pt, von 802 bis 945 pt, 6 pt unter der Oberkante: links 36,5, rechts 47,5 pt über die Aussparung hinaus |
+| Statussymbole | keine eigenen Fenster mehr; alle liegen als Kinder im Fenster der Menüleiste desselben Prozesses, der auch die Insel führt |
+
+Zwei Folgen:
+
+- **Die System-Insel liegt immer über unseren Fenstern.** Ein rotes
+  Testfenster über der Inselgegend zeigt im Bildschirmfoto die schwarze Kapsel
+  obenauf. Die Anzeige kann Apples Insel und alles, was das System darin zeigt
+  (Mikrofon-Anzeige, Live Activities), nicht verdecken. Sie zeichnet deshalb
+  nur Schwarz um die Insel herum.
+- **Höhe der Insel und Höhe einer ausgeblendeten Menüleiste meldet das System
+  nicht**, nur die Unterkante der Insel (`safeAreaInsets.top`) und ihre
+  Breite. Dafür nimmt die Anzeige zwei gemessene Verhältnisse, als Anteile am
+  Sicherheitsrand, damit sie bei jeder Skalierung stimmen: Die Insel beginnt
+  ein Fünftel darunter (8 von 40 pt), die Menüleiste ist ein Achtel höher
+  (45 zu 40 pt). So schließt der Hals oben bündig mit der Insel ab und ragt
+  nicht über sie hinaus, und der Körper beginnt auch bei ausgeblendeter Leiste
+  dort, wo sie beim Einfahren endet.
+
+### Was neben der Kamera steht
+
+`NotchIslandProbe` fragt über die Bedienungshilfen (öffentliche
+Accessibility-Aufrufe) drei Dinge ab:
+
+- **Menüs der vorderen App:** die Rahmen der Einträge ihrer Menüleiste
+  (`NSWorkspace.menuBarOwningApplication`), auch wenn sie rechts der Kamera
+  weiterlaufen.
+- **Statussymbole:** Die Fensterliste (`CGWindowListCopyWindowInfo`) nennt
+  den Prozess, dem die Insel gehört: Besitzer des obersten bildschirmbreiten
+  Fensters an der Kamera. Dessen Fenster in Höhe der Menüleiste enthält die
+  Statussymbole aller Apps mit ihren Rahmen.
+- **Apples Insel:** Zeigt sie etwas, hat ihr bildschirmgroßes Fenster ein Kind
+  mit genau dem Rahmen ihrer Kapsel; in Ruhe hat es keins.
+
+Kein Prozessname, kein festes Maß. Das systemweite Accessibility-Element
+fasst die Messung nicht an: Ein Zeitlimit daran gälte für alle Aufrufe der
+App, auch für den Diktat-Kontext. Jede Anfrage hat ihr eigenes Zeitlimit
+(0,25 s je Element), die ganze Messung eine Frist von 0,5 s, und es läuft nie
+mehr als eine zugleich. Die Aufrufe liegen hinter einer austauschbaren Schicht
+(`NotchIslandAX`), damit Tests sie ersetzen können.
+`NotchIslandGeometry.presentation` wählt
+daraus die Stufe, `band` die Breite. Ohne Berechtigung für Bedienungshilfen
+oder wenn einer der drei Teile nicht zu ermitteln ist (anderer Aufbau in einer
+späteren macOS-Version), gibt es keine Messung: Die Anzeige zeigt in Ruhe
+nichts, Hinweis, Liste und Diktat hängen am schmalen Hals.
+
+Gemessen wird nicht laufend, sondern zu Ereignissen, die es ohnehin gibt
+(`NotchIslandMonitor`, kein eigener Beobachter): bei App- und Space-Wechsel
+zusammen mit der Vollbild-Prüfung (und 0,9 s später noch einmal), wenn sich
+Zeichen oder Zahl ändern, alle 30 s, solange kompakt oder minimal etwas in der
+Menüleiste steht, beim Klick auf die Kapsel vor dem Aufklappen, und wenn das
+Diktat erscheint oder geht (dann einige Male nachgemessen, weil Apples Insel
+ihre Breite erst nach und nach ändert).
+
+### Wie die Insel erkannt wird
+
+`NotchScreenInfo.cutout` unterscheidet nur aus diesen öffentlichen Werten, ohne
+Modellnamen und ohne feste Maße:
+
+- keine Aussparung: kein Sicherheitsrand oder keine freien Bereiche,
+- Kamera-Insel: Die Aussparung ist weniger als dreimal so breit, wie sie tief
+  reicht (hier 59 zu 40, also 1,5),
+- Notch: alles Breitere (eine Notch liegt bei 5 bis 6).
+
+Das Verhältnis bleibt bei jeder Skalierung gleich. Alle Maße der Anzeige
+(`NotchIslandGeometry`) leiten sich aus Sicherheitsrand, Breite der Aussparung
+und Höhe der Menüleiste ab; ein Modellname oder feste Punktwerte je Gerät
+kommen nicht vor. Hat ein späteres Gerät eine anders proportionierte Insel,
+stimmen die beiden gemessenen Verhältnisse nicht mehr genau: Der Hals säße
+dann wenige Punkte zu hoch oder zu tief, schwarz auf schwarz. MacBooks mit
+Notch und Bildschirme ohne Aussparung laufen durch denselben Code wie vorher;
+Tests halten deren Rahmen und Form fest.
+
+Mehrere Bildschirme: Die Wahl des Bildschirms ist unverändert, die Insel zählt
+dabei wie eine Notch (`hasNotch`). Ein externer Bildschirm zeigt weiter die
+Pille. Bei Bildschirmwechsel, anderer Auflösung und Menüleiste ein oder aus
+wird neu gerechnet (`didChangeScreenParametersNotification`).
+
+Vollbild: Unter der Insel beginnt ein Vollbild-Fenster unter der Menüleiste
+(45 pt), bei ausgeblendeter Leiste an der Unterkante der Kamera (40 pt). Die
+Vollbild-Erkennung lässt dort beide Kanten gelten
+(`NotchScreenInfo.fullscreenTopInsets`), an der Notch wie bisher genau den
+Sicherheitsrand.
+
+### Kosten
+
+Keine neuen Beobachter des Systems, keine zusätzlichen Fenster. Ein Takt
+läuft nur, solange an einer Kamera-Insel etwas in der Menüleiste steht: alle
+30 s eine Messung. Die Insel-Geometrie ist reine Rechnung beim Zeichnen
+eines neuen Zustands, wie an der Notch.
+
+Neu ist die Messung: rund 60 kurze Accessibility-Anfragen an die vordere App
+und an den Prozess der Insel, gemessen 5 bis 27 ms, abseits des Main Threads
+mit niedriger Priorität und 0,25 s Zeitlimit je Anfrage. Sie läuft nur auf
+Bildschirmen mit Kamera-Insel und nur zu den oben genannten Ereignissen, also
+bei jedem App-Wechsel zweimal und sonst höchstens alle 30 s; dazu liest sie
+einmal die Fensterliste (einige Millisekunden). Die Form (`NotchHangingShape`) hat vier
+animierte Werte statt einem (unterer Radius, Höhe, Breite und Lage des
+Bands); das wirkt nur während der 0,2 bis 0,35 s eines Zustandswechsels.
+
 ## Bedienung
 
 | Zustand | Aussehen | Wie man hinkommt |
@@ -417,6 +630,8 @@ AgentSessionActivityStore (statusSince; Stand-Zeile nur       │
 |---|---|
 | `Services/AgentChats/Notch/NotchStatusModel.swift` | Rein: Zeilen, Sortierung, Zähler, Abschnitte, Sichtbarkeit, `NotchAlertTracker` |
 | `Services/AgentChats/Notch/NotchGeometry.swift` | Rein: Bildschirmwahl, Notch-Maße, Fenster-Rahmen je Zustand, Vollbild-Erkennung |
+| `Services/AgentChats/Notch/NotchIslandGeometry.swift` | Rein: Notch oder Kamera-Insel (`cutout`), Zeichen und Zahl (`NotchIslandSignal`), Stufe aus der Messung (`presentation`), Band und Rahmen je Zustand |
+| `Services/AgentChats/Notch/NotchIslandProbe.swift` | Messung der Menüleiste über die Bedienungshilfen (`NotchIslandProbe`, Aufrufe hinter `NotchIslandAX`) und letzter Stand je Bildschirm (`NotchIslandMonitor`) |
 | `Services/AgentChats/Notch/NotchPillPlacement.swift` | Rein: Stellen der Anzeige (Notch, Pille), gemerkte Lage, Öffnungsrichtung, Begrenzung auf den Bildschirm; auch für die Dynamic Island des Controllers |
 | `Services/AgentChats/Notch/NotchStatusController.swift` | AppKit-Seite: Beobachter, Klick-daneben, Hotkey, Einstellungen, Aufklappen |
 | `Services/AgentChats/Notch/NotchStatusController+Placements.swift` | Je Stelle ein Fenster (`NotchSlot`), Bildschirm des Agent-Chats-Fensters, Vollbild, Ziehen und Zurücksetzen der Pille |
@@ -488,7 +703,9 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   Entprellung zählt es nicht mehr, und die Pille verschwindet bzw. geht auf den
   gewählten Bildschirm, falls der keine Notch hat.
 - Notch-Erkennung: `safeAreaInsets.top > 0` und beide `auxiliaryTop…Area`.
-  Notch-Breite = Bildschirmbreite minus die beiden freien Bereiche.
+  Notch-Breite = Bildschirmbreite minus die beiden freien Bereiche. Ist die
+  Aussparung schmaler als das Dreifache ihrer Tiefe, ist es eine Kamera-Insel
+  (Abschnitt oben).
 - Vollbild: Über Vollbild-Apps wird die Anzeige ausgeblendet, je Stelle für
   ihren Bildschirm geprüft (eine Fensterliste für beide). Erkannt wird ein
   fremdes Fenster der Ebene 0, das den Bildschirm samt Menüleistenbereich exakt
@@ -552,6 +769,22 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   Vollbild meldet).
 - `NotchStatusModelTests.testClickOnHoverOpenedListPinsItInsteadOfClosing`:
   Klick auf den Kopf je nach Zustand auf, zu oder festhalten.
+- `NotchIslandGeometryTests`: Insel, Notch und kein Ausschnitt aus den
+  öffentlichen Werten, auch bei anderer Skalierung und mit echten Notch-Maßen;
+  ohne Messung in der Menüleiste nur der Hals (Aussparung plus 3 pt); Zeichen
+  und Zahl nach Wichtigkeit; kompakt nur auf einer Seite breiter und nichts
+  unter der Menüleiste; Stufe und Seite je nach gemessenem Platz; kompakt und minimal schneiden
+  bei keiner Lage von Menüs und Statussymbolen einen gemessenen Rahmen, auch
+  nicht mit Hinweis oder Liste; neben Apples aktiver Insel ein abgesetzter
+  Kreis und ein Hals in ihrer Breite; Hinweis und Liste unter der Menüleiste,
+  auch bei ausgeblendeter; Diktat und Controller-Insel hängen an der Kapsel; Vollbild mit
+  beiden Kanten; Form als Kapsel bzw. Hals mit Körper; Notch-Rahmen,
+  Notch-Form und Vollbild an der Notch unverändert.
+- `NotchIslandProbeTests`: Messung mit einer Attrappe der
+  Accessibility-Schicht: Menüs und Statussymbole als Rahmen, was Apples Insel
+  zeigt, Prozess der Insel aus der Fensterliste (Mauszeiger und eigenes Fenster
+  zählen nicht), kein Ergebnis ohne Berechtigung oder ohne einen der Teile,
+  Frist; die Messung erzeugt kein systemweites Accessibility-Element.
 - `NotchConfigTests`: Standardwerte, Schalter und Kill-Switch.
 - `NotchPillPlacementTests`: welche Stellen bei Notch, externem Bildschirm und
   Agent-Chats-Fenster, gemerkte Lage hin und zurück, Begrenzung auf den
@@ -593,6 +826,11 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
 - Snapshots: `make snapshots ONLY=notch` (Ruhe, Ruhe mit allen Zählern,
   braucht dich, Fehler, aufgeklappt, jeweils an der Notch und als Pille; dazu
   die leere Pille und die Pille unten mit Liste nach oben; hell und dunkel).
+  `make snapshots ONLY=kamera-insel` zeigt die Anzeige an der Kamera-Insel
+  (kompakt je Zustand, zweistellig und rechts der Kamera, minimal bei wenig
+  Platz und neben Apples Insel mit Mikrofon, Hinweis, Fehler, Liste, Diktat mit schmalem und breitem
+  Hals, Übergang, Controller); die Attrappe legt die Kamera-Kapsel wie macOS
+  über alles und zeigt Menüs und Statussymbole der Leiste.
   `make snapshots ONLY=pill-` zeigt die Diktat-Pille zum Vergleich. Die Attrappe zeigt Menüs und Statussymbole bis dicht an die
   Notch, damit man sieht, dass nichts verdeckt wird.
 
@@ -609,6 +847,24 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   Fertig-Verbreiterung wird nur unterdrückt, solange WhisperM8 aktive App ist.
 - Unter der Notch verdeckt die Anzeige ein kleines Stück oben in der
   Bildschirmmitte (Notch-Breite mal 24 pt, beim Alarm kurz 340 pt breit).
+- An der Kamera-Insel braucht die Anzeige in Ruhe die Berechtigung für
+  Bedienungshilfen (die das Einfügen nach dem Diktat ohnehin verlangt). Ohne
+  sie steht in der Menüleiste nichts; Hinweis und Liste (Hotkey) erscheinen
+  trotzdem.
+- Gemessen wird zu Ereignissen und alle 30 s, nicht laufend. Bekommt die
+  vordere App ein Menü dazu, erscheint ein Statussymbol oder beginnt Apples
+  Insel etwas zu zeigen, ohne dass App oder Space wechseln, gilt der alte
+  Stand bis zu 30 s weiter. Apples Insel liegt dann über unserer Kapsel und
+  verdeckt Zeichen und Zahl so lange.
+- Die Messung stützt sich auf den Aufbau der Menüleiste unter macOS 27 (ein
+  Prozess führt Insel und Statussymbole). Ändert Apple das, liefert sie
+  nichts und die Anzeige bleibt aus der Menüleiste heraus, bis der Code
+  nachzieht.
+- Die Kapsel reagiert auf Klicks nur im Flügel neben der Kamera: Über der
+  Kamera selbst liegt Apples Fenster.
+- Neben Apples aktiver Insel zeigt die Anzeige nur das Zeichen, keine Zahl.
+- Der Hals ist je Seite 3 pt breiter als die Kamera-Insel. Auf heller
+  Menüleiste sieht man diesen Rand.
 - Titeländerungen erscheinen erst mit dem nächsten Statuswechsel (oder sofort
   bei offener Liste); die Anzeige beobachtet den Workspace nicht.
 - „In Screenshots und Bildschirmfreigabe ausblenden“ ist kein sicherer Schutz:
@@ -620,7 +876,7 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
 
 ## Keywords
 
-Notch, MacBook, Dynamic Island, Statusanzeige, Streifen, Pille, verschieben, braucht dich,
+Notch, MacBook, Dynamic Island, Kamera-Insel, kompakt, minimal, expandiert, `NotchIslandGeometry`, `NotchIslandProbe`, `NotchIslandMonitor`, `NotchCutoutKind`, Statusanzeige, Streifen, Pille, verschieben, braucht dich,
 frisch fertig, `NotchStatusController`, `NotchStatusModel`, `NotchGeometry`,
 `NotchAlertTracker`, `NotchPanel`, `NotchPillPlacement`, `notchPillPositions`, `notchStatusEnabled`,
 `notchStatusFeatureEnabled`, `toggleNotchStatus`, `sharingType`.

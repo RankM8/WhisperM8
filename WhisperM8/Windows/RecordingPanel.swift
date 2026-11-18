@@ -480,6 +480,8 @@ class OverlayController: ObservableObject {
     var unifiedGeneration = 0
     var unifiedScreen: NotchScreenInfo?
     var badgeCancellable: AnyCancellable?
+    /// Kamera-Insel: folgt der Breite von Apples Insel (`followSystemIsland`).
+    var islandCancellable: AnyCancellable?
     var unifiedScreenObserver: NSObjectProtocol?
     /// Breite der zugeklappten Pille: Darüberfahren klappt nur nach links auf.
     var collapsedPillWidth: CGFloat?
@@ -940,7 +942,8 @@ class OverlayController: ObservableObject {
         // liegt auf der Aussparung, sein Rahmen reichte neben der Notch in
         // die Menüleiste (Treffer- und Hover-Fläche).
         var swiftUIFrame = reportedFrame
-        if case .notch(_, let bandHeight) = presentation {
+        if presentation.isNotch {
+            let bandHeight = presentation.bandHeight
             swiftUIFrame.origin.y += bandHeight
             swiftUIFrame.size.height -= bandHeight
         }
