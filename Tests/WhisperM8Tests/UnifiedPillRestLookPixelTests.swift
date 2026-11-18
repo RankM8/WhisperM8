@@ -154,7 +154,7 @@ final class UnifiedPillRestLookPixelTests: XCTestCase {
             safeAreaTop: 40, auxiliaryLeftWidth: 838.5, auxiliaryRightWidth: 838.5, isBuiltIn: true)
         let neck = NotchIslandGeometry.band(screen: screen)
         let band = NotchIslandGeometry.band(
-            screen: screen, occupancy: NotchMenuBarOccupancy(frames: []), presentation: .compact)
+            screen: screen, occupancy: NotchMenuBarOccupancy(frames: []), presentation: .compact(.leading))
         let size = CGSize(width: OverlayFrameResolver.panelSize.width, height: band.neckHeight + 40 + 24)
         let summary = summary
         let alerts = alerts
@@ -162,13 +162,18 @@ final class UnifiedPillRestLookPixelTests: XCTestCase {
             ForEach(Array(alerts.enumerated()), id: \.offset) { _, alert in
                 let mode: NotchPanelMode = alert == nil ? .compact(chipCount: summary.chipCount) : .alert
                 let layout = NotchGeometry.layout(screen: screen, mode: mode, islandBand: band)
+                // Die Kamera sitzt in der Mitte der Zelle; das Fenster der
+                // Anzeige liegt in Ruhe links davon (Kapsel wächst nach links).
+                let shift = layout.frame.midX - screen.notchCenterX
                 let display = NotchDisplay(
-                    style: .island(band), summary: summary, alert: alert, isExpanded: false, sections: [])
+                    style: .island(band), summary: summary, alert: alert, isExpanded: false, sections: [],
+                    cameraOffset: -shift)
                 HStack(spacing: 0) {
-                    // Fenster der Anzeige: um die Kamera zentriert, oben an der Kapsel.
                     Self.cell(HStack {
                         Spacer(minLength: 0)
-                        NotchStatusView(display: display).frame(width: layout.frame.width, height: layout.frame.height)
+                        NotchStatusView(display: display)
+                            .frame(width: layout.frame.width, height: layout.frame.height)
+                            .offset(x: shift)
                         Spacer(minLength: 0)
                     }, size)
                     Self.cell(RecordingOverlayView(controller: Self.restController(

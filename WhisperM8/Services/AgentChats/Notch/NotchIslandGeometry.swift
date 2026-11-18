@@ -34,6 +34,8 @@ struct NotchIslandBand: Equatable {
     /// (0 ohne Inhalt auf dieser Seite).
     var leadingContent: CGFloat = 0
     var trailingContent: CGFloat = 0
+    /// Neben dem Zeichen steht seine Zahl (kompakt); sonst das Zeichen allein.
+    var showsValue = false
     /// Zeigt Apples Insel selbst etwas, steht unser Zeichen in Ruhe als
     /// eigener kleiner Kreis neben ihr, mit Abstand (wie die abgesetzte
     /// minimale Darstellung bei zwei Live Activities). Rahmen in globalen
@@ -86,12 +88,12 @@ struct NotchIslandSignal: Equatable {
 enum NotchIslandSide: Equatable { case leading, trailing }
 
 /// Die Stufen der Anzeige in der Menüleiste, nach Apples Live Activities
-/// (HIG): kompakt mit Zeichen links und Zahl rechts der Kamera, minimal mit
-/// nur dem Zeichen auf einer Seite, oder nichts.
+/// (HIG): kompakt mit Zeichen und Zahl zusammen auf einer Seite der Kamera,
+/// minimal mit nur dem Zeichen, oder nichts.
 enum NotchIslandPresentation: Equatable {
     case hidden
     case minimal(NotchIslandSide)
-    case compact
+    case compact(NotchIslandSide)
 }
 
 /// Gemessene Belegung der Menüleiste: Rahmen der Menüs der vorderen App und
@@ -160,9 +162,9 @@ enum NotchIslandGeometry {
     /// 45 zu 40 pt). Gilt nur, solange sie ausgeblendet ist und keine Höhe meldet.
     static let menuBarRatio: CGFloat = 1.125
 
-    /// Platz für das Zeichen außen im Flügel. Mit dem Rand um die Kamera ist
-    /// ein Flügel 26 pt breit, so viel wie bei Apples eigener Insel mit
-    /// Mikrofon-Hinweis (gemessen 111,5 pt gesamt).
+    /// Platz für das Zeichen allein. Mit dem Rand um die Kamera ist der
+    /// Flügel 26 pt breit, so viel wie bei Apples eigener Insel mit
+    /// Mikrofon-Hinweis (gemessen 111,5 pt gesamt, je Seite 26).
     static let glyphContent: CGFloat = 23
     /// Abstand, den die Kapsel zu Menüs und Statussymbolen hält.
     static let menuClearance: CGFloat = 6
@@ -171,12 +173,9 @@ enum NotchIslandGeometry {
     /// Abstand des abgesetzten Kreises zu Apples Insel.
     static let detachedGap: CGFloat = 6
 
-    /// Platz für die Zahl: eine Ziffer so breit wie das Zeichen, zwei etwas mehr.
-    static func valueContent(digits: Int) -> CGFloat { digits > 1 ? 30 : glyphContent }
-
-    /// Kompakt sind beide Flügel gleich breit, die Kapsel bleibt um die
-    /// Kamera zentriert.
-    static func compactContent(digits: Int) -> CGFloat { max(glyphContent, valueContent(digits: digits)) }
+    /// Platz für Zeichen und Zahl nebeneinander: 10 pt bis zum runden Ende,
+    /// Zeichen 9, Abstand 5, je Ziffer 7,5, dann 5 bis zum Rand um die Kamera.
+    static func compactContent(digits: Int) -> CGFloat { digits > 1 ? 45 : 37 }
 
     /// Freier Platz links und rechts der Aussparung bis zum nächsten
     /// gemessenen Rahmen (bzw. bis zum Bildschirmrand).
@@ -206,11 +205,12 @@ enum NotchIslandGeometry {
         return (max(cutoutMargin, leading), max(cutoutMargin, trailing))
     }
 
-    /// Welche Stufe passt: kompakt nur, wenn beide Flügel samt Abstand frei
-    /// sind; sonst das Zeichen allein auf der Seite mit Platz; sonst nichts.
-    /// Zeigt Apples Insel gerade selbst etwas, bleibt es beim Zeichen allein
-    /// (wie bei zwei Live Activities, HIG), außen an ihr. Ohne Zeichen
-    /// (nichts los) und ohne Messung nichts.
+    /// Welche Stufe passt: kompakt, wenn auf einer Seite Zeichen und Zahl
+    /// samt Abstand Platz haben (links zuerst, sonst rechts); sonst das
+    /// Zeichen allein auf der Seite mit Platz; sonst nichts. Zeigt Apples
+    /// Insel gerade selbst etwas, bleibt es beim Zeichen allein (wie bei
+    /// zwei Live Activities, HIG), abgesetzt neben ihr. Ohne Zeichen (nichts
+    /// los) und ohne Messung nichts.
     static func presentation(
         signal: NotchIslandSignal?, screen: NotchScreenInfo, occupancy: NotchMenuBarOccupancy?
     ) -> NotchIslandPresentation {
@@ -219,7 +219,8 @@ enum NotchIslandGeometry {
         let base = baseWings(screen: screen, occupancy: occupancy)
         if occupancy.systemIsland == nil {
             let content = compactContent(digits: signal.digits) + menuClearance
-            if free.leading >= base.leading + content, free.trailing >= base.trailing + content { return .compact }
+            if free.leading >= base.leading + content { return .compact(.leading) }
+            if free.trailing >= base.trailing + content { return .compact(.trailing) }
         }
         // Neben Apples aktiver Insel: Abstand plus ein Kreis in ihrer Höhe.
         let glyph = occupancy.systemIsland == nil
@@ -286,9 +287,12 @@ enum NotchIslandGeometry {
         switch presentation {
         case .hidden:
             break
-        case .compact:
+        case .compact(.leading):
             band.leadingContent = compactContent(digits: digits)
-            band.trailingContent = band.leadingContent
+            band.showsValue = true
+        case .compact(.trailing):
+            band.trailingContent = compactContent(digits: digits)
+            band.showsValue = true
         case .minimal(.leading):
             band.leadingContent = glyphContent
         case .minimal(.trailing):

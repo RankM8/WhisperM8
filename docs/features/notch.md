@@ -247,8 +247,8 @@ breiter, nach unten wächst sie erst auf einen Klick oder kurz bei einem Hinweis
 
 | Stufe | An der Insel |
 |---|---|
-| Kompakt (Ruhe, etwas los) | Die schwarze Kapsel wird links und rechts der Kamera je 26 pt breiter (111 pt gesamt, so breit wie Apples Insel mit Mikrofon-Hinweis), gleiche Höhe, gleiche Oberkante, nichts unter der Menüleiste. Links ein Zeichen für den wichtigsten Zustand, rechts seine Zahl: gelbe Raute, wenn ein Chat wartet; sonst roter Ring bei einem Fehler; sonst grüner Punkt, wenn einer arbeitet; sonst ein Haken für frisch fertig. Mit zweistelliger Zahl je Seite 7 pt mehr |
-| Minimal | Reicht ein Menü oder Statussymbol in den Platz einer Seite, steht nur das Zeichen auf der freien Seite. Zeigt Apples Insel gerade selbst etwas (Mikrofon, Kamera, Live Activity), steht das Zeichen als eigener kleiner Kreis mit 6 pt Abstand neben ihr, so hoch wie sie |
+| Kompakt (Ruhe, etwas los) | Die schwarze Kapsel wird auf einer Seite der Kamera 40 pt breiter (102 pt gesamt), gleiche Höhe, gleiche Oberkante, nichts unter der Menüleiste. Dort stehen zusammen ein Zeichen für den wichtigsten Zustand und seine Zahl: gelbe Raute, wenn ein Chat wartet; sonst roter Ring bei einem Fehler; sonst grüner Punkt, wenn einer arbeitet; sonst ein Haken für frisch fertig. Mit zweistelliger Zahl 8 pt mehr. Links der Kamera; reichen die Menüs heran, rechts |
+| Minimal | Passen Zeichen und Zahl auf keiner Seite neben Menüs und Statussymbole, steht nur das Zeichen auf der Seite mit Platz (Flügel 26 pt). Zeigt Apples Insel gerade selbst etwas (Mikrofon, Kamera, Live Activity), steht das Zeichen als eigener kleiner Kreis mit 6 pt Abstand neben ihr, so hoch wie sie |
 | Nichts | Nichts los, auf keiner Seite Platz oder keine Messung möglich: Von der Anzeige ist nichts zu sehen, nur Apples Insel |
 | Expandiert: Hinweis | „Braucht dich“ klappt rund vier Sekunden nach unten auf: Das Band läuft als Hals bis unter die Menüleiste, darunter hängt die Zeile mit Chat-Name und Wort. Danach zurück auf kompakt |
 | Expandiert: Liste | Ein Klick auf die Kapsel (oder der Hotkey) klappt die Liste unter der Menüleiste auf; über ihr stehen alle Zähler |
@@ -274,10 +274,11 @@ ohnehin selbst. Dazu käme: Wo Menüs bis an die Kamera reichen, gäbe es für
 eine kompakte Aufnahme keinen Platz, und eine laufende Aufnahme ohne sichtbare
 Anzeige darf es nicht geben.
 
-Zwei frühere Fassungen: Zähler fest neben der
-Kamera ohne Messung, das verdeckte Menüs; danach nur ein Hals um die Kamera
-mit den Zählern in einer Zeile unter der Menüleiste, das hing in Ruhe wie ein
-schwarzes Stück unter der Kamera.
+Frühere Fassungen: alle Zähler fest neben der Kamera ohne Messung, das
+verdeckte Menüs; danach nur ein Hals um die Kamera mit den Zählern in einer
+Zeile unter der Menüleiste, das hing in Ruhe wie ein schwarzes Stück unter der
+Kamera; dann Zeichen links und Zahl rechts der Kamera, das las sich
+schlechter als beides nebeneinander und brauchte auf beiden Seiten Platz.
 
 ### Was Apple vorgibt
 
@@ -320,7 +321,8 @@ Die drei Darstellungen einer Live Activity nach den HIG, an denen sich die
 Anzeige ausrichtet:
 
 - **Kompakt:** ein Element links, eines rechts der Kamera, zusammen eine
-  Aussage, so schmal wie möglich.
+  Aussage, so schmal wie möglich; reicht eine Seite, bleibt die andere leer.
+  Die Anzeige nutzt eine Seite und lässt die Kapsel nur dorthin wachsen.
 - **Minimal:** Sind zwei Activities aktiv, zeigt jede nur noch ein Zeichen;
   eine hängt an der Insel, die andere steht abgesetzt daneben.
 - **Expandiert:** auf eine Geste hin, und kurz von selbst, wenn sich etwas
@@ -759,8 +761,8 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
 - `NotchIslandGeometryTests`: Insel, Notch und kein Ausschnitt aus den
   öffentlichen Werten, auch bei anderer Skalierung und mit echten Notch-Maßen;
   ohne Messung in der Menüleiste nur der Hals (Aussparung plus 3 pt); Zeichen
-  und Zahl nach Wichtigkeit; kompakt nur seitlich breiter und nichts unter der
-  Menüleiste; Stufe je nach gemessenem Platz; kompakt und minimal schneiden
+  und Zahl nach Wichtigkeit; kompakt nur auf einer Seite breiter und nichts
+  unter der Menüleiste; Stufe und Seite je nach gemessenem Platz; kompakt und minimal schneiden
   bei keiner Lage von Menüs und Statussymbolen einen gemessenen Rahmen, auch
   nicht mit Hinweis oder Liste; neben Apples aktiver Insel ein abgesetzter
   Kreis und ein Hals in ihrer Breite; Hinweis und Liste unter der Menüleiste,
@@ -809,8 +811,8 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   braucht dich, Fehler, aufgeklappt, jeweils an der Notch und als Pille; dazu
   die leere Pille und die Pille unten mit Liste nach oben; hell und dunkel).
   `make snapshots ONLY=kamera-insel` zeigt die Anzeige an der Kamera-Insel
-  (kompakt je Zustand und zweistellig, minimal neben Menüs und neben Apples
-  Insel mit Mikrofon, Hinweis, Fehler, Liste, Diktat mit schmalem und breitem
+  (kompakt je Zustand, zweistellig und rechts der Kamera, minimal bei wenig
+  Platz und neben Apples Insel mit Mikrofon, Hinweis, Fehler, Liste, Diktat mit schmalem und breitem
   Hals, Übergang, Controller); die Attrappe legt die Kamera-Kapsel wie macOS
   über alles und zeigt Menüs und Statussymbole der Leiste.
   `make snapshots ONLY=pill-` zeigt die Diktat-Pille zum Vergleich. Die Attrappe zeigt Menüs und Statussymbole bis dicht an die
@@ -842,8 +844,8 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   Prozess führt Insel und Statussymbole). Ändert Apple das, liefert sie
   nichts und die Anzeige bleibt aus der Menüleiste heraus, bis der Code
   nachzieht.
-- Die Kapsel reagiert auf Klicks nur in den Flügeln neben der Kamera: Über
-  der Kamera selbst liegt Apples Fenster.
+- Die Kapsel reagiert auf Klicks nur im Flügel neben der Kamera: Über der
+  Kamera selbst liegt Apples Fenster.
 - Neben Apples aktiver Insel zeigt die Anzeige nur das Zeichen, keine Zahl.
 - Der Hals ist je Seite 3 pt breiter als die Kamera-Insel. Auf heller
   Menüleiste sieht man diesen Rand.

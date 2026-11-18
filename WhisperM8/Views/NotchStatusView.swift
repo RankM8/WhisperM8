@@ -178,7 +178,7 @@ struct NotchStatusView: View {
                     NotchIslandBandRow.glyph(NotchIslandSignal(summary: display.summary))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
-                    // Die Kapsel um die Kamera: links das Zeichen, rechts die Zahl.
+                    // Die Kapsel um die Kamera mit Zeichen und Zahl daneben.
                     NotchIslandBandRow(band: band, signal: NotchIslandSignal(summary: display.summary))
                         .frame(height: band.capsuleHeight)
                         .offset(x: display.cameraOffset + band.centerOffset)
@@ -431,10 +431,10 @@ struct NotchStatusDot: View {
     }
 }
 
-/// Inhalt der Kapsel an der Kamera-Insel: links das Zeichen des wichtigsten
-/// Zustands, rechts seine Zahl, beides dicht an der Kamera wie bei Apples
-/// kompakter Darstellung. Mit nur einem Flügel steht dort allein das Zeichen
-/// (minimal). Geteilt mit dem Ruhebild der Diktat-Pille.
+/// Inhalt der Kapsel an der Kamera-Insel: auf einer Seite der Kamera das
+/// Zeichen des wichtigsten Zustands, kompakt mit seiner Zahl daneben, minimal
+/// allein. Beides steht dicht an der Kamera, wie bei Apples Insel. Geteilt
+/// mit dem Ruhebild der Diktat-Pille.
 struct NotchIslandBandRow: View {
     let band: NotchIslandBand
     let signal: NotchIslandSignal?
@@ -442,29 +442,35 @@ struct NotchIslandBandRow: View {
     var body: some View {
         HStack(spacing: 0) {
             Group {
-                if band.hasLeadingContent { Self.glyph(signal) }
+                if band.hasLeadingContent { content }
             }
             .padding(.trailing, 5)
             .frame(width: band.leadingContent, alignment: .trailing)
             Color.clear.frame(width: max(0, band.width - band.leadingContent - band.trailingContent))
             Group {
-                if band.hasTrailingContent, let signal {
-                    if band.hasLeadingContent {
-                        Text(verbatim: signal.text)
-                            .font(.system(size: 12, weight: .semibold))
-                            .monospacedDigit()
-                            .foregroundStyle(color(signal.kind))
-                            .fixedSize()
-                    } else {
-                        Self.glyph(signal)
-                    }
-                }
+                if band.hasTrailingContent { content }
             }
             .padding(.leading, 5)
             .frame(width: band.trailingContent, alignment: .leading)
         }
         .frame(width: band.width)
         .accessibilityHidden(true)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let signal {
+            HStack(spacing: 5) {
+                Self.glyph(signal)
+                if band.showsValue {
+                    Text(verbatim: signal.text)
+                        .font(.system(size: 12, weight: .semibold))
+                        .monospacedDigit()
+                        .foregroundStyle(color(signal.kind))
+                        .fixedSize()
+                }
+            }
+        }
     }
 
     @ViewBuilder

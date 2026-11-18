@@ -175,31 +175,39 @@ final class NotchIslandGeometryTests: XCTestCase {
         XCTAssertEqual(signal(.working, 250).text, "99", "höchstens zwei Ziffern")
     }
 
-    /// Kompakt wird die Insel nur seitlich breiter: gleiche Höhe, gleiche
-    /// Oberkante, nichts unter der Menüleiste, so breit wie Apples eigene
-    /// Insel mit Mikrofon-Hinweis (111 pt).
+    /// Kompakt wird die Insel nur seitlich breiter, und nur auf einer Seite:
+    /// Zeichen und Zahl stehen zusammen links der Kamera. Gleiche Höhe,
+    /// gleiche Oberkante, nichts unter der Menüleiste.
     func testCompactWidensOnlySideways() {
         let screen = islandScreen()
         let occupancy = roomyBar(screen)
-        XCTAssertEqual(NotchIslandGeometry.presentation(signal: signal(), screen: screen, occupancy: occupancy), .compact)
-        let band = NotchIslandGeometry.band(screen: screen, occupancy: occupancy, presentation: .compact)
-        XCTAssertEqual(band.width, 59 + 2 * 26, accuracy: 0.001)
-        XCTAssertEqual(band.centerOffset, 0, "um die Kamera zentriert")
-        XCTAssertTrue(band.hasLeadingContent && band.hasTrailingContent)
+        XCTAssertEqual(
+            NotchIslandGeometry.presentation(signal: signal(), screen: screen, occupancy: occupancy), .compact(.leading))
+        let band = NotchIslandGeometry.band(screen: screen, occupancy: occupancy, presentation: .compact(.leading))
+        XCTAssertEqual(band.leadingWing, 40, "Rand um die Kamera plus Zeichen und Zahl")
+        XCTAssertEqual(band.trailingWing, NotchIslandGeometry.cutoutMargin, "rechts nur der Rand")
+        XCTAssertEqual(band.width, 59 + 40 + 3, accuracy: 0.001)
+        XCTAssertTrue(band.hasLeadingContent && band.showsValue)
+        XCTAssertFalse(band.hasTrailingContent)
         let layout = NotchGeometry.layout(screen: screen, mode: .compact(chipCount: 1), islandBand: band)
         XCTAssertEqual(layout.frame.height, 32)
         XCTAssertEqual(layout.frame.maxY, screen.frame.maxY - 8)
-        XCTAssertEqual(layout.frame.midX, screen.notchCenterX, accuracy: 0.001)
+        XCTAssertEqual(layout.frame.maxX, screen.notchCenterX + 59 / 2 + 3, accuracy: 0.001, "wächst nur nach links")
         XCTAssertGreaterThanOrEqual(layout.frame.minY, screen.frame.maxY - 45, "nichts unter der Menüleiste")
-        // Zwei Ziffern brauchen etwas mehr, bleiben aber zentriert.
-        let wide = NotchIslandGeometry.band(screen: screen, occupancy: occupancy, presentation: .compact, digits: 2)
-        XCTAssertEqual(wide.width, 59 + 2 * 33, accuracy: 0.001)
-        XCTAssertEqual(wide.centerOffset, 0)
+        // Zwei Ziffern brauchen etwas mehr.
+        let wide = NotchIslandGeometry.band(screen: screen, occupancy: occupancy, presentation: .compact(.leading), digits: 2)
+        XCTAssertEqual(wide.leadingWing, 48)
+        // Rechts der Kamera: gespiegelt.
+        let right = NotchIslandGeometry.band(screen: screen, occupancy: occupancy, presentation: .compact(.trailing))
+        XCTAssertEqual(right.trailingWing, 40)
+        XCTAssertEqual(right.leadingWing, NotchIslandGeometry.cutoutMargin)
+        XCTAssertTrue(right.hasTrailingContent && right.showsValue)
     }
 
     /// Ohne Messung (keine Berechtigung) und ohne Zeichen steht nichts in der
-    /// Menüleiste. Reicht ein Menü oder Statussymbol in den Platz, bleibt nur
-    /// das Zeichen auf der freien Seite; ist keine frei, nichts.
+    /// Menüleiste. Zeichen und Zahl stehen links der Kamera; reichen die
+    /// Menüs heran, rechts. Passt beides nirgends, bleibt nur das Zeichen auf
+    /// der Seite mit Platz; ist keine frei, nichts.
     func testPresentationNeedsMeasuredRoom() {
         let screen = islandScreen()
         func stage(_ frames: [CGRect], _ signal: NotchIslandSignal? = NotchIslandSignal(kind: .working, count: 2)) -> NotchIslandPresentation {
@@ -207,16 +215,19 @@ final class NotchIslandGeometryTests: XCTestCase {
         }
         XCTAssertEqual(NotchIslandGeometry.presentation(signal: signal(), screen: screen, occupancy: nil), .hidden)
         XCTAssertEqual(stage([], nil), .hidden, "nichts los: nichts von uns")
-        XCTAssertEqual(stage([]), .compact)
-        // Aussparung 838,5 bis 897,5; kompakt braucht je Seite 26 + 6 pt.
-        XCTAssertEqual(stage([barItem(screen, from: 10, to: 806)]), .compact)
-        XCTAssertEqual(stage([barItem(screen, from: 10, to: 808)]), .minimal(.trailing), "Menüs reichen heran: Zeichen rechts")
-        XCTAssertEqual(stage([barItem(screen, from: 928, to: 1716)]), .minimal(.leading), "Statussymbole reichen heran: Zeichen links")
+        XCTAssertEqual(stage([]), .compact(.leading))
+        // Aussparung 838,5 bis 897,5; kompakt braucht auf einer Seite 3 + 37 + 6 pt.
+        XCTAssertEqual(stage([barItem(screen, from: 10, to: 792)]), .compact(.leading))
+        XCTAssertEqual(stage([barItem(screen, from: 10, to: 794)]), .compact(.trailing), "Menüs reichen heran: beides rechts")
+        XCTAssertEqual(stage([barItem(screen, from: 928, to: 1716)]), .compact(.leading), "rechts belegt stört links nicht")
+        // Für die Zahl reicht es auf keiner Seite: nur das Zeichen (3 + 23 + 6 pt).
+        XCTAssertEqual(stage([barItem(screen, from: 10, to: 800), barItem(screen, from: 940, to: 1716)]), .minimal(.leading))
+        XCTAssertEqual(stage([barItem(screen, from: 10, to: 820), barItem(screen, from: 935, to: 1716)]), .minimal(.trailing))
         XCTAssertEqual(stage([barItem(screen, from: 10, to: 820), barItem(screen, from: 920, to: 1716)]), .hidden)
-        // Zwei Ziffern passen nicht mehr, eine schon.
-        let tight = [barItem(screen, from: 10, to: 803), barItem(screen, from: 933, to: 1716)]
-        XCTAssertEqual(stage(tight, signal(.working, 2)), .compact)
-        XCTAssertEqual(stage(tight, signal(.working, 12)), .minimal(.leading))
+        // Zwei Ziffern passen links nicht mehr, rechts schon.
+        let tight = [barItem(screen, from: 10, to: 790), barItem(screen, from: 1151, to: 1716)]
+        XCTAssertEqual(stage(tight, signal(.working, 2)), .compact(.leading))
+        XCTAssertEqual(stage(tight, signal(.working, 12)), .compact(.trailing))
         // Menüs, die rechts der Kamera weiterlaufen, zählen genauso.
         XCTAssertEqual(stage([barItem(screen, from: 10, to: 838), barItem(screen, from: 898, to: 960)]), .hidden)
         // Notch und Bildschirm ohne Aussparung kennen die Stufen nicht.
@@ -309,10 +320,11 @@ final class NotchIslandGeometryTests: XCTestCase {
     }
 
     /// Hinweis und Liste: Das Band läuft als Hals bis unter die Menüleiste,
-    /// so breit wie die Kapsel; der Körper hängt mittig unter der Kamera.
+    /// so breit wie die Kapsel (also neben der Mitte); der Körper hängt
+    /// mittig unter der Kamera.
     func testAlertAndListHangBelowTheMenuBar() {
         let screen = islandScreen()
-        let band = NotchIslandGeometry.band(screen: screen, occupancy: roomyBar(screen), presentation: .compact)
+        let band = NotchIslandGeometry.band(screen: screen, occupancy: roomyBar(screen), presentation: .compact(.leading))
         let alert = NotchGeometry.layout(screen: screen, mode: .alert, islandBand: band)
         XCTAssertEqual(alert.band.width, band.width)
         XCTAssertEqual(alert.band.height, 37)
