@@ -45,23 +45,14 @@ struct UnifiedPillRestLookView: View {
         case .notchBand:
             // Nur das Band in der Aussparung, schwarz auf schwarz.
             Color.clear.frame(width: 0, height: 0)
-        case .island(_, let alert, let band, let bodyWidth):
-            // Die Zähler stehen oben in der Kapsel (zeichnet die Hülle,
-            // `PillChrome`); hier nur der Platz dafür und beim Hinweis die
-            // Zeile mit dem Chat-Namen.
-            if let alert {
-                NotchAlertLabel(alert: alert, palette: .notch)
-                    .padding(.horizontal, 14)
-                    .frame(width: bodyWidth)
-                    .transition(.pillRestContent)
-            } else {
-                Color.clear.frame(width: band.centeredWidth, height: 0)
-            }
         }
     }
 
     private var notchStyle: NotchDisplay.Style {
-        if case .notch(let width, let height) = presentation { return .notch(width: width, height: height) }
-        return .pill
+        switch presentation {
+        case .notch(let width, let height): return .notch(width: width, height: height)
+        case .island(let band): return .island(band)
+        case .classic, .pill: return .pill
+        }
     }
 }

@@ -12,27 +12,18 @@ enum NotchCutoutKind: Equatable {
     case island
 }
 
-/// Maße der Anzeige an einer Kamera-Insel, in Punkten. Die Anzeige legt eine
-/// schwarze Kapsel um die Kamera; Zähler stehen links und rechts daneben,
-/// alles Breitere hängt an einem Hals unter der Menüleiste.
+/// Band der Anzeige an einer Kamera-Insel, in Punkten: ein schmaler Hals um
+/// die Kamera. In der Menüleiste liegt nie mehr als das; Zähler, Hinweis,
+/// Liste und Diktat hängen darunter.
 struct NotchIslandBand: Equatable {
-    /// Breite der Aussparung laut System.
-    var cutoutWidth: CGFloat
-    /// Höhe der Kapsel um die Kamera (Ruhe).
+    /// Breite des Bands: die Aussparung plus ein schmaler Rand je Seite.
+    var width: CGFloat
+    /// Höhe der Kapsel um die Kamera (das Band, solange nichts darunter hängt).
     var capsuleHeight: CGFloat
-    /// Höhe des Bands von der Kapsel-Oberkante bis zum Körper unter der Menüleiste.
+    /// Höhe des Bands von der Oberkante der Kapsel bis zum Körper unter der Menüleiste.
     var neckHeight: CGFloat
-    /// Platz links bzw. rechts neben der Aussparung (Zähler oder nur der Rand).
-    var leadingSlot: CGFloat
-    var trailingSlot: CGFloat
 
-    var width: CGFloat { leadingSlot + cutoutWidth + trailingSlot }
-    /// Mitte des Bands gegen die Mitte der Aussparung (Zähler nur auf einer
-    /// Seite: das Band wächst nur dorthin).
-    var centerOffset: CGFloat { (trailingSlot - leadingSlot) / 2 }
     var topRadius: CGFloat { capsuleHeight / 2 }
-    /// Breite, um die Aussparung zentriert, in die das Band ganz passt.
-    var centeredWidth: CGFloat { cutoutWidth + 2 * max(leadingSlot, trailingSlot) }
 }
 
 extension NotchScreenInfo {
@@ -51,109 +42,95 @@ extension NotchScreenInfo {
 
     var hasIsland: Bool { cutout == .island }
 
-    /// Wo ein Vollbild-Fenster unter der Kamera beginnt: an der Notch an ihrer
-    /// Unterkante, an der Insel unter der Menüleiste.
-    var fullscreenTopInset: CGFloat {
-        hasIsland ? NotchIslandGeometry.bodyTop(self) : safeAreaTop
+    /// Wo ein Vollbild-Fenster unter der Kamera beginnen kann (Abstand zur
+    /// Oberkante): an der Notch an ihrer Unterkante. An der Insel irgendwo
+    /// zwischen Unterkante der Kamera und Unterkante der Menüleiste, je
+    /// nachdem, ob die Leiste eingeblendet ist.
+    var fullscreenTopInsets: ClosedRange<CGFloat> {
+        hasIsland ? safeAreaTop...max(safeAreaTop, NotchIslandGeometry.bodyTop(self)) : safeAreaTop...safeAreaTop
     }
 }
 
 /// Lage der Anzeige an einer Kamera-Insel. Rein, ohne Bildschirm testbar; alle
 /// Rahmen in globalen Cocoa-Koordinaten.
 ///
-/// Die System-Insel liegt immer über unseren Fenstern (eigene Ebene von
-/// macOS). Die Anzeige legt deshalb nur Schwarz um sie herum: eine Kapsel in
-/// der Menüleiste, die die Insel einschließt, und für Hinweis, Liste und
-/// Diktat einen Körper unter der Menüleiste. Die Menüleiste bleibt bis auf die
-/// Kapsel frei.
+/// Links und rechts der Kamera gehört die Menüleiste den Menüs und
+/// Statussymbolen (`auxiliaryTop…Area` reicht bis an die Kamera). Die Anzeige
+/// belegt dort deshalb nur einen Hals um die Kamera, wie das Band an der
+/// Notch; alles andere hängt unter der Menüleiste. Die System-Insel selbst
+/// liegt immer über unseren Fenstern (eigene Ebene von macOS).
+///
+/// Zwei Verhältnisse stammen aus der Messung vom 18.11.2026
+/// (`docs/features/notch.md`), weil das System die Werte nicht meldet. Sie
+/// sind Anteile am Sicherheitsrand und skalieren mit jeder Auflösung.
 enum NotchIslandGeometry {
     static let maxIslandAspect: CGFloat = 3
-    /// Schwarzer Rand neben der Kamera, wenn daneben nichts steht.
+    /// Schwarzer Rand links und rechts der Kamera.
     static let cutoutMargin: CGFloat = 3
-    /// Abstand der Zähler zur Kamera. Rechts blendet das System dort die
-    /// Mikrofon-Anzeige ein; die Zähler stehen deshalb nicht direkt an.
-    static let slotInnerGap: CGFloat = 10
-    /// Abstand der Zähler zum runden Ende der Kapsel.
-    static let slotOuterPadding: CGFloat = 11
-    /// Platz je Zähler (Punkt und bis zu zwei Ziffern).
-    static let chipWidth: CGFloat = 28
-    static let chipSpacing: CGFloat = 10
+    /// Die Insel beginnt ein Fünftel des Sicherheitsrands unter der Oberkante
+    /// (gemessen 8 von 40 pt). Das System meldet nur ihre Unterkante.
+    static let topInsetRatio: CGFloat = 0.2
+    /// Die Menüleiste ist ein Achtel höher als der Sicherheitsrand (gemessen
+    /// 45 zu 40 pt). Gilt nur, solange sie ausgeblendet ist und keine Höhe meldet.
+    static let menuBarRatio: CGFloat = 1.125
 
-    /// Abstand der Kapsel zur Oberkante des Bildschirms. Die Kapsel sitzt in
-    /// der Menüleiste so, dass über ihr so viel Luft bleibt wie unter der
-    /// Kamera (Menüleiste minus Sicherheitsrand). Meldet das System keine
-    /// Menüleiste (ausgeblendet), gilt ein Achtel des Sicherheitsrands.
+    /// Breite der Zeile mit `chipCount` Zählern: je Zähler 46 pt (Punkt, bis
+    /// zu zwei Ziffern, Abstand) plus Rand. Ein Zähler passt unter den Hals,
+    /// die Zeile ist dann genauso breit wie er.
+    static func compactWidth(chipCount: Int, band: NotchIslandBand) -> CGFloat {
+        max(band.width, 12 + CGFloat(max(0, chipCount)) * 46)
+    }
+
+    /// Abstand der Kapsel zur Oberkante des Bildschirms: die Oberkante der
+    /// Insel, damit das Band oben nicht über sie hinausragt.
     static func topInset(_ screen: NotchScreenInfo) -> CGFloat {
-        let below = screen.measuredMenuBarHeight - screen.safeAreaTop
-        let inset = below >= 1 ? below : (screen.safeAreaTop / 8).rounded()
-        return min(max(inset, 2), screen.safeAreaTop / 4)
+        screen.safeAreaTop * topInsetRatio
     }
 
-    /// Abstand der Oberkante des Körpers zur Oberkante des Bildschirms: unter
-    /// der Menüleiste, mindestens unter der Kamera.
+    /// Abstand der Oberkante des Körpers zur Oberkante des Bildschirms: die
+    /// Unterkante der Menüleiste. Ist sie ausgeblendet, die Stelle, an der
+    /// sie beim Einfahren endet; sonst läge der Körper dann unter ihr.
     static func bodyTop(_ screen: NotchScreenInfo) -> CGFloat {
-        max(screen.safeAreaTop, screen.measuredMenuBarHeight)
+        let measured = screen.measuredMenuBarHeight
+        guard measured > 0 else { return (screen.safeAreaTop * menuBarRatio).rounded() }
+        return max(screen.safeAreaTop, measured)
     }
 
-    /// Zähler links und rechts der Kamera: gleichmäßig verteilt, der erste
-    /// links (arbeitet, wartet, Fehler, fertig in dieser Reihenfolge).
-    static func chipSplit(chipCount: Int) -> (leading: Int, trailing: Int) {
-        let count = max(0, chipCount)
-        return (leading: (count + 1) / 2, trailing: count / 2)
-    }
-
-    static func slotWidth(chips: Int) -> CGFloat {
-        guard chips > 0 else { return cutoutMargin }
-        return slotInnerGap + CGFloat(chips) * chipWidth + CGFloat(chips - 1) * chipSpacing + slotOuterPadding
-    }
-
-    /// Band für `chipCount` sichtbare Zähler (0: nur die Kamera mit Rand).
-    static func band(screen: NotchScreenInfo, chipCount: Int = 0) -> NotchIslandBand {
+    static func band(screen: NotchScreenInfo) -> NotchIslandBand {
         let inset = topInset(screen)
-        let split = chipSplit(chipCount: chipCount)
         return NotchIslandBand(
-            cutoutWidth: screen.notchWidth,
+            width: screen.notchWidth + 2 * cutoutMargin,
             capsuleHeight: max(0, screen.safeAreaTop - inset),
-            neckHeight: max(0, bodyTop(screen) - inset),
-            leadingSlot: slotWidth(chips: split.leading),
-            trailingSlot: slotWidth(chips: split.trailing))
+            neckHeight: max(0, bodyTop(screen) - inset))
     }
 
-    /// Ruhe: nur die Kapsel in der Menüleiste. Hinweis und Liste: Die Kapsel
-    /// wird zum Hals, darunter hängt der Körper unter der Menüleiste. Das
-    /// Fenster ist immer um die Kamera zentriert, damit die Zähler beim
-    /// Wechsel der Zustände stehen bleiben; neben dem Band ist es durchsichtig.
-    static func layout(screen: NotchScreenInfo, mode: NotchPanelMode, chipCount: Int) -> NotchLayout {
-        let band = band(screen: screen, chipCount: chipCount)
-        let top = screen.frame.maxY - topInset(screen)
-        let centerX = screen.notchCenterX
-        let bandMinX = centerX - band.cutoutWidth / 2 - band.leadingSlot
-
+    /// Wie an der Notch, nur mit dem Hals statt des Bands: Zähler, Chat-Name
+    /// oder Liste hängen unter der Menüleiste. Die Zeile mit den Zählern ist
+    /// so breit, wie die Zähler brauchen (die Insel ist schmaler als zwei).
+    static func layout(screen: NotchScreenInfo, mode: NotchPanelMode) -> NotchLayout {
+        let band = band(screen: screen)
         let bodyWidth: CGFloat
-        let bodyHeight: CGFloat
+        var bodyHeight = NotchGeometry.chinHeight
         switch mode {
-        case .compact:
-            let capsule = CGRect(x: bandMinX, y: top - band.capsuleHeight, width: band.width, height: band.capsuleHeight)
-            let frame = CGRect(
-                x: centerX - band.centeredWidth / 2, y: capsule.minY,
-                width: band.centeredWidth, height: capsule.height)
-            return NotchLayout(
-                frame: frame, band: capsule,
-                body: CGRect(x: capsule.minX, y: capsule.minY, width: capsule.width, height: 0))
+        case .compact(let chipCount):
+            bodyWidth = compactWidth(chipCount: chipCount, band: band)
         case .alert:
-            bodyWidth = max(band.centeredWidth, NotchGeometry.alertWidth)
-            bodyHeight = NotchGeometry.chinHeight
+            bodyWidth = max(band.width, NotchGeometry.alertWidth)
         case .expanded(let rows, let sections):
-            bodyWidth = max(band.centeredWidth, NotchGeometry.expandedMinWidth)
-            bodyHeight = NotchGeometry.listHeight(rowCount: rows, sectionCount: sections)
+            bodyWidth = max(band.width, NotchGeometry.expandedMinWidth)
+            bodyHeight += NotchGeometry.listHeight(rowCount: rows, sectionCount: sections)
         }
-        let neck = CGRect(x: bandMinX, y: top - band.neckHeight, width: band.width, height: band.neckHeight)
-        let body = CGRect(x: centerX - bodyWidth / 2, y: neck.minY - bodyHeight, width: bodyWidth, height: bodyHeight)
+        let neck = CGRect(
+            x: screen.notchCenterX - band.width / 2, y: windowTop(screen) - band.neckHeight,
+            width: band.width, height: band.neckHeight)
+        let body = CGRect(
+            x: screen.notchCenterX - bodyWidth / 2, y: neck.minY - bodyHeight,
+            width: bodyWidth, height: bodyHeight)
         return NotchLayout(frame: neck.union(body), band: neck, body: body)
     }
 
-    /// Oberkante eines Fensters, das an der Insel hängt (Diktat, Controller):
-    /// die Oberkante der Kapsel.
+    /// Oberkante eines Fensters, das an der Insel hängt (Anzeige, Diktat,
+    /// Controller): die Oberkante der Kapsel.
     static func windowTop(_ screen: NotchScreenInfo) -> CGFloat {
         screen.frame.maxY - topInset(screen)
     }

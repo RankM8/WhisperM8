@@ -61,13 +61,12 @@ extension NotchStatusController {
             isExpanded: expandedHere, alert: alert, rows: rows, sections: expandedHere ? sections : [])
         let pillCenter = isPill ? pillCenter(on: screen) : nil
         let display = NotchDisplay(
-            style: Self.displayStyle(screen: screen, summary: summary),
+            style: Self.displayStyle(screen: screen),
             summary: summary, alert: alert, isExpanded: expandedHere,
             sections: expandedHere ? sections : [],
             opensUpward: pillCenter.map { NotchPillPlacement.opensUpward(center: $0, on: screen) } ?? false,
             selectedRowID: expandedHere ? keyboardSelection : nil)
-        let frame = NotchGeometry.panelFrame(
-            screen: screen, mode: mode, pillCenter: pillCenter, chipCount: summary.chipCount)
+        let frame = NotchGeometry.panelFrame(screen: screen, mode: mode, pillCenter: pillCenter)
 
         let panel = ensurePanel(slot)
         // Ohne Notch ein Fensterschatten: Ein im Fenster gezeichneter Schatten
@@ -99,13 +98,13 @@ extension NotchStatusController {
         slot.returnsFromDictation = false
     }
 
-    /// Notch: Band in der Aussparung. Kamera-Insel: Kapsel um die Kamera mit
-    /// Platz für die sichtbaren Zähler. Sonst die Pille.
-    nonisolated static func displayStyle(screen: NotchScreenInfo, summary: NotchSummary) -> NotchDisplay.Style {
+    /// Notch: Band in der Aussparung. Kamera-Insel: Hals um die Kamera.
+    /// Sonst die Pille.
+    nonisolated static func displayStyle(screen: NotchScreenInfo) -> NotchDisplay.Style {
         switch screen.cutout {
         case .none: return .pill
         case .notch: return .notch(width: screen.notchWidth, height: screen.safeAreaTop)
-        case .island: return .island(NotchIslandGeometry.band(screen: screen, chipCount: summary.chipCount))
+        case .island: return .island(NotchIslandGeometry.band(screen: screen))
         }
     }
 
@@ -208,7 +207,7 @@ extension NotchStatusController {
         let targets = placements.map { placement in
             (kind: placement.kind,
              quartz: NotchFullscreenDetector.quartzFrame(fromCocoa: placement.screen.frame, primaryHeight: primaryHeight),
-             safeAreaTop: placement.screen.fullscreenTopInset)
+             topInsets: placement.screen.fullscreenTopInsets)
         }
         let systemFullScreen = NSApp.currentSystemPresentationOptions.contains(.fullScreen)
         let ownPID = ProcessInfo.processInfo.processIdentifier
@@ -220,7 +219,8 @@ extension NotchStatusController {
             for target in targets {
                 hidden[target.kind] = NotchFullscreenDetector.isFullscreen(
                     screenFrameQuartz: target.quartz,
-                    safeAreaTop: target.safeAreaTop,
+                    safeAreaTop: target.topInsets.lowerBound,
+                    maxTopInset: target.topInsets.upperBound,
                     windows: windows,
                     ownPID: ownPID,
                     systemReportsFullScreen: systemFullScreen,

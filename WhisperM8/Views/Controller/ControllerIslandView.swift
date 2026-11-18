@@ -22,10 +22,6 @@ struct ControllerIslandDisplay: Equatable {
     /// Nur Pille: Sie sitzt in der unteren Bildschirmhälfte, die Insel wächst
     /// nach oben aus ihr heraus.
     var opensUpward = false
-    /// Nur Kamera-Insel: Zähler der Notch-Anzeige, wenn sie auf diesem
-    /// Bildschirm steht. Die Insel liegt über ihrer Kapsel und zeichnet die
-    /// Zähler an derselben Stelle neben der Kamera weiter.
-    var bandSummary: NotchSummary?
 
     /// An der Hardware (Notch oder Kamera-Insel): schwarz, ohne Schatten.
     var isNotch: Bool {
@@ -54,7 +50,7 @@ struct ControllerIslandDisplay: Equatable {
         case .whereTo: width = Self.keyboardWidth(model) ?? 440
         }
         if case .notch(let notchWidth, _) = style { return max(width, notchWidth) }
-        if case .island(let band) = style { return max(width, band.centeredWidth) }
+        if case .island(let band) = style { return max(width, band.width) }
         return width
     }
 
@@ -122,10 +118,7 @@ struct ControllerIslandView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if case .island(let band) = display.style, let summary = display.bandSummary {
-                NotchIslandChipsRow(band: band, summary: summary)
-                    .frame(maxWidth: .infinity, minHeight: band.neckHeight, alignment: .top)
-            } else if display.isNotch {
+            if display.isNotch {
                 Color.clear.frame(height: display.bandHeight)
             }
             header
@@ -155,8 +148,7 @@ struct ControllerIslandView: View {
         }
         if case .island(let band) = display.style {
             return AnyShape(NotchHangingShape(
-                bandWidth: band.width, bandHeight: band.neckHeight, bottomRadius: 20,
-                topRadius: band.topRadius, bandOffset: band.centerOffset))
+                bandWidth: band.width, bandHeight: band.neckHeight, bottomRadius: 20, topRadius: band.topRadius))
         }
         return AnyShape(RoundedRectangle(cornerRadius: PillGlass.cornerRadius, style: .continuous))
     }
@@ -179,8 +171,8 @@ struct ControllerIslandView: View {
         case .notch(let width, let height):
             return CGSize(width: min(size.width, width), height: min(size.height, height + NotchGeometry.chinHeight))
         case .island(let band):
-            // Zu: nur die Kapsel um die Kamera (samt Platz der Zähler).
-            return CGSize(width: min(size.width, band.centeredWidth), height: min(size.height, band.capsuleHeight))
+            // Zu: nur die Kapsel um die Kamera.
+            return CGSize(width: min(size.width, band.width), height: min(size.height, band.capsuleHeight))
         case .pill:
             return CGSize(width: min(size.width, NotchGeometry.pillIdleWidth),
                           height: min(size.height, NotchGeometry.pillHeight))

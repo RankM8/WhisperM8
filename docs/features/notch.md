@@ -6,9 +6,9 @@ feature: Statusanzeige an der Notch und vereinte Pille
 
 # Statusanzeige an der Notch
 
-Eine kleine Anzeige an der MacBook-Notch (an einer Kamera-Insel eine Kapsel um
-die Kamera, auf einem Bildschirm ohne Notch eine dunkle Pille, die immer
-dasteht) zeigt, wie es den Agent Chats geht: wie viele arbeiten,
+Eine kleine Anzeige an der MacBook-Notch (an einer Kamera-Insel hängt sie an
+einem Hals um die Kamera, auf einem Bildschirm ohne Notch ist sie eine dunkle
+Pille, die immer dasteht) zeigt, wie es den Agent Chats geht: wie viele arbeiten,
 wie viele auf dich warten, wie viele gerade fertig wurden. Wer woanders
 arbeitet, sieht auf einen Blick, ob er gebraucht wird, und springt mit einem
 Klick in den passenden Chat. Prototyp der Zustände:
@@ -246,16 +246,23 @@ herunterzuziehen.
 
 | Zustand | An der Insel |
 |---|---|
-| Ruhe | Schwarze Kapsel um die Kamera, die Zähler stehen links und rechts daneben. Ein Zähler: die Kapsel wächst nur nach links. Nichts los: nichts zu sehen, nur Apples Insel |
-| Hinweis | Die Kapsel wird zum Hals, darunter hängt einmal kurz die Zeile mit Chat-Name und Wort. Die Zähler bleiben oben stehen |
-| Liste | Wie der Hinweis, die Liste hängt unter der Menüleiste |
-| Diktat | Die Diktat-Zeile hängt an einem schmalen Hals um die Kamera; sie wächst aus der Kapsel (mit oder ohne Zähler) und zieht sich dorthin zurück |
-| Dynamic Island des Controllers | Hängt am selben Hals; die Zähler der Anzeige bleiben neben der Kamera stehen. Zu ist sie nur die Kapsel |
+| Ruhe | Um die Kamera liegt ein schmaler schwarzer Hals, darunter hängt unter der Menüleiste die Zeile mit den Zählern. Ein Zähler passt unter den Hals (gerade Kante), mehrere machen die Zeile breiter. Nichts los: nichts zu sehen, nur Apples Insel |
+| Hinweis | Die Zeile verbreitert sich einmal kurz und zeigt Chat-Name und Wort, wie an der Notch |
+| Liste | Die Liste hängt unter der Zeile mit den Zählern |
+| Diktat | Die Diktat-Zeile hängt am selben Hals; sie wächst aus der Zeile mit den Zählern (oder aus der leeren Insel) und zieht sich dorthin zurück |
+| Dynamic Island des Controllers | Hängt am selben Hals, zu ist sie nur die Kapsel um die Kamera |
 
-In der Menüleiste liegt immer nur die Kapsel (höchstens 233 pt breit, mit vier
-Zählern). Hinweis, Liste, Diktat und Controller hängen darunter, die Menüleiste
-links und rechts bleibt frei wie an der Notch. Im Vollbild ist die Anzeige wie
-bisher ausgeblendet, Diktat und Controller erscheinen trotzdem.
+In der Menüleiste liegt nie mehr als der Hals: die Kamera plus 3 pt Rand je
+Seite (65 pt bei 59 pt Aussparung). Links und rechts der Kamera gehört die
+Leiste den Menüs und Statussymbolen (`auxiliaryTop…Area` reicht bis an die
+Kamera); dort bleibt alles frei und klickbar, wie an der Notch. Im Vollbild
+ist die Anzeige wie bisher ausgeblendet, Diktat und Controller erscheinen
+trotzdem.
+
+Ein erster Entwurf stellte die Zähler in einer Kapsel links und rechts neben
+die Kamera. Das sah näher an Apples Insel aus, nahm den Menüs aber je Seite 49
+bis 87 pt weg: Bis zu den Menüs von Chrome blieben 38 pt, Apps mit zwölf und
+mehr Menüs oder die Darstellung „Größerer Text“ wären verdeckt worden.
 
 ### Was Apple vorgibt
 
@@ -294,9 +301,10 @@ Quellen, Stand 18.11.2026:
 - [`NSPrefersDisplaySafeAreaCompatibilityMode`](https://developer.apple.com/documentation/bundleresources/information-property-list/nsprefersdisplaysafeareacompatibilitymode):
   betrifft nur Vollbild-Fenster einer App, nicht diese Anzeige.
 
-Daraus folgt für die Anzeige: schwarz und deckend, Zähler dicht an der Kamera
-und gleichmäßig verteilt, Zustände wachsen aus der Kapsel und behalten die
-Zähler an ihrem Platz, und nichts liegt auf der Insel selbst.
+Daraus folgt für die Anzeige: schwarz und deckend, Zustände wachsen aus der
+Insel heraus, nichts liegt auf der Insel selbst, und der Sicherheitsbereich
+neben der Kamera bleibt den Menüs. Zähler links und rechts der Kamera, wie sie
+eine Live Activity zeigt, stehen einer App mit eigenem Fenster dort nicht zu.
 
 ### Messung auf einem MacBook Pro mit Insel (18.11.2026)
 
@@ -317,16 +325,17 @@ Zwei Folgen:
 
 - **Die System-Insel liegt immer über unseren Fenstern.** Ein rotes
   Testfenster über der Inselgegend zeigt im Bildschirmfoto die schwarze Kapsel
-  obenauf. Die Anzeige kann Apples Insel und alles, was das System darin oder
-  direkt daneben zeigt (Mikrofon-Anzeige, Live Activities), nicht verdecken.
-  Umgekehrt überdeckt das System unsere Zähler, wenn es selbst breiter wird.
-  Deshalb zeichnet die Anzeige nur Schwarz um die Insel herum und lässt
-  zwischen Kamera und Zählern 10 pt Luft.
-- **Die Höhe der Insel meldet das System nicht**, nur ihre Unterkante
-  (`safeAreaInsets.top`) und ihre Breite. Die Kapsel der Anzeige sitzt deshalb
-  so in der Menüleiste, dass über ihr so viel Luft bleibt wie unter der Kamera
-  (45 − 40 = 5 pt). Sie ist damit 35 pt hoch und schließt die 32 pt hohe Insel
-  ein; schwarz auf schwarz sieht man die Naht nicht.
+  obenauf. Die Anzeige kann Apples Insel und alles, was das System darin zeigt
+  (Mikrofon-Anzeige, Live Activities), nicht verdecken. Sie zeichnet deshalb
+  nur Schwarz um die Insel herum.
+- **Höhe der Insel und Höhe einer ausgeblendeten Menüleiste meldet das System
+  nicht**, nur die Unterkante der Insel (`safeAreaInsets.top`) und ihre
+  Breite. Dafür nimmt die Anzeige zwei gemessene Verhältnisse, als Anteile am
+  Sicherheitsrand, damit sie bei jeder Skalierung stimmen: Die Insel beginnt
+  ein Fünftel darunter (8 von 40 pt), die Menüleiste ist ein Achtel höher
+  (45 zu 40 pt). So schließt der Hals oben bündig mit der Insel ab und ragt
+  nicht über sie hinaus, und der Körper beginnt auch bei ausgeblendeter Leiste
+  dort, wo sie beim Einfahren endet.
 
 ### Wie die Insel erkannt wird
 
@@ -340,28 +349,31 @@ Modellnamen und ohne feste Maße:
 
 Das Verhältnis bleibt bei jeder Skalierung gleich. Alle Maße der Anzeige
 (`NotchIslandGeometry`) leiten sich aus Sicherheitsrand, Breite der Aussparung
-und Höhe der Menüleiste ab. Meldet das System keine Menüleiste (automatisch
-ausgeblendet), sitzt die Kapsel ein Achtel des Sicherheitsrands unter der
-Oberkante und der Körper beginnt direkt unter der Kamera. MacBooks mit Notch
-und Bildschirme ohne Aussparung laufen durch denselben Code wie vorher; Tests
-halten deren Rahmen und Form fest.
+und Höhe der Menüleiste ab; ein Modellname oder feste Punktwerte je Gerät
+kommen nicht vor. Hat ein späteres Gerät eine anders proportionierte Insel,
+stimmen die beiden gemessenen Verhältnisse nicht mehr genau: Der Hals säße
+dann wenige Punkte zu hoch oder zu tief, schwarz auf schwarz. MacBooks mit
+Notch und Bildschirme ohne Aussparung laufen durch denselben Code wie vorher;
+Tests halten deren Rahmen und Form fest.
 
 Mehrere Bildschirme: Die Wahl des Bildschirms ist unverändert, die Insel zählt
 dabei wie eine Notch (`hasNotch`). Ein externer Bildschirm zeigt weiter die
 Pille. Bei Bildschirmwechsel, anderer Auflösung und Menüleiste ein oder aus
 wird neu gerechnet (`didChangeScreenParametersNotification`).
 
-Vollbild: Unter der Insel beginnt ein Vollbild-Fenster unter der Menüleiste.
-Die Vollbild-Erkennung vergleicht dort mit dieser Höhe
-(`NotchScreenInfo.fullscreenTopInset`), an der Notch wie bisher mit dem
+Vollbild: Unter der Insel beginnt ein Vollbild-Fenster unter der Menüleiste
+(45 pt), bei ausgeblendeter Leiste an der Unterkante der Kamera (40 pt). Die
+Vollbild-Erkennung lässt dort beide Kanten gelten
+(`NotchScreenInfo.fullscreenTopInsets`), an der Notch wie bisher genau den
 Sicherheitsrand.
 
 ### Kosten
 
 Keine neuen Beobachter, Timer oder Fenster. Die Insel-Geometrie ist reine
 Rechnung beim Zeichnen eines neuen Zustands, wie an der Notch. Die Form
-(`NotchHangingShape`) hat an der Insel vier animierte Werte statt einem; das
-wirkt nur während der 0,2 bis 0,35 s eines Zustandswechsels.
+(`NotchHangingShape`) hat zwei animierte Werte statt einem (unterer Radius und
+Höhe des Bands); das wirkt nur während der 0,2 bis 0,35 s eines
+Zustandswechsels.
 
 ## Bedienung
 
@@ -544,8 +556,7 @@ AgentSessionActivityStore (statusSince; Stand-Zeile nur       │
 |---|---|
 | `Services/AgentChats/Notch/NotchStatusModel.swift` | Rein: Zeilen, Sortierung, Zähler, Abschnitte, Sichtbarkeit, `NotchAlertTracker` |
 | `Services/AgentChats/Notch/NotchGeometry.swift` | Rein: Bildschirmwahl, Notch-Maße, Fenster-Rahmen je Zustand, Vollbild-Erkennung |
-| `Services/AgentChats/Notch/NotchIslandGeometry.swift` | Rein: Notch oder Kamera-Insel (`cutout`), Kapsel, Zähler-Plätze, Hals und Körper an der Insel |
-| `Views/NotchIslandViews.swift` | Zähler links und rechts der Kamera |
+| `Services/AgentChats/Notch/NotchIslandGeometry.swift` | Rein: Notch oder Kamera-Insel (`cutout`), Hals um die Kamera und Körper unter der Menüleiste |
 | `Services/AgentChats/Notch/NotchPillPlacement.swift` | Rein: Stellen der Anzeige (Notch, Pille), gemerkte Lage, Öffnungsrichtung, Begrenzung auf den Bildschirm; auch für die Dynamic Island des Controllers |
 | `Services/AgentChats/Notch/NotchStatusController.swift` | AppKit-Seite: Beobachter, Klick-daneben, Hotkey, Einstellungen, Aufklappen |
 | `Services/AgentChats/Notch/NotchStatusController+Placements.swift` | Je Stelle ein Fenster (`NotchSlot`), Bildschirm des Agent-Chats-Fensters, Vollbild, Ziehen und Zurücksetzen der Pille |
@@ -685,11 +696,11 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   Klick auf den Kopf je nach Zustand auf, zu oder festhalten.
 - `NotchIslandGeometryTests`: Insel, Notch und kein Ausschnitt aus den
   öffentlichen Werten, auch bei anderer Skalierung und mit echten Notch-Maßen;
-  Kapsel um die Kamera, Zähler links und rechts, ein Zähler nur links; Fenster
-  in jedem Zustand um die Kamera zentriert; Hinweis und Liste unter der
-  Menüleiste, in der Leiste nur das Band; ausgeblendete Menüleiste; Diktat und
-  Controller-Insel hängen an der Kapsel; Vollbild unter der Menüleiste; Form
-  als Kapsel bzw. Hals mit Körper; Notch-Rahmen und Notch-Form unverändert.
+  in der Menüleiste in jedem Zustand nur der Hals (Aussparung plus 3 pt), der
+  Körper darunter, auch bei ausgeblendeter Menüleiste; Zeile so breit wie die
+  Zähler; Diktat und Controller-Insel hängen an der Kapsel; Vollbild mit
+  beiden Kanten; Form als Kapsel bzw. Hals mit Körper; Notch-Rahmen,
+  Notch-Form und Vollbild an der Notch unverändert.
 - `NotchConfigTests`: Standardwerte, Schalter und Kill-Switch.
 - `NotchPillPlacementTests`: welche Stellen bei Notch, externem Bildschirm und
   Agent-Chats-Fenster, gemerkte Lage hin und zurück, Begrenzung auf den
@@ -734,7 +745,7 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   `make snapshots ONLY=kamera-insel` zeigt die Anzeige an der Kamera-Insel
   (Ruhe mit einem, mehreren und vier Zählern, Hinweis, Fehler, Liste, Diktat,
   Übergang, Controller); die Attrappe legt die Kamera-Kapsel wie macOS über
-  alles.
+  alles und zeigt Menüs und Statussymbole der Leiste.
   `make snapshots ONLY=pill-` zeigt die Diktat-Pille zum Vergleich. Die Attrappe zeigt Menüs und Statussymbole bis dicht an die
   Notch, damit man sieht, dass nichts verdeckt wird.
 
@@ -751,17 +762,18 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   Fertig-Verbreiterung wird nur unterdrückt, solange WhisperM8 aktive App ist.
 - Unter der Notch verdeckt die Anzeige ein kleines Stück oben in der
   Bildschirmmitte (Notch-Breite mal 24 pt, beim Alarm kurz 340 pt breit).
-- An der Kamera-Insel liegt die Kapsel mit den Zählern in der Menüleiste: je
-  Seite bis zu 87 pt neben der Kamera. Reichen Menüs oder Statussymbole einer
-  App bis dorthin (sehr viele Symbole oder eine stark vergrößerte
-  Darstellung), verdeckt die Kapsel sie. Wo Menüs und Symbole enden, meldet
-  macOS nicht.
-- Zeigt das System selbst etwas in der Insel (Live Activity, Mikrofon-Anzeige
-  über 10 pt hinaus), liegt es über unseren Zählern und verdeckt sie, solange
-  es dasteht.
-- Die Kapsel ist 3 pt höher als die Kamera-Insel (35 statt 32 pt), weil das
-  System deren Höhe nicht meldet. Auf heller Menüleiste ragt sie oben um
-  diese 3 pt über die Kamera hinaus.
+- An der Kamera-Insel verdeckt die Anzeige wie an der Notch ein Stück unter
+  der Menüleiste (Zeile der Zähler, 24 pt hoch, mit vier Zählern 196 pt
+  breit). Die Menüleiste selbst bleibt frei: Dort liegt nur der Hals um die
+  Kamera. Eine frühere Fassung stellte die Zähler neben die Kamera und
+  verdeckte damit Menüs; das ist behoben. (Wo die Menüs einer App enden, ließe
+  sich über die Bedienungshilfen abfragen, die deren Rahmen melden. Die
+  Anzeige braucht das nicht mehr.)
+- Zeigt das System selbst etwas Größeres in der Insel (aufgeklappte Live
+  Activity), liegt es über unserer Anzeige und verdeckt sie, solange es
+  dasteht.
+- Der Hals ist je Seite 3 pt breiter als die Kamera-Insel. Auf heller
+  Menüleiste sieht man diesen Rand.
 - Titeländerungen erscheinen erst mit dem nächsten Statuswechsel (oder sofort
   bei offener Liste); die Anzeige beobachtet den Workspace nicht.
 - „In Screenshots und Bildschirmfreigabe ausblenden“ ist kein sicherer Schutz:

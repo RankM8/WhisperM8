@@ -115,9 +115,9 @@ extension UISnapshotGallery {
             let sections = expanded ? NotchStatusModel.sections(of: rows) : []
             let mode = NotchStatusModel.panelMode(isExpanded: expanded, alert: alert, rows: rows, sections: sections)
             let display = NotchDisplay(
-                style: NotchStatusController.displayStyle(screen: screen, summary: summary),
+                style: NotchStatusController.displayStyle(screen: screen),
                 summary: summary, alert: alert, isExpanded: expanded, sections: sections)
-            let frame = NotchGeometry.panelFrame(screen: screen, mode: mode, chipCount: summary.chipCount)
+            let frame = NotchGeometry.panelFrame(screen: screen, mode: mode)
             return AnyView(IslandDesk(size: size) {
                 NotchStatusView(display: display)
                     .frame(width: frame.width, height: frame.height)
@@ -164,9 +164,9 @@ extension UISnapshotGallery {
 
         let screen = islandScreen(strip)
         let restSummary = NotchSummary(working: 2, waiting: 1)
-        let restBand = NotchIslandGeometry.band(screen: screen, chipCount: restSummary.chipCount)
-        let rest = UnifiedPillRestLook.island(
-            summary: restSummary, alert: nil, band: restBand, bodyWidth: restBand.centeredWidth)
+        let rest = UnifiedPillRestLook.notch(
+            summary: restSummary, alert: nil,
+            bodyWidth: NotchGeometry.layout(screen: screen, mode: .compact(chipCount: restSummary.chipCount)).body.width)
 
         let controllerSize = CGSize(width: 720, height: 300)
         let controllerIsland = Fixture(name: "kamera-insel-controller", size: controllerSize) {
@@ -174,12 +174,9 @@ extension UISnapshotGallery {
             let model = ControllerIslandModel(
                 target: ControllerIslandTarget(title: "Controller Insel", status: .idle),
                 content: .writing(ControllerWritingSlots(state: ControllerChatState(status: .idle, profile: .claude))))
-            // Die Notch-Anzeige steht dort mit zwei Zählern: Die Insel
-            // zeichnet sie an derselben Stelle weiter.
-            let summary = NotchSummary(working: 2, waiting: 1)
             let display = ControllerIslandDisplay(
-                style: ControllerIslandGeometry.style(for: screen, chipCount: summary.chipCount), model: model,
-                counts: ControllerIslandCounts(working: 2, waiting: 1), bandSummary: summary)
+                style: ControllerIslandGeometry.style(for: screen), model: model,
+                counts: ControllerIslandCounts(working: 2, waiting: 1))
             return AnyView(IslandDesk(size: controllerSize) {
                 ControllerIslandView(display: display)
                     .frame(maxWidth: .infinity, alignment: .top)
@@ -188,7 +185,6 @@ extension UISnapshotGallery {
         }
 
         return [
-            // Nur arbeitende Chats: Die Kapsel wächst allein nach links.
             islandStatus("ruhe-einzeln", size: strip, inputs: working),
             islandStatus("ruhe", size: strip, inputs: islandDemoInputs),
             islandStatus("ruhe-voll", size: strip, inputs: busy),
@@ -201,7 +197,7 @@ extension UISnapshotGallery {
                 $0.statusBadge = DictationStatusBadge(waiting: 1, errored: 0)
             },
             islandDictation("diktat-transkribiert", size: strip) { $0.isTranscribing = true },
-            // Übergang: Ruhebild (Kapsel mit Zählern), Mitte, und aus der
+            // Übergang: Ruhebild (Zeile mit Zählern), Mitte, und aus der
             // leeren Insel, wenn an ihr nichts los ist.
             islandDictation("uebergang-ruhe", size: strip, rest: rest),
             islandDictation("uebergang-mitte", size: strip, rest: rest, midway: true),
