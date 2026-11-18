@@ -301,6 +301,17 @@ final class PillHitTestHostingView<Content: View>: NSHostingView<Content> {
             )
         }
     }
+    /// Kamera-Insel, kompakt: Die Ansicht reicht symmetrisch um die Kamera,
+    /// sichtbar und klickbar sind aber nur die Kapsel neben der Insel und die
+    /// aufgeklappten Knöpfe. Leer: der ganze `interactiveFrame` zählt.
+    private var interactiveParts: [NSRect] = []
+
+    func setInteractiveParts(swiftUIFrames: [CGRect]) {
+        interactiveParts = swiftUIFrames.map { frame in
+            isFlipped ? frame : NSRect(x: frame.minX, y: bounds.height - frame.maxY, width: frame.width, height: frame.height)
+        }
+    }
+
     var onHoverChange: ((Bool) -> Void)?
     /// Doppelklick auf freie Pill-Fläche → Rückkehr zur Default-Position.
     /// Hier (nicht im Panel) abgefangen: NSHostingView ist der Event-Einstieg
@@ -316,6 +327,9 @@ final class PillHitTestHostingView<Content: View>: NSHostingView<Content> {
     override func hitTest(_ point: NSPoint) -> NSView? {
         let local = convert(point, from: superview)
         guard interactiveFrame.insetBy(dx: -2, dy: -2).contains(local) else { return nil }
+        if !interactiveParts.isEmpty, !interactiveParts.contains(where: { $0.insetBy(dx: -2, dy: -2).contains(local) }) {
+            return nil
+        }
         return super.hitTest(point)
     }
 
@@ -481,7 +495,27 @@ class OverlayController: ObservableObject {
     var unifiedScreen: NotchScreenInfo?
     var badgeCancellable: AnyCancellable?
     /// Kamera-Insel: folgt der Breite von Apples Insel (`followSystemIsland`).
-    var islandCancellable: AnyCancellable?
+    var islandCancellables = Set<AnyCancellable>()
+    /// Kamera-Insel: Lage der kompakten Diktat-Kapsel in der Menüleiste.
+    /// `nil`: kein Platz (oder kein Insel-Bildschirm), das Diktat hängt dann
+    /// unter der Menüleiste.
+    @Published var islandCapsule: NotchIslandDictationCapsule?
+    /// Kamera-Insel: Die Bedienknöpfe sind per Klick aufgeklappt.
+    @Published var isIslandExpanded = false
+    /// Kamera-Insel: Platz, den die Kapsel Apples Insel in diesem Diktat lässt
+    /// (wächst nur, damit die Kapsel nicht hin und her rückt).
+    var islandReserve: (leading: CGFloat, trailing: CGFloat)?
+    var islandOccupancy: NotchMenuBarOccupancy?
+    /// Kamera-Insel: gemeldeter Rahmen der aufgeklappten Knöpfe und der
+    /// ganzen Ansicht (SwiftUI-Koordinaten), für die Trefferflächen.
+    var islandParts: [String: CGRect] = [:]
+    var islandViewFrame: CGRect?
+    /// Kamera-Insel: Es gibt noch keine Messung, sie ist aber angefordert;
+    /// so lange zeigt das Fenster nur die Insel selbst.
+    @Published var islandAwaitsMeasurement = false
+    var islandAwaitTask: Task<Void, Never>?
+    /// Berechtigung für Bedienungshilfen (ohne sie gibt es keine Messung).
+    var islandAXTrusted: () -> Bool = { AXIsProcessTrusted() }
     var unifiedScreenObserver: NSObjectProtocol?
     /// Breite der zugeklappten Pille: Darüberfahren klappt nur nach links auf.
     var collapsedPillWidth: CGFloat?
@@ -937,12 +971,17 @@ class OverlayController: ObservableObject {
     /// top-left origin) — hier wird er in AppKit-Koordinaten gedreht und an
     /// hitTest/Tracking/Clamp/Persistenz verteilt.
     func reportPillFrame(_ reportedFrame: CGRect) {
+        // Kamera-Insel, kompakt: Klicks nur auf Kapsel und Knöpfen.
+        islandViewFrame = reportedFrame
+        refreshIslandInteractiveParts()
         guard let panel, let hostingView else { return }
         // An der Notch zählt nur der Körper unter der Menüleiste: Das Band
         // liegt auf der Aussparung, sein Rahmen reichte neben der Notch in
         // die Menüleiste (Treffer- und Hover-Fläche).
         var swiftUIFrame = reportedFrame
-        if presentation.isNotch {
+        // Die kompakte Kapsel an der Kamera-Insel liegt selbst in der
+        // Menüleiste: Ihr ganzer Rahmen zählt.
+        if presentation.isNotch, !(usesIslandCompact && !showsRestLook) {
             let bandHeight = presentation.bandHeight
             swiftUIFrame.origin.y += bandHeight
             swiftUIFrame.size.height -= bandHeight

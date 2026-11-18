@@ -65,6 +65,8 @@ extension OverlayController {
         Logger.info("unified_pill_morph_adopted")
         lastPillActionAt = Date()
         observeUnifiedBadge()
+        // Kamera-Insel: zugeklappt und mit frischer Messung, wie ein neues Fenster.
+        if let screen = unifiedScreen { beginIslandDictation(on: screen) }
         applyMorph(morph.show(morph: true))
         // Hat sich der Bildschirm inzwischen geändert, baut die Pille neu auf.
         relocateAfterScreenChange()

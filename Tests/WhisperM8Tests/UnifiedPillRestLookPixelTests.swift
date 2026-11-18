@@ -74,6 +74,11 @@ final class UnifiedPillRestLookPixelTests: XCTestCase {
     private static func restController(_ presentation: OverlayPresentation, _ look: UnifiedPillRestLook) -> OverlayController {
         let controller = OverlayController(presentsWindow: false)
         controller.presentation = presentation
+        // An der Kamera-Insel folgt auf das Ruhebild die kompakte Kapsel;
+        // das Ruhebild selbst muss davon unberührt bleiben.
+        if case .island = presentation {
+            controller.islandCapsule = NotchIslandDictationCapsule(side: .leading, showsClock: true, width: 96, offset: -110)
+        }
         controller.pillAlignment = .center
         controller.restLook = look
         controller.showsRestLook = true

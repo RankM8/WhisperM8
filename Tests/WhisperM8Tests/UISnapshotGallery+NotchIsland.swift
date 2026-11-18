@@ -54,7 +54,7 @@ extension UISnapshotGallery {
     /// eines schon 40 pt neben der Kamera). `microphone`: Apples Insel zeigt
     /// den Mikrofon-Hinweis (gemessen 111,5 pt breit).
     private static func islandOccupancy(
-        _ size: CGSize, crowded: Bool = false, tight: Bool = false, microphone: Bool = false
+        _ size: CGSize, crowded: Bool = false, tight: Bool = false, microphone: Bool = false, statusGap: CGFloat? = nil
     ) -> NotchMenuBarOccupancy {
         let height = max(600, size.height)
         let bar = { (minX: CGFloat, maxX: CGFloat) in
@@ -63,7 +63,7 @@ extension UISnapshotGallery {
         return NotchMenuBarOccupancy(
             frames: [
                 bar(10, crowded ? size.width / 2 - 36 : 255),
-                bar(tight ? size.width / 2 + islandCutout.width / 2 + 40 : size.width - 150, size.width - 10),
+                bar(tight ? size.width / 2 + islandCutout.width / 2 + (statusGap ?? 40) : size.width - 150, size.width - 10),
             ],
             systemIsland: microphone ? (size.width / 2 - 55.75)...(size.width / 2 + 55.75) : nil,
             systemIslandInsets: microphone ? 8...40 : nil)
@@ -77,6 +77,8 @@ extension UISnapshotGallery {
         var crowded = false
         /// Ein Statussymbol steht schon dicht rechts der Kamera.
         var tight = false
+        /// Abstand dieses Statussymbols zur Kamera.
+        var statusGap: CGFloat = 40
         /// Apples Insel mit Mikrofon-Hinweis: breiter, oranger Punkt rechts.
         var microphone = false
         @ViewBuilder let content: Content
@@ -177,19 +179,24 @@ extension UISnapshotGallery {
         }
     }
 
-    /// Diktat-Pille im Fenster der vereinten Pille an der Insel.
+    /// Diktat im Fenster der vereinten Pille an der Insel: kompakt in der
+    /// Menüleiste, wo die Belegung Platz lässt (`measured: false`: ohne
+    /// Messung), sonst die Ausweichform unter der Menüleiste.
     @MainActor
     private static func islandDictation(
         _ name: String, size: CGSize, rest: UnifiedPillRestLook? = nil, midway: Bool = false, microphone: Bool = false,
+        crowded: Bool = false, tight: Bool = false, statusGap: CGFloat? = nil, measured: Bool = true,
         configure: @escaping (OverlayController) -> Void = { _ in }
     ) -> Fixture {
         Fixture(name: "kamera-insel-\(name)", size: size) {
             let screen = islandScreen(size)
-            let band = NotchIslandGeometry.band(
-                screen: screen, occupancy: islandOccupancy(size, microphone: microphone))
+            let occupancy = islandOccupancy(size, crowded: crowded, tight: tight, microphone: microphone, statusGap: statusGap)
+            let band = NotchIslandGeometry.band(screen: screen, occupancy: occupancy)
             let controller = morphController(notch: .island(band), rest: rest)
             configure(controller)
-            return AnyView(IslandDesk(size: size, microphone: microphone) {
+            controller.islandCapsule = NotchIslandGeometry.dictationCapsule(
+                screen: screen, occupancy: measured ? occupancy : nil, hasBadge: controller.statusBadge != nil)
+            return AnyView(IslandDesk(size: size, crowded: crowded, tight: tight, microphone: microphone) {
                 RecordingOverlayView(controller: controller)
                     .environment(\.colorScheme, .dark)
                     .padding(.top, NotchIslandGeometry.topInset(screen))
@@ -206,6 +213,8 @@ extension UISnapshotGallery {
     @MainActor
     static func notchIslandFixtures() -> [Fixture] {
         let strip = CGSize(width: 720, height: 130)
+        // Diktat: breiter, damit links der Insel Platz wie am echten Bildschirm ist.
+        let wide = CGSize(width: 960, height: 130)
         let tall = CGSize(width: 720, height: 470)
         let alert = NotchAlert(sessionID: UUID(), title: "Release-Notizen prüfen", kind: .awaitingInput)
         let errorAlert = NotchAlert(sessionID: UUID(), title: "Landing Page Texte", kind: .errored, extraCount: 1)
@@ -215,11 +224,11 @@ extension UISnapshotGallery {
             + (0..<3).map { islandInput("Wartet \($0)", .awaitingInput, since: Double($0)) }
             + [islandInput("Fehler", .errored, since: 5), islandInput("Fertig", .idle, since: 9, turnAgo: 9)]
 
-        let screen = islandScreen(strip)
         let restSummary = NotchSummary(working: 2, waiting: 1)
-        let rest = UnifiedPillRestLook.island(
+        let wideRest = UnifiedPillRestLook.island(
             summary: restSummary, alert: nil,
-            band: NotchIslandGeometry.band(screen: screen, occupancy: islandOccupancy(strip), presentation: .compact(.leading)),
+            band: NotchIslandGeometry.band(
+                screen: islandScreen(wide), occupancy: islandOccupancy(wide), presentation: .compact(.leading)),
             bodyWidth: nil)
         let manyWorking = (0..<12).map { islandInput("Job \($0)", .working, since: Double($0)) }
         let done = [islandInput("Tab-Switcher Review", .idle, since: 60, turnAgo: 60)]
@@ -260,21 +269,37 @@ extension UISnapshotGallery {
                          alert: errorAlert),
             islandStatus("liste", size: tall, inputs: islandDemoInputs, expanded: true),
             islandStatus("liste-rechts", size: tall, inputs: islandDemoInputs, expanded: true, crowded: true),
-            islandDictation("diktat", size: strip) {
+            // Diktat kompakt: eigene Kapsel links neben der Insel, Wellenform und Zeit.
+            islandDictation("diktat", size: wide) { $0.levelModel.level = 0.45 },
+            islandDictation("diktat-raute", size: wide) {
                 $0.levelModel.level = 0.45
                 $0.statusBadge = DictationStatusBadge(waiting: 1, errored: 0)
             },
-            // Mit Mikrofon ist Apples Insel breiter: der Hals ist so breit wie sie.
-            islandDictation("diktat-mikrofon", size: strip, microphone: true) {
+            // Mit Mikrofon zeigt Apples Insel ihren Punkt; die Kapsel steht daneben.
+            islandDictation("diktat-mikrofon", size: wide, microphone: true) { $0.levelModel.level = 0.45 },
+            islandDictation("diktat-transkribiert", size: wide) { $0.isTranscribing = true },
+            islandDictation("diktat-nachbearbeitung", size: wide) { $0.isPostProcessing = true },
+            // Menüs reichen heran: rechts der Insel. Für die Zeit reicht es
+            // nirgends: nur die Wellenform. Ohne Messung: die schmalste Form.
+            islandDictation("diktat-rechts", size: wide, crowded: true) { $0.levelModel.level = 0.45 },
+            islandDictation("diktat-minimal", size: wide, crowded: true, tight: true, statusGap: 120) { $0.levelModel.level = 0.45 },
+            islandDictation("diktat-ohne-messung", size: wide, measured: false) { $0.levelModel.level = 0.45 },
+            // Klick auf die Kapsel: Bedienknöpfe unter der Menüleiste.
+            islandDictation("diktat-aufgeklappt", size: wide, microphone: true) {
+                $0.levelModel.level = 0.45
+                $0.statusBadge = DictationStatusBadge(waiting: 1, errored: 0)
+                $0.isIslandExpanded = true
+            },
+            // Nirgends Platz: Ausweichform unter der Menüleiste, wie früher.
+            islandDictation("diktat-ausweich", size: wide, microphone: true, crowded: true, tight: true) {
                 $0.levelModel.level = 0.45
                 $0.statusBadge = DictationStatusBadge(waiting: 1, errored: 0)
             },
-            islandDictation("diktat-transkribiert", size: strip, microphone: true) { $0.isTranscribing = true },
             // Übergang: Ruhebild (Kapsel mit Zeichen und Zahl), Mitte, und aus
             // der leeren Insel, wenn an ihr nichts los ist.
-            islandDictation("uebergang-ruhe", size: strip, rest: rest),
-            islandDictation("uebergang-mitte", size: strip, rest: rest, midway: true),
-            islandDictation("uebergang-leer", size: strip, rest: .notchBand),
+            islandDictation("uebergang-ruhe", size: wide, rest: wideRest),
+            islandDictation("uebergang-mitte", size: wide, rest: wideRest, midway: true),
+            islandDictation("uebergang-leer", size: wide, rest: .notchBand),
             controllerIsland,
         ]
     }
