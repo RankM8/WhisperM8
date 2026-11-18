@@ -6171,6 +6171,16 @@
         }
       }
     },
+    "Hides the dictation controls": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blendet die Bedienknöpfe des Diktats aus"
+          }
+        }
+      }
+    },
     "Hold %@, then right stick up or down: one screen per push, repeats while held": {
       "localizations": {
         "de": {
@@ -16020,6 +16030,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Läuft gedrosselt im Hintergrund und pausiert während eines Diktats. Ältere Werte sind noch unvollständig."
+          }
+        }
+      }
+    },
+    "Shows the dictation controls": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeigt die Bedienknöpfe des Diktats"
           }
         }
       }

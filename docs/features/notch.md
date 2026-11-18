@@ -252,7 +252,8 @@ breiter, nach unten wächst sie erst auf einen Klick oder kurz bei einem Hinweis
 | Nichts | Nichts los, auf keiner Seite Platz oder keine Messung möglich: Von der Anzeige ist nichts zu sehen, nur Apples Insel |
 | Expandiert: Hinweis | „Braucht dich“ klappt rund vier Sekunden nach unten auf: Das Band läuft als Hals bis unter die Menüleiste, darunter hängt die Zeile mit Chat-Name und Wort. Danach zurück auf kompakt |
 | Expandiert: Liste | Ein Klick auf die Kapsel (oder der Hotkey) klappt die Liste unter der Menüleiste auf; über ihr stehen alle Zähler |
-| Diktat | Die Diktat-Zeile hängt an einem Hals um die Kamera unter der Menüleiste. Mit dem Mikrofon wird Apples Insel breiter; der Hals ist dann so breit wie sie, damit beides eine Form ist |
+| Diktat, kompakt | Die laufende Aufnahme steht als eigene kleine Kapsel in der Menüleiste links neben der Insel: Wellenform (Bewegung und Farbe tragen den Zustand: Aufnahme, Transkription, Nachbearbeitung) und Zeit, gleiche Höhe wie die Insel, 96 pt breit. Warten Chats oder gibt es Fehler, steht davor ein kleines Zeichen. Reichen die Menüs heran, steht die Kapsel rechts; ist es für die Zeit zu eng, zeigt sie nur die Wellenform (48 pt) |
+| Diktat, aufgeklappt | Ein Klick auf die Kapsel klappt die Bedienknöpfe unter der Menüleiste auf: wartende Chats mit Zahl, Bildschirmfoto, Clip, Ausgabemodus, Kontext, fertig, abbrechen. Noch ein Klick klappt sie zu. Fertig und Abbrechen gehen wie immer auch per Hotkey und Esc |
 | Dynamic Island des Controllers | Hängt am Hals wie bisher, zu ist sie nur die Kapsel um die Kamera |
 
 Im Vollbild ist die Anzeige wie bisher ausgeblendet, Diktat und Controller
@@ -265,14 +266,24 @@ und hält 6 pt Abstand zum nächsten Menü oder Symbol (siehe „Was neben der
 Kamera steht“). Hinweis und Liste hängen unter der Menüleiste; in der Leiste
 bleibt es bei der Breite der Kapsel.
 
-**Diktat bleibt expandiert.** Geprüft gegen Apples Regeln: Kompakt ist für
-Vorgänge gedacht, die im Hintergrund laufen und deren Bedienung in der App
-liegt. Das Diktat dauert Sekunden, steht im Vordergrund, und die Pille ist
-seine einzige Bedienfläche (fertig, abbrechen, Ausgabemodus, Pegel als
-Rückmeldung „ich höre dich“). Dass ein Mikrofon läuft, zeigt macOS in der Insel
-ohnehin selbst. Dazu käme: Wo Menüs bis an die Kamera reichen, gäbe es für
-eine kompakte Aufnahme keinen Platz, und eine laufende Aufnahme ohne sichtbare
-Anzeige darf es nicht geben.
+**Diktat neben Apples Insel.** Beim Diktat läuft das Mikrofon, und macOS
+zeigt das in der Insel selbst an: Sie wird breiter (orangefarbener Punkt,
+anfangs mit Mikrofon-Zeichen), und ihr Fenster liegt über unserem. Die
+Diktat-Kapsel steht deshalb nicht an der Kamera, sondern mit 6 pt Abstand
+neben dem Platz, den Apples Hinweis braucht (je Seite 26,25 pt, gemessen). Sie
+steht dort von Anfang an, damit sie nicht springt, wenn der Hinweis erscheint;
+nach außen rückt sie nur, wenn die Messung zeigt, dass Apples Insel sonst
+Inhalt verdeckte, und bleibt dann für dieses Diktat dort.
+
+Ohne Messung (keine Berechtigung für Bedienungshilfen) erscheint die Aufnahme
+trotzdem, in der schmalsten Form links: Der Nutzer hat das Diktat selbst
+ausgelöst, es dauert Sekunden, und eine laufende Aufnahme ohne Anzeige darf es
+nicht geben. Ist gemessen und auf keiner Seite Platz, hängt das Diktat wie
+früher an einem Hals unter der Menüleiste; ein Menü wird nie verdeckt.
+
+Zwei Fälle hängen weiter unter der Menüleiste, weil sie Text zeigen bzw. ohne
+Maus bedient werden: Schnellaktionen (Beschriftung und Hinweise) und die
+Aufnahme per Controller (Ziel-Chat und Modus müssen ohne Klick sichtbar sein).
 
 Frühere Fassungen: alle Zähler fest neben der Kamera ohne Messung, das
 verdeckte Menüs; danach nur ein Hals um die Kamera mit den Zählern in einer
@@ -780,6 +791,13 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   auch bei ausgeblendeter; Diktat und Controller-Insel hängen an der Kapsel; Vollbild mit
   beiden Kanten; Form als Kapsel bzw. Hals mit Körper; Notch-Rahmen,
   Notch-Form und Vollbild an der Notch unverändert.
+- `NotchIslandGeometryTests` (Diktat): Kapsel neben der Insel mit Platz für
+  Apples Mikrofon-Hinweis; Stufen je nach Platz; schneidet bei keiner Lage
+  einen gemessenen Rahmen und liegt nie über der Kamera; ohne Messung
+  höchstens die Mindestbreite; rückt nur nach außen.
+  `IslandDictationCompactTests`: kompakt nur an der Insel mit Platz,
+  Schnellaktion und Controller darunter, Knöpfe nur auf Klick bzw. bei
+  laufendem Clip, Lage bleibt über ein Diktat stehen.
 - `NotchIslandProbeTests`: Messung mit einer Attrappe der
   Accessibility-Schicht: Menüs und Statussymbole als Rahmen, was Apples Insel
   zeigt, Prozess der Insel aus der Fensterliste (Mauszeiger und eigenes Fenster
@@ -828,8 +846,9 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   die leere Pille und die Pille unten mit Liste nach oben; hell und dunkel).
   `make snapshots ONLY=kamera-insel` zeigt die Anzeige an der Kamera-Insel
   (kompakt je Zustand, zweistellig und rechts der Kamera, minimal bei wenig
-  Platz und neben Apples Insel mit Mikrofon, Hinweis, Fehler, Liste, Diktat mit schmalem und breitem
-  Hals, Übergang, Controller); die Attrappe legt die Kamera-Kapsel wie macOS
+  Platz und neben Apples Insel mit Mikrofon, Hinweis, Fehler, Liste; Diktat
+  kompakt je Zustand, rechts, minimal, ohne Messung, aufgeklappt und in der
+  Ausweichform; Übergang, Controller); die Attrappe legt die Kamera-Kapsel wie macOS
   über alles und zeigt Menüs und Statussymbole der Leiste.
   `make snapshots ONLY=pill-` zeigt die Diktat-Pille zum Vergleich. Die Attrappe zeigt Menüs und Statussymbole bis dicht an die
   Notch, damit man sieht, dass nichts verdeckt wird.
@@ -863,6 +882,11 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
 - Die Kapsel reagiert auf Klicks nur im Flügel neben der Kamera: Über der
   Kamera selbst liegt Apples Fenster.
 - Neben Apples aktiver Insel zeigt die Anzeige nur das Zeichen, keine Zahl.
+- Die Diktat-Kapsel steht mit Abstand neben der Insel, nicht an ihr: Solange
+  das Mikrofon noch nicht läuft oder schon wieder aus ist (Transkription),
+  bleibt zwischen Kapsel und Insel eine Lücke von rund 32 pt.
+- Aufgeklappt reicht das Diktat-Fenster über die Menüleiste um die Kamera;
+  Klicks nimmt es nur auf Kapsel und Knöpfen an.
 - Der Hals ist je Seite 3 pt breiter als die Kamera-Insel. Auf heller
   Menüleiste sieht man diesen Rand.
 - Titeländerungen erscheinen erst mit dem nächsten Statuswechsel (oder sofort

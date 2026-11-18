@@ -96,6 +96,28 @@ enum NotchIslandPresentation: Equatable {
     case compact(NotchIslandSide)
 }
 
+/// Die kompakte Diktat-Kapsel in der Menüleiste neben der Kamera-Insel:
+/// Wellenform und Zeit zusammen in einer eigenen kleinen Kapsel, mit Abstand
+/// neben Apples Insel (die beim Diktat selbst den Mikrofon-Hinweis zeigt und
+/// über unserem Fenster liegt).
+struct NotchIslandDictationCapsule: Equatable {
+    var side: NotchIslandSide
+    /// `false`: nur die Wellenform (minimal).
+    var showsClock: Bool
+    var width: CGFloat
+    /// Mitte der Kapsel gegenüber der Mitte der Kamera.
+    var offset: CGFloat
+
+    /// Rahmen in globalen Cocoa-Koordinaten.
+    func frame(screen: NotchScreenInfo) -> CGRect {
+        let band = NotchIslandGeometry.band(screen: screen)
+        return CGRect(
+            x: screen.notchCenterX + offset - width / 2,
+            y: NotchIslandGeometry.windowTop(screen) - band.capsuleHeight,
+            width: width, height: band.capsuleHeight)
+    }
+}
+
 /// Gemessene Belegung der Menüleiste: Rahmen der Menüs der vorderen App und
 /// der Statussymbole, in globalen Koordinaten (es zählt nur die x-Achse).
 /// Ohne Messung (keine Berechtigung für Bedienungshilfen) gibt es keinen
@@ -229,6 +251,74 @@ enum NotchIslandGeometry {
         if free.leading >= base.leading + glyph { return .minimal(.leading) }
         if free.trailing >= base.trailing + glyph { return .minimal(.trailing) }
         return .hidden
+    }
+
+    // MARK: Diktat
+
+    /// Apples Insel mit Mikrofon-Punkt reicht je Seite 26,25 pt über die
+    /// Aussparung hinaus (gemessen 111,5 pt gesamt bei 40 pt Sicherheitsrand).
+    /// So viel Platz bleibt der Diktat-Kapsel von Anfang an frei, damit sie
+    /// nicht springt, wenn der Hinweis erscheint.
+    static let microphoneReserveRatio: CGFloat = 0.65625
+    /// Breite der Diktat-Kapsel: Wellenform und Zeit bzw. nur die Wellenform;
+    /// mit Raute für wartende Chats etwas mehr.
+    static let dictationCompactWidth: CGFloat = 96
+    static let dictationMinimalWidth: CGFloat = 48
+    static let dictationBadgeWidth: CGFloat = 14
+    /// So weit darf Apples Insel über die Kapsel ragen, ohne Inhalt zu
+    /// verdecken (Abstand plus Innenrand der Kapsel).
+    static let dictationCoverTolerance: CGFloat = detachedGap + 5
+
+    /// Platz, den die Diktat-Kapsel Apples Insel je Seite lässt: der
+    /// Mikrofon-Hinweis, oder mehr, wenn die Messung zeigt, dass die Insel
+    /// sonst Inhalt verdeckte. `previous`: der Wert bisher in diesem Diktat;
+    /// die Kapsel rückt nur nach außen, nie zurück (kein Hin und Her).
+    static func dictationReserve(
+        screen: NotchScreenInfo, occupancy: NotchMenuBarOccupancy?,
+        previous: (leading: CGFloat, trailing: CGFloat)? = nil
+    ) -> (leading: CGFloat, trailing: CGFloat) {
+        let steady = screen.safeAreaTop * microphoneReserveRatio
+        var leading = max(steady, previous?.leading ?? 0)
+        var trailing = max(steady, previous?.trailing ?? 0)
+        if let system = occupancy?.systemIsland {
+            let beyondLeading = screen.notchCenterX - screen.notchWidth / 2 - system.lowerBound
+            let beyondTrailing = system.upperBound - (screen.notchCenterX + screen.notchWidth / 2)
+            if beyondLeading > leading + dictationCoverTolerance { leading = beyondLeading }
+            if beyondTrailing > trailing + dictationCoverTolerance { trailing = beyondTrailing }
+        }
+        return (leading, trailing)
+    }
+
+    /// Wo die Diktat-Kapsel steht: mit Zeit, wenn auf einer Seite Platz ist
+    /// (links zuerst), sonst nur die Wellenform, sonst gar nicht (`nil`: Das
+    /// Diktat hängt dann wie früher unter der Menüleiste, eine laufende
+    /// Aufnahme bleibt immer sichtbar). Ohne Messung erscheint die schmalste
+    /// Form links: Der Nutzer hat das Diktat selbst ausgelöst, es dauert
+    /// Sekunden, und ohne Anzeige wäre eine laufende Aufnahme unsichtbar.
+    static func dictationCapsule(
+        screen: NotchScreenInfo, occupancy: NotchMenuBarOccupancy?, hasBadge: Bool = false,
+        reserve: (leading: CGFloat, trailing: CGFloat)? = nil
+    ) -> NotchIslandDictationCapsule? {
+        guard screen.hasIsland else { return nil }
+        let reserve = reserve ?? dictationReserve(screen: screen, occupancy: occupancy)
+        let badge = hasBadge ? dictationBadgeWidth : 0
+        func capsule(_ side: NotchIslandSide, clock: Bool) -> NotchIslandDictationCapsule {
+            let width = (clock ? dictationCompactWidth : dictationMinimalWidth) + badge
+            let inner = screen.notchWidth / 2 + (side == .leading ? reserve.leading : reserve.trailing) + detachedGap
+            return NotchIslandDictationCapsule(
+                side: side, showsClock: clock, width: width,
+                offset: (side == .leading ? -1 : 1) * (inner + width / 2))
+        }
+        guard let occupancy else { return capsule(.leading, clock: false) }
+        let free = freeSpace(screen: screen, occupancy: occupancy)
+        for clock in [true, false] {
+            for side in [NotchIslandSide.leading, .trailing] {
+                let candidate = capsule(side, clock: clock)
+                let needed = abs(candidate.offset) + candidate.width / 2 - screen.notchWidth / 2 + menuClearance
+                if (side == .leading ? free.leading : free.trailing) >= needed { return candidate }
+            }
+        }
+        return nil
     }
 
     /// Durchmesser des abgesetzten Kreises: so hoch wie Apples Insel gerade ist.

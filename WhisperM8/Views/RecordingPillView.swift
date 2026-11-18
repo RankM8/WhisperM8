@@ -50,7 +50,41 @@ struct RecordingPillView: View {
     /// An der Notch ist nichts verschiebbar: kein Griff.
     private var showsGrip: Bool { !controller.presentation.isNotch }
 
+    /// Kamera-Insel: kompakte Kapsel in der Menüleiste statt der Zeile unter
+    /// ihr. Im Übergang zeigt das Fenster das Ruhebild wie bisher.
+    private var compactCapsule: NotchIslandDictationCapsule? {
+        guard restLook == nil, controller.usesIslandCompact else { return nil }
+        return controller.islandCapsule
+    }
+
     var body: some View {
+        Group {
+            if let capsule = compactCapsule, case .island(let band) = controller.presentation {
+                islandCompact(capsule, band: band)
+                    .transition(.opacity)
+            } else {
+                pill
+                    .transition(.opacity)
+            }
+        }
+        .animation(reduceMotion ? nil : .pill, value: isExpanded)
+        .animation(reduceMotion ? nil : .pill, value: phase)
+        .animation(reduceMotion ? nil : .pill, value: controller.contextBundle.isEmpty)
+        .animation(reduceMotion ? nil : .pill, value: controller.isScreenClipRecording)
+        .animation(reduceMotion ? nil : .pill, value: controller.showModePickerInMiniOverlay)
+        .animation(reduceMotion ? nil : .pill, value: controller.showConfirmButton)
+        .animation(reduceMotion ? nil : .pill, value: controller.overlayStyle)
+        .animation(reduceMotion ? nil : .pill, value: controller.statusBadge)
+        // Übergang aus der ruhenden Pille und zurück: dieselbe Kurve, nur die
+        // Breite (an der Notch die Höhe der Zeile) gleitet.
+        .animation(reduceMotion ? nil : .pill, value: controller.showsRestLook)
+        .animation(reduceMotion ? nil : .pill, value: controller.isIslandExpanded)
+        .animation(reduceMotion ? nil : .pill, value: controller.usesIslandCompact)
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(phase.accessibilityLabel)
+    }
+
+    private var pill: some View {
         // Zwei Anordnungen, ein Prinzip:
         // - Full (permanent expandiert): klassische Anatomie, Kern links außen.
         // - Mini: ALLE Hover-Zusätze (Grip/Kamera/Clip) klappen LINKS außen
@@ -72,19 +106,94 @@ struct RecordingPillView: View {
         .modifier(PillChrome(
             presentation: controller.presentation, bottomRadius: restLook?.isNotch == true ? 11 : 18,
             restLook: restLook))
-        .animation(reduceMotion ? nil : .pill, value: isExpanded)
-        .animation(reduceMotion ? nil : .pill, value: phase)
-        .animation(reduceMotion ? nil : .pill, value: controller.contextBundle.isEmpty)
-        .animation(reduceMotion ? nil : .pill, value: controller.isScreenClipRecording)
-        .animation(reduceMotion ? nil : .pill, value: controller.showModePickerInMiniOverlay)
-        .animation(reduceMotion ? nil : .pill, value: controller.showConfirmButton)
-        .animation(reduceMotion ? nil : .pill, value: controller.overlayStyle)
-        .animation(reduceMotion ? nil : .pill, value: controller.statusBadge)
-        // Übergang aus der ruhenden Pille und zurück: dieselbe Kurve, nur die
-        // Breite (an der Notch die Höhe der Zeile) gleitet.
-        .animation(reduceMotion ? nil : .pill, value: controller.showsRestLook)
-        .accessibilityElement(children: .contain)
-        .accessibilityLabel(phase.accessibilityLabel)
+    }
+
+    // MARK: Kamera-Insel, kompakt
+
+    /// Die Aufnahme als eigene kleine Kapsel in der Menüleiste neben der
+    /// Insel: Wellenform (Bewegung und Farbe tragen den Zustand, wie in der
+    /// Pille) und Zeit; ist es eng, nur die Wellenform. Ein Klick klappt die
+    /// Bedienknöpfe unter der Menüleiste auf. Die Ansicht reicht symmetrisch
+    /// um die Kamera (ihre Mittellinie), die Kapsel steht an ihrem Rand;
+    /// Klicks nimmt das Fenster nur auf Kapsel und Knöpfen an.
+    private func islandCompact(_ capsule: NotchIslandDictationCapsule, band: NotchIslandBand) -> some View {
+        let extent = abs(capsule.offset) + capsule.width / 2
+        return VStack(spacing: band.neckHeight - band.capsuleHeight + 5) {
+            Button(action: controller.toggleIslandExpanded) {
+                HStack(spacing: 0) {
+                    if let badge = controller.statusBadge {
+                        // Wartende Chats bzw. Fehler als kleines Zeichen; die
+                        // Zahl steht aufgeklappt bei den Knöpfen.
+                        NotchStatusDot(status: badge.waiting > 0 ? .awaitingInput : .errored, palette: .notch, size: 8)
+                            .frame(width: NotchIslandGeometry.dictationBadgeWidth, alignment: .trailing)
+                            .transition(.opacity)
+                    }
+                    PillCoreView(
+                        levelModel: controller.levelModel, phase: phase,
+                        isClipping: controller.isScreenClipRecording, reduceMotion: reduceMotion)
+                        .scaleEffect(0.8)
+                        .frame(width: 38, height: 24)
+                        .padding(.leading, 5)
+                    if capsule.showsClock {
+                        PillCompactClock(clockModel: controller.clockModel)
+                            .frame(maxWidth: .infinity)
+                            .padding(.trailing, 4)
+                    } else {
+                        Spacer(minLength: 0)
+                    }
+                }
+                .frame(width: capsule.width, height: band.capsuleHeight)
+                .background { Capsule().fill(Color.black) }
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .help(phase.statusLabel(postProcessingStatusText: controller.postProcessingStatusText) ?? "Recording")
+            .accessibilityLabel(phase.accessibilityLabel)
+            .accessibilityHint(controller.showsIslandControls ? Text("Hides the dictation controls") : Text("Shows the dictation controls"))
+            .background { islandPart("capsule") }
+            .frame(width: 2 * extent, alignment: capsule.side == .leading ? .leading : .trailing)
+
+            if controller.showsIslandControls {
+                HStack(spacing: 0) { islandControls }
+                    .padding(.horizontal, PillMetrics.horizontalPadding)
+                    .frame(height: PillMetrics.height)
+                    .background { Capsule().fill(Color.black) }
+                    .background { islandPart("controls") }
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    private func islandPart(_ key: String) -> some View {
+        GeometryReader { geometry in
+            Color.clear
+                .onAppear { controller.reportIslandPart(key, geometry.frame(in: .global)) }
+                .onChange(of: geometry.frame(in: .global)) { _, frame in controller.reportIslandPart(key, frame) }
+                .onDisappear { controller.reportIslandPart(key, nil) }
+        }
+    }
+
+    /// Alles, was die Pille außer Wellenform und Zeit zeigt: wartende Chats
+    /// mit Zahl, Bildschirmfoto und Clip, Ausgabemodus, Kontext, fertig und
+    /// abbrechen.
+    @ViewBuilder
+    private var islandControls: some View {
+        if let badge = controller.statusBadge {
+            DictationStatusBadgeView(badge: badge)
+            PillSeparator()
+        }
+        PillCameraButton(controller: controller)
+        PillScreenClipButton(controller: controller)
+            .padding(.trailing, 2)
+        modeChip
+            .padding(.trailing, 5)
+        PillContextChip(controller: controller)
+            .padding(.trailing, 5)
+        PillSeparator()
+        if phase == .recording {
+            PillConfirmButton(action: controller.stopAndTranscribe)
+        }
+        PillCancelButton(phase: phase, controller: controller)
     }
 
     /// Das Diktat selbst (Mini, Voll, Schnellaktion).
@@ -510,6 +619,20 @@ private struct PillClockView: View {
             .fixedSize()
             .padding(.leading, 9)
             .padding(.trailing, 10)
+            .accessibilityLabel("Recording duration \(clockModel.timeText)")
+    }
+}
+
+/// Zeit in der kompakten Kapsel an der Kamera-Insel.
+private struct PillCompactClock: View {
+    @ObservedObject var clockModel: OverlayClockModel
+
+    var body: some View {
+        Text(clockModel.timeText)
+            .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+            .foregroundStyle(Color.white.opacity(0.72))
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
             .accessibilityLabel("Recording duration \(clockModel.timeText)")
     }
 }

@@ -319,6 +319,109 @@ final class NotchIslandGeometryTests: XCTestCase {
         XCTAssertLessThanOrEqual(squeezed.maxX, 960)
     }
 
+    // MARK: Diktat-Kapsel
+
+    /// Das Diktat steht als eigene Kapsel in der Menüleiste links neben der
+    /// Insel, mit Platz für Apples Mikrofon-Hinweis (26,25 pt) und 6 pt
+    /// Abstand; gleiche Höhe und Oberkante wie die Insel, nichts darunter.
+    func testDictationCapsuleSitsBesideTheIsland() throws {
+        let screen = islandScreen()
+        let capsule = try XCTUnwrap(NotchIslandGeometry.dictationCapsule(screen: screen, occupancy: roomyBar(screen)))
+        XCTAssertEqual(capsule.side, .leading)
+        XCTAssertTrue(capsule.showsClock)
+        let frame = capsule.frame(screen: screen)
+        XCTAssertEqual(frame.width, NotchIslandGeometry.dictationCompactWidth)
+        XCTAssertEqual(frame.maxX, 838.5 - 26.25 - 6, accuracy: 0.001)
+        XCTAssertEqual(frame.height, 32)
+        XCTAssertEqual(frame.maxY, screen.frame.maxY - 8)
+        XCTAssertGreaterThanOrEqual(frame.minY, screen.frame.maxY - 45, "nichts unter der Menüleiste")
+        // Mit Raute für wartende Chats etwas breiter, die Kante zur Insel bleibt.
+        let badged = try XCTUnwrap(NotchIslandGeometry.dictationCapsule(screen: screen, occupancy: roomyBar(screen), hasBadge: true))
+        XCTAssertEqual(badged.frame(screen: screen).maxX, frame.maxX, accuracy: 0.001)
+        XCTAssertEqual(badged.width, capsule.width + NotchIslandGeometry.dictationBadgeWidth)
+        // Notch und Bildschirm ohne Aussparung: keine Kapsel, alles wie bisher.
+        XCTAssertNil(NotchIslandGeometry.dictationCapsule(screen: notchScreen(), occupancy: roomyBar(notchScreen())))
+        XCTAssertNil(NotchIslandGeometry.dictationCapsule(screen: plainScreen, occupancy: nil))
+    }
+
+    /// Stufen beim Diktat: mit Zeit links, sonst rechts, sonst nur die
+    /// Wellenform, sonst keine Kapsel (Ausweichform unter der Menüleiste).
+    /// Ohne Messung die schmalste Form links.
+    func testDictationCapsuleStagesFollowTheRoom() throws {
+        let screen = islandScreen()
+        func capsule(_ frames: [CGRect]) -> NotchIslandDictationCapsule? {
+            NotchIslandGeometry.dictationCapsule(screen: screen, occupancy: NotchMenuBarOccupancy(frames: frames))
+        }
+        // Links braucht die volle Kapsel 26,25 + 6 + 96 + 6 = 134,25 pt.
+        XCTAssertEqual(capsule([barItem(screen, from: 10, to: 700)])?.side, .leading)
+        let right = try XCTUnwrap(capsule([barItem(screen, from: 10, to: 710)]))
+        XCTAssertEqual(right.side, .trailing)
+        XCTAssertTrue(right.showsClock)
+        XCTAssertEqual(right.frame(screen: screen).minX, 897.5 + 26.25 + 6, accuracy: 0.001)
+        // Für die Zeit reicht es nirgends: nur die Wellenform (86,25 pt).
+        let minimal = try XCTUnwrap(capsule([barItem(screen, from: 10, to: 740), barItem(screen, from: 1000, to: 1716)]))
+        XCTAssertEqual(minimal.side, .leading)
+        XCTAssertFalse(minimal.showsClock)
+        XCTAssertEqual(minimal.width, NotchIslandGeometry.dictationMinimalWidth)
+        XCTAssertNil(capsule([barItem(screen, from: 10, to: 800), barItem(screen, from: 940, to: 1716)]), "kein Platz: Ausweichform")
+        // Ohne Messung: höchstens die Mindestbreite.
+        let blind = try XCTUnwrap(NotchIslandGeometry.dictationCapsule(screen: screen, occupancy: nil, hasBadge: false))
+        XCTAssertEqual(blind.width, NotchIslandGeometry.dictationMinimalWidth)
+        XCTAssertFalse(blind.showsClock)
+        XCTAssertEqual(blind.side, .leading)
+    }
+
+    /// Die Diktat-Kapsel schneidet bei keiner Lage von Menüs und
+    /// Statussymbolen einen gemessenen Rahmen.
+    func testDictationCapsuleNeverCutsMeasuredMenuFrames() {
+        for screen in [islandScreen(), islandScreen(scale: 0.67), islandScreen(scale: 1.18)] {
+            let cutoutMinX = screen.notchCenterX - screen.notchWidth / 2
+            let cutoutMaxX = screen.notchCenterX + screen.notchWidth / 2
+            for leftGap in stride(from: CGFloat(0), through: 180, by: 7.5) {
+                for rightGap in stride(from: CGFloat(0), through: 180, by: 7.5) {
+                    let frames = [
+                        barItem(screen, from: 10, to: cutoutMinX - leftGap),
+                        barItem(screen, from: cutoutMaxX + rightGap, to: screen.frame.width - 20),
+                    ]
+                    for system in [nil, (cutoutMinX - 36.5)...(cutoutMaxX + 47.5)] as [ClosedRange<CGFloat>?] {
+                        for badge in [false, true] {
+                            let occupancy = NotchMenuBarOccupancy(frames: frames, systemIsland: system)
+                            guard let capsule = NotchIslandGeometry.dictationCapsule(
+                                screen: screen, occupancy: occupancy, hasBadge: badge) else { continue }
+                            let frame = capsule.frame(screen: screen)
+                            for item in frames { XCTAssertFalse(frame.intersects(item), "\(leftGap) \(rightGap) \(capsule)") }
+                            XCTAssertTrue(frame.maxX <= cutoutMinX || frame.minX >= cutoutMaxX, "nie über der Kamera")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Apples Mikrofon-Hinweis (111,5 pt) hat von Anfang an Platz. Ragt die
+    /// Insel weiter hinaus, als der Innenrand der Kapsel verträgt, rückt die
+    /// Kapsel nach außen und bleibt dort, auch wenn die Insel wieder
+    /// schrumpft.
+    func testDictationCapsuleMovesOutwardOnlyOnce() {
+        let screen = islandScreen()
+        var occupancy = roomyBar(screen)
+        let start = NotchIslandGeometry.dictationReserve(screen: screen, occupancy: occupancy)
+        XCTAssertEqual(start.leading, 26.25)
+        XCTAssertEqual(start.trailing, 26.25)
+        // Mikrofon-Punkt (812 bis 923,5): passt in den freigehaltenen Platz.
+        occupancy.systemIsland = 812...923.5
+        XCTAssertEqual(NotchIslandGeometry.dictationReserve(screen: screen, occupancy: occupancy, previous: start).leading, 26.25)
+        // Anfangs mit Mikrofon-Zeichen (802 bis 945): links ragt sie 10 pt in
+        // Abstand und Innenrand, rechts 21 pt über Inhalt.
+        occupancy.systemIsland = 802...945
+        let wide = NotchIslandGeometry.dictationReserve(screen: screen, occupancy: occupancy, previous: start)
+        XCTAssertEqual(wide.leading, 26.25, "links verdeckt sie nichts: die Kapsel bleibt stehen")
+        XCTAssertEqual(wide.trailing, 47.5, "rechts verdeckte sie Inhalt")
+        // Schrumpft die Insel wieder, bleibt der größere Abstand.
+        occupancy.systemIsland = 812...923.5
+        XCTAssertEqual(NotchIslandGeometry.dictationReserve(screen: screen, occupancy: occupancy, previous: wide).trailing, 47.5)
+    }
+
     /// Hinweis und Liste: Das Band läuft als Hals bis unter die Menüleiste,
     /// so breit wie die Kapsel (also neben der Mitte); der Körper hängt
     /// mittig unter der Kamera.

@@ -171,6 +171,9 @@ extension OverlayController {
         installPanel(panel, safeAreaFree: placement.isNotch, contentHidden: snapshot != nil)
         observeScreenChanges()
         observeUnifiedBadge()
+        islandReserve = nil
+        isIslandExpanded = false
+        refreshIslandCapsule(occupancy: NotchIslandMonitor.shared.occupancy[screen.displayID], animated: false)
         // Ohne Übergang meldet sich das Diktat sofort beim Hub (die
         // Status-Pille dort tritt zurück), mit Übergang erst nach dem ersten Bild.
         applyMorph(morph.show(morph: snapshot != nil))
@@ -194,6 +197,54 @@ extension OverlayController {
     }
 
     /// Raute für wartende Chats und Fehler, solange das Diktat steht.
+    // MARK: Kamera-Insel, kompakt
+
+    /// An der Kamera-Insel steht das Diktat kompakt in der Menüleiste
+    /// (`RecordingPillView`), solange dort Platz ist. Ausnahmen, die Text
+    /// brauchen oder ohne Maus bedient werden: Schnellaktion (Beschriftung)
+    /// und Aufnahme per Controller (Ziel-Chat und Modus müssen ohne Klick
+    /// sichtbar sein). Sie hängen wie bisher unter der Menüleiste.
+    var usesIslandCompact: Bool {
+        guard case .island = presentation, islandCapsule != nil else { return false }
+        return quickActionLabel == nil && controllerTargetLabel == nil
+    }
+
+    /// Bedienknöpfe unter der Kapsel: per Klick aufgeklappt, und solange ein
+    /// Bildschirm-Clip läuft (sein Stopp-Knopf muss erreichbar bleiben).
+    var showsIslandControls: Bool { isIslandExpanded || isScreenClipRecording }
+
+    func toggleIslandExpanded() {
+        guard !morph.isRetiring else { return }
+        isIslandExpanded.toggle()
+    }
+
+    /// Kapsel und Knöpfe melden ihre Rahmen: Nur dort nimmt das Fenster
+    /// Klicks an, die Menüleiste dazwischen bleibt bedienbar.
+    func reportIslandPart(_ key: String, _ frame: CGRect?) {
+        if islandParts[key] == frame { return }
+        islandParts[key] = frame
+        hostingView?.setInteractiveParts(swiftUIFrames: Array(islandParts.values))
+    }
+
+    /// Lage der Kapsel aus der letzten Messung neu bestimmen.
+    func refreshIslandCapsule(occupancy: NotchMenuBarOccupancy?, animated: Bool) {
+        islandOccupancy = occupancy
+        guard let screen = unifiedScreen, screen.hasIsland, case .island = presentation else {
+            if islandCapsule != nil { islandCapsule = nil }
+            return
+        }
+        let reserve = NotchIslandGeometry.dictationReserve(screen: screen, occupancy: occupancy, previous: islandReserve)
+        islandReserve = reserve
+        let capsule = NotchIslandGeometry.dictationCapsule(
+            screen: screen, occupancy: occupancy, hasBadge: statusBadge != nil, reserve: reserve)
+        guard capsule != islandCapsule else { return }
+        if animated {
+            withAnimation(.pill) { islandCapsule = capsule }
+        } else {
+            islandCapsule = capsule
+        }
+    }
+
     /// Kamera-Insel: Mit dem Mikrofon wird Apples Insel breiter (Hinweis
     /// rechts der Kamera) und nach einigen Sekunden wieder schmaler. Der Hals
     /// der Diktat-Pille ist so breit wie sie, damit beides eine Form ist.
@@ -203,6 +254,7 @@ extension OverlayController {
             .dropFirst()
             .sink { [weak self] occupancy in
                 guard let self, case .island(let current) = self.presentation, self.unifiedScreen == screen else { return }
+                self.refreshIslandCapsule(occupancy: occupancy[screen.displayID], animated: true)
                 let band = NotchIslandGeometry.band(screen: screen, occupancy: occupancy[screen.displayID])
                 guard band != current else { return }
                 withAnimation(.pill) { self.presentation = .island(band) }
@@ -218,6 +270,8 @@ extension OverlayController {
             .sink { [weak self] badge in
                 guard let self, self.statusBadge != badge else { return }
                 self.statusBadge = badge
+                // Mit Raute ist die Kapsel an der Kamera-Insel etwas breiter.
+                self.refreshIslandCapsule(occupancy: self.islandOccupancy, animated: true)
             }
     }
 
