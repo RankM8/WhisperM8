@@ -93,11 +93,13 @@ enum ControllerIslandGeometry {
         return screen.hasNotch ? visible : visible.insetBy(dx: -shadowMargin, dy: -shadowMargin)
     }
 
-    static func style(for screen: NotchScreenInfo) -> ControllerIslandDisplay.Style {
+    /// `chipCount`: sichtbare Zähler der Notch-Anzeige auf diesem Bildschirm.
+    /// An der Kamera-Insel ist das Band dann so breit wie ihre Kapsel.
+    static func style(for screen: NotchScreenInfo, chipCount: Int = 0) -> ControllerIslandDisplay.Style {
         switch screen.cutout {
         case .none: return .pill
         case .notch: return .notch(width: screen.notchWidth, height: screen.safeAreaTop)
-        case .island: return .island(NotchIslandGeometry.band(screen: screen))
+        case .island: return .island(NotchIslandGeometry.band(screen: screen, chipCount: chipCount))
         }
     }
 }
@@ -134,7 +136,8 @@ final class ControllerIslandPresenter: ControllerIslandPresenting {
             return
         }
         var counts: ControllerIslandCounts?
-        if let summary = NotchStatusController.shared.visibleSummary(onDisplay: screen.displayID) {
+        let statusSummary = NotchStatusController.shared.visibleSummary(onDisplay: screen.displayID)
+        if let summary = statusSummary {
             counts = ControllerIslandCounts(working: summary.working, waiting: summary.waiting)
             // Eine aufgeklappte Liste der Notch-Anzeige ragte unter der Insel hervor.
             NotchStatusController.shared.collapse()
@@ -143,8 +146,10 @@ final class ControllerIslandPresenter: ControllerIslandPresenting {
         let stored = screen.hasNotch ? nil : AppPreferences.shared.notchPillPositions[screen.pillStorageKey]
         let visiblePill = screen.hasNotch ? nil : NotchStatusController.shared.visiblePillCenter(onDisplay: screen.displayID)
         let display = ControllerIslandDisplay(
-            style: ControllerIslandGeometry.style(for: screen), model: model, counts: counts,
-            opensUpward: ControllerIslandGeometry.opensUpward(screen: screen, stored: stored, visiblePill: visiblePill))
+            style: ControllerIslandGeometry.style(for: screen, chipCount: statusSummary?.chipCount ?? 0),
+            model: model, counts: counts,
+            opensUpward: ControllerIslandGeometry.opensUpward(screen: screen, stored: stored, visiblePill: visiblePill),
+            bandSummary: screen.hasIsland ? statusSummary : nil)
         let panel = ensurePanel()
         let wasShown = panel.isVisible && viewModel.revealed
         generation += 1

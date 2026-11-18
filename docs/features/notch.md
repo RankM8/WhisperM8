@@ -250,7 +250,7 @@ herunterzuziehen.
 | Hinweis | Die Kapsel wird zum Hals, darunter hängt einmal kurz die Zeile mit Chat-Name und Wort. Die Zähler bleiben oben stehen |
 | Liste | Wie der Hinweis, die Liste hängt unter der Menüleiste |
 | Diktat | Die Diktat-Zeile hängt an einem schmalen Hals um die Kamera; sie wächst aus der Kapsel (mit oder ohne Zähler) und zieht sich dorthin zurück |
-| Dynamic Island des Controllers | Hängt am selben Hals, zu ist sie nur die Kapsel |
+| Dynamic Island des Controllers | Hängt am selben Hals; die Zähler der Anzeige bleiben neben der Kamera stehen. Zu ist sie nur die Kapsel |
 
 In der Menüleiste liegt immer nur die Kapsel (höchstens 233 pt breit, mit vier
 Zählern). Hinweis, Liste, Diktat und Controller hängen darunter, die Menüleiste

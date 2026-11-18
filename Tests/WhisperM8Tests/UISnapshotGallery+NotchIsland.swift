@@ -174,9 +174,12 @@ extension UISnapshotGallery {
             let model = ControllerIslandModel(
                 target: ControllerIslandTarget(title: "Controller Insel", status: .idle),
                 content: .writing(ControllerWritingSlots(state: ControllerChatState(status: .idle, profile: .claude))))
+            // Die Notch-Anzeige steht dort mit zwei Zählern: Die Insel
+            // zeichnet sie an derselben Stelle weiter.
+            let summary = NotchSummary(working: 2, waiting: 1)
             let display = ControllerIslandDisplay(
-                style: ControllerIslandGeometry.style(for: screen), model: model,
-                counts: ControllerIslandCounts(working: 2, waiting: 1))
+                style: ControllerIslandGeometry.style(for: screen, chipCount: summary.chipCount), model: model,
+                counts: ControllerIslandCounts(working: 2, waiting: 1), bandSummary: summary)
             return AnyView(IslandDesk(size: controllerSize) {
                 ControllerIslandView(display: display)
                     .frame(maxWidth: .infinity, alignment: .top)

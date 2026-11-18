@@ -260,6 +260,16 @@ final class NotchIslandGeometryTests: XCTestCase {
         XCTAssertEqual(frame.maxY, screen.frame.maxY - 5)
         XCTAssertEqual(frame.midX, screen.notchCenterX, accuracy: 0.001)
         XCTAssertEqual(ControllerIslandGeometry.panelFrame(screen: screen, bodySize: CGSize(width: 440, height: 200)), frame)
+        // Steht die Notch-Anzeige dort mit Zählern, deckt das Band ihre Kapsel.
+        XCTAssertEqual(
+            ControllerIslandGeometry.style(for: screen, chipCount: 3),
+            .island(NotchIslandGeometry.band(screen: screen, chipCount: 3)))
+        let wide = ControllerIslandDisplay(
+            style: ControllerIslandGeometry.style(for: screen, chipCount: 4),
+            model: ControllerIslandModel(
+                target: ControllerIslandTarget(title: "Chat", status: .idle),
+                content: .writing(ControllerWritingSlots(state: ControllerChatState(status: .idle, profile: .claude)))))
+        XCTAssertGreaterThanOrEqual(wide.bodyWidth, NotchIslandGeometry.band(screen: screen, chipCount: 4).centeredWidth)
         // Notch unverändert: bündig an der Oberkante.
         XCTAssertEqual(
             ControllerIslandGeometry.frame(screen: notchScreen(), bodySize: CGSize(width: 440, height: 200)).maxY, 982)
