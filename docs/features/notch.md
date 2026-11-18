@@ -270,16 +270,29 @@ bleibt es bei der Breite der Kapsel.
 zeigt das in der Insel selbst an: Sie wird breiter (orangefarbener Punkt,
 anfangs mit Mikrofon-Zeichen), und ihr Fenster liegt über unserem. Die
 Diktat-Kapsel steht deshalb nicht an der Kamera, sondern mit 6 pt Abstand
-neben dem Platz, den Apples Hinweis braucht (je Seite 26,25 pt, gemessen). Sie
-steht dort von Anfang an, damit sie nicht springt, wenn der Hinweis erscheint;
-nach außen rückt sie nur, wenn die Messung zeigt, dass Apples Insel sonst
-Inhalt verdeckte, und bleibt dann für dieses Diktat dort.
+neben dem Platz, den Apples Hinweis braucht (links 36,5, rechts 47,5 pt neben
+der Aussparung, gemessen). Sie steht dort von Anfang an, damit sie nicht
+springt, wenn der Hinweis erscheint; nach außen rückt sie nur, wenn die
+Messung eine noch breitere Insel zeigt, und bleibt dann für dieses Diktat dort.
 
-Ohne Messung (keine Berechtigung für Bedienungshilfen) erscheint die Aufnahme
-trotzdem, in der schmalsten Form links: Der Nutzer hat das Diktat selbst
+Ohne Berechtigung für Bedienungshilfen gibt es keine Messung. Die Aufnahme
+erscheint dann trotzdem, in der schmalsten Form links (nur die Wellenform, die
+Zeit steht aufgeklappt bei den Knöpfen): Der Nutzer hat das Diktat selbst
 ausgelöst, es dauert Sekunden, und eine laufende Aufnahme ohne Anzeige darf es
-nicht geben. Ist gemessen und auf keiner Seite Platz, hängt das Diktat wie
-früher an einem Hals unter der Menüleiste; ein Menü wird nie verdeckt.
+nicht geben. In diesem einen Fall kann die Kapsel einen Menütitel verdecken
+und dort Klicks abfangen, wenn die Menüs der vorderen App bis dorthin reichen.
+
+Mit Berechtigung gilt: Ein Menü wird nie verdeckt. Fällt eine Nachmessung aus
+(die vordere App antwortet nicht), bleibt die Kapsel, wo die letzte gültige
+Messung sie hingestellt hat. Gibt es noch gar keine Messung (Statusanzeige
+aus), zeigt das Fenster bis zu 0,3 s nur die Insel und wartet auf sie; kommt
+keine, oder ist auf keiner Seite Platz, hängt das Diktat wie früher an einem
+Hals unter der Menüleiste. Während des Diktats wird bei jedem App- und
+Space-Wechsel neu gemessen, auch wenn die Statusanzeige ausgeschaltet ist.
+
+Die Knöpfe bleiben von selbst offen, solange ein Bildschirm-Clip läuft, damit
+sein Stopp-Knopf erreichbar ist. „Fertig“ steht aufgeklappt immer da, auch
+wenn die Einstellung es in der Pille ausblendet.
 
 Zwei Fälle hängen weiter unter der Menüleiste, weil sie Text zeigen bzw. ohne
 Maus bedient werden: Schnellaktionen (Beschriftung und Hinweise) und die
@@ -884,7 +897,7 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
 - Neben Apples aktiver Insel zeigt die Anzeige nur das Zeichen, keine Zahl.
 - Die Diktat-Kapsel steht mit Abstand neben der Insel, nicht an ihr: Solange
   das Mikrofon noch nicht läuft oder schon wieder aus ist (Transkription),
-  bleibt zwischen Kapsel und Insel eine Lücke von rund 32 pt.
+  bleibt zwischen Kapsel und Insel eine Lücke von rund 40 pt.
 - Aufgeklappt reicht das Diktat-Fenster über die Menüleiste um die Kamera;
   Klicks nimmt es nur auf Kapsel und Knöpfen an.
 - Der Hals ist je Seite 3 pt breiter als die Kamera-Insel. Auf heller

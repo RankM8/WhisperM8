@@ -36,7 +36,14 @@ struct RecordingPillView: View {
 
     /// Vereinte Pille im Übergang: das Ruhebild statt des Diktats (`nil` sonst).
     private var restLook: UnifiedPillRestLook? {
-        controller.showsRestLook ? controller.restLook : nil
+        if controller.showsRestLook { return controller.restLook }
+        // Kamera-Insel: Die erste Messung steht noch aus. So lange nur die
+        // Insel selbst, wie im Ruhebild ohne Anzeige.
+        if controller.islandAwaitsMeasurement, case .island = controller.presentation,
+           controller.quickActionLabel == nil, controller.controllerTargetLabel == nil {
+            return .notchBand
+        }
+        return nil
     }
 
     /// Voll-Stil ist permanent expandiert; Mini expandiert per Hover
@@ -58,7 +65,9 @@ struct RecordingPillView: View {
     }
 
     var body: some View {
-        Group {
+        // Ein Behälter: Beim Überblenden zwischen den Formen stehen kurz
+        // beide da, die äußeren Modifier sehen trotzdem eine Ansicht.
+        ZStack(alignment: .top) {
             if let capsule = compactCapsule, case .island(let band) = controller.presentation {
                 islandCompact(capsule, band: band)
                     .transition(.opacity)
@@ -80,6 +89,7 @@ struct RecordingPillView: View {
         .animation(reduceMotion ? nil : .pill, value: controller.showsRestLook)
         .animation(reduceMotion ? nil : .pill, value: controller.isIslandExpanded)
         .animation(reduceMotion ? nil : .pill, value: controller.usesIslandCompact)
+        .animation(reduceMotion ? nil : .pill, value: controller.islandAwaitsMeasurement)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(phase.accessibilityLabel)
     }
@@ -150,7 +160,6 @@ struct RecordingPillView: View {
             .help(phase.statusLabel(postProcessingStatusText: controller.postProcessingStatusText) ?? "Recording")
             .accessibilityLabel(phase.accessibilityLabel)
             .accessibilityHint(controller.showsIslandControls ? Text("Hides the dictation controls") : Text("Shows the dictation controls"))
-            .background { islandPart("capsule") }
             .frame(width: 2 * extent, alignment: capsule.side == .leading ? .leading : .trailing)
 
             if controller.showsIslandControls {
@@ -189,7 +198,13 @@ struct RecordingPillView: View {
             .padding(.trailing, 5)
         PillContextChip(controller: controller)
             .padding(.trailing, 5)
+        // Die schmale Kapsel zeigt die Zeit nicht: dann steht sie hier.
+        if controller.islandControlsShowClock {
+            PillClockView(clockModel: controller.clockModel)
+        }
         PillSeparator()
+        // Wer die Knöpfe aufklappt, will sie alle sehen: „fertig“ steht hier
+        // unabhängig von der Einstellung, die es in der Pille ausblendet.
         if phase == .recording {
             PillConfirmButton(action: controller.stopAndTranscribe)
         }
@@ -629,10 +644,11 @@ private struct PillCompactClock: View {
 
     var body: some View {
         Text(clockModel.timeText)
-            .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+            .font(.system(size: 12, weight: .medium, design: .monospaced))
             .foregroundStyle(Color.white.opacity(0.72))
             .lineLimit(1)
-            .minimumScaleFactor(0.8)
+            // Bleibt über 11 pt.
+            .minimumScaleFactor(0.92)
             .accessibilityLabel("Recording duration \(clockModel.timeText)")
     }
 }

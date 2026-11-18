@@ -255,36 +255,31 @@ enum NotchIslandGeometry {
 
     // MARK: Diktat
 
-    /// Apples Insel mit Mikrofon-Punkt reicht je Seite 26,25 pt über die
-    /// Aussparung hinaus (gemessen 111,5 pt gesamt bei 40 pt Sicherheitsrand).
-    /// So viel Platz bleibt der Diktat-Kapsel von Anfang an frei, damit sie
-    /// nicht springt, wenn der Hinweis erscheint.
-    static let microphoneReserveRatio: CGFloat = 0.65625
+    /// Apples Insel mit Mikrofon-Hinweis (Punkt und Mikrofon-Zeichen, 143 pt)
+    /// reicht links 36,5 und rechts 47,5 pt über die Aussparung hinaus
+    /// (gemessen bei 40 pt Sicherheitsrand; mit dem Punkt allein sind es je
+    /// 26,25 pt). So viel Platz bleibt ihr von Anfang an, damit die
+    /// Diktat-Kapsel nicht springt, wenn der Hinweis erscheint.
+    static let microphoneReserveLeadingRatio: CGFloat = 0.9125
+    static let microphoneReserveTrailingRatio: CGFloat = 1.1875
     /// Breite der Diktat-Kapsel: Wellenform und Zeit bzw. nur die Wellenform;
     /// mit Raute für wartende Chats etwas mehr.
     static let dictationCompactWidth: CGFloat = 96
     static let dictationMinimalWidth: CGFloat = 48
     static let dictationBadgeWidth: CGFloat = 14
-    /// So weit darf Apples Insel über die Kapsel ragen, ohne Inhalt zu
-    /// verdecken (Abstand plus Innenrand der Kapsel).
-    static let dictationCoverTolerance: CGFloat = detachedGap + 5
-
     /// Platz, den die Diktat-Kapsel Apples Insel je Seite lässt: der
-    /// Mikrofon-Hinweis, oder mehr, wenn die Messung zeigt, dass die Insel
-    /// sonst Inhalt verdeckte. `previous`: der Wert bisher in diesem Diktat;
-    /// die Kapsel rückt nur nach außen, nie zurück (kein Hin und Her).
+    /// Mikrofon-Hinweis, oder mehr, wenn die Messung eine breitere Insel
+    /// zeigt. `previous`: der Wert bisher in diesem Diktat; die Kapsel rückt
+    /// nur nach außen, nie zurück (kein Hin und Her).
     static func dictationReserve(
         screen: NotchScreenInfo, occupancy: NotchMenuBarOccupancy?,
         previous: (leading: CGFloat, trailing: CGFloat)? = nil
     ) -> (leading: CGFloat, trailing: CGFloat) {
-        let steady = screen.safeAreaTop * microphoneReserveRatio
-        var leading = max(steady, previous?.leading ?? 0)
-        var trailing = max(steady, previous?.trailing ?? 0)
+        var leading = max(screen.safeAreaTop * microphoneReserveLeadingRatio, previous?.leading ?? 0)
+        var trailing = max(screen.safeAreaTop * microphoneReserveTrailingRatio, previous?.trailing ?? 0)
         if let system = occupancy?.systemIsland {
-            let beyondLeading = screen.notchCenterX - screen.notchWidth / 2 - system.lowerBound
-            let beyondTrailing = system.upperBound - (screen.notchCenterX + screen.notchWidth / 2)
-            if beyondLeading > leading + dictationCoverTolerance { leading = beyondLeading }
-            if beyondTrailing > trailing + dictationCoverTolerance { trailing = beyondTrailing }
+            leading = max(leading, screen.notchCenterX - screen.notchWidth / 2 - system.lowerBound)
+            trailing = max(trailing, system.upperBound - (screen.notchCenterX + screen.notchWidth / 2))
         }
         return (leading, trailing)
     }

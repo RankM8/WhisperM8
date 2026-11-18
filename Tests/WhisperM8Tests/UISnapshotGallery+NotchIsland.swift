@@ -282,7 +282,7 @@ extension UISnapshotGallery {
             // Menüs reichen heran: rechts der Insel. Für die Zeit reicht es
             // nirgends: nur die Wellenform. Ohne Messung: die schmalste Form.
             islandDictation("diktat-rechts", size: wide, crowded: true) { $0.levelModel.level = 0.45 },
-            islandDictation("diktat-minimal", size: wide, crowded: true, tight: true, statusGap: 100) { $0.levelModel.level = 0.45 },
+            islandDictation("diktat-minimal", size: wide, crowded: true, tight: true, statusGap: 120) { $0.levelModel.level = 0.45 },
             islandDictation("diktat-ohne-messung", size: wide, measured: false) { $0.levelModel.level = 0.45 },
             // Klick auf die Kapsel: Bedienknöpfe unter der Menüleiste.
             islandDictation("diktat-aufgeklappt", size: wide, microphone: true) {

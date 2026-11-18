@@ -139,7 +139,7 @@ extension OverlayController {
                 ? .island(NotchIslandGeometry.band(
                     screen: screen, occupancy: NotchIslandMonitor.shared.occupancy[screen.displayID]))
                 : .notch(width: screen.notchWidth, height: screen.safeAreaTop)
-            if screen.hasIsland { followSystemIsland(on: screen) }
+
             let frame = UnifiedPillGeometry.notchDictationPanelFrame(
                 screen: screen, panelWidth: OverlayFrameResolver.panelSize.width)
             panel = RecordingPanel(initialOrigin: frame.origin, size: frame.size)
@@ -171,9 +171,7 @@ extension OverlayController {
         installPanel(panel, safeAreaFree: placement.isNotch, contentHidden: snapshot != nil)
         observeScreenChanges()
         observeUnifiedBadge()
-        islandReserve = nil
-        isIslandExpanded = false
-        refreshIslandCapsule(occupancy: NotchIslandMonitor.shared.occupancy[screen.displayID], animated: false)
+        beginIslandDictation(on: screen)
         // Ohne Übergang meldet sich das Diktat sofort beim Hub (die
         // Status-Pille dort tritt zurück), mit Übergang erst nach dem ersten Bild.
         applyMorph(morph.show(morph: snapshot != nil))
@@ -196,7 +194,6 @@ extension OverlayController {
         return panel
     }
 
-    /// Raute für wartende Chats und Fehler, solange das Diktat steht.
     // MARK: Kamera-Insel, kompakt
 
     /// An der Kamera-Insel steht das Diktat kompakt in der Menüleiste
@@ -213,56 +210,151 @@ extension OverlayController {
     /// Bildschirm-Clip läuft (sein Stopp-Knopf muss erreichbar bleiben).
     var showsIslandControls: Bool { isIslandExpanded || isScreenClipRecording }
 
+    /// Die schmale Kapsel hat keinen Platz für die Zeit: Sie steht dann bei
+    /// den aufgeklappten Knöpfen.
+    var islandControlsShowClock: Bool { islandCapsule?.showsClock == false }
+
     func toggleIslandExpanded() {
         guard !morph.isRetiring else { return }
         isIslandExpanded.toggle()
     }
 
-    /// Kapsel und Knöpfe melden ihre Rahmen: Nur dort nimmt das Fenster
-    /// Klicks an, die Menüleiste dazwischen bleibt bedienbar.
-    func reportIslandPart(_ key: String, _ frame: CGRect?) {
-        if islandParts[key] == frame { return }
-        islandParts[key] = frame
-        hostingView?.setInteractiveParts(swiftUIFrames: Array(islandParts.values))
+    /// Ein Diktat beginnt an dieser Stelle (neues Fenster oder Übernahme
+    /// eines Fensters, das sich gerade zurückzieht): nichts vom vorigen
+    /// Diktat bleibt stehen. Zugeklappt, Platz für Apples Insel von vorn,
+    /// Messung neu angefordert.
+    func beginIslandDictation(on screen: NotchScreenInfo) {
+        isIslandExpanded = false
+        islandReserve = nil
+        islandOccupancy = nil
+        islandParts = [:]
+        islandViewFrame = nil
+        islandAwaitTask?.cancel()
+        islandAwaitTask = nil
+        islandAwaitsMeasurement = false
+        hostingView?.setInteractiveParts(swiftUIFrames: [])
+        guard screen.hasIsland, case .island = presentation else {
+            islandCancellables.removeAll()
+            if islandCapsule != nil { islandCapsule = nil }
+            return
+        }
+        followSystemIsland(on: screen)
+        let known = NotchIslandMonitor.shared.occupancy[screen.displayID]
+        refreshIslandCapsule(occupancy: known, animated: false)
+        guard known == nil, islandAXTrusted() else { return }
+        // Noch nie gemessen (Statusanzeige aus): kurz nur die Insel selbst
+        // zeigen, statt blind eine Kapsel über mögliche Menüs zu stellen.
+        // Kommt keine Messung, gilt die Form unter der Menüleiste.
+        islandAwaitsMeasurement = true
+        islandAwaitTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(300))
+            guard !Task.isCancelled, let self, self.islandAwaitsMeasurement else { return }
+            withAnimation(.pill) { self.islandAwaitsMeasurement = false }
+        }
     }
 
-    /// Lage der Kapsel aus der letzten Messung neu bestimmen.
+    /// Lage der Kapsel neu bestimmen. Eine Messung, die ausfällt (`nil`),
+    /// ersetzt die letzte gültige dieses Diktats nicht: Die Kapsel bleibt
+    /// stehen. Die schmalste Form ohne Messung gibt es nur, wenn die
+    /// Berechtigung für Bedienungshilfen fehlt; fehlt die Messung trotz
+    /// Berechtigung, hängt das Diktat unter der Menüleiste.
     func refreshIslandCapsule(occupancy: NotchMenuBarOccupancy?, animated: Bool) {
-        islandOccupancy = occupancy
         guard let screen = unifiedScreen, screen.hasIsland, case .island = presentation else {
             if islandCapsule != nil { islandCapsule = nil }
             return
         }
-        let reserve = NotchIslandGeometry.dictationReserve(screen: screen, occupancy: occupancy, previous: islandReserve)
-        islandReserve = reserve
-        let capsule = NotchIslandGeometry.dictationCapsule(
-            screen: screen, occupancy: occupancy, hasBadge: statusBadge != nil, reserve: reserve)
-        guard capsule != islandCapsule else { return }
-        if animated {
-            withAnimation(.pill) { islandCapsule = capsule }
-        } else {
-            islandCapsule = capsule
+        if let occupancy {
+            islandOccupancy = occupancy
+            islandAwaitTask?.cancel()
+            islandAwaitTask = nil
         }
+        var capsule: NotchIslandDictationCapsule?
+        if let known = islandOccupancy {
+            let reserve = NotchIslandGeometry.dictationReserve(screen: screen, occupancy: known, previous: islandReserve)
+            islandReserve = reserve
+            capsule = NotchIslandGeometry.dictationCapsule(
+                screen: screen, occupancy: known, hasBadge: statusBadge != nil, reserve: reserve)
+        } else if !islandAXTrusted() {
+            capsule = NotchIslandGeometry.dictationCapsule(screen: screen, occupancy: nil, hasBadge: statusBadge != nil)
+        }
+        let settled = occupancy != nil && islandAwaitsMeasurement
+        guard capsule != islandCapsule || settled else { return }
+        let apply = {
+            self.islandCapsule = capsule
+            if settled { self.islandAwaitsMeasurement = false }
+        }
+        if animated { withAnimation(.pill, apply) } else { apply() }
+        refreshIslandInteractiveParts()
+    }
+
+    // MARK: Kamera-Insel, Trefferflächen
+
+    /// Wo das Fenster in der kompakten Form Klicks annimmt (Koordinaten der
+    /// Ansicht, oben links): die Kapsel neben der Insel, aufgeklappt dazu die
+    /// Knöpfe. Die Ansicht selbst reicht symmetrisch um die Kamera; die
+    /// Menüleiste dazwischen und auf der anderen Seite bleibt bedienbar. Die
+    /// Kapsel kommt aus der Geometrie, nicht aus einer Meldung der Ansicht.
+    nonisolated static func islandInteractiveParts(
+        viewFrame: CGRect, capsule: NotchIslandDictationCapsule, band: NotchIslandBand,
+        showsControls: Bool, controls: CGRect?
+    ) -> [CGRect] {
+        var parts = [CGRect(
+            x: viewFrame.midX + capsule.offset - capsule.width / 2, y: viewFrame.minY,
+            width: capsule.width, height: band.capsuleHeight)]
+        if showsControls {
+            // Ohne gemeldeten Rahmen der Knöpfe: alles unter der Menüleiste.
+            parts.append(controls ?? CGRect(
+                x: viewFrame.minX, y: viewFrame.minY + band.neckHeight,
+                width: viewFrame.width, height: max(0, viewFrame.height - band.neckHeight)))
+        }
+        return parts
+    }
+
+    func refreshIslandInteractiveParts() {
+        guard usesIslandCompact, !showsRestLook, let capsule = islandCapsule, let viewFrame = islandViewFrame,
+              case .island(let band) = presentation else {
+            hostingView?.setInteractiveParts(swiftUIFrames: [])
+            return
+        }
+        hostingView?.setInteractiveParts(swiftUIFrames: Self.islandInteractiveParts(
+            viewFrame: viewFrame, capsule: capsule, band: band,
+            showsControls: showsIslandControls, controls: islandParts["controls"]))
+    }
+
+    /// Die aufgeklappten Knöpfe melden ihren Rahmen.
+    func reportIslandPart(_ key: String, _ frame: CGRect?) {
+        if islandParts[key] == frame { return }
+        islandParts[key] = frame
+        refreshIslandInteractiveParts()
     }
 
     /// Kamera-Insel: Mit dem Mikrofon wird Apples Insel breiter (Hinweis
-    /// rechts der Kamera) und nach einigen Sekunden wieder schmaler. Der Hals
-    /// der Diktat-Pille ist so breit wie sie, damit beides eine Form ist.
-    /// Gemessen wird nur ein paarmal nach dem Erscheinen, nicht laufend.
+    /// rechts der Kamera). Der Hals der Ausweichform ist so breit wie sie,
+    /// die kompakte Kapsel hält Abstand. Gemessen wird ein paarmal nach dem
+    /// Erscheinen und bei jedem App- oder Space-Wechsel während des Diktats
+    /// (die Menüs der neuen App können weiter reichen), nicht laufend.
     private func followSystemIsland(on screen: NotchScreenInfo) {
-        islandCancellable = NotchIslandMonitor.shared.$occupancy
+        islandCancellables.removeAll()
+        NotchIslandMonitor.shared.$occupancy
             .dropFirst()
             .sink { [weak self] occupancy in
                 guard let self, case .island(let current) = self.presentation, self.unifiedScreen == screen else { return }
                 self.refreshIslandCapsule(occupancy: occupancy[screen.displayID], animated: true)
-                let band = NotchIslandGeometry.band(screen: screen, occupancy: occupancy[screen.displayID])
+                let band = NotchIslandGeometry.band(screen: screen, occupancy: self.islandOccupancy)
                 guard band != current else { return }
                 withAnimation(.pill) { self.presentation = .island(band) }
             }
+            .store(in: &islandCancellables)
+        let workspace = NSWorkspace.shared.notificationCenter
+        workspace.publisher(for: NSWorkspace.didActivateApplicationNotification)
+            .merge(with: workspace.publisher(for: NSWorkspace.activeSpaceDidChangeNotification))
+            .sink { _ in NotchIslandMonitor.shared.measure([screen], followUps: [.milliseconds(900)]) }
+            .store(in: &islandCancellables)
         NotchIslandMonitor.shared.measure(
             [screen], followUps: [.milliseconds(700), .milliseconds(2500), .seconds(7)])
     }
 
+    /// Raute für wartende Chats und Fehler, solange das Diktat steht.
     func observeUnifiedBadge() {
         statusBadge = UnifiedPillHub.shared.badge
         badgeCancellable = UnifiedPillHub.shared.$badge
@@ -358,7 +450,9 @@ extension OverlayController {
     func tearDownUnified(keepingWindow: Bool = false) {
         unifiedGeneration += 1
         badgeCancellable = nil
-        islandCancellable = nil
+        islandCancellables.removeAll()
+        islandAwaitTask?.cancel()
+        islandAwaitTask = nil
         if statusBadge != nil { statusBadge = nil }
         guard !keepingWindow else { return }
         if let unifiedScreenObserver {

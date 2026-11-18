@@ -495,7 +495,7 @@ class OverlayController: ObservableObject {
     var unifiedScreen: NotchScreenInfo?
     var badgeCancellable: AnyCancellable?
     /// Kamera-Insel: folgt der Breite von Apples Insel (`followSystemIsland`).
-    var islandCancellable: AnyCancellable?
+    var islandCancellables = Set<AnyCancellable>()
     /// Kamera-Insel: Lage der kompakten Diktat-Kapsel in der Menüleiste.
     /// `nil`: kein Platz (oder kein Insel-Bildschirm), das Diktat hängt dann
     /// unter der Menüleiste.
@@ -506,8 +506,16 @@ class OverlayController: ObservableObject {
     /// (wächst nur, damit die Kapsel nicht hin und her rückt).
     var islandReserve: (leading: CGFloat, trailing: CGFloat)?
     var islandOccupancy: NotchMenuBarOccupancy?
-    /// Kamera-Insel: Rahmen von Kapsel und Knöpfen (SwiftUI-Koordinaten).
+    /// Kamera-Insel: gemeldeter Rahmen der aufgeklappten Knöpfe und der
+    /// ganzen Ansicht (SwiftUI-Koordinaten), für die Trefferflächen.
     var islandParts: [String: CGRect] = [:]
+    var islandViewFrame: CGRect?
+    /// Kamera-Insel: Es gibt noch keine Messung, sie ist aber angefordert;
+    /// so lange zeigt das Fenster nur die Insel selbst.
+    @Published var islandAwaitsMeasurement = false
+    var islandAwaitTask: Task<Void, Never>?
+    /// Berechtigung für Bedienungshilfen (ohne sie gibt es keine Messung).
+    var islandAXTrusted: () -> Bool = { AXIsProcessTrusted() }
     var unifiedScreenObserver: NSObjectProtocol?
     /// Breite der zugeklappten Pille: Darüberfahren klappt nur nach links auf.
     var collapsedPillWidth: CGFloat?
@@ -963,6 +971,9 @@ class OverlayController: ObservableObject {
     /// top-left origin) — hier wird er in AppKit-Koordinaten gedreht und an
     /// hitTest/Tracking/Clamp/Persistenz verteilt.
     func reportPillFrame(_ reportedFrame: CGRect) {
+        // Kamera-Insel, kompakt: Klicks nur auf Kapsel und Knöpfen.
+        islandViewFrame = reportedFrame
+        refreshIslandInteractiveParts()
         guard let panel, let hostingView else { return }
         // An der Notch zählt nur der Körper unter der Menüleiste: Das Band
         // liegt auf der Aussparung, sein Rahmen reichte neben der Notch in
