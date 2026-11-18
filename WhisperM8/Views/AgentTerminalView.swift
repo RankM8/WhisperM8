@@ -615,6 +615,8 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
     let command: AgentLaunchCommand
     private var keyboardShortcutHandler: TerminalKeyboardShortcutHandler?
     private var scrollGuard: TerminalScrollGuard?
+    /// Finger-Bedienung am Touch-Display (`AgentTerminalController+Touch`).
+    var touchGestures: TerminalTouchGestures?
     /// Ersetzt SwiftTerms internen `terminalDelegate`, um Link-Klicks abzufangen
     /// (siehe `AgentTerminalLinkInterceptor`). Stark gehalten, weil
     /// `terminalDelegate` `weak` ist.
@@ -936,6 +938,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         )
         keyboardShortcutHandler?.onTerminalKeyDownEvent = { [weak self] event in
             guard let self else { return }
+            self.touchGestures?.stopMomentum()
             // Entwurf, Abbruch (ESC/Ctrl+C) und Rewind schätzen — Regeln und
             // Begründung in `TerminalComposerDraftTracker.recordTerminalKey`.
             self.composerDraft.recordTerminalKey(
@@ -954,6 +957,7 @@ final class AgentTerminalController: NSObject, ObservableObject, Identifiable, @
         // Bytes an die TUI. Im normalen Buffer (echter Scrollback) bleibt
         // das Default-Scroll von SwiftTerm aktiv.
         scrollGuard = TerminalScrollGuard(attachedTo: terminal)
+        installTouchGestures()
     }
 
     deinit {

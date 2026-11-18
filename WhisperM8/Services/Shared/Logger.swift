@@ -36,6 +36,8 @@ enum Logger {
     /// Geplante Aufgaben (WM8-110): Termine, Starts, Nachholen, Ende eines Laufs.
     /// Nie den Auftragstext, nur Aufgaben- und Lauf-IDs.
     static let scheduledTasks = os.Logger(subsystem: subsystem, category: "scheduled.tasks")
+    /// Finger-Bedienung am Touch-Display (WM8-136): erkannte Absicht je Geste.
+    static let touch = os.Logger(subsystem: subsystem, category: "touch")
 
     // MARK: - Optional File Logging
 
