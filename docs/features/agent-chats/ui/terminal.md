@@ -89,6 +89,12 @@ die nur direkte Touches sehen (`buttonMask = 0`, `allowedTouchTypes = .direct`):
   Markierung samt Rand-Auto-Scroll; Kopieren wie gewohnt mit Cmd+C. Ein
   Langdruck-Erkenner sichert das ab, falls der Pan nach längerem Halten nicht
   mehr anspringt (ungemessen); Halten allein markiert nichts.
+  Hat eine TUI Maus-Reporting an, geht das Ziehen wie bei der Maus an die TUI;
+  die Shift-Umgehung der Maus gibt es für den Finger nicht.
+- Die Scrollleiste bleibt beim System: Ein nachgebildeter Klick dort hielte
+  die App in der Tracking-Schleife des Scrollers fest, bis ein echtes
+  Loslassen käme. Schwung endet bei Trackpad, Mausrad, Mausklick, Taste, neuem
+  Finger und wenn das Terminal das Fenster verlässt.
 - **Tippen** wird ein Klick (Fokus, Auswahl aufheben); zwei- bzw. dreimal
   schnell tippen markiert Wort bzw. Zeile. Ein Tipper in laufenden Schwung hält
   ihn nur an.

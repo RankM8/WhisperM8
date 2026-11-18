@@ -47,6 +47,9 @@ final class TerminalTouchGestures: NSObject, NSGestureRecognizerDelegate {
     private var momentumLocation: NSPoint = .zero
     private var displayLink: CADisplayLink?
     private var lastFrameTimestamp: CFTimeInterval?
+    /// Nur während des Schwungs: Trackpad, Mausrad oder Mausklick im Fenster
+    /// halten ihn an, wie bei `NSScrollView`.
+    private var interruptMonitor: Any?
 
     init(attachedTo terminal: TerminalView, scroll: @escaping ScrollHandler) {
         self.terminal = terminal
@@ -73,6 +76,7 @@ final class TerminalTouchGestures: NSObject, NSGestureRecognizerDelegate {
         press.buttonMask = 0
         press.allowedTouchTypes = [.direct]
         press.minimumPressDuration = TerminalTouchIntent.holdThreshold
+        press.allowableMovement = TerminalTouchPanRecognizer.moveSlop
         press.delegate = self
         terminal.addGestureRecognizer(press)
     }
@@ -90,11 +94,34 @@ final class TerminalTouchGestures: NSObject, NSGestureRecognizerDelegate {
         displayLink = nil
         lastFrameTimestamp = nil
         momentum = nil
+        if let interruptMonitor {
+            self.interruptMonitor = nil
+            // Nicht aus dem eigenen Monitor-Aufruf heraus abmelden.
+            DispatchQueue.main.async { NSEvent.removeMonitor(interruptMonitor) }
+        }
+    }
+
+    /// Darf ein Finger an dieser Stelle (Terminal-Koordinaten) von uns bedient
+    /// werden? Nicht auf SwiftTerms Scrollleiste: Deren `mouseDown` wartet in
+    /// einer eigenen Schleife auf ein echtes Loslassen — ein nachgebildeter
+    /// Klick würde die App dort festhalten. Die Leiste bleibt beim System.
+    func handlesTouch(at point: NSPoint) -> Bool {
+        guard let terminal, terminal.bounds.contains(point) else { return false }
+        let hit = terminal.hitTest(terminal.convert(point, to: terminal.superview))
+        var view = hit
+        while let current = view, current !== terminal {
+            if current is NSScroller { return false }
+            view = current.superview
+        }
+        return view === terminal
     }
 
     // MARK: - Delegate
 
     func gestureRecognizer(_ gestureRecognizer: NSGestureRecognizer, shouldReceive touch: NSTouch) -> Bool {
+        if let terminal, !handlesTouch(at: touch.location(in: terminal)) {
+            return false
+        }
         // Jeder neue Finger hält laufenden Schwung an; der zugehörige Tipper
         // ist dann nur „Anhalten“, kein Klick.
         if gestureRecognizer === pan {
@@ -108,6 +135,10 @@ final class TerminalTouchGestures: NSObject, NSGestureRecognizerDelegate {
         // Markiert der Langdruck schon, darf der Pan nicht mehr übernehmen.
         if gestureRecognizer === pan {
             return press.state != .began && press.state != .changed
+        }
+        // Hat sich der Finger schon bewegt, ist es ein Wisch, kein Langdruck.
+        if gestureRecognizer === press {
+            return !pan.hasMoved
         }
         return true
     }
@@ -148,6 +179,10 @@ final class TerminalTouchGestures: NSObject, NSGestureRecognizerDelegate {
 
     private func beginSelection(at start: NSPoint, current: NSPoint) {
         pendingSelectionStart = nil
+        guard handlesTouch(at: start) else {
+            intent = nil
+            return
+        }
         sendMouse(.leftMouseDown, at: start, clickCount: 1)
         sendMouse(.leftMouseDragged, at: start, clickCount: 1)
         sendMouse(.leftMouseDragged, at: current, clickCount: 1)
@@ -240,15 +275,36 @@ final class TerminalTouchGestures: NSObject, NSGestureRecognizerDelegate {
         let link = terminal.displayLink(target: self, selector: #selector(momentumFrame(_:)))
         link.add(to: .main, forMode: .common)
         displayLink = link
+        interruptMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.scrollWheel, .leftMouseDown, .rightMouseDown, .otherMouseDown]
+        ) { [weak self] event in
+            if let self, event.window === self.terminal?.window {
+                self.stopMomentum()
+            }
+            return event
+        }
     }
+
+    /// Längste Lücke zwischen zwei Schwung-Schritten. Längere Pausen (Fenster
+    /// verdeckt oder geschlossen, Terminal ausgehängt) beenden den Schwung,
+    /// statt ihn später weiterlaufen zu lassen.
+    static let maximumMomentumGap: CFTimeInterval = 0.25
 
     @objc private func momentumFrame(_ link: CADisplayLink) {
         guard var current = momentum else {
             stopMomentum()
             return
         }
+        guard terminal?.window != nil else {
+            stopMomentum()
+            return
+        }
         defer { lastFrameTimestamp = link.timestamp }
         guard let last = lastFrameTimestamp else { return }
+        guard link.timestamp - last <= Self.maximumMomentumGap else {
+            stopMomentum()
+            return
+        }
         let travel = current.advance(by: link.timestamp - last)
         momentum = current
         let lines = accumulator.lines(forFingerTravel: travel, cellHeight: cellHeight())
@@ -267,6 +323,7 @@ final class TerminalTouchGestures: NSObject, NSGestureRecognizerDelegate {
             return
         }
         let location = recognizer.location(in: terminal)
+        guard handlesTouch(at: location) else { return }
         let count = tapCounter.register(
             at: location,
             time: ProcessInfo.processInfo.systemUptime,
@@ -283,6 +340,9 @@ final class TerminalTouchGestures: NSObject, NSGestureRecognizerDelegate {
     /// die Klick-Beobachter der App es genauso sehen wie einen echten Klick.
     private func sendMouse(_ type: NSEvent.EventType, at point: NSPoint, clickCount: Int) {
         guard let terminal, let window = terminal.window else { return }
+        // Ein Drücken nur dorthin, wo das Terminal selbst liegt (siehe
+        // `handlesTouch`); Ziehen und Loslassen gehen an das gedrückte Ziel.
+        if type == .leftMouseDown, !handlesTouch(at: point) { return }
         guard let event = NSEvent.mouseEvent(
             with: type,
             location: terminal.convert(point, to: nil),
@@ -308,6 +368,9 @@ final class TerminalTouchPanRecognizer: NSPanGestureRecognizer {
     private(set) var touchDownLocation: NSPoint?
     private var touchDownTime: TimeInterval?
     private var firstMoveTime: TimeInterval?
+
+    /// Hat sich der Finger seit dem Aufsetzen spürbar bewegt?
+    var hasMoved: Bool { firstMoveTime != nil }
 
     override func touchesBegan(with event: NSEvent) {
         if touchDownTime == nil {

@@ -189,4 +189,20 @@ final class TerminalTouchScrollingTests: XCTestCase {
         gestures.detach()
         XCTAssertTrue(terminal.gestureRecognizers.isEmpty)
     }
+
+    /// Auf der Scrollleiste bildet die Erkennung keinen Klick nach (sonst
+    /// hinge die App in der Tracking-Schleife des Scrollers).
+    @MainActor
+    func testScrollerIsLeftToTheSystem() throws {
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+        let terminal = TerminalView(frame: container.bounds)
+        container.addSubview(terminal)
+        let gestures = TerminalTouchGestures(attachedTo: terminal) { _, _ in true }
+        let scroller = try XCTUnwrap(terminal.subviews.compactMap { $0 as? NSScroller }.first)
+        XCTAssertFalse(scroller.isHidden)
+        let onScroller = NSPoint(x: scroller.frame.midX, y: scroller.frame.midY)
+        XCTAssertFalse(gestures.handlesTouch(at: onScroller))
+        XCTAssertTrue(gestures.handlesTouch(at: NSPoint(x: 20, y: 150)))
+        XCTAssertFalse(gestures.handlesTouch(at: NSPoint(x: -5, y: 150)))
+    }
 }
