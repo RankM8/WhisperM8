@@ -96,7 +96,12 @@ extension NotchStatusController {
                 look: .pill(summary: summary, alert: shownAlert), center: CGPoint(x: visible.midX, y: visible.midY))
         case .notch:
             guard NotchStatusModel.isVisible(summary: summary, isExpanded: false, alert: shownAlert) else { return nil }
-            let body = NotchGeometry.layout(screen: screen, mode: mode).body
+            let body = NotchGeometry.layout(screen: screen, mode: mode, chipCount: summary.chipCount).body
+            if screen.hasIsland {
+                let band = NotchIslandGeometry.band(screen: screen, chipCount: summary.chipCount)
+                return UnifiedPillRestSnapshot(
+                    look: .island(summary: summary, alert: shownAlert, band: band, bodyWidth: body.width), center: nil)
+            }
             return UnifiedPillRestSnapshot(
                 look: .notch(summary: summary, alert: shownAlert, bodyWidth: body.width), center: nil)
         }

@@ -61,12 +61,13 @@ extension NotchStatusController {
             isExpanded: expandedHere, alert: alert, rows: rows, sections: expandedHere ? sections : [])
         let pillCenter = isPill ? pillCenter(on: screen) : nil
         let display = NotchDisplay(
-            style: screen.hasNotch ? .notch(width: screen.notchWidth, height: screen.safeAreaTop) : .pill,
+            style: Self.displayStyle(screen: screen, summary: summary),
             summary: summary, alert: alert, isExpanded: expandedHere,
             sections: expandedHere ? sections : [],
             opensUpward: pillCenter.map { NotchPillPlacement.opensUpward(center: $0, on: screen) } ?? false,
             selectedRowID: expandedHere ? keyboardSelection : nil)
-        let frame = NotchGeometry.panelFrame(screen: screen, mode: mode, pillCenter: pillCenter)
+        let frame = NotchGeometry.panelFrame(
+            screen: screen, mode: mode, pillCenter: pillCenter, chipCount: summary.chipCount)
 
         let panel = ensurePanel(slot)
         // Ohne Notch ein Fensterschatten: Ein im Fenster gezeichneter Schatten
@@ -96,6 +97,16 @@ extension NotchStatusController {
         }
         if !wasVisible { panel.orderFrontRegardless() }
         slot.returnsFromDictation = false
+    }
+
+    /// Notch: Band in der Aussparung. Kamera-Insel: Kapsel um die Kamera mit
+    /// Platz für die sichtbaren Zähler. Sonst die Pille.
+    nonisolated static func displayStyle(screen: NotchScreenInfo, summary: NotchSummary) -> NotchDisplay.Style {
+        switch screen.cutout {
+        case .none: return .pill
+        case .notch: return .notch(width: screen.notchWidth, height: screen.safeAreaTop)
+        case .island: return .island(NotchIslandGeometry.band(screen: screen, chipCount: summary.chipCount))
+        }
     }
 
     func hide(_ slot: NotchSlot) {
@@ -197,7 +208,7 @@ extension NotchStatusController {
         let targets = placements.map { placement in
             (kind: placement.kind,
              quartz: NotchFullscreenDetector.quartzFrame(fromCocoa: placement.screen.frame, primaryHeight: primaryHeight),
-             safeAreaTop: placement.screen.safeAreaTop)
+             safeAreaTop: placement.screen.fullscreenTopInset)
         }
         let systemFullScreen = NSApp.currentSystemPresentationOptions.contains(.fullScreen)
         let ownPID = ProcessInfo.processInfo.processIdentifier

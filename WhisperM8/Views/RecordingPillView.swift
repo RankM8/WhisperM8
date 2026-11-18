@@ -69,7 +69,9 @@ struct RecordingPillView: View {
         // Übergang mit, die Zeile wächst unter der Notch heraus.
         .padding(.horizontal, restLook?.isNotch == true ? 0 : PillMetrics.horizontalPadding)
         .frame(height: restLook?.rowHeight ?? PillMetrics.height)
-        .modifier(PillChrome(presentation: controller.presentation, bottomRadius: restLook?.isNotch == true ? 11 : 18))
+        .modifier(PillChrome(
+            presentation: controller.presentation, bottomRadius: restLook?.isNotch == true ? 11 : 18,
+            restLook: restLook))
         .animation(reduceMotion ? nil : .pill, value: isExpanded)
         .animation(reduceMotion ? nil : .pill, value: phase)
         .animation(reduceMotion ? nil : .pill, value: controller.contextBundle.isEmpty)
@@ -236,6 +238,9 @@ private struct PillChrome: ViewModifier {
     /// Unterer Radius an der Notch: 18 beim Diktat, 11 im Ruhebild (wie die
     /// Notch-Anzeige in Ruhe).
     var bottomRadius: CGFloat = 18
+    /// Ruhebild im Übergang (`nil` beim Diktat). An der Kamera-Insel
+    /// bestimmt es das Band: Kapsel mit Zählern statt schmalem Hals.
+    var restLook: UnifiedPillRestLook?
 
     func body(content: Content) -> some View {
         switch presentation {
@@ -268,7 +273,42 @@ private struct PillChrome: ViewModifier {
                     NotchHangingShape(bandWidth: width, bandHeight: height, bottomRadius: bottomRadius)
                         .fill(Color.black)
                 }
+        case .island(let neck):
+            island(content: content, neck: neck)
         }
+    }
+
+    /// Kamera-Insel: Beim Diktat hängt die Zeile an einem schmalen Hals um
+    /// die Kamera. Im Ruhebild ist das Band die Kapsel der Status-Anzeige
+    /// samt Zählern (ohne Hinweis ohne Zeile darunter), damit das Diktat
+    /// genau aus ihr wächst. Band und Radius gleiten mit.
+    private func island(content: Content, neck: NotchIslandBand) -> some View {
+        var band = neck
+        var summary: NotchSummary?
+        var hasRow = restLook == nil
+        if case .island(let restSummary, let alert, let restBand, _) = restLook {
+            band = restBand
+            summary = restSummary
+            hasRow = alert != nil
+        }
+        let bandHeight = hasRow ? band.neckHeight : band.capsuleHeight
+        let shape = NotchHangingShape(
+            bandWidth: band.width, bandHeight: bandHeight, bottomRadius: bottomRadius,
+            topRadius: band.topRadius, bandOffset: band.centerOffset)
+        return content
+            .frame(minWidth: band.width)
+            .padding(.top, bandHeight)
+            .background { shape.fill(Color.black) }
+            .overlay(alignment: .top) {
+                if let summary {
+                    NotchIslandChipsRow(band: band, summary: summary)
+                        .transition(.pillRestContent)
+                }
+            }
+            // Wie die Status-Anzeige auf die Form zugeschnitten: gleiche Kanten
+            // im Ruhebild, und die Zähler ragen nicht aus dem Hals, während
+            // er schmaler wird.
+            .clipShape(shape)
     }
 }
 

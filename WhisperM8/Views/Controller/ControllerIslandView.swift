@@ -6,6 +6,9 @@ struct ControllerIslandDisplay: Equatable {
     enum Style: Equatable {
         /// An der Notch: schwarz, das Band deckt genau die Aussparung.
         case notch(width: CGFloat, height: CGFloat)
+        /// An einer Kamera-Insel (Dynamic Island): schwarz, hängt an einem
+        /// schmalen Hals um die Kamera unter der Menüleiste.
+        case island(NotchIslandBand)
         /// Ohne Notch: wächst aus der Pille der Notch-Anzeige, im dunklen
         /// Glas der Diktat-Pille.
         case pill
@@ -20,9 +23,19 @@ struct ControllerIslandDisplay: Equatable {
     /// nach oben aus ihr heraus.
     var opensUpward = false
 
+    /// An der Hardware (Notch oder Kamera-Insel): schwarz, ohne Schatten.
     var isNotch: Bool {
-        if case .notch = style { return true }
-        return false
+        if case .pill = style { return false }
+        return true
+    }
+
+    /// Höhe des Bands über dem Körper (0 ohne Notch).
+    var bandHeight: CGFloat {
+        switch style {
+        case .notch(_, let height): return height
+        case .island(let band): return band.neckHeight
+        case .pill: return 0
+        }
     }
 
     /// Breite des Körpers je Zustand (Entwurf); an der Notch nie schmaler
@@ -37,6 +50,7 @@ struct ControllerIslandDisplay: Equatable {
         case .whereTo: width = Self.keyboardWidth(model) ?? 440
         }
         if case .notch(let notchWidth, _) = style { return max(width, notchWidth) }
+        if case .island(let band) = style { return max(width, band.width) }
         return width
     }
 
@@ -104,8 +118,8 @@ struct ControllerIslandView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if case .notch(_, let height) = display.style {
-                Color.clear.frame(height: height)
+            if display.isNotch {
+                Color.clear.frame(height: display.bandHeight)
             }
             header
             content
@@ -132,6 +146,10 @@ struct ControllerIslandView: View {
         if case .notch(let width, let height) = display.style {
             return AnyShape(NotchHangingShape(bandWidth: width, bandHeight: height, bottomRadius: 20))
         }
+        if case .island(let band) = display.style {
+            return AnyShape(NotchHangingShape(
+                bandWidth: band.width, bandHeight: band.neckHeight, bottomRadius: 20, topRadius: band.topRadius))
+        }
         return AnyShape(RoundedRectangle(cornerRadius: PillGlass.cornerRadius, style: .continuous))
     }
 
@@ -152,6 +170,9 @@ struct ControllerIslandView: View {
         switch display.style {
         case .notch(let width, let height):
             return CGSize(width: min(size.width, width), height: min(size.height, height + NotchGeometry.chinHeight))
+        case .island(let band):
+            // Zu: nur die Kapsel um die Kamera.
+            return CGSize(width: min(size.width, band.width), height: min(size.height, band.capsuleHeight))
         case .pill:
             return CGSize(width: min(size.width, NotchGeometry.pillIdleWidth),
                           height: min(size.height, NotchGeometry.pillHeight))

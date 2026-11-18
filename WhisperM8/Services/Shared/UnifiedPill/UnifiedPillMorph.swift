@@ -12,6 +12,10 @@ enum UnifiedPillRestLook: Equatable {
     /// An der Notch ohne Anzeige: nur das schwarze Band in der Aussparung, die
     /// Diktat-Zeile wächst darunter heraus.
     case notchBand
+    /// An einer Kamera-Insel mit Anzeige: Kapsel um die Kamera mit den
+    /// Zählern daneben (`band`); beim Hinweis hängt darunter die Zeile mit
+    /// dem Chat-Namen, so breit wie dort.
+    case island(summary: NotchSummary, alert: NotchAlert?, band: NotchIslandBand, bodyWidth: CGFloat)
 
     var isNotch: Bool {
         if case .pill = self { return false }
@@ -24,6 +28,7 @@ enum UnifiedPillRestLook: Equatable {
         case .pill: return PillMetrics.height
         case .notch: return NotchGeometry.chinHeight
         case .notchBand: return 0
+        case .island(_, let alert, _, _): return alert == nil ? 0 : NotchGeometry.chinHeight
         }
     }
 }

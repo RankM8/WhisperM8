@@ -20,7 +20,8 @@ struct NotchScreenInfo: Equatable {
     /// Schlüssel für die gemerkte Lage der Pille auf diesem Bildschirm.
     var pillStorageKey: String { uuid ?? "display-\(displayID)" }
 
-    /// Notch vorhanden: Sicherheitsrand oben und beide freien Bereiche daneben.
+    /// Aussparung vorhanden (Notch oder Kamera-Insel, siehe `cutout`):
+    /// Sicherheitsrand oben und beide freien Bereiche daneben.
     var hasNotch: Bool {
         safeAreaTop > 0 && auxiliaryLeftWidth != nil && auxiliaryRightWidth != nil
     }
@@ -136,8 +137,10 @@ enum NotchGeometry {
     // MARK: Fenster-Rahmen
 
     /// Rahmen des Fensters in globalen Cocoa-Koordinaten (Ursprung unten links).
-    static func panelFrame(screen: NotchScreenInfo, mode: NotchPanelMode, pillCenter: CGPoint? = nil) -> CGRect {
-        layout(screen: screen, mode: mode, pillCenter: pillCenter).frame
+    static func panelFrame(
+        screen: NotchScreenInfo, mode: NotchPanelMode, pillCenter: CGPoint? = nil, chipCount: Int = 0
+    ) -> CGRect {
+        layout(screen: screen, mode: mode, pillCenter: pillCenter, chipCount: chipCount).frame
     }
 
     /// Mit Notch: Oben deckt ein schwarzes Band genau die Aussparung (sie ist
@@ -146,7 +149,16 @@ enum NotchGeometry {
     /// bleibt frei. Ohne Notch sitzt eine Pille um `pillCenter` (ohne Angabe
     /// oben mittig unter der Menüleiste); Alarm und Liste wachsen aus ihr,
     /// in der unteren Bildschirmhälfte nach oben (`NotchPillPlacement`).
-    static func layout(screen: NotchScreenInfo, mode: NotchPanelMode, pillCenter: CGPoint? = nil) -> NotchLayout {
+    ///
+    /// An einer Kamera-Insel (`NotchScreenInfo.cutout`) gilt
+    /// `NotchIslandGeometry.layout`: Kapsel um die Kamera, Zähler daneben
+    /// (`chipCount`), der Körper unter der Menüleiste.
+    static func layout(
+        screen: NotchScreenInfo, mode: NotchPanelMode, pillCenter: CGPoint? = nil, chipCount: Int = 0
+    ) -> NotchLayout {
+        if screen.hasIsland {
+            return NotchIslandGeometry.layout(screen: screen, mode: mode, chipCount: chipCount)
+        }
         if screen.hasNotch {
             let bandHeight = screen.safeAreaTop
             let notchWidth = screen.notchWidth
@@ -193,9 +205,14 @@ enum NotchGeometry {
     /// Bereich der Menüleiste neben der Notch, den die Anzeige nicht berühren
     /// darf (links und rechts der Aussparung). Ohne Notch die ganze Leiste.
     static func menuBarItemAreas(screen: NotchScreenInfo) -> [CGRect] {
-        let menuBarHeight = screen.hasNotch
-            ? screen.safeAreaTop
-            : max(0, screen.frame.maxY - screen.visibleFrame.maxY)
+        let menuBarHeight: CGFloat
+        if screen.hasIsland {
+            menuBarHeight = NotchIslandGeometry.bodyTop(screen)
+        } else if screen.hasNotch {
+            menuBarHeight = screen.safeAreaTop
+        } else {
+            menuBarHeight = max(0, screen.frame.maxY - screen.visibleFrame.maxY)
+        }
         let bar = CGRect(
             x: screen.frame.minX, y: screen.frame.maxY - menuBarHeight,
             width: screen.frame.width, height: menuBarHeight)

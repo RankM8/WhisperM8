@@ -940,7 +940,8 @@ class OverlayController: ObservableObject {
         // liegt auf der Aussparung, sein Rahmen reichte neben der Notch in
         // die Menüleiste (Treffer- und Hover-Fläche).
         var swiftUIFrame = reportedFrame
-        if case .notch(_, let bandHeight) = presentation {
+        if presentation.isNotch {
+            let bandHeight = presentation.bandHeight
             swiftUIFrame.origin.y += bandHeight
             swiftUIFrame.size.height -= bandHeight
         }

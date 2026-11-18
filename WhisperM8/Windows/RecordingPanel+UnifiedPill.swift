@@ -13,10 +13,25 @@ enum OverlayPresentation: Equatable {
     /// Vereinte Pille an der Notch: schwarz, die Zeile hängt unter der
     /// Aussparung, nicht verschiebbar.
     case notch(width: CGFloat, height: CGFloat)
+    /// Vereinte Pille an einer Kamera-Insel (Dynamic Island): Die Zeile hängt
+    /// an einem schmalen Hals um die Kamera unter der Menüleiste.
+    case island(NotchIslandBand)
 
+    /// An der Hardware (Notch oder Kamera-Insel): schwarz, nicht verschiebbar.
     var isNotch: Bool {
-        if case .notch = self { return true }
-        return false
+        switch self {
+        case .notch, .island: return true
+        case .classic, .pill: return false
+        }
+    }
+
+    /// Höhe des Bands über der Zeile (0 ohne Notch).
+    var bandHeight: CGFloat {
+        switch self {
+        case .notch(_, let height): return height
+        case .island(let band): return band.neckHeight
+        case .classic, .pill: return 0
+        }
     }
 
     var isUnified: Bool { self != .classic }
@@ -120,7 +135,9 @@ extension OverlayController {
         let panel: RecordingPanel
         switch placement {
         case .notch(let screen):
-            presentation = .notch(width: screen.notchWidth, height: screen.safeAreaTop)
+            presentation = screen.hasIsland
+                ? .island(NotchIslandGeometry.band(screen: screen))
+                : .notch(width: screen.notchWidth, height: screen.safeAreaTop)
             let frame = UnifiedPillGeometry.notchDictationPanelFrame(
                 screen: screen, panelWidth: OverlayFrameResolver.panelSize.width)
             panel = RecordingPanel(initialOrigin: frame.origin, size: frame.size)

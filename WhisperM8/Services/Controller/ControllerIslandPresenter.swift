@@ -67,8 +67,11 @@ enum ControllerIslandGeometry {
             // Bildschirm.
             let centered = screen.notchCenterX - bodySize.width / 2
             let x = max(screen.frame.minX, min(centered, screen.frame.maxX - bodySize.width))
+            // An einer Kamera-Insel beginnt das Fenster an der Oberkante der
+            // Kapsel, nicht an der Bildschirmkante.
+            let top = screen.hasIsland ? NotchIslandGeometry.windowTop(screen) : screen.frame.maxY
             return CGRect(
-                x: x, y: screen.frame.maxY - bodySize.height,
+                x: x, y: top - bodySize.height,
                 width: bodySize.width, height: bodySize.height)
         }
         let center = pillCenter(screen: screen, stored: stored, visible: visiblePill)
@@ -91,7 +94,11 @@ enum ControllerIslandGeometry {
     }
 
     static func style(for screen: NotchScreenInfo) -> ControllerIslandDisplay.Style {
-        screen.hasNotch ? .notch(width: screen.notchWidth, height: screen.safeAreaTop) : .pill
+        switch screen.cutout {
+        case .none: return .pill
+        case .notch: return .notch(width: screen.notchWidth, height: screen.safeAreaTop)
+        case .island: return .island(NotchIslandGeometry.band(screen: screen))
+        }
     }
 }
 
@@ -183,7 +190,7 @@ final class ControllerIslandPresenter: ControllerIslandPresenting {
     private func logShown(_ model: ControllerIslandModel, screen: NotchScreenInfo, frame: CGRect) {
         let current = generation
         let layer = String(describing: model.layer)
-        let style = screen.hasNotch ? "notch" : "pill"
+        let style = screen.hasIsland ? "island" : (screen.hasNotch ? "notch" : "pill")
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.animationDuration + 0.05) { [weak self] in
             guard let self, let panel = self.panel, self.generation == current else { return }
             let visible = panel.occlusionState.contains(.visible)

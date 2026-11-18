@@ -7,6 +7,10 @@ struct NotchDisplay: Equatable {
     enum Style: Equatable {
         /// An der Notch: schwarz, bündig an der Oberkante.
         case notch(width: CGFloat, height: CGFloat)
+        /// An einer Kamera-Insel (Dynamic Island): schwarze Kapsel um die
+        /// Kamera, Zähler links und rechts daneben, alles Breitere hängt
+        /// unter der Menüleiste (`NotchIslandGeometry`).
+        case island(NotchIslandBand)
         /// Ohne Notch: Pille im dunklen Glas der Diktat-Pille, immer dunkel,
         /// verschiebbar.
         case pill
@@ -23,10 +27,19 @@ struct NotchDisplay: Equatable {
     /// Mit der Tastatur markierte Zeile (Hotkey „Statusliste öffnen“).
     var selectedRowID: UUID?
 
+    /// An der Hardware (Notch oder Kamera-Insel): schwarz, nicht verschiebbar.
     var isNotch: Bool {
-        if case .notch = style { return true }
-        return false
+        if case .pill = style { return false }
+        return true
     }
+
+    var islandBand: NotchIslandBand? {
+        if case .island(let band) = style { return band }
+        return nil
+    }
+
+    /// Ruhe: weder Liste noch Hinweis.
+    var isCompact: Bool { !isExpanded && alert == nil }
 }
 
 /// Farben der Anzeige. Immer dunkel: An der Notch ist die Hardware schwarz
@@ -129,6 +142,12 @@ struct NotchStatusView: View {
                 bandWidth: notchWidth, bandHeight: notchHeight,
                 bottomRadius: display.isExpanded ? 18 : 11))
         }
+        if let band = display.islandBand {
+            return AnyShape(NotchHangingShape(
+                bandWidth: band.width, bandHeight: display.isCompact ? band.capsuleHeight : band.neckHeight,
+                bottomRadius: display.isExpanded ? 18 : 11,
+                topRadius: band.topRadius, bandOffset: band.centerOffset))
+        }
         if display.isExpanded {
             return AnyShape(RoundedRectangle(cornerRadius: PillGlass.cornerRadius, style: .continuous))
         }
@@ -148,6 +167,21 @@ struct NotchStatusView: View {
                     .padding(.horizontal, 12)
                     .frame(maxWidth: .infinity)
                     .frame(height: NotchGeometry.chinHeight)
+            }
+        case .island(let band):
+            VStack(spacing: 0) {
+                // Die Zähler stehen neben der Kamera und bleiben dort, auch
+                // wenn darunter Hinweis oder Liste hängen.
+                NotchIslandChipsRow(band: band, summary: display.summary)
+                    .frame(
+                        maxWidth: .infinity,
+                        minHeight: display.isCompact ? band.capsuleHeight : band.neckHeight, alignment: .top)
+                if let alert = display.alert, !display.isExpanded {
+                    NotchAlertLabel(alert: alert, palette: palette)
+                        .padding(.horizontal, 14)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: NotchGeometry.chinHeight)
+                }
             }
         case .pill:
             headerRow
@@ -236,15 +270,28 @@ struct NotchHangingShape: Shape {
     var bandWidth: CGFloat
     var bandHeight: CGFloat
     var bottomRadius: CGFloat
+    /// Kamera-Insel: Das Band schwebt unter der Oberkante, seine oberen Ecken
+    /// sind rund; ohne Körper ist es eine Kapsel. 0 an der Notch.
+    var topRadius: CGFloat = 0
+    /// Kamera-Insel: Versatz der Bandmitte gegen die Mitte (Zähler nur auf
+    /// einer Seite der Kamera).
+    var bandOffset: CGFloat = 0
 
     /// Der untere Radius gleitet mit (Notch-Anzeige auf und zu, Diktat-Zeile
-    /// aus dem Ruhebild und zurück), statt am Anfang zu springen.
-    var animatableData: CGFloat {
-        get { bottomRadius }
-        set { bottomRadius = newValue }
+    /// aus dem Ruhebild und zurück), statt am Anfang zu springen. An der Insel
+    /// gleitet auch das Band (Kapsel mit Zählern wird zum schmalen Hals).
+    var animatableData: AnimatablePair<AnimatablePair<CGFloat, CGFloat>, AnimatablePair<CGFloat, CGFloat>> {
+        get { AnimatablePair(AnimatablePair(bottomRadius, bandOffset), AnimatablePair(bandWidth, bandHeight)) }
+        set {
+            bottomRadius = newValue.first.first
+            bandOffset = newValue.first.second
+            bandWidth = newValue.second.first
+            bandHeight = newValue.second.second
+        }
     }
 
     func path(in rect: CGRect) -> Path {
+        if topRadius > 0 { return islandPath(in: rect) }
         let width = rect.width
         let bandW = min(bandWidth, width)
         let bandH = min(bandHeight, rect.height)
@@ -277,6 +324,49 @@ struct NotchHangingShape: Shape {
         corner(&path, CGPoint(x: minX, y: maxY), CGPoint(x: minX, y: bodyTop), bottom)
         corner(&path, CGPoint(x: minX, y: bodyTop), CGPoint(x: bandMinX, y: bodyTop), top)
         corner(&path, CGPoint(x: bandMinX, y: bodyTop), CGPoint(x: bandMinX, y: minY), fillet)
+        path.closeSubpath()
+        return path
+    }
+
+    /// Kamera-Insel: Das Band beginnt mit runden Ecken (obere Hälfte der
+    /// Kapsel). Ohne Körper schließt es unten genauso rund, mit Körper läuft
+    /// es gerade hinunter und geht mit Hohlkehlen in ihn über.
+    private func islandPath(in rect: CGRect) -> Path {
+        let bandW = min(bandWidth, rect.width)
+        let bandH = min(bandHeight, rect.height)
+        let bodyH = rect.height - bandH
+        let minX = rect.minX, maxX = rect.maxX, minY = rect.minY, maxY = rect.maxY
+        let bandMinX = min(max(minX, rect.midX + bandOffset - bandW / 2), maxX - bandW)
+        let bandMaxX = bandMinX + bandW
+        let bodyTop = minY + bandH
+
+        guard bodyH >= 0.5 else {
+            let band = CGRect(x: bandMinX, y: minY, width: bandW, height: bandH)
+            return Path(roundedRect: band, cornerRadius: min(topRadius, bandH / 2, bandW / 2))
+        }
+
+        let crown = max(0, min(topRadius, bandH, bandW / 2))
+        let bottom = max(0, min(bottomRadius, bodyH / 2, rect.width / 2))
+        func radii(side: CGFloat) -> (fillet: CGFloat, top: CGFloat) {
+            let fillet = max(0, min(6, side / 2, bandH - crown))
+            return (fillet, max(0, min(8, side - fillet, bodyH - bottom)))
+        }
+        let left = radii(side: bandMinX - minX), right = radii(side: maxX - bandMaxX)
+
+        var path = Path()
+        path.move(to: CGPoint(x: bandMinX + crown, y: minY))
+        corner(&path, CGPoint(x: bandMaxX, y: minY), CGPoint(x: bandMaxX, y: bodyTop), crown)
+        if maxX - bandMaxX >= 0.5 {
+            corner(&path, CGPoint(x: bandMaxX, y: bodyTop), CGPoint(x: maxX, y: bodyTop), right.fillet)
+            corner(&path, CGPoint(x: maxX, y: bodyTop), CGPoint(x: maxX, y: maxY), right.top)
+        }
+        corner(&path, CGPoint(x: maxX, y: maxY), CGPoint(x: minX, y: maxY), bottom)
+        corner(&path, CGPoint(x: minX, y: maxY), CGPoint(x: minX, y: bodyTop), bottom)
+        if bandMinX - minX >= 0.5 {
+            corner(&path, CGPoint(x: minX, y: bodyTop), CGPoint(x: bandMinX, y: bodyTop), left.top)
+            corner(&path, CGPoint(x: bandMinX, y: bodyTop), CGPoint(x: bandMinX, y: minY), left.fillet)
+        }
+        corner(&path, CGPoint(x: bandMinX, y: minY), CGPoint(x: bandMaxX, y: minY), crown)
         path.closeSubpath()
         return path
     }
