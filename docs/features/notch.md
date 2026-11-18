@@ -282,9 +282,12 @@ ausgelöst, es dauert Sekunden, und eine laufende Aufnahme ohne Anzeige darf es
 nicht geben. In diesem einen Fall kann die Kapsel einen Menütitel verdecken
 und dort Klicks abfangen, wenn die Menüs der vorderen App bis dorthin reichen.
 
-Mit Berechtigung gilt: Ein Menü wird nie verdeckt. Fällt eine Nachmessung aus
-(die vordere App antwortet nicht), bleibt die Kapsel, wo die letzte gültige
-Messung sie hingestellt hat. Gibt es noch gar keine Messung (Statusanzeige
+Mit Berechtigung gilt: Die Kapsel steht nur dort, wo die Messung Platz belegt.
+Direkt nach einem App-Wechsel steht sie noch nach der alten Messung, bis die
+neue ankommt (einige Millisekunden). Fällt eine Nachmessung aus (die vordere
+App antwortet nicht), bleibt die Kapsel, wo die letzte gültige Messung sie
+hingestellt hat; reichen die Menüs der neuen App weiter, kann sie so lange
+einen Menütitel verdecken. Gibt es noch gar keine Messung (Statusanzeige
 aus), zeigt das Fenster bis zu 0,3 s nur die Insel und wartet auf sie; kommt
 keine, oder ist auf keiner Seite Platz, hängt das Diktat wie früher an einem
 Hals unter der Menüleiste. Während des Diktats wird bei jedem App- und

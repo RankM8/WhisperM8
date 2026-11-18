@@ -228,7 +228,8 @@ extension OverlayController {
         islandReserve = nil
         islandOccupancy = nil
         islandParts = [:]
-        islandViewFrame = nil
+        // `islandViewFrame` bleibt: Die Ansicht meldet ihren Rahmen schon beim
+        // Einbau des Fensters, also vor diesem Aufruf.
         islandAwaitTask?.cancel()
         islandAwaitTask = nil
         islandAwaitsMeasurement = false
