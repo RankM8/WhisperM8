@@ -1,6 +1,6 @@
 ---
 status: aktiv
-updated: 2026-10-22
+updated: 2026-11-18
 ---
 
 # Terminal
@@ -72,6 +72,77 @@ an das PTY und verschluckt das Original-Event, damit Sidebar oder Tab-Strip
 nicht mitschrollen. Im normalen Buffer lässt er das Event an SwiftTerm durch.
 Der Repo-Code belegt nur das Senden dieser Bytes; die Reaktion darauf ist
 externes Laufzeitverhalten der jeweiligen TUI.
+
+## Touch-Display (WM8-136)
+
+Auf einem Mac mit Touch-Display scrollt ein Finger den Verlauf, statt Text zu
+markieren. `TerminalTouchGestures` hängt dafür zwei Erkenner an das Terminal,
+die nur direkte Touches sehen (`buttonMask = 0`, `allowedTouchTypes = .direct`):
+
+- **Sofort wischen** scrollt, mit Schwung nach dem Loslassen (Abbremsung
+  0,998 je Millisekunde wie bei `NSScrollView`). Der Weg geht dorthin, wo das
+  Trackpad hinginge: normaler Puffer in den eigenen Verlauf, Alternate Buffer
+  als SGR-Mausrad an die TUI (wie `TerminalScrollGuard`), normaler Puffer mit
+  Maus-Reporting als Mausrad-Knöpfe 4/5 (wie SwiftTerms `scrollWheel`).
+- **Erst halten (ab 0,35 s), dann ziehen** markiert. Die Erkennung schickt dazu
+  nachgebildete Mausereignisse über `NSApp.sendEvent`, also SwiftTerms eigene
+  Markierung samt Rand-Auto-Scroll; Kopieren wie gewohnt mit Cmd+C. Ein
+  Langdruck-Erkenner sichert das ab, falls der Pan nach längerem Halten nicht
+  mehr anspringt (ungemessen); Halten allein markiert nichts.
+  Hat eine TUI Maus-Reporting an, geht das Ziehen wie bei der Maus an die TUI;
+  die Shift-Umgehung der Maus gibt es für den Finger nicht.
+- Die Scrollleiste bleibt beim System: Ein nachgebildeter Klick dort hielte
+  die App in der Tracking-Schleife des Scrollers fest, bis ein echtes
+  Loslassen käme. Schwung endet bei Trackpad, Mausrad, Mausklick, Taste, neuem
+  Finger und wenn das Terminal das Fenster verlässt.
+- **Tippen** wird ein Klick (Fokus, Auswahl aufheben); zwei- bzw. dreimal
+  schnell tippen markiert Wort bzw. Zeile. Ein Tipper in laufenden Schwung hält
+  ihn nur an.
+
+Maus, Trackpad und Tastatur laufen unverändert über `mouseDown`, `scrollWheel`
+und `keyDown`; die Erkenner sehen sie nicht und verzögern nichts (Test
+`TerminalTouchScrollingTests`). Kosten: nichts pro Byte oder Zeile; ein
+Display-Link läuft nur, solange der Schwung ausläuft. Diagnose:
+`log stream --predicate 'subsystem == "com.whisperm8.app" AND category == "touch"' --level debug`
+zeigt je Geste die erkannte Absicht und die Ruhezeit.
+
+**Messung am 18.11.2026** (MacBook Pro mit Touch-Display, macOS 27.2.1 Build
+26B8132, App mit SDK 26.2 gebaut) mit einem eigenen Messfenster:
+
+- Eine `NSView`, die Maus selbst behandelt (wie das Terminal), bekommt einen
+  Finger-Wisch als `mouseDown` plus `mouseDragged` (Subtyp 0, Druck 1,0), auch
+  wenn der Finger sofort losläuft. Ein Scroll-Ereignis kommt nicht. Das ist der
+  Grund, warum der Finger bisher markierte.
+- Mit einem Pan-Erkenner (`buttonMask = 0`) kommt derselbe Wisch als Geste an
+  (`shouldReceiveTouch` mit Touch-Typ `direct`, dann `began/changed/ended`).
+  Es entstehen dann keine Mausereignisse mehr, auch Tippen wird kein Klick
+  mehr. Deshalb bildet die Erkennung den Klick selbst nach.
+- `NSScrollView` scrollt mit dem Finger von selbst (`isTouchScrollingEnabled`
+  ist an). Der Verlauf (`TranscriptTextView`) sitzt in einer `NSScrollView`.
+- Die nachgebildeten Mausereignisse laufen wie Apples eigene über
+  `NSApp.sendEvent`. Direkte Touches selbst sieht kein Ereignis-Monitor.
+- In zwei frühen Läufen kam in eigenen Ansichten gar nichts an, nur Knöpfe und
+  `NSScrollView` reagierten; der Unterschied zum dritten Lauf ist ungeklärt.
+- Die Laufzeit kennt `NSView.exclusiveGestureBehavior`,
+  `NSGestureRecognizer.isCancellableByScrollGesture`,
+  `NSPanGestureRecognizer.minimum/maximumNumberOfTouches` und
+  `NSScrollView.isTouchScrollingEnabled`; das SDK 26.2 kennt sie nicht.
+  Benutzt wird davon nichts.
+
+**Quellen** (geprüft 18.11.2026): HIG „Designing for macOS“, „Gestures“
+(Tabelle Touch-Display: ein Finger scrollt, halten öffnet das Kontextmenü,
+halten und ziehen zieht) und „Pointing devices“ (Stand 28.10.2026); AppKit
+„Adopting gesture recognizers in your app“ (Abschnitt „Add touch support to
+your custom tracking loop“ beschreibt genau dieses Muster),
+`NSPanGestureRecognizer.buttonMask` („Set this property to 0 … only direct
+touches“), TN3212 „Adopting gesture recognizers for Sidecar touch support“
+(direkte Touches nur über Gesture-Recognizer), `NSIsTouchNative` (für reine
+AppKit-Apps nicht nötig). Die 36-pt-Tippfläche steht in keiner HIG-Seite,
+nur in Apples Tech Talk 111468.
+
+**Nicht gebaut:** Pinch für die Schriftgröße — das Terminal hat keine
+einstellbare Schriftgröße, Pinch bräuchte eine neue Einstellung samt
+Bedienweg. Langes Drücken ohne Ziehen öffnet noch kein Kontextmenü (Paket 3).
 
 ## Keyboard-Profile
 
@@ -150,6 +221,7 @@ damit tote PTYs nicht weiter jedes App-Event durchlaufen.
 ## Schlüsseldateien
 
 - `WhisperM8/Views/AgentTerminalView.swift` enthält SwiftTerm-View, Registry, Controller, Keyboard-Profile, Shortcut-Handler, Scroll-Guard, Link-Ausführung und Datei-Drop.
+- `WhisperM8/Views/TerminalTouchGestures.swift` (Erkenner, Schwung, nachgebildete Mausereignisse), `WhisperM8/Views/TerminalTouchScrolling.swift` (reine Logik) und `WhisperM8/Views/AgentTerminalController+Touch.swift` (Ziel des Scrolls) bedienen das Terminal per Finger.
 - `WhisperM8/Views/AgentTerminalPalette.swift` definiert die Light-/Dark-Terminalpaletten und ANSI-16-Farben.
 - `WhisperM8/Views/AgentTerminalLinkInterceptor.swift` proxied SwiftTerms `terminalDelegate` und fängt nur Link-Klicks ab.
 - `WhisperM8/Views/TerminalLinkResolver.swift` entscheidet pure und getestet, ob ein Terminal-Link als Web-URL, Editor-Datei, Datei, Ordner, Finder-Reveal, Not-Found oder Reject behandelt wird.
@@ -175,7 +247,10 @@ Mouse-Reporting, `AgentTerminalView`, `AgentTerminalController`,
 CPU-Monitoring, RAM-Monitoring, RSS, RAM Share, Prozessbaum, Root-PID,
 `/bin/ps`, `hw.memsize`, `AgentResourceMonitor`,
 `AgentResourceSummaryButton`, 10-Sekunden-Polling, 2-Sekunden-Polling,
-inaktives Fenster, Pipe-Drain, `waitUntilExit()`, Child-Deadlock.
+inaktives Fenster, Pipe-Drain, `waitUntilExit()`, Child-Deadlock,
+Touch-Display, Finger scrollen, Touch-Scroll, Schwung, Momentum,
+`NSPanGestureRecognizer`, `buttonMask`, `TerminalTouchGestures`,
+`TerminalTouchIntent`, `TerminalTouchMomentum`.
 
 ## Betriebswissen aus CLAUDE.md
 
