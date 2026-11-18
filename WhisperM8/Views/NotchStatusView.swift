@@ -38,6 +38,20 @@ struct NotchDisplay: Equatable {
         return true
     }
 
+    /// Was die Anzeige gerade sagt, für VoiceOver (Kopfzeile und Fenster):
+    /// der Hinweis, dann die Zähler.
+    var accessibilitySummary: String {
+        var parts: [String] = []
+        if summary.working > 0 { parts.append(String(localized: "\(summary.working) working")) }
+        if summary.waiting > 0 { parts.append(String(localized: "\(summary.waiting) waiting for you")) }
+        if summary.errored > 0 { parts.append(String(localized: "\(summary.errored) with an error")) }
+        if summary.freshDone > 0 { parts.append(String(localized: "\(summary.freshDone) just finished")) }
+        if let alert, !isExpanded {
+            parts.insert("\(alert.title), \(NotchAlertLabel.word(for: alert.kind))", at: 0)
+        }
+        return parts.isEmpty ? String(localized: "No active chats") : parts.joined(separator: ", ")
+    }
+
     /// Kamera-Insel: Unter der Menüleiste hängt etwas (Hinweis oder Liste).
     /// In Ruhe steht nur die Kapsel in der Leiste.
     var hasIslandBody: Bool { alert != nil || isExpanded }
@@ -213,19 +227,7 @@ struct NotchStatusView: View {
         NotchHeaderRow(display: display)
     }
 
-    private var headerAccessibilityLabel: Text {
-        var parts: [String] = []
-        let summary = display.summary
-        if summary.working > 0 { parts.append(String(localized: "\(summary.working) working")) }
-        if summary.waiting > 0 { parts.append(String(localized: "\(summary.waiting) waiting for you")) }
-        if summary.errored > 0 { parts.append(String(localized: "\(summary.errored) with an error")) }
-        if summary.freshDone > 0 { parts.append(String(localized: "\(summary.freshDone) just finished")) }
-        if let alert = display.alert, !display.isExpanded {
-            parts.insert("\(alert.title), \(NotchAlertLabel.word(for: alert.kind))", at: 0)
-        }
-        if parts.isEmpty { return Text("No active chats") }
-        return Text(parts.joined(separator: ", "))
-    }
+    private var headerAccessibilityLabel: Text { Text(verbatim: display.accessibilitySummary) }
 }
 
 /// Zähler, im Alarm der Chat-Name mit den arbeitenden Chats davor: Kopfzeile

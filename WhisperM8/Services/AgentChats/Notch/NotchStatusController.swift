@@ -140,6 +140,9 @@ final class NotchSlot {
     var returnsFromDictation = false
     /// Kamera-Insel: Zeichen und Zahl, für die zuletzt gemessen wurde.
     var lastIslandSignal: NotchIslandSignal?
+    /// Kamera-Insel: Die Anzeige steht gerade in der Menüleiste (kompakt
+    /// oder minimal); dann wird regelmäßig nachgemessen.
+    var showsIslandInBar = false
 
     init(kind: NotchPlacement.Kind) {
         self.kind = kind
@@ -169,6 +172,8 @@ final class NotchStatusController {
     /// So lange bleibt die Anzeige nach „braucht dich" verbreitert.
     static let alertDuration: Duration = .seconds(4)
     static let throttleInterval: DispatchQueue.SchedulerTimeType.Stride = .milliseconds(300)
+    /// Abstand der Nachmessungen an der Kamera-Insel, solange dort etwas steht.
+    static let islandRefreshInterval: Duration = .seconds(30)
 
     private let statusStore: AgentSessionRuntimeStatusStore
     private let activityStore: AgentSessionActivityStore
@@ -197,6 +202,7 @@ final class NotchStatusController {
     private var tickTask: Task<Void, Never>?
     private var hoverTask: Task<Void, Never>?
     var fullscreenRecheckTask: Task<Void, Never>?
+    var islandRefreshTask: Task<Void, Never>?
 
     /// Stelle, deren Liste offen ist (nur eine zugleich).
     var expandedKind: NotchPlacement.Kind?
@@ -371,6 +377,7 @@ final class NotchStatusController {
         expiryTask?.cancel(); expiryTask = nil
         hoverTask?.cancel(); hoverTask = nil
         fullscreenRecheckTask?.cancel(); fullscreenRecheckTask = nil
+        islandRefreshTask?.cancel(); islandRefreshTask = nil
         fullscreenGeneration += 1
         collapse(rebuildAfter: false)
         alert = nil
@@ -386,6 +393,7 @@ final class NotchStatusController {
             slot.isFullscreenHidden = false
             slot.dragOrigin = nil
             slot.lastIslandSignal = nil
+            slot.showsIslandInBar = false
             slot.shrinkTask?.cancel()
             slot.shrinkTask = nil
             slot.panel?.orderOut(nil)
@@ -503,6 +511,9 @@ final class NotchStatusController {
 
     private func expand(_ kind: NotchPlacement.Kind, byHover: Bool) {
         guard config.isActive, !isExpanded else { return }
+        // Kamera-Insel: vor dem Aufklappen nachmessen, der Hals steht dann
+        // sicher neben keinem Menü.
+        if let screen = slots[kind]?.screen, screen.hasIsland { NotchIslandMonitor.shared.measure([screen]) }
         expandedKind = kind
         expandedByHover = byHover
         keyboardSelection = nil

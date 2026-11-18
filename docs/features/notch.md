@@ -376,13 +376,20 @@ Accessibility-Aufrufe) drei Dinge ab:
 - **Menüs der vorderen App:** die Rahmen der Einträge ihrer Menüleiste
   (`NSWorkspace.menuBarOwningApplication`), auch wenn sie rechts der Kamera
   weiterlaufen.
-- **Statussymbole:** Ein Treffer-Test an der Kamera nennt den Prozess, dem die
-  Insel gehört. Dessen Fenster in Höhe der Menüleiste enthält die
+- **Statussymbole:** Die Fensterliste (`CGWindowListCopyWindowInfo`) nennt
+  den Prozess, dem die Insel gehört: Besitzer des obersten bildschirmbreiten
+  Fensters an der Kamera. Dessen Fenster in Höhe der Menüleiste enthält die
   Statussymbole aller Apps mit ihren Rahmen.
 - **Apples Insel:** Zeigt sie etwas, hat ihr bildschirmgroßes Fenster ein Kind
   mit genau dem Rahmen ihrer Kapsel; in Ruhe hat es keins.
 
-Kein Prozessname, kein festes Maß. `NotchIslandGeometry.presentation` wählt
+Kein Prozessname, kein festes Maß. Das systemweite Accessibility-Element
+fasst die Messung nicht an: Ein Zeitlimit daran gälte für alle Aufrufe der
+App, auch für den Diktat-Kontext. Jede Anfrage hat ihr eigenes Zeitlimit
+(0,25 s je Element), die ganze Messung eine Frist von 0,5 s, und es läuft nie
+mehr als eine zugleich. Die Aufrufe liegen hinter einer austauschbaren Schicht
+(`NotchIslandAX`), damit Tests sie ersetzen können.
+`NotchIslandGeometry.presentation` wählt
 daraus die Stufe, `band` die Breite. Ohne Berechtigung für Bedienungshilfen
 oder wenn einer der drei Teile nicht zu ermitteln ist (anderer Aufbau in einer
 späteren macOS-Version), gibt es keine Messung: Die Anzeige zeigt in Ruhe
@@ -391,8 +398,10 @@ nichts, Hinweis, Liste und Diktat hängen am schmalen Hals.
 Gemessen wird nicht laufend, sondern zu Ereignissen, die es ohnehin gibt
 (`NotchIslandMonitor`, kein eigener Beobachter): bei App- und Space-Wechsel
 zusammen mit der Vollbild-Prüfung (und 0,9 s später noch einmal), wenn sich
-Zeichen oder Zahl ändern, und wenn das Diktat erscheint oder geht (dann einige
-Male nachgemessen, weil Apples Insel ihre Breite erst nach und nach ändert).
+Zeichen oder Zahl ändern, alle 30 s, solange kompakt oder minimal etwas in der
+Menüleiste steht, beim Klick auf die Kapsel vor dem Aufklappen, und wenn das
+Diktat erscheint oder geht (dann einige Male nachgemessen, weil Apples Insel
+ihre Breite erst nach und nach ändert).
 
 ### Wie die Insel erkannt wird
 
@@ -426,15 +435,17 @@ Sicherheitsrand.
 
 ### Kosten
 
-Keine neuen Beobachter des Systems, keine Timer im Ruhezustand, keine
-zusätzlichen Fenster. Die Insel-Geometrie ist reine Rechnung beim Zeichnen
+Keine neuen Beobachter des Systems, keine zusätzlichen Fenster. Ein Takt
+läuft nur, solange an einer Kamera-Insel etwas in der Menüleiste steht: alle
+30 s eine Messung. Die Insel-Geometrie ist reine Rechnung beim Zeichnen
 eines neuen Zustands, wie an der Notch.
 
 Neu ist die Messung: rund 60 kurze Accessibility-Anfragen an die vordere App
 und an den Prozess der Insel, gemessen 5 bis 27 ms, abseits des Main Threads
 mit niedriger Priorität und 0,25 s Zeitlimit je Anfrage. Sie läuft nur auf
 Bildschirmen mit Kamera-Insel und nur zu den oben genannten Ereignissen, also
-bei jedem App-Wechsel zweimal. Die Form (`NotchHangingShape`) hat vier
+bei jedem App-Wechsel zweimal und sonst höchstens alle 30 s; dazu liest sie
+einmal die Fensterliste (einige Millisekunden). Die Form (`NotchHangingShape`) hat vier
 animierte Werte statt einem (unterer Radius, Höhe, Breite und Lage des
 Bands); das wirkt nur während der 0,2 bis 0,35 s eines Zustandswechsels.
 
@@ -620,7 +631,7 @@ AgentSessionActivityStore (statusSince; Stand-Zeile nur       │
 | `Services/AgentChats/Notch/NotchStatusModel.swift` | Rein: Zeilen, Sortierung, Zähler, Abschnitte, Sichtbarkeit, `NotchAlertTracker` |
 | `Services/AgentChats/Notch/NotchGeometry.swift` | Rein: Bildschirmwahl, Notch-Maße, Fenster-Rahmen je Zustand, Vollbild-Erkennung |
 | `Services/AgentChats/Notch/NotchIslandGeometry.swift` | Rein: Notch oder Kamera-Insel (`cutout`), Zeichen und Zahl (`NotchIslandSignal`), Stufe aus der Messung (`presentation`), Band und Rahmen je Zustand |
-| `Services/AgentChats/Notch/NotchIslandProbe.swift` | Messung der Menüleiste über die Bedienungshilfen (`NotchIslandProbe`) und letzter Stand je Bildschirm (`NotchIslandMonitor`) |
+| `Services/AgentChats/Notch/NotchIslandProbe.swift` | Messung der Menüleiste über die Bedienungshilfen (`NotchIslandProbe`, Aufrufe hinter `NotchIslandAX`) und letzter Stand je Bildschirm (`NotchIslandMonitor`) |
 | `Services/AgentChats/Notch/NotchPillPlacement.swift` | Rein: Stellen der Anzeige (Notch, Pille), gemerkte Lage, Öffnungsrichtung, Begrenzung auf den Bildschirm; auch für die Dynamic Island des Controllers |
 | `Services/AgentChats/Notch/NotchStatusController.swift` | AppKit-Seite: Beobachter, Klick-daneben, Hotkey, Einstellungen, Aufklappen |
 | `Services/AgentChats/Notch/NotchStatusController+Placements.swift` | Je Stelle ein Fenster (`NotchSlot`), Bildschirm des Agent-Chats-Fensters, Vollbild, Ziehen und Zurücksetzen der Pille |
@@ -769,6 +780,11 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   auch bei ausgeblendeter; Diktat und Controller-Insel hängen an der Kapsel; Vollbild mit
   beiden Kanten; Form als Kapsel bzw. Hals mit Körper; Notch-Rahmen,
   Notch-Form und Vollbild an der Notch unverändert.
+- `NotchIslandProbeTests`: Messung mit einer Attrappe der
+  Accessibility-Schicht: Menüs und Statussymbole als Rahmen, was Apples Insel
+  zeigt, Prozess der Insel aus der Fensterliste (Mauszeiger und eigenes Fenster
+  zählen nicht), kein Ergebnis ohne Berechtigung oder ohne einen der Teile,
+  Frist; die Messung erzeugt kein systemweites Accessibility-Element.
 - `NotchConfigTests`: Standardwerte, Schalter und Kill-Switch.
 - `NotchPillPlacementTests`: welche Stellen bei Notch, externem Bildschirm und
   Agent-Chats-Fenster, gemerkte Lage hin und zurück, Begrenzung auf den
@@ -835,11 +851,11 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   Bedienungshilfen (die das Einfügen nach dem Diktat ohnehin verlangt). Ohne
   sie steht in der Menüleiste nichts; Hinweis und Liste (Hotkey) erscheinen
   trotzdem.
-- Gemessen wird zu Ereignissen, nicht laufend. Bekommt die vordere App ein
-  Menü dazu, erscheint ein Statussymbol oder beginnt Apples Insel etwas zu
-  zeigen, ohne dass App oder Space wechseln, gilt der alte Stand bis zum
-  nächsten Ereignis. Apples Insel liegt dann über unserer Kapsel und verdeckt
-  Zeichen und Zahl so lange.
+- Gemessen wird zu Ereignissen und alle 30 s, nicht laufend. Bekommt die
+  vordere App ein Menü dazu, erscheint ein Statussymbol oder beginnt Apples
+  Insel etwas zu zeigen, ohne dass App oder Space wechseln, gilt der alte
+  Stand bis zu 30 s weiter. Apples Insel liegt dann über unserer Kapsel und
+  verdeckt Zeichen und Zahl so lange.
 - Die Messung stützt sich auf den Aufbau der Menüleiste unter macOS 27 (ein
   Prozess führt Insel und Statussymbole). Ändert Apple das, liefert sie
   nichts und die Anzeige bleibt aus der Menüleiste heraus, bis der Code

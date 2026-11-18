@@ -38,6 +38,27 @@ extension NotchStatusController {
             }
             render(slot, screen: placement.screen, rows: rows, summary: summary, sections: sections)
         }
+        updateIslandRefresh()
+    }
+
+    /// Solange an einer Kamera-Insel etwas in der Menüleiste steht, alle 30 s
+    /// nachmessen: Ein neues Menü oder Statussymbol wäre sonst bis zum
+    /// nächsten App-Wechsel verdeckt. Kein Takt, wenn dort nichts steht.
+    private func updateIslandRefresh() {
+        let screens = slots.values.filter(\.showsIslandInBar).compactMap(\.screen)
+        guard !screens.isEmpty else {
+            islandRefreshTask?.cancel()
+            islandRefreshTask = nil
+            return
+        }
+        guard islandRefreshTask == nil else { return }
+        islandRefreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.islandRefreshInterval)
+                guard !Task.isCancelled, let self else { return }
+                NotchIslandMonitor.shared.measure(self.slots.values.filter(\.showsIslandInBar).compactMap(\.screen))
+            }
+        }
     }
 
     private func render(
@@ -49,6 +70,7 @@ extension NotchStatusController {
         }
         let expandedHere = expandedKind == slot.kind
         let isPill = slot.kind == .pill
+        slot.showsIslandInBar = false
         // Kamera-Insel: In der Menüleiste steht nur, wofür die Messung Platz
         // belegt (kompakt, minimal oder nichts).
         let island = screen.hasIsland ? islandState(slot, screen: screen, summary: summary) : nil
@@ -75,6 +97,7 @@ extension NotchStatusController {
             selectedRowID: expandedHere ? keyboardSelection : nil,
             cameraOffset: island == nil || frame == island?.band.detachedFrame ? 0 : screen.notchCenterX - frame.midX)
 
+        slot.showsIslandInBar = island.map { $0.presentation != .hidden } ?? false
         let panel = ensurePanel(slot)
         // Ohne Notch ein Fensterschatten: Ein im Fenster gezeichneter Schatten
         // bräuchte einen Rand, der bei einer dauerhaft sichtbaren Pille Klicks
@@ -85,6 +108,8 @@ extension NotchStatusController {
         slot.shrinkTask = nil
         if display != slot.lastDisplay {
             slot.lastDisplay = display
+            // VoiceOver: Das Fenster nennt, was die Anzeige zeigt.
+            panel.setAccessibilityLabel(display.accessibilitySummary)
             if let island, island.band.detachedFrame == nil, !wasVisible, !display.hasIslandBody,
                !slot.returnsFromDictation,
                !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
@@ -179,6 +204,7 @@ extension NotchStatusController {
     }
 
     func hide(_ slot: NotchSlot) {
+        slot.showsIslandInBar = false
         slot.lastDisplay = nil
         slot.dragOrigin = nil
         slot.shrinkTask?.cancel()
@@ -353,7 +379,8 @@ extension NotchStatusController {
         return CGRect(origin: position, size: size)
     }
 
-    nonisolated private static func onScreenWindows() -> [NotchWindowSample] {
+    /// Sichtbare Fenster von vorn nach hinten (Quartz-Koordinaten).
+    nonisolated static func onScreenWindows() -> [NotchWindowSample] {
         let list = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
             as? [[String: Any]] ?? []
         return list.compactMap { info in
