@@ -40,7 +40,7 @@ struct NotchSettingsSection: View {
 
                 SettingsToggleRow(
                     title: "Open the list on hover",
-                    subtitle: "In addition to clicking. Off by default so the list does not pop open when the pointer passes by.",
+                    subtitle: "In addition to clicking. Off by default so the list does not pop open when the pointer passes by. Not at a camera island: there the list opens on a click only.",
                     isOn: $expandOnHover
                 )
 

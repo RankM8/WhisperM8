@@ -8,9 +8,9 @@ struct NotchDisplay: Equatable {
         /// An der Notch: schwarz, bündig an der Oberkante.
         case notch(width: CGFloat, height: CGFloat)
         /// An einer Kamera-Insel (Dynamic Island): schwarz. In Ruhe nur die
-        /// Kapsel um die Kamera, seitlich um Zeichen und Zahl verbreitert;
-        /// Hinweis und Liste hängen unter der Menüleiste
-        /// (`NotchIslandGeometry`).
+        /// Kapsel um die Kamera, seitlich um Zeichen und Zahl verbreitert
+        /// (`NotchIslandGeometry`); Hinweis und Liste sind die große Form
+        /// (`islandLarge`).
         case island(NotchIslandBand)
         /// Ohne Notch: Pille im dunklen Glas der Diktat-Pille, immer dunkel,
         /// verschiebbar.
@@ -31,6 +31,12 @@ struct NotchDisplay: Equatable {
     /// Ungleich 0, wenn das Band nur auf einer Seite einen Flügel hat und
     /// das Fenster genau so breit ist wie das Band.
     var cameraOffset: CGFloat = 0
+    /// Nur Kamera-Insel: Hinweis oder Liste als große Form
+    /// (`NotchIslandLargeStatusView`); `nil` in Ruhe.
+    var islandLarge: NotchIslandLargeDisplay?
+    /// Zweite Zeile des Hinweises in der großen Form (woran der Chat hängt
+    /// bzw. sein Projekt).
+    var alertDetail: String?
 
     /// An der Hardware (Notch oder Kamera-Insel): schwarz, nicht verschiebbar.
     var isNotch: Bool {
@@ -52,16 +58,12 @@ struct NotchDisplay: Equatable {
         return parts.isEmpty ? String(localized: "No active chats") : parts.joined(separator: ", ")
     }
 
-    /// Kamera-Insel: Unter der Menüleiste hängt etwas (Hinweis oder Liste).
-    /// In Ruhe steht nur die Kapsel in der Leiste.
-    var hasIslandBody: Bool { alert != nil || isExpanded }
-
     /// Höhe des Bands über der Zeile mit den Zählern (0 ohne Notch). An der
-    /// Insel in Ruhe die Kapsel, sonst der Hals bis unter die Menüleiste.
+    /// Insel die Kapsel in der Menüleiste.
     var bandHeight: CGFloat {
         switch style {
         case .notch(_, let height): return height
-        case .island(let band): return hasIslandBody ? band.neckHeight : band.capsuleHeight
+        case .island(let band): return band.capsuleHeight
         case .pill: return 0
         }
     }
@@ -110,7 +112,9 @@ struct NotchPalette {
 /// wechselt die Größe einmalig, die Inhalte blenden einmal ein.
 ///
 /// An der Notch füllt ein Band genau die Aussparung, der Inhalt hängt darunter
-/// (`NotchGeometry.layout`). Die Menüleiste neben der Notch bleibt frei.
+/// (`NotchGeometry.layout`). Die Menüleiste neben der Notch bleibt frei. An
+/// einer Kamera-Insel steht in Ruhe nur die Kapsel in der Menüleiste; Hinweis
+/// und Liste zeichnet `NotchIslandLargeStatusView` als eine große Form.
 struct NotchStatusView: View {
     let display: NotchDisplay
     var onToggle: () -> Void = {}
@@ -123,6 +127,16 @@ struct NotchStatusView: View {
     private var palette: NotchPalette { display.isNotch ? .notch : .pill }
 
     var body: some View {
+        if let large = display.islandLarge {
+            NotchIslandLargeStatusView(
+                display: display, large: large, onToggle: onToggle, onSelect: onSelect,
+                onTurnOff: onTurnOff, onHover: onHover)
+        } else {
+            standard
+        }
+    }
+
+    private var standard: some View {
         VStack(spacing: 0) {
             if display.isExpanded, display.opensUpward { list }
             Button(action: onToggle) {
@@ -169,10 +183,10 @@ struct NotchStatusView: View {
         }
         if case .island(let band) = display.style {
             // Neben Apples aktiver Insel: ein eigener kleiner Kreis.
-            if band.detachedFrame != nil, !display.hasIslandBody { return AnyShape(Capsule()) }
+            if band.detachedFrame != nil { return AnyShape(Capsule()) }
             return AnyShape(NotchHangingShape(
                 bandWidth: band.width, bandHeight: display.bandHeight,
-                bottomRadius: display.isExpanded ? 18 : 11, topRadius: band.topRadius,
+                bottomRadius: 11, topRadius: band.topRadius,
                 bandOffset: display.cameraOffset + band.centerOffset))
         }
         if display.isExpanded {
@@ -187,24 +201,14 @@ struct NotchStatusView: View {
     private var header: some View {
         switch display.style {
         case .island(let band):
-            VStack(spacing: 0) {
-                if band.detachedFrame != nil, !display.hasIslandBody {
-                    NotchIslandBandRow.glyph(NotchIslandSignal(summary: display.summary))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    // Die Kapsel um die Kamera mit Zeichen und Zahl daneben.
-                    NotchIslandBandRow(band: band, signal: NotchIslandSignal(summary: display.summary))
-                        .frame(height: band.capsuleHeight)
-                        .offset(x: display.cameraOffset + band.centerOffset)
-                }
-                if display.hasIslandBody {
-                    Color.clear.frame(height: max(0, band.neckHeight - band.capsuleHeight))
-                    headerRow
-                        .padding(.horizontal, 12)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: NotchGeometry.chinHeight)
-                        .transition(.opacity)
-                }
+            if band.detachedFrame != nil {
+                NotchIslandBandRow.glyph(NotchIslandSignal(summary: display.summary))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                // Die Kapsel um die Kamera mit Zeichen und Zahl daneben.
+                NotchIslandBandRow(band: band, signal: NotchIslandSignal(summary: display.summary))
+                    .frame(height: band.capsuleHeight)
+                    .offset(x: display.cameraOffset + band.centerOffset)
             }
         case .notch:
             VStack(spacing: 0) {
@@ -569,16 +573,20 @@ struct NotchAlertLabel: View {
         .accessibilityElement(children: .combine)
     }
 
-    private var status: AgentSessionRuntimeStatus {
-        switch alert.kind {
+    private var status: AgentSessionRuntimeStatus { Self.status(for: alert.kind) }
+
+    private var tint: Color { Self.tint(for: alert.kind, palette: palette) }
+
+    static func status(for kind: NotchAlertKind) -> AgentSessionRuntimeStatus {
+        switch kind {
         case .awaitingInput: return .awaitingInput
         case .errored: return .errored
         case .finished: return .idle
         }
     }
 
-    private var tint: Color {
-        switch alert.kind {
+    static func tint(for kind: NotchAlertKind, palette: NotchPalette) -> Color {
+        switch kind {
         case .awaitingInput: return palette.awaiting
         case .errored: return palette.error
         case .finished: return palette.secondary
@@ -609,6 +617,8 @@ struct NotchChatList: View {
     var turnOffHelp: String = String(localized: "Hides the chat status at the notch. Turn it back on in Settings or the menu bar.")
     /// Mit der Tastatur markierte Zeile.
     var selectedRowID: UUID?
+    /// Maße der Zeilen (große Form an der Kamera-Insel: `.islandLarge`).
+    var metrics: NotchListMetrics = .standard
 
     var body: some View {
         VStack(spacing: 0) {
@@ -618,14 +628,16 @@ struct NotchChatList: View {
                         ForEach(sections) { section in
                             sectionTitle(section.kind)
                             ForEach(section.rows) { row in
-                                NotchRowButton(row: row, palette: palette, isSelected: row.id == selectedRowID) {
+                                NotchRowButton(
+                                    row: row, palette: palette, isSelected: row.id == selectedRowID, metrics: metrics
+                                ) {
                                     onSelect(row.id)
                                 }
                                 .id(row.id)
                             }
                         }
                     }
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, metrics.listPadding)
                 }
                 .scrollIndicators(.hidden)
                 .onChange(of: selectedRowID) { _, id in
@@ -649,12 +661,12 @@ struct NotchChatList: View {
                 Spacer()
                 Text("Esc closes")
             }
-            .font(.system(size: 11))
+            .font(.system(size: metrics.footerSize))
             .foregroundStyle(palette.tertiary)
-            .padding(.horizontal, 16)
-            .frame(height: NotchGeometry.footerHeight)
+            .padding(.horizontal, metrics.listPadding + metrics.rowPadding)
+            .frame(height: metrics.footerHeight)
         }
-        .padding(.bottom, 4)
+        .padding(.bottom, metrics.bottomPadding)
     }
 
     private func sectionTitle(_ kind: NotchSectionKind) -> some View {
@@ -666,12 +678,12 @@ struct NotchChatList: View {
             case .ready: Text("Ready")
             }
         }
-        .font(.system(size: 11, weight: .semibold))
+        .font(.system(size: metrics.sectionSize, weight: .semibold))
         .textCase(.uppercase)
         .tracking(0.6)
         .foregroundStyle(palette.tertiary)
-        .padding(.horizontal, 8)
-        .frame(height: NotchGeometry.sectionHeaderHeight, alignment: .bottom)
+        .padding(.horizontal, metrics.rowPadding)
+        .frame(height: metrics.sectionTitleHeight, alignment: .bottom)
         .padding(.bottom, 2)
         .accessibilityAddTraits(.isHeader)
     }
@@ -681,45 +693,57 @@ struct NotchRowButton: View {
     let row: NotchRow
     let palette: NotchPalette
     var isSelected = false
+    var metrics: NotchListMetrics = .standard
     var action: () -> Void
 
     @State private var isHovering = false
 
     var body: some View {
         Button(action: action) {
-            HStack(alignment: .top, spacing: 10) {
-                NotchStatusDot(status: row.status, palette: palette)
-                    .padding(.top, 4)
-                VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: metrics.centersRow ? .center : .top, spacing: metrics.rowSpacing) {
+                NotchStatusDot(status: row.status, palette: palette, size: metrics.dotSize)
+                    .padding(.top, metrics.centersRow ? 0 : 4)
+                VStack(alignment: .leading, spacing: metrics.centersRow ? 3 : 2) {
                     Text(row.title)
-                        .font(.system(size: 12.5, weight: .semibold))
+                        .font(.system(size: metrics.titleSize, weight: .semibold))
                         .foregroundStyle(palette.text)
                         .lineLimit(1)
                     Text(row.activityLine ?? row.project ?? "")
-                        .font(.system(size: 11))
+                        .font(.system(size: metrics.detailSize))
                         .foregroundStyle(palette.secondary)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 8)
-                VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: .trailing, spacing: metrics.centersRow ? 3 : 2) {
                     Text(row.headline)
-                        .font(.system(size: 11))
+                        .font(.system(size: metrics.detailSize))
                         .foregroundStyle(palette.tertiary)
                         .lineLimit(1)
                     if row.activityLine != nil, let project = row.project {
                         Text(project)
-                            .font(.system(size: 11))
+                            .font(.system(size: metrics.detailSize))
                             .foregroundStyle(palette.tertiary)
                             .lineLimit(1)
                     }
                 }
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .frame(height: NotchGeometry.rowHeight, alignment: .top)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(background))
+            .padding(.horizontal, metrics.rowPadding)
+            .padding(.vertical, metrics.centersRow ? 0 : 6)
+            .frame(height: metrics.rowHeight, alignment: metrics.centersRow ? .center : .top)
+            .background {
+                // Große Zeilen: 1 pt Luft, damit zwei gefärbte Felder
+                // untereinander nicht zusammenlaufen.
+                RoundedRectangle(cornerRadius: metrics.rowRadius)
+                    .fill(background)
+                    .padding(.vertical, metrics.centersRow ? 1 : 0)
+            }
+            .overlay {
+                if isSelected, metrics.outlinesSelection {
+                    RoundedRectangle(cornerRadius: metrics.rowRadius, style: .continuous)
+                        .strokeBorder(palette.text.opacity(0.7), lineWidth: 2)
+                        .padding(.vertical, 1)
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

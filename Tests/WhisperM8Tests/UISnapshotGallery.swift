@@ -367,7 +367,7 @@ final class UISnapshotGallery: XCTestCase {
             + Self.controllerFixtures() + Self.controllerXboxFixtures() + Self.controllerMenuCardFixtures() + Self.gridFixtures() + Self.dictationPillFixtures()
             + Self.unifiedPillFixtures() + Self.pillMorphFixtures() + Self.noticeBannerFixtures() + Self.workingCopyFixtures()
             + Self.usageLimitFixtures() + Self.ticketSettingsFixtures() + Self.ticketBoardFixtures() + Self.boardChatFixtures() + Self.restartSettingsFixtures() + Self.scheduledTasksSettingsFixtures() + Self.scheduledTasksViewFixtures() + Self.scheduledTasksPinnedFixtures()
-            + Self.sidebarSortedFixtures() + Self.tabWidthFixtures() + Self.sidebarTabBarFixtures() + Self.notchIslandFixtures()
+            + Self.sidebarSortedFixtures() + Self.tabWidthFixtures() + Self.sidebarTabBarFixtures() + Self.notchIslandFixtures() + Self.islandLargeFixtures()
     }
 
     // MARK: - Lauf

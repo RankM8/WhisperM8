@@ -6191,6 +6191,16 @@
         }
       }
     },
+    "Improving…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbessert …"
+          }
+        }
+      }
+    },
     "In a chat that is scrolled up, %@ jumps to the end instead of sending Escape": {
       "localizations": {
         "de": {
@@ -8781,22 +8791,22 @@
         }
       }
     },
-    "In addition to clicking, only while you are not dictating.": {
+    "In addition to clicking, only while you are not dictating. Not at a camera island: there the list opens on a click only.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Zusätzlich zum Klick, nur wenn du gerade nicht diktierst."
+            "value": "Zusätzlich zum Klick, nur wenn du gerade nicht diktierst. Nicht an einer Kamera-Insel: Dort öffnet nur ein Klick die Liste."
           }
         }
       }
     },
-    "In addition to clicking. Off by default so the list does not pop open when the pointer passes by.": {
+    "In addition to clicking. Off by default so the list does not pop open when the pointer passes by. Not at a camera island: there the list opens on a click only.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Zusätzlich zum Klick. Standardmäßig aus, damit die Liste nicht aufgeht, wenn der Zeiger nur vorbeikommt."
+            "value": "Zusätzlich zum Klick. Standardmäßig aus, damit die Liste nicht aufgeht, wenn der Zeiger nur vorbeikommt. Nicht an einer Kamera-Insel: Dort öffnet nur ein Klick die Liste."
           }
         }
       }
@@ -20230,6 +20240,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Transkribiere …"
+          }
+        }
+      }
+    },
+    "Transcribing…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkribiert …"
           }
         }
       }

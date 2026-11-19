@@ -302,8 +302,9 @@ final class PillHitTestHostingView<Content: View>: NSHostingView<Content> {
         }
     }
     /// Kamera-Insel, kompakt: Die Ansicht reicht symmetrisch um die Kamera,
-    /// sichtbar und klickbar sind aber nur die Kapsel neben der Insel und die
-    /// aufgeklappten Knöpfe. Leer: der ganze `interactiveFrame` zählt.
+    /// sichtbar und klickbar ist aber nur die Kapsel neben der Insel bzw.
+    /// aufgeklappt die große Form. Gesetzt, zählen allein diese Flächen;
+    /// leer: der ganze `interactiveFrame`.
     private var interactiveParts: [NSRect] = []
 
     func setInteractiveParts(swiftUIFrames: [CGRect]) {
@@ -325,12 +326,17 @@ final class PillHitTestHostingView<Content: View>: NSHostingView<Content> {
     private var hoverArea: NSTrackingArea?
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        let local = convert(point, from: superview)
-        guard interactiveFrame.insetBy(dx: -2, dy: -2).contains(local) else { return nil }
-        if !interactiveParts.isEmpty, !interactiveParts.contains(where: { $0.insetBy(dx: -2, dy: -2).contains(local) }) {
-            return nil
-        }
+        guard takesClick(at: convert(point, from: superview)) else { return nil }
         return super.hitTest(point)
+    }
+
+    /// Ob ein Punkt (Koordinaten dieser Ansicht) in der Klickfläche liegt.
+    func takesClick(at local: NSPoint) -> Bool {
+        if !interactiveParts.isEmpty {
+            return interactiveParts.contains { $0.insetBy(dx: -2, dy: -2).contains(local) }
+        }
+        guard interactiveFrame.width > 0, interactiveFrame.height > 0 else { return false }
+        return interactiveFrame.insetBy(dx: -2, dy: -2).contains(local)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -500,18 +506,26 @@ class OverlayController: ObservableObject {
     /// `nil`: kein Platz (oder kein Insel-Bildschirm), das Diktat hängt dann
     /// unter der Menüleiste.
     @Published var islandCapsule: NotchIslandDictationCapsule?
-    /// Kamera-Insel: Die Bedienknöpfe sind per Klick aufgeklappt.
+    /// Kamera-Insel: Die große Form mit den Bedienknöpfen ist per Klick
+    /// aufgeklappt (`setIslandExpanded`).
     @Published var isIslandExpanded = false
+    /// Kamera-Insel: Maße der großen Form dieses Diktats (`nil` ohne Insel).
+    @Published var islandDictationForm: NotchIslandLargeForm?
+    /// Kamera-Insel: Beobachter für den Klick neben die offene große Form.
+    var islandDismissMonitors: [Any] = []
     /// Kamera-Insel: Platz, den die Kapsel Apples Insel in diesem Diktat lässt
     /// (wächst nur, damit die Kapsel nicht hin und her rückt).
     var islandReserve: (leading: CGFloat, trailing: CGFloat)?
     var islandOccupancy: NotchMenuBarOccupancy?
-    /// Kamera-Insel: gemeldeter Rahmen der aufgeklappten Knöpfe und der
-    /// ganzen Ansicht (SwiftUI-Koordinaten), für die Trefferflächen.
-    var islandParts: [String: CGRect] = [:]
+    /// Kamera-Insel: gemeldeter Rahmen der ganzen Ansicht
+    /// (SwiftUI-Koordinaten), für die Trefferflächen.
     var islandViewFrame: CGRect?
     /// Kamera-Insel: zuletzt gesetzte Trefferflächen (leer: die ganze Ansicht).
     var islandInteractiveParts: [CGRect] = []
+    /// Kamera-Insel: Fläche, über der das Fenster dem Mauszeiger folgt: die
+    /// Kapsel bzw. die offene Form, nicht die ganze Ansicht um die Kamera.
+    /// `nil`: die Ansicht als Ganzes (Ruhebild, Schnellaktion, andere Lagen).
+    var islandHoverFrame: CGRect?
     /// Kamera-Insel: Der Grund für die Form dieses Diktats steht schon im Log.
     var islandDecisionLogged = false
     var islandDecisionTask: Task<Void, Never>?
@@ -917,11 +931,18 @@ class OverlayController: ObservableObject {
 
     func captureScreenshot() {
         notePillAction()
+        // Kamera-Insel: Die große Form geht vor der Auswahl zu, damit sie
+        // nicht im Bild steht (wie beim Clip).
+        setIslandExpanded(false)
         onCaptureScreenshot?()
     }
 
     func toggleScreenClip() {
         notePillAction()
+        // Kamera-Insel: Ein Clip nimmt den Bildschirm auf; die große Form
+        // geht dafür zu (die Kapsel zeigt den Clip, ein Klick öffnet sie
+        // wieder zum Stoppen).
+        if !isScreenClipRecording { setIslandExpanded(false) }
         onToggleScreenClip?()
     }
 
@@ -981,13 +1002,24 @@ class OverlayController: ObservableObject {
         // die Menüleiste (Treffer- und Hover-Fläche).
         var swiftUIFrame = reportedFrame
         // Die kompakte Kapsel an der Kamera-Insel liegt selbst in der
-        // Menüleiste: Ihr ganzer Rahmen zählt.
-        if presentation.isNotch, !(usesIslandCompact && !showsRestLook) {
-            let bandHeight = presentation.bandHeight
+        // Menüleiste: Es zählt genau sie (bzw. aufgeklappt die große Form),
+        // nicht die Ansicht, die symmetrisch um die Kamera reicht. Sonst
+        // wertete jede Mausbewegung durch die Menüleiste die Pille neu aus.
+        if let hover = islandHoverFrame {
+            swiftUIFrame = hover
+        } else if presentation.isNotch, !(usesIslandCompact && !showsRestLook) {
+            // An der Insel beginnt das Fenster etwas über der Kapsel.
+            let bandHeight = presentation.bandHeight + presentation.islandTopGap
             swiftUIFrame.origin.y += bandHeight
             swiftUIFrame.size.height -= bandHeight
         }
-        guard swiftUIFrame.width > 0, swiftUIFrame.height > 0 else { return }
+        guard swiftUIFrame.width > 0, swiftUIFrame.height > 0 else {
+            // Nur das Band in der Menüleiste (Ruhebild ohne Zeile darunter):
+            // Es gibt nichts zu treffen, auch nicht die Fläche des Zustands
+            // davor (etwa die große Form, die eben noch offen war).
+            hostingView.setInteractive(swiftUIFrame: .zero)
+            return
+        }
 
         // Fenster-Koordinaten sind immer bottom-left; die Hosting-View
         // konvertiert für hitTest/Tracking selbst anhand ihres isFlipped.

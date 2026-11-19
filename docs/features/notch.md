@@ -1,6 +1,6 @@
 ---
-status: umgesetzt, wartet auf make-dev-QA; vereinte Pille neu (12.11.2026, Kill-Switch unifiedPillEnabled), Übergang ins Diktat ohne Sprung; Kamera-Insel (Dynamic Island) seit 18.11.2026
-stand: 2026-11-18
+status: umgesetzt, wartet auf make-dev-QA; vereinte Pille neu (12.11.2026, Kill-Switch unifiedPillEnabled), Übergang ins Diktat ohne Sprung; Kamera-Insel (Dynamic Island) seit 18.11.2026, aufgeklappt als große Form seit 19.11.2026
+stand: 2026-11-19
 feature: Statusanzeige an der Notch und vereinte Pille
 ---
 
@@ -243,28 +243,35 @@ Neuere MacBook Pro haben statt der Notch eine Kamera-Insel: eine kleine
 schwarze Kapsel, die frei in der Menüleiste schwebt. Die Anzeige verhält sich
 dort wie Apples eigene Insel und folgt deren drei Darstellungen der Live
 Activities (kompakt, minimal, expandiert): In Ruhe wird die Insel nur seitlich
-breiter, nach unten wächst sie erst auf einen Klick oder kurz bei einem Hinweis.
+breiter. Erst auf einen Klick oder kurz bei einem Hinweis wird die ganze Insel
+groß: eine schwarze Fläche um die Kamera, ohne Hals und ohne Kasten darunter.
 
 | Stufe | An der Insel |
 |---|---|
 | Kompakt (Ruhe, etwas los) | Die schwarze Kapsel wird auf einer Seite der Kamera 40 pt breiter (102 pt gesamt), gleiche Höhe, gleiche Oberkante, nichts unter der Menüleiste. Dort stehen zusammen ein Zeichen für den wichtigsten Zustand und seine Zahl: gelbe Raute, wenn ein Chat wartet; sonst roter Ring bei einem Fehler; sonst grüner Punkt, wenn einer arbeitet; sonst ein Haken für frisch fertig. Mit zweistelliger Zahl 8 pt mehr. Links der Kamera; reichen die Menüs heran, rechts |
 | Minimal | Passen Zeichen und Zahl auf keiner Seite neben Menüs und Statussymbole, steht nur das Zeichen auf der Seite mit Platz (Flügel 26 pt). Zeigt Apples Insel gerade selbst etwas (Mikrofon, Kamera, Live Activity), steht das Zeichen als eigener kleiner Kreis mit 6 pt Abstand neben ihr, so hoch wie sie |
 | Nichts | Nichts los, auf keiner Seite Platz oder keine Messung möglich: Von der Anzeige ist nichts zu sehen, nur Apples Insel |
-| Expandiert: Hinweis | „Braucht dich“ klappt rund vier Sekunden nach unten auf: Das Band läuft als Hals bis unter die Menüleiste, darunter hängt die Zeile mit Chat-Name und Wort. Danach zurück auf kompakt |
-| Expandiert: Liste | Ein Klick auf die Kapsel (oder der Hotkey) klappt die Liste unter der Menüleiste auf; über ihr stehen alle Zähler |
+| Expandiert: Hinweis | „Braucht dich“ klappt von selbst rund vier Sekunden zur großen Form auf (380 × 108 pt): oben die Zähler links und rechts der Kamera, darunter Chat-Name, die Art des Wartens (Freigabe mit Werkzeugname, Frage, Plan; sonst das Projekt) und das Wort (wartet, Fehler, fertig). Danach zurück auf kompakt; steht der Mauszeiger auf der Form, bleibt sie so lange stehen (höchstens 20 s). Ein Klick darauf öffnet die Liste |
+| Expandiert: Liste | Ein Klick auf die Kapsel (oder der Hotkey) macht die Insel zur großen Form mit der Liste (420 pt breit): große Zeilen (56 pt, Titel 15 pt), oben die Zähler. Klick daneben, Klick auf die Kopfzeile oder Esc schließt |
 | Diktat, kompakt | Die laufende Aufnahme steht als eigene kleine Kapsel in der Menüleiste links neben der Insel: Wellenform (Bewegung und Farbe tragen den Zustand: Aufnahme, Transkription, Nachbearbeitung) und Zeit, gleiche Höhe wie die Insel, 96 pt breit. Warten Chats oder gibt es Fehler, steht davor ein kleines Zeichen. Reichen die Menüs heran, steht die Kapsel rechts; ist es für die Zeit zu eng, zeigt sie nur die Wellenform (48 pt) |
-| Diktat, aufgeklappt | Ein Klick auf die Kapsel klappt die Bedienknöpfe unter der Menüleiste auf: wartende Chats mit Zahl, Bildschirmfoto, Clip, Ausgabemodus, Kontext, fertig, abbrechen. Noch ein Klick klappt sie zu. Fertig und Abbrechen gehen wie immer auch per Hotkey und Esc |
-| Dynamic Island des Controllers | Hängt am Hals wie bisher, zu ist sie nur die Kapsel um die Kamera |
+| Diktat, aufgeklappt | Ein Klick auf die Kapsel lässt sie selbst zur großen Form um die Kamera wachsen (420 × 178 pt); eine zweite Wellenform daneben gibt es nicht. Oben wartende Chats mit Zahl und der Zustand in Worten, darunter breite Wellenform, Zeit, Bildschirmfoto und Clip, dann Ausgabemodus, Kontext, abbrechen und fertig, alle Knöpfe 44 pt groß. Ein Klick auf Kopfzeile oder Wellenform oder ein Klick daneben klappt sie zu. Fertig und Abbrechen gehen wie immer auch per Hotkey und Esc |
+| Dynamic Island des Controllers | Hängt am Hals wie bisher, zu ist sie nur die Kapsel um die Kamera (die große Form für sie ist entworfen, noch nicht gebaut) |
 
 Im Vollbild ist die Anzeige wie bisher ausgeblendet, Diktat und Controller
 erscheinen trotzdem.
 
-**Menüs werden nie verdeckt.** Links und rechts der Kamera gehört die Leiste
-den Menüs und Statussymbolen (`auxiliaryTop…Area` reicht bis an die Kamera).
-Die Kapsel wird deshalb nur dort breiter, wo eine Messung freien Platz belegt,
-und hält 6 pt Abstand zum nächsten Menü oder Symbol (siehe „Was neben der
-Kamera steht“). Hinweis und Liste hängen unter der Menüleiste; in der Leiste
-bleibt es bei der Breite der Kapsel.
+**In Ruhe wird kein Menü verdeckt.** Links und rechts der Kamera gehört die
+Leiste den Menüs und Statussymbolen (`auxiliaryTop…Area` reicht bis an die
+Kamera). Die Kapsel wird deshalb nur dort breiter, wo eine Messung freien
+Platz belegt, und hält 6 pt Abstand zum nächsten Menü oder Symbol (siehe „Was
+neben der Kamera steht“). Die offene große Form dagegen darf Menüs und
+Statussymbole neben der Kamera verdecken, solange sie offen ist, wie Apples
+eigene aufgeklappte Insel (Entscheidung 19.11.2026): Sie geht nur auf einen
+Klick auf bzw. beim Hinweis für rund vier Sekunden. Die Einstellung „Liste
+beim Darüberfahren öffnen“ wirkt an der Kamera-Insel deshalb nicht; wer nach
+einem Menü neben der Kapsel greift, hätte sonst plötzlich die Form darüber.
+Steht ein Hinweis als große Form da und beginnt ein Diktat, geht er sofort weg
+und wird nach dem Diktat einmal nachgeholt, wenn der Chat noch wartet.
 
 **Diktat neben Apples Insel.** Beim Diktat läuft das Mikrofon, und macOS
 zeigt das in der Insel selbst an: Sie wird breiter (orangefarbener Punkt,
@@ -279,7 +286,7 @@ Messung eine noch breitere Insel zeigt, und bleibt dann für dieses Diktat dort.
 steht die Kapsel dort, wo Platz ist. Ist auf keiner Seite Platz, oder gibt es
 keine Messung (keine Berechtigung für Bedienungshilfen, Messung gescheitert
 oder noch nicht da), steht trotzdem die schmalste Form neben der Insel (nur
-die Wellenform; die Zeit steht aufgeklappt bei den Knöpfen): ohne Messung
+die Wellenform; die Zeit steht in der aufgeklappten großen Form): ohne Messung
 links, ohne Platz auf der Seite mit mehr Platz. In diesen Fällen kann die
 Kapsel einen Menütitel oder ein Statussymbol verdecken und dort Klicks
 abfangen. Das ist gewollt: Der Nutzer hat das Diktat selbst ausgelöst, es
@@ -294,9 +301,11 @@ nach dem Beginn, also mit der frischen Messung) eine Zeile
 warum (`measured`, `no_room`, `no_accessibility_permission`,
 `no_measurement(Grund)`), dazu den freien Platz je Seite.
 
-Die Knöpfe bleiben von selbst offen, solange ein Bildschirm-Clip läuft, damit
-sein Stopp-Knopf erreichbar ist. „Fertig“ steht aufgeklappt immer da, auch
-wenn die Einstellung es in der Pille ausblendet.
+Die große Form geht nur per Klick auf, nie von selbst, auch nicht bei einem
+Bildschirm-Clip: Wer einen Clip startet oder ein Bildschirmfoto macht, will
+den Bildschirm zeigen, die Form geht dafür zu. Die Kapsel zeigt den laufenden Clip (roter Ring), ein Klick
+öffnet sie wieder zum Stoppen. „Fertig“ steht aufgeklappt immer da, auch wenn
+die Einstellung es in der Pille ausblendet.
 
 Zwei Fälle hängen weiter unter der Menüleiste, weil sie Text zeigen bzw. ohne
 Maus bedient werden: Schnellaktionen (Beschriftung und Hinweise) und die
@@ -306,7 +315,89 @@ Frühere Fassungen: alle Zähler fest neben der Kamera ohne Messung, das
 verdeckte Menüs; danach nur ein Hals um die Kamera mit den Zählern in einer
 Zeile unter der Menüleiste, das hing in Ruhe wie ein schwarzes Stück unter der
 Kamera; dann Zeichen links und Zahl rechts der Kamera, das las sich
-schlechter als beides nebeneinander und brauchte auf beiden Seiten Platz.
+schlechter als beides nebeneinander und brauchte auf beiden Seiten Platz;
+zuletzt Hinweis, Liste und Diktat-Knöpfe an einem Hals mit Kasten unter der
+Menüleiste, das sah aus wie ein Strich nach unten statt wie eine Insel, die
+groß wird.
+
+### Aufgeklappt: eine große Form (seit 19.11.2026)
+
+Hinweis, Liste und aufgeklapptes Diktat sind EINE schwarze Fläche ohne Hals,
+wie Apples aufgeklappte Insel: Sie wächst aus der Insel in Breite und Höhe,
+ist auf die Kamera zentriert und beginnt auf Höhe der Insel
+(`NotchIslandLargeGeometry`, `NotchIslandLargeStatusView`,
+`IslandDictationView`). Für die Dynamic Island des Controllers gibt es bisher
+nur den Entwurf (`make snapshots ONLY=insel-gross`).
+
+Apples aufgeklappte Insel auf einem MacBook Pro mit Kamera-Insel (macOS 27.2.1):
+
+| Wert | Ergebnis | Quelle |
+|---|---|---|
+| Aufgeklappt („Now Playing“) | 286 × 152 pt, 6 pt unter der Oberkante | Bildschirmfoto, ausgemessen |
+| Ecken | rund 36 pt, weich auslaufend | Bildschirmfoto |
+| Innenabstand | 16 pt seitlich und unten; der Inhalt beginnt rund 27 pt unter der Oberkante, unter der Zeile mit der Kamera | Bildschirmfoto |
+| Schrift und Knöpfe | Titel rund 15 pt halbfett, Unterzeile 15 pt, Zeiten 12 pt, Bedienzeichen rund 30 pt | Bildschirmfoto |
+| Kompakt mit Musik | 143 × 34 pt (802 bis 945), 6 pt unter der Oberkante: Cover links, Wellenform rechts der Kamera | Accessibility (`AXLiveActivity`) |
+
+So ist es gebaut:
+
+- **Form:** abgerundetes Rechteck mit 36 pt Ecken, auf die Kamera zentriert.
+  Die Oberkante liegt dort, wo Apples Insel mit Inhalt beginnt (6 von 40 pt
+  Sicherheitsrand, 2 pt über der Kapsel in Ruhe); so ragt Apples Insel nie
+  oben über unsere Form. Hinweis 380 × 108 pt, Liste 420 pt breit, Diktat
+  420 × 178 pt (Apples „Now Playing“: 286). Die Liste scrollt ab 420 pt Höhe
+  und bevor sie unten aus dem Bildschirm ragt; auf einem schmalen Bildschirm
+  wird die Form schmaler statt über den Rand zu reichen.
+- **Kopfzeile (42 pt):** Apples Insel liegt immer über unseren Fenstern. Was
+  sie zeigt (Musik, Mikrofon-Hinweis), steht deshalb oben in der Mitte der
+  Form; die Kopfzeile lässt ihr so viel Platz, wie die Messung zeigt (in Ruhe
+  ihre 65 pt, beim Diktat von Anfang an den Platz des Mikrofon-Hinweises).
+  Links davon stehen wartende Chats, Fehler und arbeitende Chats mit Zahl,
+  rechts frisch Fertiges bzw. beim Diktat der Zustand in Worten. Jede Seite
+  behält ihre Breite, auch wenn die andere leer ist.
+- **Liste:** Zeilen 56 pt hoch, Titel 15 pt halbfett, zweite Zeile 12,5 pt,
+  Felder mit 16 pt Ecken; wartende Zeilen gelb, Fehler rot hinterlegt, die mit
+  der Tastatur markierte Zeile umrandet. Dieselbe Liste wie an Notch und
+  Pille (`NotchChatList`), nur mit größeren Maßen (`NotchListMetrics`).
+- **Hinweis:** Chat-Name 16 pt, darunter die Art des Wartens („Approval:
+  Bash“, „Question“, „Plan awaiting approval“; sonst das Projekt), rechts das
+  Wort. Der Hinweis geht von selbst auf, auch bei einer Bildschirmfreigabe:
+  Befehle, Dateinamen, Fragetext und Antworttext eines Chats stehen deshalb
+  nie darin (`AgentSessionActivity.awaitingKindLine`), nur in der Liste. Nach
+  vier Sekunden geht er zu; steht der Mauszeiger gerade auf der Form, wartet
+  er, bis der weg ist (alle 0,4 s nachgesehen, höchstens 20 s), damit ein
+  später Klick nicht das Menü darunter trifft.
+- **Diktat:** erste Zeile breite Wellenform, Zeit (24 pt), Bildschirmfoto und
+  Clip; zweite Zeile Ausgabemodus, Kontext, abbrechen, fertig. Alle Knöpfe
+  44 pt. Die Wellenform folgt bei der Aufnahme allein dem Pegel (grau ohne
+  Signal, grün beim Sprechen, gelb zu laut, wie der Kern der Pille); bei
+  Transkription und Nachbearbeitung steht dort der Kern der Pille mit seiner
+  Bewegung. Gegenüber dem Entwurf stehen Bildschirmfoto und Clip in der ersten
+  Zeile: Mit beiden in der zweiten hätten Ausgabemodus und Kontext bei
+  längeren Namen keinen Platz.
+- **Bewegung:** EINE Federbewegung des Umrisses (Breite, Höhe, Lage und Ecken
+  zusammen, rund 0,4 s) aus dem, was in Ruhe dasteht: der Kapsel mit Zeichen
+  und Zahl, dem abgesetzten Kreis, der Diktat-Kapsel, oder Apples Insel selbst,
+  wenn von uns nichts in der Menüleiste stand. Der Inhalt blendet erst ein,
+  wenn die Form fast steht (0,18 s), und vor dem Schließen aus (0,1 s); die
+  Form zieht sich in dieselbe Kapsel zurück. Mit „Bewegung reduzieren“ steht
+  die Form sofort, nur der Inhalt blendet.
+- **Fenster:** Die Anzeige bewegt nie Fenster und Form zugleich. Ihr Fenster
+  ist in Ruhe genau die Kapsel; für die große Form wird es in einem Schritt
+  ohne Animation so groß wie die Form (plus 16 pt Rand, damit die Feder
+  überschwingen kann) und zeigt dabei noch die Kapsel, im nächsten Bild
+  gleitet die Form. Beim Schließen umgekehrt, danach wird das Fenster wieder
+  die Kapsel. Das Fenster des Diktats beginnt von vornherein auf Höhe der
+  großen Form und fasst sie; es wechselt nie die Größe.
+- **Klicks:** Das Fenster nimmt Klicks nur auf der Form an
+  (`NotchHostingView.islandHitFrame`, beim Diktat `islandInteractiveParts`),
+  nicht im Rand. Beim Schließen gilt sofort wieder nur die Kapsel, auch
+  während die Form noch schrumpft: Die Menüleiste daneben ist gleich wieder
+  bedienbar.
+- **Verdecken:** Solange die Form offen ist, verdeckt sie Menüs und
+  Statussymbole neben der Kamera (bei 420 pt Breite je 180 pt links und
+  rechts der Kamera), wie Apples Insel. Kompakt und minimal bleiben, wie sie
+  sind.
 
 ### Was Apple vorgibt
 
@@ -394,7 +485,9 @@ Zwei Folgen:
   ein Fünftel darunter (8 von 40 pt), die Menüleiste ist ein Achtel höher
   (45 zu 40 pt). So schließt der Hals oben bündig mit der Insel ab und ragt
   nicht über sie hinaus, und der Körper beginnt auch bei ausgeblendeter Leiste
-  dort, wo sie beim Einfahren endet.
+  dort, wo sie beim Einfahren endet. Ein drittes Verhältnis stammt aus der
+  Messung vom 19.11.2026: Mit Inhalt beginnt Apples Insel bei 6 von 40 pt;
+  dort liegt die Oberkante der großen Form.
 
 ### Was neben der Kamera steht
 
@@ -427,7 +520,9 @@ mehr als eine zugleich. Die Aufrufe liegen hinter einer austauschbaren Schicht
 daraus die Stufe, `band` die Breite. Ohne Berechtigung für Bedienungshilfen
 oder wenn einer der drei Teile nicht zu ermitteln ist (anderer Aufbau in einer
 späteren macOS-Version), gibt es keine Messung: Die Anzeige zeigt in Ruhe
-nichts, Hinweis, Liste und Diktat hängen am schmalen Hals.
+nichts. Hinweis und Liste gehen trotzdem als große Form auf (aus Apples Insel
+heraus, die Kopfzeile lässt ihr dann den Platz in Ruhe), das Diktat steht als
+schmalste Kapsel neben der Insel.
 
 Gemessen wird nicht laufend, sondern zu Ereignissen, die es ohnehin gibt
 (`NotchIslandMonitor`, kein eigener Beobachter): bei App- und Space-Wechsel
@@ -482,6 +577,28 @@ bei jedem App-Wechsel zweimal und sonst höchstens alle 30 s; dazu liest sie
 einmal die Fensterliste (einige Millisekunden). Die Form (`NotchHangingShape`) hat vier
 animierte Werte statt einem (unterer Radius, Höhe, Breite und Lage des
 Bands); das wirkt nur während der 0,2 bis 0,35 s eines Zustandswechsels.
+
+Die große Form kostet nur beim Auf- und Zuklappen: eine einmalige
+Federbewegung von rund 0,4 s (`NotchIslandLargeShape`, fünf animierte Werte,
+rund 25 Bilder Layout), keine Dauerbewegung, kein Takt, kein neuer
+Beobachter. Im Ereignispfad kommt je Auf- oder Zuklappen ein Fensterwechsel
+ohne Animation dazu und eine einmalige Aufgabe, die das Fenster nach der
+Bewegung wieder klein macht (0,42 s nach dem Schließen, 0,56 s nach einem
+Wechsel von Form zu Form). Für die zweite Zeile des Hinweises liest die
+Anzeige beim Neuaufbau den Stand des einen betroffenen Chats aus dem Speicher
+(kein Beobachter des Activity-Stores, kein I/O). Nach den vier Sekunden des
+Hinweises sieht sie alle 0,4 s nach, ob der Zeiger noch auf der Form steht,
+nur solange er das tut und höchstens 20 s. Die offene Liste baut wie
+bisher alle 500 ms neu, solange Chats arbeiten. Beim Diktat hängt die breite
+Wellenform am Pegel (10 Hz) und zeichnet dann 22 Balken neu, nur solange die
+große Form offen ist; zugeklappt zeichnet wie bisher nur der kleine Kern.
+Solange die große Form des Diktats offen ist, hört ein Beobachter auf
+Mausklicks neben ihr (zum Schließen); er wird beim Zuklappen entfernt. Das
+Fenster des Diktats ist an der Insel höher als bisher (194 statt 101 pt,
+durchsichtig); Klicks nimmt es weiter nur auf dem Sichtbaren an, und dem
+Mauszeiger folgt es nur über der Kapsel bzw. der offenen Form (nicht über der
+ganzen Ansicht um die Kamera, sonst wertete jede Fahrt durch die Menüleiste
+die Pille neu aus).
 
 ## Bedienung
 
@@ -611,7 +728,7 @@ Abschnitt „Notch Status" (`NotchSettingsSection`):
 | Bildschirm: Automatisch, Eingebaut, Hauptbildschirm | `notchStatusScreen` | automatisch |
 | In Screenshots und Bildschirmfreigabe ausblenden | `notchStatusHideFromCapture` | an |
 | Fertige Chats anzeigen | `notchStatusShowFreshDone` | an |
-| Liste beim Darüberfahren öffnen | `notchStatusExpandOnHover` | aus |
+| Liste beim Darüberfahren öffnen (nicht an einer Kamera-Insel) | `notchStatusExpandOnHover` | aus |
 | Lage der Pille: „Zurücksetzen“ (alle Bildschirme oben mittig) | `notchPillPositions` | leer (oben mittig) |
 | Hotkey zum Ein- und Ausblenden | `KeyboardShortcuts` `toggleNotchStatus` | ohne Belegung |
 
@@ -665,6 +782,10 @@ AgentSessionActivityStore (statusSince; Stand-Zeile nur       │
 | `Services/AgentChats/Notch/NotchStatusModel.swift` | Rein: Zeilen, Sortierung, Zähler, Abschnitte, Sichtbarkeit, `NotchAlertTracker` |
 | `Services/AgentChats/Notch/NotchGeometry.swift` | Rein: Bildschirmwahl, Notch-Maße, Fenster-Rahmen je Zustand, Vollbild-Erkennung |
 | `Services/AgentChats/Notch/NotchIslandGeometry.swift` | Rein: Notch oder Kamera-Insel (`cutout`), Zeichen und Zahl (`NotchIslandSignal`), Stufe aus der Messung (`presentation`), Band und Rahmen je Zustand |
+| `Services/AgentChats/Notch/NotchIslandLargeGeometry.swift` | Rein: die aufgeklappte große Form an der Kamera-Insel (Maße je Inhalt, Kopfzeile um Apples Insel, Umrisse der Bewegung, Fenster und Klickfläche) |
+| `Services/AgentChats/Notch/NotchStatusController+IslandLarge.swift` | Hinweis und Liste als große Form: Fenster in zwei Schritten auf und zu, Klickfläche |
+| `Views/NotchIslandLargeView.swift` | Große Form der Status-Anzeige (`NotchIslandLargeStatusView`), Umriss (`NotchIslandLargeShape`), Kopfzeile, Bewegung, Maße der großen Liste (`NotchListMetrics`) |
+| `Views/IslandDictationView.swift` | Diktat an der Kamera-Insel: Kapsel in der Menüleiste und aufgeklappte große Form mit allen Knöpfen |
 | `Services/AgentChats/Notch/NotchIslandProbe.swift` | Messung der Menüleiste über die Bedienungshilfen (`NotchIslandProbe`, Aufrufe hinter `NotchIslandAX`) und letzter Stand je Bildschirm (`NotchIslandMonitor`) |
 | `Services/AgentChats/Notch/NotchPillPlacement.swift` | Rein: Stellen der Anzeige (Notch, Pille), gemerkte Lage, Öffnungsrichtung, Begrenzung auf den Bildschirm; auch für die Dynamic Island des Controllers |
 | `Services/AgentChats/Notch/NotchStatusController.swift` | AppKit-Seite: Beobachter, Klick-daneben, Hotkey, Einstellungen, Aufklappen |
@@ -810,19 +931,38 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   unter der Menüleiste; Stufe und Seite je nach gemessenem Platz; kompakt und minimal schneiden
   bei keiner Lage von Menüs und Statussymbolen einen gemessenen Rahmen, auch
   nicht mit Hinweis oder Liste; neben Apples aktiver Insel ein abgesetzter
-  Kreis und ein Hals in ihrer Breite; Hinweis und Liste unter der Menüleiste,
-  auch bei ausgeblendeter; Diktat und Controller-Insel hängen an der Kapsel; Vollbild mit
+  Kreis und ein Hals in ihrer Breite; Hinweis und Liste als eine Form um die
+  Kamera; Diktat-Fenster auf Höhe der großen Form, Controller-Insel an der Kapsel; Vollbild mit
   beiden Kanten; Form als Kapsel bzw. Hals mit Körper; Notch-Rahmen,
   Notch-Form und Vollbild an der Notch unverändert.
+- `NotchIslandLargeGeometryTests`: große Form je Inhalt (zentriert auf die
+  Kamera, Oberkante bei 6 pt, abgenommene Maße), Liste begrenzt und im
+  Bildschirm, schmaler Bildschirm, andere Auflösung; Kopfzeile lässt Apples
+  Insel Platz (Ruhe, Musik, Mikrofon-Hinweis); Ausgangsform je Lage (Kapsel,
+  abgesetzter Kreis, Apples Insel) und dass sie in der offenen Form liegt;
+  Umriss gleitet zwischen Kapsel und Form; Fenster fasst Form samt Rand und
+  hält die Kamera oben in der Mitte; Klicks nur auf der Form, beim Schließen
+  sofort nur auf der Kapsel (Geometrie und `NotchHostingView`); zweite Zeile
+  des Hinweises nennt die Art, nie den Inhalt; Hinweis hält unter dem
+  Zeiger; kein Öffnen per Darüberfahren an der Insel; Notch und
+  Bildschirm ohne Aussparung unverändert (Rahmen, Listen-Maße, Fenster des
+  Diktats).
+  `NotchIslandLargePixelTests` (gezeichnetes Bild): offen eine Fläche ohne
+  Hals mit runden Ecken und leerem Rand; zu nur die Kapsel; Kopfzeile behält
+  beide Seiten, auch wenn eine leer ist; aufgeklapptes Diktat ohne zweite
+  Kapsel daneben.
 - `NotchIslandGeometryTests` (Diktat): Kapsel neben der Insel mit Platz für
   Apples Mikrofon-Hinweis; Stufen je nach Platz; schneidet bei keiner Lage
   einen gemessenen Rahmen und liegt nie über der Kamera; ohne Messung
   höchstens die Mindestbreite; rückt nur nach außen.
   `IslandDictationCompactTests`: ohne Messung und ohne Platz trotzdem die
   schmalste Kapsel, nie die Form unter der Menüleiste; Schnellaktion und
-  Controller darunter; Knöpfe nur auf Klick bzw. bei laufendem Clip; Zeit
-  immer sichtbar; ausgefallene Messung verschiebt nichts; Log-Zeile zur
-  Entscheidung; Klicks nur auf Kapsel und Knöpfen.
+  Controller darunter; große Form nur auf Klick, nie von selbst, und sie geht
+  zu, wenn ein Clip startet, ein Bildschirmfoto beginnt oder das Diktat endet;
+  Fläche fürs Darüberfahren nur Kapsel bzw. Form; ihre Kopfzeile folgt der
+  Messung; ausgefallene Messung verschiebt nichts; Log-Zeile zur Entscheidung;
+  Klicks zugeklappt nur auf der Kapsel, aufgeklappt nur auf der Form
+  (Geometrie und Fenster-Ansicht).
 - `NotchIslandProbeTests`: Messung mit einer Attrappe der
   Accessibility-Schicht: Menüs und Statussymbole als Rahmen, was Apples Insel
   zeigt, Prozess der Insel aus der Fensterliste (Mauszeiger und eigenes Fenster
@@ -873,10 +1013,15 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   die leere Pille und die Pille unten mit Liste nach oben; hell und dunkel).
   `make snapshots ONLY=kamera-insel` zeigt die Anzeige an der Kamera-Insel
   (kompakt je Zustand, zweistellig und rechts der Kamera, minimal bei wenig
-  Platz und neben Apples Insel mit Mikrofon, Hinweis, Fehler, Liste; Diktat
-  kompakt je Zustand, rechts, minimal, ohne Messung, aufgeklappt, ohne Platz und als
-  Schnellaktion unter der Menüleiste; Übergang, Controller); die Attrappe legt die Kamera-Kapsel wie macOS
+  Platz und neben Apples Insel mit Mikrofon; Hinweis, Fehler und Liste als
+  große Form, auch mit Musik in Apples Insel, mit Tastatur-Auswahl, lang und
+  leer, dazu die Bewegung in drei Standbildern; Diktat kompakt je Zustand,
+  rechts, minimal, ohne Messung, ohne Platz, aufgeklappt als große Form (auch
+  laut, bei der Transkription und mit laufendem Clip) und als Schnellaktion
+  unter der Menüleiste; Übergang, Controller); die Attrappe legt die Kamera-Kapsel wie macOS
   über alles und zeigt Menüs und Statussymbole der Leiste.
+  `make snapshots ONLY=insel-gross` zeigt den Entwurf der Controller-Insel
+  als große Form (noch nicht gebaut).
   `make snapshots ONLY=pill-` zeigt die Diktat-Pille zum Vergleich. Die Attrappe zeigt Menüs und Statussymbole bis dicht an die
   Notch, damit man sieht, dass nichts verdeckt wird.
 
@@ -897,6 +1042,22 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   Bedienungshilfen (die das Einfügen nach dem Diktat ohnehin verlangt). Ohne
   sie steht in der Menüleiste nichts; Hinweis und Liste (Hotkey) erscheinen
   trotzdem.
+- Die offene große Form verdeckt Menüs und Statussymbole neben der Kamera und
+  nimmt dort Klicks an, solange sie offen ist (Hinweis: rund vier Sekunden).
+- Apples Insel liegt über der großen Form. Ein Klick in die Mitte der
+  Kopfzeile trifft deshalb Apples Insel, nicht uns; klappt Apple die eigene
+  Insel auf (etwa „Now Playing“), liegt sie über unserer Form. Wie Apples
+  Inhalt in unserer Kopfzeile sitzt, zeigen nur Attrappen; an der echten
+  Insel ist es nicht geprüft.
+- Die Reihenfolge am Fenster (erst groß, dann gleitet die Form; beim
+  Schließen umgekehrt) läuft nur an der echten App und ist durch Tests nicht
+  abgedeckt (Tests öffnen keine Fenster).
+- Die große Form des Diktats schließt per Klick, nicht per Esc: Esc bricht
+  wie immer das Diktat ab.
+- Zieht sich die große Form zurück, während ein Diktat beginnt, verschwindet
+  sie ohne Bewegung; das Diktat beginnt an der Kapsel.
+- Endet ein Diktat bei offener großer Form, blendet sie ins Ruhebild über,
+  statt sich in die Kapsel zurückzuziehen.
 - Gemessen wird zu Ereignissen und alle 30 s, nicht laufend. Bekommt die
   vordere App ein Menü dazu, erscheint ein Statussymbol oder beginnt Apples
   Insel etwas zu zeigen, ohne dass App oder Space wechseln, gilt der alte
@@ -912,8 +1073,9 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
 - Die Diktat-Kapsel steht mit Abstand neben der Insel, nicht an ihr: Solange
   das Mikrofon noch nicht läuft oder schon wieder aus ist (Transkription),
   bleibt zwischen Kapsel und Insel eine Lücke von rund 40 pt.
-- Aufgeklappt reicht das Diktat-Fenster über die Menüleiste um die Kamera;
-  Klicks nimmt es nur auf Kapsel und Knöpfen an.
+- Das Diktat-Fenster reicht an der Insel über die Menüleiste um die Kamera
+  und 194 pt nach unten (durchsichtig); Klicks nimmt es nur auf der Kapsel
+  bzw. der offenen großen Form an.
 - Ohne Messung oder ohne Platz steht die Diktat-Kapsel trotzdem neben der
   Insel und kann dann einen Menütitel oder ein Statussymbol verdecken.
 - Der Hals ist je Seite 3 pt breiter als die Kamera-Insel. Auf heller

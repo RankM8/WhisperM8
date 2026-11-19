@@ -13,11 +13,12 @@ enum NotchCutoutKind: Equatable {
 }
 
 /// Band der Anzeige an einer Kamera-Insel, in Punkten: die schwarze Kapsel um
-/// die Kamera. Diktat und Controller-Insel nutzen sie als schmalen Hals
-/// (Aussparung plus Rand); die Status-Anzeige verbreitert sie seitlich um
-/// Flügel für ein Zeichen und eine Zahl, wenn dort nachweislich Platz ist
-/// (`NotchIslandGeometry.presentation`). Hinweis, Liste und Diktat hängen
-/// unter der Menüleiste.
+/// die Kamera. Die Status-Anzeige verbreitert sie seitlich um Flügel für ein
+/// Zeichen und eine Zahl, wenn dort nachweislich Platz ist
+/// (`NotchIslandGeometry.presentation`). Schnellaktion, Aufnahme per
+/// Controller und Controller-Insel nutzen sie als schmalen Hals (Aussparung
+/// plus Rand) bis unter die Menüleiste. Hinweis, Liste und aufgeklapptes
+/// Diktat sind die große Form (`NotchIslandLargeGeometry`).
 struct NotchIslandBand: Equatable {
     /// Breite des Bands: die Aussparung plus beide Flügel.
     var width: CGFloat
@@ -41,6 +42,10 @@ struct NotchIslandBand: Equatable {
     /// minimale Darstellung bei zwei Live Activities). Rahmen in globalen
     /// Cocoa-Koordinaten; `nil` sonst.
     var detachedFrame: CGRect? = nil
+    /// So viel höher als die Kapsel beginnt die aufgeklappte große Form
+    /// (`NotchIslandLargeGeometry.topGap`). Das Fenster des Diktats beginnt
+    /// dort, damit die Form ohne Fensterwechsel aufgehen kann.
+    var topGap: CGFloat = 0
 
     var topRadius: CGFloat { capsuleHeight / 2 }
     var hasLeadingContent: Bool { leadingContent > 0 }
@@ -169,9 +174,10 @@ extension NotchScreenInfo {
 /// Statussymbolen (`auxiliaryTop…Area` reicht bis an die Kamera). Die Anzeige
 /// wird dort wie Apples Insel nur seitlich breiter, und nur so weit, wie die
 /// Messung freien Platz belegt (`presentation`); ohne Platz oder ohne Messung
-/// bleibt es beim Hals um die Kamera. Hinweis und Liste hängen unter der
-/// Menüleiste. Die System-Insel selbst liegt immer über unseren Fenstern
-/// (eigene Ebene von macOS).
+/// steht dort nichts. Hinweis und Liste sind die große Form
+/// (`NotchIslandLargeGeometry`): Sie darf Menüs und Statussymbole verdecken,
+/// solange sie offen ist. Die System-Insel selbst liegt immer über unseren
+/// Fenstern (eigene Ebene von macOS).
 ///
 /// Zwei Verhältnisse stammen aus der Messung vom 18.11.2026
 /// (`docs/features/notch.md`), weil das System die Werte nicht meldet. Sie
@@ -350,7 +356,8 @@ enum NotchIslandGeometry {
         return NotchIslandBand(
             width: screen.notchWidth + 2 * cutoutMargin,
             capsuleHeight: max(0, screen.safeAreaTop - inset),
-            neckHeight: max(0, bodyTop(screen) - inset))
+            neckHeight: max(0, bodyTop(screen) - inset),
+            topGap: NotchIslandLargeGeometry.topGap(screen))
     }
 
     /// Band mit dem, was neben der Kamera gemessen ist: der Hals, so breit
@@ -398,36 +405,30 @@ enum NotchIslandGeometry {
     }
 
     /// Ruhe (`compact`): nur die Kapsel in der Menüleiste, so breit wie ihr
-    /// Band, nichts darunter. Hinweis und Liste: Das Band läuft als Hals bis
-    /// unter die Menüleiste, dort hängt der Körper mit Chat-Name bzw. Liste,
-    /// mittig unter der Kamera. `band`: das Band der Status-Anzeige; ohne
-    /// Angabe der schmale Hals.
-    static func layout(screen: NotchScreenInfo, mode: NotchPanelMode, band: NotchIslandBand? = nil) -> NotchLayout {
+    /// Band, nichts darunter. Hinweis und Liste: die große Form
+    /// (`NotchIslandLargeGeometry.form`), eine Fläche auf die Kamera
+    /// zentriert; `band` nennt dann die Kapsel, aus der sie wächst. `band`:
+    /// das Band der Status-Anzeige; ohne Angabe der schmale Hals.
+    static func layout(
+        screen: NotchScreenInfo, mode: NotchPanelMode, band: NotchIslandBand? = nil,
+        occupancy: NotchMenuBarOccupancy? = nil
+    ) -> NotchLayout {
         let band = band ?? self.band(screen: screen)
         let bandMinX = screen.notchCenterX - screen.notchWidth / 2 - band.leadingWing
-        let top = windowTop(screen)
-        let bodyWidth: CGFloat
-        var bodyHeight = NotchGeometry.chinHeight
+        let capsule = band.detachedFrame
+            ?? CGRect(x: bandMinX, y: windowTop(screen) - band.capsuleHeight, width: band.width, height: band.capsuleHeight)
+        let kind: NotchIslandLargeKind
         switch mode {
         case .compact:
-            if let detached = band.detachedFrame {
-                return NotchLayout(
-                    frame: detached, band: detached, body: CGRect(x: detached.midX, y: detached.minY, width: 0, height: 0))
-            }
-            let capsule = CGRect(x: bandMinX, y: top - band.capsuleHeight, width: band.width, height: band.capsuleHeight)
             return NotchLayout(
                 frame: capsule, band: capsule, body: CGRect(x: capsule.midX, y: capsule.minY, width: 0, height: 0))
         case .alert:
-            bodyWidth = max(band.width, NotchGeometry.alertWidth)
+            kind = .alert
         case .expanded(let rows, let sections):
-            bodyWidth = max(band.width, NotchGeometry.expandedMinWidth)
-            bodyHeight += NotchGeometry.listHeight(rowCount: rows, sectionCount: sections)
+            kind = .list(rowCount: rows, sectionCount: sections)
         }
-        let neck = CGRect(x: bandMinX, y: top - band.neckHeight, width: band.width, height: band.neckHeight)
-        let body = CGRect(
-            x: screen.notchCenterX - bodyWidth / 2, y: neck.minY - bodyHeight,
-            width: bodyWidth, height: bodyHeight)
-        return NotchLayout(frame: neck.union(body), band: neck, body: body)
+        let form = NotchIslandLargeGeometry.form(screen: screen, kind: kind, occupancy: occupancy)
+        return NotchLayout(frame: form.frame, band: capsule, body: form.frame)
     }
 
     /// Oberkante eines Fensters, das an der Insel hängt (Anzeige, Diktat,

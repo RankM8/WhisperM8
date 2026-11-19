@@ -13,8 +13,10 @@ enum OverlayPresentation: Equatable {
     /// Vereinte Pille an der Notch: schwarz, die Zeile hängt unter der
     /// Aussparung, nicht verschiebbar.
     case notch(width: CGFloat, height: CGFloat)
-    /// Vereinte Pille an einer Kamera-Insel (Dynamic Island): Die Zeile hängt
-    /// an einem schmalen Hals um die Kamera unter der Menüleiste.
+    /// Vereinte Pille an einer Kamera-Insel (Dynamic Island): Das Diktat
+    /// steht als Kapsel in der Menüleiste neben der Insel
+    /// (`IslandDictationView`); Schnellaktion und Aufnahme per Controller
+    /// hängen an einem schmalen Hals um die Kamera unter der Menüleiste.
     case island(NotchIslandBand)
 
     /// An der Hardware (Notch oder Kamera-Insel): schwarz, nicht verschiebbar.
@@ -32,6 +34,13 @@ enum OverlayPresentation: Equatable {
         case .island(let band): return band.neckHeight
         case .classic, .pill: return 0
         }
+    }
+
+    /// Kamera-Insel: Das Fenster beginnt auf Höhe der großen Form, etwas
+    /// über der Kapsel; so viel Abstand hält alles andere zur Fensterkante.
+    var islandTopGap: CGFloat {
+        if case .island(let band) = self { return band.topGap }
+        return 0
     }
 
     var isUnified: Bool { self != .classic }
@@ -197,7 +206,7 @@ extension OverlayController {
     // MARK: Kamera-Insel, kompakt
 
     /// An der Kamera-Insel steht das Diktat immer kompakt in der Menüleiste
-    /// (`RecordingPillView`), auch ohne Messung und ohne Platz. Ausnahmen, die Text
+    /// (`IslandDictationView`), auch ohne Messung und ohne Platz. Ausnahmen, die Text
     /// brauchen oder ohne Maus bedient werden: Schnellaktion (Beschriftung)
     /// und Aufnahme per Controller (Ziel-Chat und Modus müssen ohne Klick
     /// sichtbar sein). Sie hängen wie bisher unter der Menüleiste.
@@ -206,17 +215,63 @@ extension OverlayController {
         return quickActionLabel == nil && controllerTargetLabel == nil
     }
 
-    /// Bedienknöpfe unter der Kapsel: per Klick aufgeklappt, und solange ein
-    /// Bildschirm-Clip läuft (sein Stopp-Knopf muss erreichbar bleiben).
-    var showsIslandControls: Bool { isIslandExpanded || isScreenClipRecording }
-
-    /// Die schmale Kapsel hat keinen Platz für die Zeit: Sie steht dann bei
-    /// den aufgeklappten Knöpfen.
-    var islandControlsShowClock: Bool { islandCapsule?.showsClock == false }
+    /// Die große Form mit den Bedienknöpfen ist offen. Sie geht nur per
+    /// Klick auf (sie verdeckt Menüs neben der Kamera), nie von selbst.
+    var showsIslandLargeForm: Bool { isIslandExpanded && islandDictationForm != nil && usesIslandCompact }
 
     func toggleIslandExpanded() {
         guard !morph.isRetiring else { return }
-        isIslandExpanded.toggle()
+        setIslandExpanded(!isIslandExpanded)
+    }
+
+    /// Auf- bzw. zuklappen. Offen schließt ein Klick neben der Form (auch
+    /// in ein Menü oder eine andere App); die Menüleiste neben der Kapsel
+    /// ist beim Zuklappen sofort wieder bedienbar.
+    func setIslandExpanded(_ expanded: Bool) {
+        guard isIslandExpanded != expanded else { return }
+        isIslandExpanded = expanded
+        if expanded {
+            installIslandDismissMonitors()
+        } else {
+            removeIslandDismissMonitors()
+        }
+        refreshIslandInteractiveParts()
+    }
+
+    private func installIslandDismissMonitors() {
+        removeIslandDismissMonitors()
+        guard presentsWindow else { return }
+        let mask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+        if let monitor = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] _ in
+            Task { @MainActor in self?.setIslandExpanded(false) }
+        }) {
+            islandDismissMonitors.append(monitor)
+        }
+        // Klicks in eigene Fenster (Agent-Chats); Menüs der Form selbst
+        // (Ausgabemodus, Kontext) sind keine normalen Fenster.
+        if let monitor = NSEvent.addLocalMonitorForEvents(matching: mask, handler: { [weak self] event in
+            if let self, Self.islandClickDismisses(
+                windowLevel: event.window?.level, isDictationPanel: event.window === self.panel) {
+                self.setIslandExpanded(false)
+            }
+            return event
+        }) {
+            islandDismissMonitors.append(monitor)
+        }
+    }
+
+    /// Schließt ein Klick in ein eigenes Fenster die große Form? Ja bei
+    /// normalen Fenstern (Agent Chats, Einstellungen); nicht beim Fenster
+    /// des Diktats selbst und nicht bei Menüs und anderen schwebenden
+    /// Fenstern (die Menüs „Ausgabemodus“ und „Kontext“ der Form).
+    nonisolated static func islandClickDismisses(windowLevel: NSWindow.Level?, isDictationPanel: Bool) -> Bool {
+        guard let windowLevel, !isDictationPanel else { return false }
+        return windowLevel == .normal
+    }
+
+    func removeIslandDismissMonitors() {
+        islandDismissMonitors.forEach(NSEvent.removeMonitor)
+        islandDismissMonitors = []
     }
 
     /// Ein Diktat beginnt an dieser Stelle (neues Fenster oder Übernahme
@@ -224,10 +279,9 @@ extension OverlayController {
     /// Diktat bleibt stehen. Zugeklappt, Platz für Apples Insel von vorn,
     /// Messung neu angefordert.
     func beginIslandDictation(on screen: NotchScreenInfo) {
-        isIslandExpanded = false
+        setIslandExpanded(false)
         islandReserve = nil
         islandOccupancy = nil
-        islandParts = [:]
         // `islandViewFrame` bleibt: Die Ansicht meldet ihren Rahmen schon beim
         // Einbau des Fensters, also vor diesem Aufruf.
         islandDecisionTask?.cancel()
@@ -236,6 +290,7 @@ extension OverlayController {
         guard screen.hasIsland, case .island = presentation else {
             islandCancellables.removeAll()
             if islandCapsule != nil { islandCapsule = nil }
+            if islandDictationForm != nil { islandDictationForm = nil }
             refreshIslandInteractiveParts()
             return
         }
@@ -262,6 +317,7 @@ extension OverlayController {
     func refreshIslandCapsule(occupancy: NotchMenuBarOccupancy?, animated: Bool) {
         guard let screen = unifiedScreen, screen.hasIsland, case .island = presentation else {
             if islandCapsule != nil { islandCapsule = nil }
+            if islandDictationForm != nil { islandDictationForm = nil }
             return
         }
         if let occupancy { islandOccupancy = occupancy }
@@ -270,6 +326,12 @@ extension OverlayController {
             reserve = NotchIslandGeometry.dictationReserve(screen: screen, occupancy: known, previous: islandReserve)
             islandReserve = reserve
         }
+        // Die große Form: Ihre Kopfzeile lässt Apples Mikrofon-Hinweis so
+        // viel Platz wie die Kapsel (auch bevor er gemessen ist).
+        let form = NotchIslandLargeGeometry.form(
+            screen: screen, kind: .dictation, occupancy: islandOccupancy,
+            reserve: reserve ?? NotchIslandGeometry.dictationReserve(screen: screen, occupancy: nil))
+        if form != islandDictationForm { islandDictationForm = form }
         let capsule = NotchIslandGeometry.dictationCapsule(
             screen: screen, occupancy: islandOccupancy, hasBadge: statusBadge != nil, reserve: reserve)
         if capsule != islandCapsule {
@@ -328,24 +390,24 @@ extension OverlayController {
     // MARK: Kamera-Insel, Trefferflächen
 
     /// Wo das Fenster in der kompakten Form Klicks annimmt (Koordinaten der
-    /// Ansicht, oben links): die Kapsel neben der Insel, aufgeklappt dazu die
-    /// Knöpfe. Die Ansicht selbst reicht symmetrisch um die Kamera; die
-    /// Menüleiste dazwischen und auf der anderen Seite bleibt bedienbar. Die
-    /// Kapsel kommt aus der Geometrie, nicht aus einer Meldung der Ansicht.
+    /// Ansicht, oben links): zugeklappt die Kapsel neben der Insel,
+    /// aufgeklappt die große Form (`openForm`: ihre Größe). Die Ansicht
+    /// selbst reicht symmetrisch um die Kamera und beginnt an der Oberkante
+    /// der großen Form; zugeklappt bleibt die Menüleiste zwischen Kapsel und
+    /// Kamera und auf der anderen Seite bedienbar. Beides kommt aus der
+    /// Geometrie, nicht aus einer Meldung der Ansicht: Beim Zuklappen gilt
+    /// sofort wieder nur die Kapsel, auch während die Form noch schrumpft.
     nonisolated static func islandInteractiveParts(
-        viewFrame: CGRect, capsule: NotchIslandDictationCapsule, band: NotchIslandBand,
-        showsControls: Bool, controls: CGRect?
+        viewFrame: CGRect, capsule: NotchIslandDictationCapsule, band: NotchIslandBand, openForm: CGSize?
     ) -> [CGRect] {
-        var parts = [CGRect(
-            x: viewFrame.midX + capsule.offset - capsule.width / 2, y: viewFrame.minY,
-            width: capsule.width, height: band.capsuleHeight)]
-        if showsControls {
-            // Ohne gemeldeten Rahmen der Knöpfe: alles unter der Menüleiste.
-            parts.append(controls ?? CGRect(
-                x: viewFrame.minX, y: viewFrame.minY + band.neckHeight,
-                width: viewFrame.width, height: max(0, viewFrame.height - band.neckHeight)))
+        if let openForm {
+            return [CGRect(
+                x: viewFrame.midX - openForm.width / 2, y: viewFrame.minY,
+                width: openForm.width, height: openForm.height)]
         }
-        return parts
+        return [CGRect(
+            x: viewFrame.midX + capsule.offset - capsule.width / 2, y: viewFrame.minY + band.topGap,
+            width: capsule.width, height: band.capsuleHeight)]
     }
 
     func refreshIslandInteractiveParts() {
@@ -354,17 +416,17 @@ extension OverlayController {
            case .island(let band) = presentation {
             parts = Self.islandInteractiveParts(
                 viewFrame: viewFrame, capsule: capsule, band: band,
-                showsControls: showsIslandControls, controls: islandParts["controls"])
+                openForm: showsIslandLargeForm ? islandDictationForm?.size : nil)
         }
         islandInteractiveParts = parts
         hostingView?.setInteractiveParts(swiftUIFrames: parts)
-    }
-
-    /// Die aufgeklappten Knöpfe melden ihren Rahmen.
-    func reportIslandPart(_ key: String, _ frame: CGRect?) {
-        if islandParts[key] == frame { return }
-        islandParts[key] = frame
-        refreshIslandInteractiveParts()
+        // Auch die Fläche fürs Darüberfahren folgt sofort (beim Auf- und
+        // Zuklappen meldet die Ansicht ihren Rahmen erst während der Bewegung).
+        let hover = parts.dropFirst().reduce(parts.first) { $0?.union($1) }
+        if hover != islandHoverFrame {
+            islandHoverFrame = hover
+            if let hover { hostingView?.setInteractive(swiftUIFrame: hover) }
+        }
     }
 
     /// Kamera-Insel: Mit dem Mikrofon wird Apples Insel breiter (Hinweis
@@ -490,6 +552,8 @@ extension OverlayController {
         unifiedGeneration += 1
         badgeCancellable = nil
         islandCancellables.removeAll()
+        // Mit dem Diktat geht auch die große Form zu.
+        setIslandExpanded(false)
         // Ein Diktat, das vor der Frist endet, bekommt seine Log-Zeile hier.
         logIslandDecision()
         islandDecisionTask?.cancel()

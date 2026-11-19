@@ -42,20 +42,10 @@ struct UnifiedPillRestLookView: View {
                 .padding(.horizontal, 12)
                 .frame(width: bodyWidth)
                 .transition(.pillRestContent)
-        case .island(let summary, let alert, _, let bodyWidth):
-            // Zeichen und Zahl zeichnet die Hülle in der Kapsel (`PillChrome`);
-            // hier nur die Zeile des Hinweises.
-            if let bodyWidth {
-                NotchHeaderRow(display: NotchDisplay(
-                    style: notchStyle, summary: summary, alert: alert, isExpanded: false, sections: []))
-                    .padding(.horizontal, 12)
-                    .frame(width: bodyWidth)
-                    .transition(.pillRestContent)
-            } else {
-                Color.clear.frame(width: 0, height: 0)
-            }
-        case .notchBand:
-            // Nur das Band in der Aussparung, schwarz auf schwarz.
+        case .island, .notchBand:
+            // Kamera-Insel: Zeichen und Zahl zeichnet die Hülle in der Kapsel
+            // (`PillChrome`). Notch ohne Anzeige: nur das Band in der
+            // Aussparung, schwarz auf schwarz.
             Color.clear.frame(width: 0, height: 0)
         }
     }

@@ -150,8 +150,10 @@ final class UnifiedPillRestLookPixelTests: XCTestCase {
         }
     }
 
-    /// Kamera-Insel: Das Ruhebild ist die Kapsel mit Zeichen und Zahl, beim
-    /// Hinweis samt Zeile unter der Menüleiste, wie die Anzeige dort.
+    /// Kamera-Insel: Das Ruhebild ist die Kapsel mit Zeichen und Zahl, wie
+    /// die Anzeige dort in Ruhe (ein Hinweis als große Form gehört nicht zum
+    /// Ruhebild). Das Fenster des Diktats beginnt auf Höhe der großen Form,
+    /// die Kapsel der Anzeige etwas darunter.
     func testIslandRestLookMatchesTheIslandStatus() throws {
         let screen = NotchScreenInfo(
             displayID: 1, frame: CGRect(x: 0, y: 0, width: 1736, height: 1133),
@@ -162,11 +164,13 @@ final class UnifiedPillRestLookPixelTests: XCTestCase {
             screen: screen, occupancy: NotchMenuBarOccupancy(frames: []), presentation: .compact(.leading))
         let size = CGSize(width: OverlayFrameResolver.panelSize.width, height: band.neckHeight + 40 + 24)
         let summary = summary
-        let alerts = alerts
+        // Zwei Zeilen wie die anderen Fälle (das Bild ist zwei Zellen hoch);
+        // an der Insel gibt es nur das Ruhebild ohne Hinweis.
+        let alerts: [NotchAlert?] = [nil, nil]
         let view = VStack(spacing: 0) {
             ForEach(Array(alerts.enumerated()), id: \.offset) { _, alert in
-                let mode: NotchPanelMode = alert == nil ? .compact(chipCount: summary.chipCount) : .alert
-                let layout = NotchGeometry.layout(screen: screen, mode: mode, islandBand: band)
+                let layout = NotchGeometry.layout(
+                    screen: screen, mode: .compact(chipCount: summary.chipCount), islandBand: band)
                 // Die Kamera sitzt in der Mitte der Zelle; das Fenster der
                 // Anzeige liegt in Ruhe links davon (Kapsel wächst nach links).
                 let shift = layout.frame.midX - screen.notchCenterX
@@ -179,18 +183,18 @@ final class UnifiedPillRestLookPixelTests: XCTestCase {
                         NotchStatusView(display: display)
                             .frame(width: layout.frame.width, height: layout.frame.height)
                             .offset(x: shift)
+                            .padding(.top, band.topGap)
                         Spacer(minLength: 0)
                     }, size)
                     Self.cell(RecordingOverlayView(controller: Self.restController(
-                        .island(neck),
-                        .island(summary: summary, alert: alert, band: band, bodyWidth: alert == nil ? nil : layout.body.width)))
+                        .island(neck), .island(summary: summary, band: band)))
                         .environment(\.colorScheme, .dark), size)
                 }
             }
         }
         let image = try render(view, cell: size, name: "insel")
         for row in alerts.indices {
-            XCTAssertGreaterThan(darkPixels(image, row: row), 2000, "kein Hals mit Zeile gezeichnet (Zeile \(row))")
+            XCTAssertGreaterThan(darkPixels(image, row: row), 2000, "keine Kapsel gezeichnet (Zeile \(row))")
             XCTAssertLessThan(mismatch(image, row: row), 0.001, "Ruhebild weicht von der Anzeige an der Insel ab (Zeile \(row))")
         }
     }

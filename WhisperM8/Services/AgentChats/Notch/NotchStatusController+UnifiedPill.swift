@@ -41,6 +41,13 @@ extension NotchStatusController {
             for slot in slots.values where slot.screen?.displayID == previous { slot.returnsFromDictation = true }
         }
         if displayID != nil, expandedKind != nil { collapse(rebuildAfter: false) }
+        // Kamera-Insel: Steht gerade ein Hinweis als große Form da, gehört
+        // er nicht zum Ruhebild und geht mit dem Diktat sofort weg. Er wird
+        // danach einmal nachgeholt, wenn sein Anlass noch steht.
+        if let displayID, let alert, alertDuringDictation == nil,
+           placements().contains(where: { $0.screen.displayID == displayID && $0.screen.hasIsland }) {
+            alertDuringDictation = alert
+        }
         if displayID == nil { replayAlertAfterDictation() }
         // Mit dem Mikrofon ändert Apples Insel ihre Breite, erst nach und nach.
         NotchIslandMonitor.shared.measure(
@@ -98,13 +105,12 @@ extension NotchStatusController {
             return UnifiedPillRestSnapshot(
                 look: .pill(summary: summary, alert: shownAlert), center: CGPoint(x: visible.midX, y: visible.midY))
         case .notch where screen.hasIsland:
-            // Kapsel mit Zeichen und Zahl, beim Hinweis samt Zeile darunter.
+            // Die Kapsel mit Zeichen und Zahl. Steht gerade ein Hinweis als
+            // große Form da, beginnt das Diktat trotzdem an der Kapsel; der
+            // Hinweis wird nach dem Diktat nachgeholt (`dictationChanged`).
             let island = islandState(slot, screen: screen, summary: summary)
-            guard shownAlert != nil || island.presentation != .hidden else { return nil }
-            let bodyWidth = shownAlert == nil
-                ? nil : NotchGeometry.layout(screen: screen, mode: mode, islandBand: island.band).body.width
-            return UnifiedPillRestSnapshot(
-                look: .island(summary: summary, alert: shownAlert, band: island.band, bodyWidth: bodyWidth), center: nil)
+            guard island.presentation != .hidden else { return nil }
+            return UnifiedPillRestSnapshot(look: .island(summary: summary, band: island.band), center: nil)
         case .notch:
             guard NotchStatusModel.isVisible(summary: summary, isExpanded: false, alert: shownAlert) else { return nil }
             let body = NotchGeometry.layout(screen: screen, mode: mode).body
@@ -159,6 +165,12 @@ extension NotchStatusController {
             slot.lastDisplay = nil
             slot.lastFrame = nil
             slot.coreFrame = nil
+            // Auch eine große Form, die gerade zugeht: Ihre Aufgabe ist
+            // abgebrochen, ohne Rücksetzen bliebe die Anzeige im Schließen hängen.
+            slot.islandLargeForm = nil
+            slot.islandLargeClosing = false
+            slot.snapsNextRender = false
+            slot.showsIslandInBar = false
         }
     }
 
