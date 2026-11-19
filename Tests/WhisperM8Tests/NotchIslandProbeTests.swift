@@ -131,6 +131,51 @@ final class NotchIslandProbeTests: XCTestCase {
             screen: notch, primaryHeight: 1133, menuOwnerPID: frontPID, ownPID: ownPID, windows: windows, ax: ax()))
     }
 
+    /// Gehört die Menüleiste der eigenen App, fragt die Messung sie nicht
+    /// über die Accessibility-Schnittstelle ab (das liefert für den eigenen
+    /// Prozess nichts), sondern nimmt die im Prozess bestimmten Rahmen.
+    func testOwnMenuBarUsesFramesFromInsideTheProcess() throws {
+        var asked: [pid_t] = []
+        let own = [CGRect(x: 10, y: 0, width: 34, height: 45), CGRect(x: 43, y: 0, width: 95, height: 45)]
+        let occupancy = try XCTUnwrap(NotchIslandProbe.measure(
+            screen: screen, primaryHeight: 1133, menuOwnerPID: ownPID, ownPID: ownPID, windows: windows,
+            ownMenuFrames: own, ax: ax(asked: &asked)))
+        XCTAssertEqual(Set(asked), [islandPID], "die eigene App wird nicht gefragt")
+        XCTAssertTrue(occupancy.frames.contains(CGRect(x: 43, y: 1133 - 45, width: 95, height: 45)))
+        XCTAssertEqual(NotchIslandGeometry.freeSpace(screen: screen, occupancy: occupancy).leading, 838.5 - 138)
+        // Ohne diese Rahmen gibt es kein Ergebnis, mit Grund fürs Log.
+        let failed = NotchIslandProbe.measureWithReason(
+            screen: screen, primaryHeight: 1133, menuOwnerPID: ownPID, ownPID: ownPID, windows: windows, ax: ax())
+        XCTAssertNil(failed.occupancy)
+        XCTAssertEqual(failed.failure, "own_menu_bar_unreadable")
+    }
+
+    /// Jede gescheiterte Messung nennt ihren Grund.
+    func testFailuresNameTheirReason() {
+        func failure(_ ax: NotchIslandAX, windows: [NotchWindowSample]? = nil, menuOwner: pid_t? = 60) -> String? {
+            NotchIslandProbe.measureWithReason(
+                screen: screen, primaryHeight: 1133, menuOwnerPID: menuOwner, ownPID: ownPID,
+                windows: windows ?? self.windows, ax: ax).failure
+        }
+        XCTAssertNil(failure(ax()))
+        XCTAssertEqual(failure(ax(trusted: false)), "no_accessibility_permission")
+        XCTAssertEqual(failure(ax(), menuOwner: nil), "no_menu_owner")
+        XCTAssertEqual(failure(ax(statusBar: false)), "no_island_owner")
+        XCTAssertEqual(failure(ax(), menuOwner: 61), "menu_bar_unreadable")
+    }
+
+    /// Schätzung der eigenen Menüs aus den Titeln: Apple-Menü 10 pt vom Rand
+    /// und 34 pt breit, je Titel 22 pt Rand, Nachbarn überlappen um 1 pt.
+    func testOwnMenusEstimatedFromTitles() {
+        let frames = NotchIslandProbe.estimatedMenuFrames(
+            titles: ["WhisperM8", "Ablage", "Bearbeiten"], screenQuartz: CGRect(x: 0, y: 0, width: 1736, height: 1133),
+            barHeight: 45
+        ) { title, isAppMenu in CGFloat(title.count) * (isAppMenu ? 8 : 7) }
+        XCTAssertEqual(frames.map(\.minX), [10, 43, 136, 199])
+        XCTAssertEqual(frames.map(\.width), [34, 94, 64, 92])
+        XCTAssertEqual(frames.last?.maxX, 291)
+    }
+
     /// Nach der Gesamtfrist antwortet die echte Schicht nicht mehr.
     func testLiveLayerStopsAfterTheDeadline() {
         let expired = NotchIslandAX.live(deadline: Date().addingTimeInterval(-1))

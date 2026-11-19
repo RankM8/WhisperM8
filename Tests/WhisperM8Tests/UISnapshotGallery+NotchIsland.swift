@@ -290,10 +290,15 @@ extension UISnapshotGallery {
                 $0.statusBadge = DictationStatusBadge(waiting: 1, errored: 0)
                 $0.isIslandExpanded = true
             },
-            // Nirgends Platz: Ausweichform unter der Menüleiste, wie früher.
-            islandDictation("diktat-ausweich", size: wide, microphone: true, crowded: true, tight: true) {
+            // Nirgends Platz: trotzdem die schmalste Kapsel neben der Insel,
+            // nie die Form unter der Menüleiste.
+            islandDictation("diktat-ohne-platz", size: wide, microphone: true, crowded: true, tight: true) {
                 $0.levelModel.level = 0.45
                 $0.statusBadge = DictationStatusBadge(waiting: 1, errored: 0)
+            },
+            // Schnellaktion: weiter unter der Menüleiste (zeigt Text).
+            islandDictation("schnellaktion", size: wide, microphone: false) {
+                $0.quickActionLabel = "Correct"
             },
             // Übergang: Ruhebild (Kapsel mit Zeichen und Zahl), Mitte, und aus
             // der leeren Insel, wenn an ihr nichts los ist.

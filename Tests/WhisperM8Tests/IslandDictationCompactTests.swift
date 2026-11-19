@@ -102,29 +102,69 @@ final class IslandDictationCompactTests: XCTestCase {
         XCTAssertEqual(controller.islandCapsule?.side, .trailing)
     }
 
-    /// Die schmalste Form ohne Messung gibt es nur ohne Berechtigung für
-    /// Bedienungshilfen. Mit Berechtigung, aber ohne Messung: keine Kapsel,
-    /// das Diktat hängt unter der Menüleiste.
-    func testBlindCapsuleOnlyWithoutAccessibilityPermission() {
-        let blind = controller(capsule: false)
-        blind.unifiedScreen = screen
-        blind.islandAXTrusted = { false }
-        blind.refreshIslandCapsule(occupancy: nil, animated: false)
-        XCTAssertEqual(blind.islandCapsule?.width, NotchIslandGeometry.dictationMinimalWidth)
-        XCTAssertTrue(blind.islandControlsShowClock, "die Zeit steht dann bei den Knöpfen")
-        blind.statusBadge = DictationStatusBadge(waiting: 1, errored: 0)
-        blind.refreshIslandCapsule(occupancy: nil, animated: false)
-        XCTAssertEqual(
-            blind.islandCapsule?.width,
-            NotchIslandGeometry.dictationMinimalWidth + NotchIslandGeometry.dictationBadgeWidth,
-            "mit Raute höchstens die Mindestbreite plus das Zeichen")
+    /// Ein normales Diktat steht an der Insel immer in der Menüleiste: Ohne
+    /// Messung (keine Berechtigung, Messung gescheitert oder noch nicht da)
+    /// die schmalste Form links, nie die Form unter der Menüleiste.
+    func testWithoutMeasurementTheNarrowCapsuleStillShows() {
+        for trusted in [false, true] {
+            let controller = controller(capsule: false)
+            controller.unifiedScreen = screen
+            controller.islandAXTrusted = { trusted }
+            controller.refreshIslandCapsule(occupancy: nil, animated: false)
+            XCTAssertEqual(controller.islandCapsule?.width, NotchIslandGeometry.dictationMinimalWidth, "\(trusted)")
+            XCTAssertEqual(controller.islandCapsule?.side, .leading)
+            XCTAssertEqual(controller.islandCapsule?.isForced, true)
+            XCTAssertTrue(controller.usesIslandCompact, "nie unter der Menüleiste")
+            XCTAssertTrue(controller.islandControlsShowClock, "die Zeit steht dann bei den Knöpfen")
+            controller.statusBadge = DictationStatusBadge(waiting: 1, errored: 0)
+            controller.refreshIslandCapsule(occupancy: nil, animated: false)
+            XCTAssertEqual(
+                controller.islandCapsule?.width,
+                NotchIslandGeometry.dictationMinimalWidth + NotchIslandGeometry.dictationBadgeWidth,
+                "mit Raute höchstens die Mindestbreite plus das Zeichen")
+        }
+    }
 
-        let trusted = controller(capsule: false)
-        trusted.unifiedScreen = screen
-        trusted.islandAXTrusted = { true }
-        trusted.refreshIslandCapsule(occupancy: nil, animated: false)
-        XCTAssertNil(trusted.islandCapsule)
-        XCTAssertFalse(trusted.usesIslandCompact)
+    /// Auch ohne Platz auf beiden Seiten: die schmalste Form neben der Insel,
+    /// nicht die Form unter der Menüleiste.
+    func testWithoutRoomTheNarrowCapsuleStillShows() {
+        let controller = controller(capsule: false)
+        controller.unifiedScreen = screen
+        let crowded = NotchMenuBarOccupancy(frames: [
+            CGRect(x: 10, y: 1088, width: 800, height: 45), CGRect(x: 930, y: 1088, width: 780, height: 45),
+        ])
+        controller.refreshIslandCapsule(occupancy: crowded, animated: false)
+        XCTAssertEqual(controller.islandCapsule?.isForced, true)
+        XCTAssertEqual(controller.islandCapsule?.showsClock, false)
+        XCTAssertTrue(controller.usesIslandCompact)
+    }
+
+    /// Je Diktat steht einmal im Log, in welcher Form es an der Insel steht
+    /// und warum.
+    func testDecisionLineNamesFormAndReason() throws {
+        func line(_ capsule: NotchIslandDictationCapsule?, _ occupancy: NotchMenuBarOccupancy?,
+                  quick: Bool = false, pad: Bool = false, trusted: Bool = true, failure: String? = nil) -> String {
+            OverlayController.islandDecisionLine(
+                capsule: capsule, occupancy: occupancy, screen: screen, quickAction: quick, controller: pad,
+                trusted: trusted, failure: failure)
+        }
+        let free = NotchMenuBarOccupancy(frames: [])
+        let measured = try XCTUnwrap(NotchIslandGeometry.dictationCapsule(screen: screen, occupancy: free))
+        XCTAssertEqual(line(measured, free), "island_dictation form=compact side=leading reason=measured free=838/838 system_island=rest")
+        let blind = try XCTUnwrap(NotchIslandGeometry.dictationCapsule(screen: screen, occupancy: nil))
+        XCTAssertEqual(line(blind, nil, trusted: false), "island_dictation form=minimal side=leading reason=no_accessibility_permission")
+        XCTAssertEqual(
+            line(blind, nil, failure: "own_menu_bar_unreadable"),
+            "island_dictation form=minimal side=leading reason=no_measurement(own_menu_bar_unreadable)")
+        XCTAssertEqual(line(blind, nil), "island_dictation form=minimal side=leading reason=no_measurement(pending)")
+        var crowded = NotchMenuBarOccupancy(frames: [
+            CGRect(x: 10, y: 1088, width: 800, height: 45), CGRect(x: 930, y: 1088, width: 780, height: 45),
+        ])
+        crowded.systemIsland = 802...945
+        let forced = try XCTUnwrap(NotchIslandGeometry.dictationCapsule(screen: screen, occupancy: crowded))
+        XCTAssertEqual(line(forced, crowded), "island_dictation form=minimal side=leading reason=no_room free=28/32 system_island=802-945")
+        XCTAssertTrue(line(measured, free, quick: true).contains("form=below_menu_bar reason=quick_action"))
+        XCTAssertTrue(line(measured, free, pad: true).contains("form=below_menu_bar reason=controller"))
     }
 
     /// Die Zeit ist in jeder Form zu sehen: in der Kapsel, oder aufgeklappt
@@ -153,17 +193,13 @@ final class IslandDictationCompactTests: XCTestCase {
         XCTAssertFalse(controller.isIslandExpanded)
         XCTAssertTrue(controller.islandParts.isEmpty)
         XCTAssertNil(controller.islandOccupancy)
-        XCTAssertEqual(controller.islandCapsule?.width, NotchIslandGeometry.dictationMinimalWidth, "ohne Berechtigung: schmalste Form")
-        XCTAssertFalse(controller.islandAwaitsMeasurement)
+        XCTAssertEqual(controller.islandCapsule?.width, NotchIslandGeometry.dictationMinimalWidth, "noch keine Messung: schmalste Form")
+        XCTAssertFalse(controller.islandDecisionLogged)
 
-        // Mit Berechtigung, noch nie gemessen: kurz nur die Insel, keine blinde Kapsel.
-        controller.islandAXTrusted = { true }
-        controller.beginIslandDictation(on: screen)
-        XCTAssertNil(controller.islandCapsule)
-        XCTAssertTrue(controller.islandAwaitsMeasurement)
+        // Die erste Messung stellt die volle Kapsel hin und schreibt den Grund ins Log, einmal.
         controller.refreshIslandCapsule(occupancy: NotchMenuBarOccupancy(frames: []), animated: false)
-        XCTAssertFalse(controller.islandAwaitsMeasurement)
         XCTAssertEqual(controller.islandCapsule?.showsClock, true)
+        XCTAssertTrue(controller.islandDecisionLogged)
         controller.tearDownUnified()
     }
 
