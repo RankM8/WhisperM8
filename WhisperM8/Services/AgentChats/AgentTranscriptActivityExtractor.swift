@@ -80,6 +80,32 @@ struct AgentSessionActivity: Equatable, Sendable {
         return raw.map { AgentTranscriptActivityExtractor.capped($0) }
     }
 
+    /// Nur die ART des Wartens, ohne Argument, Dateiname oder Fragetext:
+    /// „Approval: Bash“, „Question“, „Plan awaiting approval“. Für Stellen,
+    /// die von selbst erscheinen (Hinweis an der Kamera-Insel), also auch
+    /// bei einer Bildschirmfreigabe; die volle Zeile (`line(for:)`) steht
+    /// nur dort, wo jemand sie aufklappt. `nil`, wenn die Art unbekannt ist.
+    var awaitingKindLine: String? {
+        switch awaitingKind {
+        case .planApproval:
+            return String(localized: "Plan awaiting approval")
+        case .question:
+            return String(localized: "Question")
+        case .permission:
+            var name = awaitingToolName.map(AgentTranscriptActivityExtractor.displayToolName)
+            if name == nil, case .tool(let toolName, _) = detail { name = toolName }
+            let line = name.map { String(localized: "Approval: \($0)") } ?? String(localized: "Approval")
+            return AgentTranscriptActivityExtractor.capped(line)
+        case nil:
+            // Codex (keine Hooks): nur, was sich ohne Inhalt sagen lässt.
+            switch detail {
+            case .question: return String(localized: "Question")
+            case .tool(let name, _) where name == "ExitPlanMode": return String(localized: "Plan awaiting approval")
+            case .tool, .reply, nil: return nil
+            }
+        }
+    }
+
     private var awaitingLine: String? {
         switch awaitingKind {
         case .planApproval:

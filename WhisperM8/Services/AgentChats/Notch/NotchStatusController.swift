@@ -178,6 +178,10 @@ final class NotchStatusController {
 
     /// So lange bleibt die Anzeige nach „braucht dich" verbreitert.
     static let alertDuration: Duration = .seconds(4)
+    /// Kamera-Insel: Steht der Zeiger auf dem Hinweis, bleibt er stehen;
+    /// nachgesehen wird in diesem Abstand, höchstens so lange.
+    static let alertPointerCheck: Duration = .milliseconds(400)
+    static let alertPointerHoldLimit: Duration = .seconds(20)
     static let throttleInterval: DispatchQueue.SchedulerTimeType.Stride = .milliseconds(300)
     /// Abstand der Nachmessungen an der Kamera-Insel, solange dort etwas steht.
     static let islandRefreshInterval: Duration = .seconds(30)
@@ -446,9 +450,10 @@ final class NotchStatusController {
             // Beim Diktat verbreitert sich die Pille dort nicht; danach einmal.
             if config.unified, dictationDisplayID != nil { alertDuringDictation = fired }
         }
-        // Hinweis in der großen Form an der Kamera-Insel: zweite Zeile mit
-        // dem, worauf dieser eine Chat wartet (ein Wert aus dem Speicher,
-        // kein Beobachter).
+        // Hinweis in der großen Form an der Kamera-Insel: Die zweite Zeile
+        // nennt die Art, auf die dieser eine Chat wartet (Freigabe, Frage,
+        // Plan), nie den Inhalt (`alertDetail`). Ein Wert aus dem Speicher,
+        // kein Beobachter.
         if !isExpanded, let alert, alert.kind == .awaitingInput,
            let index = inputs.firstIndex(where: { $0.id == alert.sessionID }) {
             inputs[index].activity = activityStore.activity(for: alert.sessionID)
@@ -463,6 +468,14 @@ final class NotchStatusController {
         alertTask?.cancel()
         alertTask = Task { [weak self] in
             try? await Task.sleep(for: Self.alertDuration)
+            // Kamera-Insel: Der Zeiger steht auf der großen Form (gleich
+            // kommt ein Klick): warten, bis er weg ist. Begrenzt, damit ein
+            // liegen gelassener Zeiger den Hinweis nicht ewig hält.
+            var held = Duration.zero
+            while !Task.isCancelled, held < Self.alertPointerHoldLimit, self?.isPointerOnIslandAlert() == true {
+                try? await Task.sleep(for: Self.alertPointerCheck)
+                held += Self.alertPointerCheck
+            }
             guard !Task.isCancelled else { return }
             self?.alert = nil
             self?.render()

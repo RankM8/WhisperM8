@@ -420,6 +420,13 @@ extension OverlayController {
         }
         islandInteractiveParts = parts
         hostingView?.setInteractiveParts(swiftUIFrames: parts)
+        // Auch die Fläche fürs Darüberfahren folgt sofort (beim Auf- und
+        // Zuklappen meldet die Ansicht ihren Rahmen erst während der Bewegung).
+        let hover = parts.dropFirst().reduce(parts.first) { $0?.union($1) }
+        if hover != islandHoverFrame {
+            islandHoverFrame = hover
+            if let hover { hostingView?.setInteractive(swiftUIFrame: hover) }
+        }
     }
 
     /// Kamera-Insel: Mit dem Mikrofon wird Apples Insel breiter (Hinweis

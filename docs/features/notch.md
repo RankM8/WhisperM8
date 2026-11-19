@@ -251,7 +251,7 @@ groß: eine schwarze Fläche um die Kamera, ohne Hals und ohne Kasten darunter.
 | Kompakt (Ruhe, etwas los) | Die schwarze Kapsel wird auf einer Seite der Kamera 40 pt breiter (102 pt gesamt), gleiche Höhe, gleiche Oberkante, nichts unter der Menüleiste. Dort stehen zusammen ein Zeichen für den wichtigsten Zustand und seine Zahl: gelbe Raute, wenn ein Chat wartet; sonst roter Ring bei einem Fehler; sonst grüner Punkt, wenn einer arbeitet; sonst ein Haken für frisch fertig. Mit zweistelliger Zahl 8 pt mehr. Links der Kamera; reichen die Menüs heran, rechts |
 | Minimal | Passen Zeichen und Zahl auf keiner Seite neben Menüs und Statussymbole, steht nur das Zeichen auf der Seite mit Platz (Flügel 26 pt). Zeigt Apples Insel gerade selbst etwas (Mikrofon, Kamera, Live Activity), steht das Zeichen als eigener kleiner Kreis mit 6 pt Abstand neben ihr, so hoch wie sie |
 | Nichts | Nichts los, auf keiner Seite Platz oder keine Messung möglich: Von der Anzeige ist nichts zu sehen, nur Apples Insel |
-| Expandiert: Hinweis | „Braucht dich“ klappt von selbst rund vier Sekunden zur großen Form auf (380 × 108 pt): oben die Zähler links und rechts der Kamera, darunter Chat-Name, woran er hängt, und das Wort (wartet, Fehler, fertig). Danach zurück auf kompakt. Ein Klick darauf öffnet die Liste |
+| Expandiert: Hinweis | „Braucht dich“ klappt von selbst rund vier Sekunden zur großen Form auf (380 × 108 pt): oben die Zähler links und rechts der Kamera, darunter Chat-Name, die Art des Wartens (Freigabe mit Werkzeugname, Frage, Plan; sonst das Projekt) und das Wort (wartet, Fehler, fertig). Danach zurück auf kompakt; steht der Mauszeiger auf der Form, bleibt sie so lange stehen (höchstens 20 s). Ein Klick darauf öffnet die Liste |
 | Expandiert: Liste | Ein Klick auf die Kapsel (oder der Hotkey) macht die Insel zur großen Form mit der Liste (420 pt breit): große Zeilen (56 pt, Titel 15 pt), oben die Zähler. Klick daneben, Klick auf die Kopfzeile oder Esc schließt |
 | Diktat, kompakt | Die laufende Aufnahme steht als eigene kleine Kapsel in der Menüleiste links neben der Insel: Wellenform (Bewegung und Farbe tragen den Zustand: Aufnahme, Transkription, Nachbearbeitung) und Zeit, gleiche Höhe wie die Insel, 96 pt breit. Warten Chats oder gibt es Fehler, steht davor ein kleines Zeichen. Reichen die Menüs heran, steht die Kapsel rechts; ist es für die Zeit zu eng, zeigt sie nur die Wellenform (48 pt) |
 | Diktat, aufgeklappt | Ein Klick auf die Kapsel lässt sie selbst zur großen Form um die Kamera wachsen (420 × 178 pt); eine zweite Wellenform daneben gibt es nicht. Oben wartende Chats mit Zahl und der Zustand in Worten, darunter breite Wellenform, Zeit, Bildschirmfoto und Clip, dann Ausgabemodus, Kontext, abbrechen und fertig, alle Knöpfe 44 pt groß. Ein Klick auf Kopfzeile oder Wellenform oder ein Klick daneben klappt sie zu. Fertig und Abbrechen gehen wie immer auch per Hotkey und Esc |
@@ -302,8 +302,8 @@ warum (`measured`, `no_room`, `no_accessibility_permission`,
 `no_measurement(Grund)`), dazu den freien Platz je Seite.
 
 Die große Form geht nur per Klick auf, nie von selbst, auch nicht bei einem
-Bildschirm-Clip: Wer einen Clip startet, will den Bildschirm zeigen, die Form
-geht dafür zu. Die Kapsel zeigt den laufenden Clip (roter Ring), ein Klick
+Bildschirm-Clip: Wer einen Clip startet oder ein Bildschirmfoto macht, will
+den Bildschirm zeigen, die Form geht dafür zu. Die Kapsel zeigt den laufenden Clip (roter Ring), ein Klick
 öffnet sie wieder zum Stoppen. „Fertig“ steht aufgeklappt immer da, auch wenn
 die Einstellung es in der Pille ausblendet.
 
@@ -359,8 +359,14 @@ So ist es gebaut:
   Felder mit 16 pt Ecken; wartende Zeilen gelb, Fehler rot hinterlegt, die mit
   der Tastatur markierte Zeile umrandet. Dieselbe Liste wie an Notch und
   Pille (`NotchChatList`), nur mit größeren Maßen (`NotchListMetrics`).
-- **Hinweis:** Chat-Name 16 pt, darunter woran der Chat hängt (etwa die
-  Freigabe, auf die er wartet; sonst sein Projekt), rechts das Wort.
+- **Hinweis:** Chat-Name 16 pt, darunter die Art des Wartens („Approval:
+  Bash“, „Question“, „Plan awaiting approval“; sonst das Projekt), rechts das
+  Wort. Der Hinweis geht von selbst auf, auch bei einer Bildschirmfreigabe:
+  Befehle, Dateinamen, Fragetext und Antworttext eines Chats stehen deshalb
+  nie darin (`AgentSessionActivity.awaitingKindLine`), nur in der Liste. Nach
+  vier Sekunden geht er zu; steht der Mauszeiger gerade auf der Form, wartet
+  er, bis der weg ist (alle 0,4 s nachgesehen, höchstens 20 s), damit ein
+  später Klick nicht das Menü darunter trifft.
 - **Diktat:** erste Zeile breite Wellenform, Zeit (24 pt), Bildschirmfoto und
   Clip; zweite Zeile Ausgabemodus, Kontext, abbrechen, fertig. Alle Knöpfe
   44 pt. Die Wellenform folgt bei der Aufnahme allein dem Pegel (grau ohne
@@ -580,14 +586,19 @@ ohne Animation dazu und eine einmalige Aufgabe, die das Fenster nach der
 Bewegung wieder klein macht (0,42 s nach dem Schließen, 0,56 s nach einem
 Wechsel von Form zu Form). Für die zweite Zeile des Hinweises liest die
 Anzeige beim Neuaufbau den Stand des einen betroffenen Chats aus dem Speicher
-(kein Beobachter des Activity-Stores, kein I/O). Die offene Liste baut wie
+(kein Beobachter des Activity-Stores, kein I/O). Nach den vier Sekunden des
+Hinweises sieht sie alle 0,4 s nach, ob der Zeiger noch auf der Form steht,
+nur solange er das tut und höchstens 20 s. Die offene Liste baut wie
 bisher alle 500 ms neu, solange Chats arbeiten. Beim Diktat hängt die breite
 Wellenform am Pegel (10 Hz) und zeichnet dann 22 Balken neu, nur solange die
 große Form offen ist; zugeklappt zeichnet wie bisher nur der kleine Kern.
 Solange die große Form des Diktats offen ist, hört ein Beobachter auf
 Mausklicks neben ihr (zum Schließen); er wird beim Zuklappen entfernt. Das
 Fenster des Diktats ist an der Insel höher als bisher (194 statt 101 pt,
-durchsichtig); Klicks nimmt es weiter nur auf dem Sichtbaren an.
+durchsichtig); Klicks nimmt es weiter nur auf dem Sichtbaren an, und dem
+Mauszeiger folgt es nur über der Kapsel bzw. der offenen Form (nicht über der
+ganzen Ansicht um die Kamera, sonst wertete jede Fahrt durch die Menüleiste
+die Pille neu aus).
 
 ## Bedienung
 
@@ -931,7 +942,9 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   abgesetzter Kreis, Apples Insel) und dass sie in der offenen Form liegt;
   Umriss gleitet zwischen Kapsel und Form; Fenster fasst Form samt Rand und
   hält die Kamera oben in der Mitte; Klicks nur auf der Form, beim Schließen
-  sofort nur auf der Kapsel (Geometrie und `NotchHostingView`); Notch und
+  sofort nur auf der Kapsel (Geometrie und `NotchHostingView`); zweite Zeile
+  des Hinweises nennt die Art, nie den Inhalt; Hinweis hält unter dem
+  Zeiger; kein Öffnen per Darüberfahren an der Insel; Notch und
   Bildschirm ohne Aussparung unverändert (Rahmen, Listen-Maße, Fenster des
   Diktats).
   `NotchIslandLargePixelTests` (gezeichnetes Bild): offen eine Fläche ohne
@@ -945,7 +958,8 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   `IslandDictationCompactTests`: ohne Messung und ohne Platz trotzdem die
   schmalste Kapsel, nie die Form unter der Menüleiste; Schnellaktion und
   Controller darunter; große Form nur auf Klick, nie von selbst, und sie geht
-  zu, wenn ein Clip startet oder das Diktat endet; ihre Kopfzeile folgt der
+  zu, wenn ein Clip startet, ein Bildschirmfoto beginnt oder das Diktat endet;
+  Fläche fürs Darüberfahren nur Kapsel bzw. Form; ihre Kopfzeile folgt der
   Messung; ausgefallene Messung verschiebt nichts; Log-Zeile zur Entscheidung;
   Klicks zugeklappt nur auf der Kapsel, aufgeklappt nur auf der Form
   (Geometrie und Fenster-Ansicht).

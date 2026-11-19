@@ -39,7 +39,9 @@ extension NotchStatusController {
             style: .island(island.band), summary: summary, alert: shownAlert, isExpanded: expandedHere,
             sections: expandedHere ? sections : [], selectedRowID: expandedHere ? keyboardSelection : nil,
             islandLarge: .open(form),
-            alertDetail: shownAlert.flatMap { Self.alertDetail(for: $0, rows: rows) })
+            alertDetail: shownAlert.flatMap { alert in
+                Self.alertDetail(kind: alert.kind, input: inputs.first { $0.id == alert.sessionID })
+            })
 
         slot.showsIslandInBar = false
         slot.islandLargeClosing = false
@@ -152,14 +154,35 @@ extension NotchStatusController {
         panel.setFrame(frame, display: true)
     }
 
-    /// Zweite Zeile des Hinweises. Wartet der Chat auf dich, steht dort
-    /// worauf (etwa die Freigabe für ein Werkzeug); sonst sein Projekt. Der
-    /// Hinweis geht von selbst auf: Antworttext oder Dateinamen eines Chats
-    /// stehen deshalb nicht darin, die zeigt erst die Liste auf einen Klick.
-    nonisolated static func alertDetail(for alert: NotchAlert, rows: [NotchRow]) -> String? {
-        guard let row = rows.first(where: { $0.id == alert.sessionID }) else { return nil }
-        if alert.kind == .awaitingInput, let line = row.activityLine { return line }
-        return row.project
+    /// Zweite Zeile des Hinweises. Wartet der Chat auf dich, steht dort nur
+    /// die ART des Wartens (`AgentSessionActivity.awaitingKindLine`:
+    /// „Approval: Bash“, „Question“, „Plan awaiting approval“); sonst sein
+    /// Projekt. Der Hinweis geht von selbst auf, auch bei einer
+    /// Bildschirmfreigabe: Befehle, Dateinamen, Fragetext und Antworttext
+    /// eines Chats stehen deshalb nie darin, die zeigt erst die Liste auf
+    /// einen Klick.
+    nonisolated static func alertDetail(kind: NotchAlertKind, input: NotchChatInput?) -> String? {
+        guard let input else { return nil }
+        if kind == .awaitingInput, let line = input.activity?.awaitingKindLine { return line }
+        return input.project
+    }
+
+    /// Der Hinweis bleibt über seine vier Sekunden hinaus stehen, solange
+    /// der Mauszeiger über der großen Form ist: Wer gerade darauf klicken
+    /// will, trifft sonst das Menü darunter. Gefragt wird der Ort des
+    /// Zeigers selbst, kein gemerkter Hover-Zustand.
+    nonisolated static func alertHeldByPointer(form: CGRect?, mouse: CGPoint) -> Bool {
+        form?.contains(mouse) ?? false
+    }
+
+    /// Steht der Zeiger gerade auf einem Hinweis in der großen Form?
+    func isPointerOnIslandAlert() -> Bool {
+        guard !isExpanded, alert != nil else { return false }
+        let mouse = NSEvent.mouseLocation
+        return slots.values.contains { slot in
+            slot.panel?.isVisible == true && !slot.islandLargeClosing
+                && Self.alertHeldByPointer(form: slot.islandLargeForm?.frame, mouse: mouse)
+        }
     }
 
     func setDisplayWithoutAnimation(_ display: NotchDisplay, on slot: NotchSlot) {

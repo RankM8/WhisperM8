@@ -75,6 +75,41 @@ final class IslandDictationCompactTests: XCTestCase {
         XCTAssertFalse(controller.isIslandExpanded, "mit dem Diktat geht auch die Form zu")
     }
 
+    /// Auch ein Bildschirmfoto klappt die Form vor der Auswahl zu, damit
+    /// sie nicht im Bild steht.
+    func testScreenshotClosesTheLargeForm() {
+        let controller = controller()
+        controller.toggleIslandExpanded()
+        XCTAssertTrue(controller.showsIslandLargeForm)
+        controller.captureScreenshot()
+        XCTAssertFalse(controller.isIslandExpanded)
+    }
+
+    /// Dem Mauszeiger folgt das Fenster nur über der Kapsel bzw. der offenen
+    /// Form, nicht über der ganzen Ansicht um die Kamera: Fahren durch die
+    /// Menüleiste wertet die Pille nicht neu aus.
+    func testHoverAreaIsTheCapsuleOrTheOpenForm() throws {
+        let controller = controller(capsule: false)
+        controller.unifiedScreen = screen
+        controller.islandAXTrusted = { false }
+        XCTAssertNil(controller.islandHoverFrame)
+        controller.islandViewFrame = CGRect(x: 94, y: 0, width: 420, height: 34)
+        controller.beginIslandDictation(on: screen)
+        let capsule = try XCTUnwrap(controller.islandCapsule)
+        XCTAssertEqual(
+            controller.islandHoverFrame,
+            CGRect(x: 304 + capsule.offset - capsule.width / 2, y: 2, width: capsule.width, height: 32))
+        controller.toggleIslandExpanded()
+        XCTAssertEqual(controller.islandHoverFrame, CGRect(x: 94, y: 0, width: 420, height: 178))
+        controller.toggleIslandExpanded()
+        XCTAssertEqual(controller.islandHoverFrame?.width, capsule.width)
+        // Ruhebild, Schnellaktion: wieder die Ansicht als Ganzes.
+        controller.quickActionLabel = "Correct"
+        controller.refreshIslandInteractiveParts()
+        XCTAssertNil(controller.islandHoverFrame)
+        controller.tearDownUnified()
+    }
+
     /// Schnellaktion und Aufnahme per Controller haben keine große Form,
     /// ebenso wenig ein Diktat ohne Maße dafür.
     func testNoLargeFormOutsideTheCompactDictation() {

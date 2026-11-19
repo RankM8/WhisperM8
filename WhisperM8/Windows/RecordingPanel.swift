@@ -522,6 +522,10 @@ class OverlayController: ObservableObject {
     var islandViewFrame: CGRect?
     /// Kamera-Insel: zuletzt gesetzte Trefferflächen (leer: die ganze Ansicht).
     var islandInteractiveParts: [CGRect] = []
+    /// Kamera-Insel: Fläche, über der das Fenster dem Mauszeiger folgt: die
+    /// Kapsel bzw. die offene Form, nicht die ganze Ansicht um die Kamera.
+    /// `nil`: die Ansicht als Ganzes (Ruhebild, Schnellaktion, andere Lagen).
+    var islandHoverFrame: CGRect?
     /// Kamera-Insel: Der Grund für die Form dieses Diktats steht schon im Log.
     var islandDecisionLogged = false
     var islandDecisionTask: Task<Void, Never>?
@@ -927,6 +931,9 @@ class OverlayController: ObservableObject {
 
     func captureScreenshot() {
         notePillAction()
+        // Kamera-Insel: Die große Form geht vor der Auswahl zu, damit sie
+        // nicht im Bild steht (wie beim Clip).
+        setIslandExpanded(false)
         onCaptureScreenshot?()
     }
 
@@ -995,8 +1002,12 @@ class OverlayController: ObservableObject {
         // die Menüleiste (Treffer- und Hover-Fläche).
         var swiftUIFrame = reportedFrame
         // Die kompakte Kapsel an der Kamera-Insel liegt selbst in der
-        // Menüleiste: Ihr ganzer Rahmen zählt.
-        if presentation.isNotch, !(usesIslandCompact && !showsRestLook) {
+        // Menüleiste: Es zählt genau sie (bzw. aufgeklappt die große Form),
+        // nicht die Ansicht, die symmetrisch um die Kamera reicht. Sonst
+        // wertete jede Mausbewegung durch die Menüleiste die Pille neu aus.
+        if let hover = islandHoverFrame {
+            swiftUIFrame = hover
+        } else if presentation.isNotch, !(usesIslandCompact && !showsRestLook) {
             // An der Insel beginnt das Fenster etwas über der Kapsel.
             let bandHeight = presentation.bandHeight + presentation.islandTopGap
             swiftUIFrame.origin.y += bandHeight

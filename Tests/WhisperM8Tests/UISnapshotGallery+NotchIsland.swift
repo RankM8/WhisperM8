@@ -220,10 +220,9 @@ extension UISnapshotGallery {
                 display.cameraOffset = 0
                 display.islandLarge = progress >= 1
                     ? .open(form) : .closed(form, outline: seed.interpolated(to: open, progress: progress))
-                // Wie der Controller: worauf der Chat wartet, sonst sein Projekt.
+                // Wie der Controller: die Art des Wartens, sonst das Projekt.
                 display.alertDetail = alert.flatMap { alert in
-                    let row = rows.first { $0.title == alert.title }
-                    return alert.kind == .awaitingInput ? row?.activityLine ?? row?.project : row?.project
+                    NotchStatusController.alertDetail(kind: alert.kind, input: inputs.first { $0.title == alert.title })
                 }
                 frame = NotchIslandLargeGeometry.canvas(form.frame, margin: NotchIslandLargeGeometry.overshootMargin)
             }

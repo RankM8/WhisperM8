@@ -288,35 +288,63 @@ final class NotchIslandLargeGeometryTests: XCTestCase {
 
     // MARK: Hinweis
 
-    /// Zweite Zeile des Hinweises: worauf der Chat wartet, sonst nur sein
-    /// Projekt. Der Hinweis geht von selbst auf; Antworttext und Dateinamen
-    /// zeigt erst die Liste auf einen Klick.
-    func testAlertDetailShowsOnlyWhatTheChatWaitsFor() {
+    /// Zweite Zeile des Hinweises: nur die ART des Wartens (Freigabe mit
+    /// Werkzeugname, Frage, Plan), sonst das Projekt. Der Hinweis geht von
+    /// selbst auf, auch bei einer Bildschirmfreigabe: Befehl, Dateiname,
+    /// Fragetext und Antworttext stehen nie darin, nur in der Liste.
+    func testAlertDetailNamesTheKindNeverTheContent() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
-        let waiting = UUID(), finished = UUID(), bare = UUID()
-        let inputs = [
+        func input(_ status: AgentSessionRuntimeStatus, _ activity: AgentSessionActivity?) -> NotchChatInput {
             NotchChatInput(
-                id: waiting, title: "Chat A", project: "Projekt A", status: .awaitingInput, statusSince: now,
-                lastTurnAt: nil, lastActivityAt: now,
-                activity: AgentSessionActivity(awaitingKind: .permission, awaitingToolName: "Bash")),
-            NotchChatInput(
-                id: finished, title: "Chat B", project: "Projekt B", status: .idle, statusSince: now,
-                lastTurnAt: now, lastActivityAt: now, activity: AgentSessionActivity(detail: .reply("Antworttext"))),
-            NotchChatInput(
-                id: bare, title: "Chat C", project: "Projekt C", status: .awaitingInput, statusSince: now,
-                lastTurnAt: nil, lastActivityAt: now, activity: nil),
-        ]
-        let rows = NotchStatusModel.rows(from: inputs, now: now, showFreshDone: true)
-        func detail(_ id: UUID, _ kind: NotchAlertKind) -> String? {
-            NotchStatusController.alertDetail(for: NotchAlert(sessionID: id, title: "x", kind: kind), rows: rows)
+                id: UUID(), title: "Chat A", project: "Projekt A", status: status, statusSince: now,
+                lastTurnAt: now, lastActivityAt: now, activity: activity)
         }
-        let line = rows.first { $0.id == waiting }?.activityLine
-        XCTAssertNotNil(line)
-        XCTAssertEqual(detail(waiting, .awaitingInput), line)
-        XCTAssertEqual(detail(finished, .finished), "Projekt B", "kein Antworttext im Hinweis")
-        XCTAssertEqual(detail(finished, .errored), "Projekt B")
-        XCTAssertEqual(detail(bare, .awaitingInput), "Projekt C")
-        XCTAssertNil(detail(UUID(), .awaitingInput))
+        func detail(_ kind: NotchAlertKind, _ input: NotchChatInput?) -> String? {
+            NotchStatusController.alertDetail(kind: kind, input: input)
+        }
+        let approval = AgentSessionActivity(
+            detail: .tool(name: "Bash", argument: "git push origin geheim"), awaitingKind: .permission, awaitingToolName: "Bash")
+        XCTAssertEqual(detail(.awaitingInput, input(.awaitingInput, approval)), String(localized: "Approval: \("Bash")"))
+        // Die Liste zeigt weiter die volle Zeile.
+        XCTAssertTrue(approval.line(for: .awaitingInput)?.contains("git push") == true)
+        XCTAssertFalse(approval.awaitingKindLine?.contains("git") == true)
+
+        let edit = AgentSessionActivity(detail: .tool(name: "Edit", argument: "Kunde.swift"), awaitingKind: .permission)
+        XCTAssertEqual(detail(.awaitingInput, input(.awaitingInput, edit)), String(localized: "Approval: \("Edit")"))
+        let mcp = AgentSessionActivity(awaitingKind: .permission, awaitingToolName: "mcp__server__lookup")
+        XCTAssertEqual(detail(.awaitingInput, input(.awaitingInput, mcp)), String(localized: "Approval: \("lookup")"))
+        let bare = AgentSessionActivity(awaitingKind: .permission)
+        XCTAssertEqual(detail(.awaitingInput, input(.awaitingInput, bare)), String(localized: "Approval"))
+
+        let question = AgentSessionActivity(detail: .question("Soll ich den Kunden anschreiben?"), awaitingKind: .question)
+        XCTAssertEqual(detail(.awaitingInput, input(.awaitingInput, question)), String(localized: "Question"))
+        XCTAssertTrue(question.line(for: .awaitingInput)?.contains("Kunden") == true)
+        let plan = AgentSessionActivity(awaitingKind: .planApproval)
+        XCTAssertEqual(detail(.awaitingInput, input(.awaitingInput, plan)), String(localized: "Plan awaiting approval"))
+
+        // Ohne bekannte Art (Codex ohne Hooks, noch kein Stand) und bei
+        // „fertig“ oder „Fehler“: nur das Projekt.
+        let codexTool = AgentSessionActivity(detail: .tool(name: "shell", argument: "rm -rf build"))
+        XCTAssertEqual(detail(.awaitingInput, input(.awaitingInput, codexTool)), "Projekt A")
+        let codexQuestion = AgentSessionActivity(detail: .question("Welche Datei?"))
+        XCTAssertEqual(detail(.awaitingInput, input(.awaitingInput, codexQuestion)), String(localized: "Question"))
+        XCTAssertEqual(detail(.awaitingInput, input(.awaitingInput, nil)), "Projekt A")
+        let reply = AgentSessionActivity(detail: .reply("Antworttext"))
+        XCTAssertEqual(detail(.finished, input(.idle, reply)), "Projekt A", "kein Antworttext im Hinweis")
+        XCTAssertEqual(detail(.errored, input(.errored, approval)), "Projekt A")
+        XCTAssertNil(detail(.awaitingInput, nil))
+    }
+
+    /// Der Hinweis bleibt stehen, solange der Zeiger auf der großen Form
+    /// ist (gleich kommt ein Klick); daneben und ohne Form läuft er ab.
+    func testAlertStaysWhileThePointerIsOnTheForm() {
+        let form = NotchIslandLargeGeometry.form(screen: islandScreen(), kind: .alert).frame
+        XCTAssertTrue(NotchStatusController.alertHeldByPointer(form: form, mouse: CGPoint(x: form.midX, y: form.midY)))
+        XCTAssertTrue(NotchStatusController.alertHeldByPointer(form: form, mouse: CGPoint(x: form.minX + 2, y: form.minY + 2)))
+        XCTAssertFalse(NotchStatusController.alertHeldByPointer(form: form, mouse: CGPoint(x: form.minX - 4, y: form.midY)))
+        XCTAssertFalse(NotchStatusController.alertHeldByPointer(form: form, mouse: CGPoint(x: form.midX, y: form.minY - 4)))
+        XCTAssertFalse(NotchStatusController.alertHeldByPointer(form: nil, mouse: CGPoint(x: form.midX, y: form.midY)))
+        XCTAssertLessThanOrEqual(NotchStatusController.alertPointerHoldLimit, .seconds(30), "nie unbegrenzt")
     }
 
     // MARK: Aufgehen nur per Klick
