@@ -308,6 +308,51 @@ Zeile unter der Menüleiste, das hing in Ruhe wie ein schwarzes Stück unter der
 Kamera; dann Zeichen links und Zahl rechts der Kamera, das las sich
 schlechter als beides nebeneinander und brauchte auf beiden Seiten Platz.
 
+### Entwurf: aufgeklappt als eine Form (19.11.2026, noch nicht gebaut)
+
+Heute hängen Liste, Hinweis und aufgeklapptes Diktat an einem Hals unter der
+Menüleiste. Der Entwurf ersetzt das durch EINE schwarze Fläche ohne Hals, wie
+Apples aufgeklappte Insel: Sie wächst aus der Insel in Breite und Höhe, ist auf
+die Kamera zentriert und beginnt auf Höhe der Insel. Die echte Anzeige ist
+unverändert; es gibt nur Vorschau-Bilder (`make snapshots ONLY=insel-gross`,
+`UISnapshotGallery+IslandLarge.swift`).
+
+Apples aufgeklappte Insel auf einem MacBook Pro mit Kamera-Insel (macOS 27.2.1):
+
+| Wert | Ergebnis | Quelle |
+|---|---|---|
+| Aufgeklappt („Now Playing“) | 286 × 152 pt, 6 pt unter der Oberkante | Bildschirmfoto, ausgemessen |
+| Ecken | rund 36 pt, weich auslaufend | Bildschirmfoto |
+| Innenabstand | 16 pt seitlich und unten; der Inhalt beginnt rund 27 pt unter der Oberkante, unter der Zeile mit der Kamera | Bildschirmfoto |
+| Schrift und Knöpfe | Titel rund 15 pt halbfett, Unterzeile 15 pt, Zeiten 12 pt, Bedienzeichen rund 30 pt | Bildschirmfoto |
+| Kompakt mit Musik | 143 × 34 pt (802 bis 945), 6 pt unter der Oberkante: Cover links, Wellenform rechts der Kamera | Accessibility (`AXLiveActivity`) |
+
+Der Entwurf:
+
+- **Form:** abgerundetes Rechteck mit 36 pt Ecken, 6 pt unter der Oberkante,
+  auf die Kamera zentriert. Liste 420 pt breit, Hinweis 380, Diktat 420,
+  Controller 460 (Apples „Now Playing“: 286).
+- **Kopfzeile (42 pt):** Apples Insel liegt immer über unseren Fenstern. Was
+  sie zeigt (Musik, Mikrofon-Hinweis), steht deshalb oben in der Mitte unserer
+  Form; links und rechts davon stehen unsere Zähler. Unser Inhalt beginnt
+  darunter. Wie breit Apples Insel gerade ist, liefert die vorhandene Messung.
+- **Inhalt:** Zeilen 56 pt hoch, Titel 15 pt halbfett, 18 pt Innenabstand,
+  Knöpfe 44 pt. Controller: Kacheln in zwei Spalten, die Auswahl hell gefüllt
+  und umrandet, unten die Tasten (Steuerkreuz bewegt, Kreuz öffnet, Kreis
+  schließt).
+- **Bewegung:** eine Federbewegung aus dem Rahmen von Apples Insel auf die
+  volle Größe (Breite und Höhe zugleich, rund 0,4 s), der Inhalt blendet erst
+  danach ein (0,15 s); zu in umgekehrter Reihenfolge. Bei „Bewegung
+  reduzieren“ nur Überblenden.
+- **Kosten:** einmalige Animationen, keine Dauerbewegung, kein Takt. Das
+  Fenster bekommt sofort seinen endgültigen Rahmen, nur die Form in ihm
+  bewegt sich (rund 25 Bilder Layout je Auf- oder Zuklappen); Klicks nimmt es
+  nur auf der Form an.
+- **Folge:** Solange die Form offen ist, verdeckt sie Menüs und Statussymbole
+  neben der Kamera, wie Apples Insel. Das ändert die bisherige Regel für die
+  aufgeklappten Zustände und ist vor dem Bau zu entscheiden; kompakt und
+  minimal bleiben, wie sie sind.
+
 ### Was Apple vorgibt
 
 Quellen, Stand 18.11.2026:
