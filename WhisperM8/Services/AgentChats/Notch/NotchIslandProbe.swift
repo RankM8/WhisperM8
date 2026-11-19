@@ -84,8 +84,10 @@ struct NotchIslandAX {
 /// der Besitzer des obersten bildschirmbreiten Fensters an der Kamera.
 ///
 /// Kosten: rund 10 bis 30 ms, etwa 60 kurze Anfragen an die vordere App und
-/// an den Prozess der System-Insel, dazu einmal die Fensterliste. Läuft nie
-/// auf dem Main Thread und nur zu Ereignissen (`NotchIslandMonitor`).
+/// an den Prozess der System-Insel, dazu einmal die Fensterliste. Die
+/// Anfragen laufen nie auf dem Main Thread und nur zu Ereignissen
+/// (`NotchIslandMonitor`); auf dem Main Thread werden nur die eigenen Menüs
+/// bestimmt, wenn die Menüleiste gerade uns gehört (ein paar Einträge).
 enum NotchIslandProbe {
     /// Gesamtfrist einer Messung.
     static let budget: TimeInterval = 0.5

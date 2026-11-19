@@ -24,7 +24,7 @@ final class IslandDictationCompactTests: XCTestCase {
     /// hergibt; Notch und Pille bleiben, wie sie waren.
     func testCompactOnlyAtTheIslandWithRoom() {
         XCTAssertTrue(controller().usesIslandCompact)
-        XCTAssertFalse(controller(capsule: false).usesIslandCompact, "kein Platz: Ausweichform unter der Menüleiste")
+        XCTAssertFalse(controller(capsule: false).usesIslandCompact, "ohne Kapsel (kein Insel-Bildschirm) gilt die Form unter der Menüleiste")
         let notch = controller()
         notch.presentation = .notch(width: 185, height: 38)
         XCTAssertFalse(notch.usesIslandCompact)
@@ -196,10 +196,42 @@ final class IslandDictationCompactTests: XCTestCase {
         XCTAssertEqual(controller.islandCapsule?.width, NotchIslandGeometry.dictationMinimalWidth, "noch keine Messung: schmalste Form")
         XCTAssertFalse(controller.islandDecisionLogged)
 
-        // Die erste Messung stellt die volle Kapsel hin und schreibt den Grund ins Log, einmal.
+        // Die erste Messung stellt die volle Kapsel hin. Die Log-Zeile kommt
+        // erst nach der Frist bzw. am Ende des Diktats, einmal.
         controller.refreshIslandCapsule(occupancy: NotchMenuBarOccupancy(frames: []), animated: false)
         XCTAssertEqual(controller.islandCapsule?.showsClock, true)
+        XCTAssertFalse(controller.islandDecisionLogged)
+        controller.logIslandDecision()
         XCTAssertTrue(controller.islandDecisionLogged)
+        controller.tearDownUnified()
+    }
+
+    /// Ein zweites Diktat mit derselben Kapsel (ohne Berechtigung immer, oft
+    /// bei gleicher Messung, auch bei Übernahme eines Fensters, das sich
+    /// gerade zurückzieht): Die Trefferflächen stehen wieder, das Fenster
+    /// nimmt nicht die ganze Ansicht um die Kamera.
+    func testSecondDictationWithTheSameCapsuleKeepsItsHitAreas() throws {
+        let controller = controller(capsule: false)
+        controller.unifiedScreen = screen
+        controller.islandAXTrusted = { false }
+        controller.islandViewFrame = CGRect(x: 100, y: 0, width: 408, height: 32)
+        controller.beginIslandDictation(on: screen)
+        let capsule = try XCTUnwrap(controller.islandCapsule)
+        XCTAssertEqual(controller.islandInteractiveParts.count, 1)
+        let first = controller.islandInteractiveParts
+        XCTAssertEqual(first.first?.width, capsule.width)
+        // Diktat zu Ende, das nächste beginnt: dieselbe Kapsel, dieselben Flächen.
+        controller.tearDownUnified(keepingWindow: true)
+        controller.beginIslandDictation(on: screen)
+        XCTAssertEqual(controller.islandCapsule, capsule)
+        XCTAssertEqual(controller.islandInteractiveParts, first)
+        // Im Ruhebild des Übergangs gilt die Ansicht als Ganzes, danach wieder die Kapsel.
+        controller.showsRestLook = true
+        controller.refreshIslandInteractiveParts()
+        XCTAssertTrue(controller.islandInteractiveParts.isEmpty)
+        controller.showsRestLook = false
+        controller.reportPillFrame(CGRect(x: 100, y: 0, width: 408, height: 32))
+        XCTAssertEqual(controller.islandInteractiveParts, first)
         controller.tearDownUnified()
     }
 

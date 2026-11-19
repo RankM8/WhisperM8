@@ -510,6 +510,8 @@ class OverlayController: ObservableObject {
     /// ganzen Ansicht (SwiftUI-Koordinaten), für die Trefferflächen.
     var islandParts: [String: CGRect] = [:]
     var islandViewFrame: CGRect?
+    /// Kamera-Insel: zuletzt gesetzte Trefferflächen (leer: die ganze Ansicht).
+    var islandInteractiveParts: [CGRect] = []
     /// Kamera-Insel: Der Grund für die Form dieses Diktats steht schon im Log.
     var islandDecisionLogged = false
     var islandDecisionTask: Task<Void, Never>?

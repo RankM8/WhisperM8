@@ -196,8 +196,8 @@ extension OverlayController {
 
     // MARK: Kamera-Insel, kompakt
 
-    /// An der Kamera-Insel steht das Diktat kompakt in der Menüleiste
-    /// (`RecordingPillView`), solange dort Platz ist. Ausnahmen, die Text
+    /// An der Kamera-Insel steht das Diktat immer kompakt in der Menüleiste
+    /// (`RecordingPillView`), auch ohne Messung und ohne Platz. Ausnahmen, die Text
     /// brauchen oder ohne Maus bedient werden: Schnellaktion (Beschriftung)
     /// und Aufnahme per Controller (Ziel-Chat und Modus müssen ohne Klick
     /// sichtbar sein). Sie hängen wie bisher unter der Menüleiste.
@@ -233,15 +233,20 @@ extension OverlayController {
         islandDecisionTask?.cancel()
         islandDecisionTask = nil
         islandDecisionLogged = false
-        hostingView?.setInteractiveParts(swiftUIFrames: [])
         guard screen.hasIsland, case .island = presentation else {
             islandCancellables.removeAll()
             if islandCapsule != nil { islandCapsule = nil }
+            refreshIslandInteractiveParts()
             return
         }
         followSystemIsland(on: screen)
         refreshIslandCapsule(occupancy: NotchIslandMonitor.shared.occupancy[screen.displayID], animated: false)
-        // Kommt keine Messung, steht der Grund trotzdem einmal im Log.
+        // Die Trefferflächen gelten auch, wenn die Kapsel dieselbe ist wie im
+        // vorigen Diktat (dann meldet `refreshIslandCapsule` keine Änderung).
+        refreshIslandInteractiveParts()
+        // Die Log-Zeile kommt nach kurzer Frist: Dann ist die frische Messung
+        // da (die erste Lage stammt aus der zwischengespeicherten), und eine
+        // Beschriftung von Schnellaktion oder Controller steht fest.
         islandDecisionTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(600))
             guard !Task.isCancelled else { return }
@@ -273,13 +278,13 @@ extension OverlayController {
             } else {
                 islandCapsule = capsule
             }
-            refreshIslandInteractiveParts()
         }
-        if occupancy != nil { logIslandDecision() }
+        refreshIslandInteractiveParts()
     }
 
     /// Einmal je Diktat: in welcher Form es an der Kamera-Insel steht und
-    /// warum. Geschrieben mit der ersten Messung, sonst nach kurzer Frist.
+    /// warum. Geschrieben 0,6 s nach dem Beginn, bei einem kürzeren Diktat
+    /// an seinem Ende.
     func logIslandDecision() {
         guard !islandDecisionLogged, let screen = unifiedScreen, case .island = presentation else { return }
         islandDecisionLogged = true
@@ -344,14 +349,15 @@ extension OverlayController {
     }
 
     func refreshIslandInteractiveParts() {
-        guard usesIslandCompact, !showsRestLook, let capsule = islandCapsule, let viewFrame = islandViewFrame,
-              case .island(let band) = presentation else {
-            hostingView?.setInteractiveParts(swiftUIFrames: [])
-            return
+        var parts: [CGRect] = []
+        if usesIslandCompact, !showsRestLook, let capsule = islandCapsule, let viewFrame = islandViewFrame,
+           case .island(let band) = presentation {
+            parts = Self.islandInteractiveParts(
+                viewFrame: viewFrame, capsule: capsule, band: band,
+                showsControls: showsIslandControls, controls: islandParts["controls"])
         }
-        hostingView?.setInteractiveParts(swiftUIFrames: Self.islandInteractiveParts(
-            viewFrame: viewFrame, capsule: capsule, band: band,
-            showsControls: showsIslandControls, controls: islandParts["controls"]))
+        islandInteractiveParts = parts
+        hostingView?.setInteractiveParts(swiftUIFrames: parts)
     }
 
     /// Die aufgeklappten Knöpfe melden ihren Rahmen.
@@ -484,6 +490,8 @@ extension OverlayController {
         unifiedGeneration += 1
         badgeCancellable = nil
         islandCancellables.removeAll()
+        // Ein Diktat, das vor der Frist endet, bekommt seine Log-Zeile hier.
+        logIslandDecision()
         islandDecisionTask?.cancel()
         islandDecisionTask = nil
         if statusBadge != nil { statusBadge = nil }

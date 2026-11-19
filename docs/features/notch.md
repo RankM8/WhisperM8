@@ -288,7 +288,8 @@ dauert Sekunden, und die Aufnahme soll dort stehen, wo er sie erwartet.
 Fällt eine Nachmessung aus (die vordere App antwortet nicht), bleibt die
 Kapsel, wo die letzte gültige Messung sie hingestellt hat. Während des Diktats
 wird bei jedem App- und Space-Wechsel neu gemessen, auch wenn die
-Statusanzeige ausgeschaltet ist. Je Diktat schreibt die App einmal eine Zeile
+Statusanzeige ausgeschaltet ist. Je Diktat schreibt die App einmal (0,6 s
+nach dem Beginn, also mit der frischen Messung) eine Zeile
 `island_dictation form=… reason=…` ins Log: in welcher Form es steht und
 warum (`measured`, `no_room`, `no_accessibility_permission`,
 `no_measurement(Grund)`), dazu den freien Platz je Seite.
@@ -407,7 +408,8 @@ Accessibility-Aufrufe) drei Dinge ab:
   gemeldet. Die eigenen Menüs kommen dann aus dem Prozess selbst
   (`NotchIslandMonitor.ownMenuFrames`): die Rahmen, die AppKit für
   Bedienungshilfen führt, und wenn die nicht brauchbar sind, aus den Titeln
-  geschätzt (Apple-Menü 34 pt, je Titel 22 pt Rand).
+  geschätzt (Apple-Menü 34 pt, je Titel 22 pt Rand). Damit steht die
+  Ruhe-Anzeige auch dann in der Menüleiste, wenn WhisperM8 selbst vorn ist.
 - **Statussymbole:** Die Fensterliste (`CGWindowListCopyWindowInfo`) nennt
   den Prozess, dem die Insel gehört: Besitzer des obersten bildschirmbreiten
   Fensters an der Kamera. Dessen Fenster in Höhe der Menüleiste enthält die
