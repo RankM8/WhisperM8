@@ -510,10 +510,11 @@ class OverlayController: ObservableObject {
     /// ganzen Ansicht (SwiftUI-Koordinaten), für die Trefferflächen.
     var islandParts: [String: CGRect] = [:]
     var islandViewFrame: CGRect?
-    /// Kamera-Insel: Es gibt noch keine Messung, sie ist aber angefordert;
-    /// so lange zeigt das Fenster nur die Insel selbst.
-    @Published var islandAwaitsMeasurement = false
-    var islandAwaitTask: Task<Void, Never>?
+    /// Kamera-Insel: zuletzt gesetzte Trefferflächen (leer: die ganze Ansicht).
+    var islandInteractiveParts: [CGRect] = []
+    /// Kamera-Insel: Der Grund für die Form dieses Diktats steht schon im Log.
+    var islandDecisionLogged = false
+    var islandDecisionTask: Task<Void, Never>?
     /// Berechtigung für Bedienungshilfen (ohne sie gibt es keine Messung).
     var islandAXTrusted: () -> Bool = { AXIsProcessTrusted() }
     var unifiedScreenObserver: NSObjectProtocol?

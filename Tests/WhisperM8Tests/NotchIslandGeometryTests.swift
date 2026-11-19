@@ -345,8 +345,8 @@ final class NotchIslandGeometryTests: XCTestCase {
     }
 
     /// Stufen beim Diktat: mit Zeit links, sonst rechts, sonst nur die
-    /// Wellenform, sonst keine Kapsel (Ausweichform unter der Menüleiste).
-    /// Ohne Messung die schmalste Form links.
+    /// Wellenform. Ein Diktat steht immer in der Menüleiste: Ohne Platz oder
+    /// ohne Messung die schmalste Form trotzdem, notfalls über einem Menütitel.
     func testDictationCapsuleStagesFollowTheRoom() throws {
         let screen = islandScreen()
         func capsule(_ frames: [CGRect]) -> NotchIslandDictationCapsule? {
@@ -363,16 +363,26 @@ final class NotchIslandGeometryTests: XCTestCase {
         XCTAssertEqual(minimal.side, .leading)
         XCTAssertFalse(minimal.showsClock)
         XCTAssertEqual(minimal.width, NotchIslandGeometry.dictationMinimalWidth)
-        XCTAssertNil(capsule([barItem(screen, from: 10, to: 800), barItem(screen, from: 940, to: 1716)]), "kein Platz: Ausweichform")
-        // Ohne Messung: höchstens die Mindestbreite.
+        XCTAssertFalse(minimal.isForced)
+        // Nirgends Platz: die schmalste Form trotzdem, auf der Seite mit mehr Platz.
+        let forced = try XCTUnwrap(capsule([barItem(screen, from: 10, to: 800), barItem(screen, from: 960, to: 1716)]))
+        XCTAssertTrue(forced.isForced)
+        XCTAssertFalse(forced.showsClock)
+        XCTAssertEqual(forced.width, NotchIslandGeometry.dictationMinimalWidth)
+        XCTAssertEqual(forced.side, .trailing, "rechts bleiben 15 pt neben Apples Insel, links 2")
+        XCTAssertEqual(capsule([barItem(screen, from: 10, to: 780), barItem(screen, from: 946, to: 1716)])?.side, .leading)
+        // Ohne Messung: höchstens die Mindestbreite, links.
         let blind = try XCTUnwrap(NotchIslandGeometry.dictationCapsule(screen: screen, occupancy: nil, hasBadge: false))
         XCTAssertEqual(blind.width, NotchIslandGeometry.dictationMinimalWidth)
         XCTAssertFalse(blind.showsClock)
         XCTAssertEqual(blind.side, .leading)
+        XCTAssertTrue(blind.isForced)
     }
 
     /// Die Diktat-Kapsel schneidet bei keiner Lage von Menüs und
-    /// Statussymbolen einen gemessenen Rahmen.
+    /// Statussymbolen einen gemessenen Rahmen, solange auf einer Seite Platz
+    /// ist; nur wenn nirgends Platz ist, steht sie trotzdem da (`isForced`).
+    /// Über der Kamera liegt sie nie.
     func testDictationCapsuleNeverCutsMeasuredMenuFrames() {
         for screen in [islandScreen(), islandScreen(scale: 0.67), islandScreen(scale: 1.18)] {
             let cutoutMinX = screen.notchCenterX - screen.notchWidth / 2
@@ -387,9 +397,21 @@ final class NotchIslandGeometryTests: XCTestCase {
                         for badge in [false, true] {
                             let occupancy = NotchMenuBarOccupancy(frames: frames, systemIsland: system)
                             guard let capsule = NotchIslandGeometry.dictationCapsule(
-                                screen: screen, occupancy: occupancy, hasBadge: badge) else { continue }
+                                screen: screen, occupancy: occupancy, hasBadge: badge) else {
+                                XCTFail("an der Insel gibt es immer eine Kapsel")
+                                continue
+                            }
                             let frame = capsule.frame(screen: screen)
-                            for item in frames { XCTAssertFalse(frame.intersects(item), "\(leftGap) \(rightGap) \(capsule)") }
+                            if capsule.isForced {
+                                // Erzwungen nur, wenn die schmalste Form auf keiner Seite Platz hat.
+                                XCTAssertFalse(capsule.showsClock)
+                                let reserve = NotchIslandGeometry.dictationReserve(screen: screen, occupancy: occupancy)
+                                let width = capsule.width + NotchIslandGeometry.detachedGap + NotchIslandGeometry.menuClearance
+                                XCTAssertLessThan(leftGap, reserve.leading + width, "\(leftGap) \(rightGap)")
+                                XCTAssertLessThan(rightGap, reserve.trailing + width, "\(leftGap) \(rightGap)")
+                            } else {
+                                for item in frames { XCTAssertFalse(frame.intersects(item), "\(leftGap) \(rightGap) \(capsule)") }
+                            }
                             XCTAssertTrue(frame.maxX <= cutoutMinX || frame.minX >= cutoutMaxX, "nie über der Kamera")
                         }
                     }

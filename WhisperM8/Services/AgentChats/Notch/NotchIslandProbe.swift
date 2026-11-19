@@ -84,8 +84,10 @@ struct NotchIslandAX {
 /// der Besitzer des obersten bildschirmbreiten Fensters an der Kamera.
 ///
 /// Kosten: rund 10 bis 30 ms, etwa 60 kurze Anfragen an die vordere App und
-/// an den Prozess der System-Insel, dazu einmal die Fensterliste. Läuft nie
-/// auf dem Main Thread und nur zu Ereignissen (`NotchIslandMonitor`).
+/// an den Prozess der System-Insel, dazu einmal die Fensterliste. Die
+/// Anfragen laufen nie auf dem Main Thread und nur zu Ereignissen
+/// (`NotchIslandMonitor`); auf dem Main Thread werden nur die eigenen Menüs
+/// bestimmt, wenn die Menüleiste gerade uns gehört (ein paar Einträge).
 enum NotchIslandProbe {
     /// Gesamtfrist einer Messung.
     static let budget: TimeInterval = 0.5
@@ -95,11 +97,31 @@ enum NotchIslandProbe {
     static let maxCandidates = 3
 
     /// `windows`: Fensterliste von vorn nach hinten (Quartz-Koordinaten).
+    /// `ownMenuFrames`: Rahmen der eigenen Menüs (Quartz), falls die
+    /// Menüleiste gerade uns gehört; siehe `measureWithReason`.
     nonisolated static func measure(
         screen: NotchScreenInfo, primaryHeight: CGFloat, menuOwnerPID: pid_t?, ownPID: pid_t,
-        windows: [NotchWindowSample], ax: NotchIslandAX
+        windows: [NotchWindowSample], ownMenuFrames: [CGRect]? = nil, ax: NotchIslandAX
     ) -> NotchMenuBarOccupancy? {
-        guard screen.hasIsland, ax.isTrusted(), let menuOwnerPID else { return nil }
+        measureWithReason(
+            screen: screen, primaryHeight: primaryHeight, menuOwnerPID: menuOwnerPID, ownPID: ownPID,
+            windows: windows, ownMenuFrames: ownMenuFrames, ax: ax).occupancy
+    }
+
+    /// Wie `measure`, dazu der Grund, wenn es kein Ergebnis gibt (fürs Log).
+    ///
+    /// Gehört die Menüleiste der eigenen App, kommen ihre Menüs aus
+    /// `ownMenuFrames`: Über die Accessibility-Schnittstelle kann ein Prozess
+    /// seine eigene Menüleiste nicht abfragen (am 19.11.2026 am laufenden
+    /// System belegt: Mit einer fremden App vorn gab es Messungen, mit der
+    /// eigenen keine).
+    nonisolated static func measureWithReason(
+        screen: NotchScreenInfo, primaryHeight: CGFloat, menuOwnerPID: pid_t?, ownPID: pid_t,
+        windows: [NotchWindowSample], ownMenuFrames: [CGRect]? = nil, ax: NotchIslandAX
+    ) -> (occupancy: NotchMenuBarOccupancy?, failure: String?) {
+        guard screen.hasIsland else { return (nil, "no_island_screen") }
+        guard ax.isTrusted() else { return (nil, "no_accessibility_permission") }
+        guard let menuOwnerPID else { return (nil, "no_menu_owner") }
         let quartz = NotchFullscreenDetector.quartzFrame(fromCocoa: screen.frame, primaryHeight: primaryHeight)
         let band = NotchIslandGeometry.band(screen: screen)
         let camera = CGPoint(
@@ -111,13 +133,33 @@ enum NotchIslandProbe {
             bar = systemBar(pid: pid, screenQuartz: quartz, barHeight: barHeight, cameraX: camera.x, ax: ax)
             if bar != nil { break }
         }
-        guard let bar, let menus = menuFrames(pid: menuOwnerPID, screenQuartz: quartz, ax: ax) else { return nil }
+        guard let bar else { return (nil, "no_island_owner") }
+        let isOwn = menuOwnerPID == ownPID
+        guard let menus = isOwn ? ownMenuFrames : menuFrames(pid: menuOwnerPID, screenQuartz: quartz, ax: ax) else {
+            return (nil, isOwn ? "own_menu_bar_unreadable" : "menu_bar_unreadable")
+        }
         let frames = (menus + bar.statusItems)
             .filter { $0.width > 0 && $0.width < quartz.width / 2 }
             .map { CGRect(x: $0.minX, y: primaryHeight - $0.maxY, width: $0.width, height: $0.height) }
-        return NotchMenuBarOccupancy(
+        return (NotchMenuBarOccupancy(
             frames: frames, systemIsland: bar.island.map { $0.minX...$0.maxX },
-            systemIslandInsets: bar.island.map { ($0.minY - quartz.minY)...($0.maxY - quartz.minY) })
+            systemIslandInsets: bar.island.map { ($0.minY - quartz.minY)...($0.maxY - quartz.minY) }), nil)
+    }
+
+    /// Rahmen der eigenen Menüs aus ihren Titeln geschätzt (Quartz): Das
+    /// Apple-Menü beginnt 10 pt vom Rand und ist 34 pt breit, jeder Titel
+    /// bekommt 22 pt Rand, benachbarte Einträge überlappen um 1 pt (so am
+    /// 18.11.2026 an fremden Apps gemessen). `titleWidth`: Breite eines
+    /// Titels in der Schrift der Menüleiste; `true` für das App-Menü (fett).
+    nonisolated static func estimatedMenuFrames(
+        titles: [String], screenQuartz: CGRect, barHeight: CGFloat, titleWidth: (String, Bool) -> CGFloat
+    ) -> [CGRect] {
+        var frames = [CGRect(x: screenQuartz.minX + 10, y: screenQuartz.minY, width: 34, height: barHeight)]
+        for (index, title) in titles.enumerated() {
+            let width = (titleWidth(title, index == 0) + 22).rounded(.up)
+            frames.append(CGRect(x: (frames.last?.maxX ?? 0) - 1, y: screenQuartz.minY, width: width, height: barHeight))
+        }
+        return frames
     }
 
     /// Wem die Insel gehören kann: Besitzer der bildschirmbreiten Fenster an
@@ -186,6 +228,8 @@ final class NotchIslandMonitor: ObservableObject {
     static let shared = NotchIslandMonitor()
 
     @Published private(set) var occupancy: [UInt32: NotchMenuBarOccupancy] = [:]
+    /// Warum die letzte Messung je Bildschirm kein Ergebnis hatte (fürs Log).
+    private(set) var failures: [UInt32: String] = [:]
     /// Es läuft immer höchstens eine Messung; eine Bitte währenddessen wird
     /// gemerkt und danach einmal erfüllt.
     private var isMeasuring = false
@@ -227,24 +271,60 @@ final class NotchIslandMonitor: ObservableObject {
         let primaryHeight = NSScreen.screens.first?.frame.height ?? screens[0].frame.height
         let menuOwner = NSWorkspace.shared.menuBarOwningApplication?.processIdentifier
         let ownPID = ProcessInfo.processInfo.processIdentifier
+        // Gehört die Menüleiste uns selbst, lassen sich ihre Menüs nur hier
+        // im Prozess bestimmen (ein paar Einträge, kein I/O).
+        let ownMenus: [UInt32: [CGRect]] = menuOwner == ownPID
+            ? Dictionary(uniqueKeysWithValues: screens.map { ($0.displayID, Self.ownMenuFrames(screen: $0, primaryHeight: primaryHeight)) })
+            : [:]
         Task.detached(priority: .utility) { [weak self] in
             let windows = NotchStatusController.onScreenWindows()
             var measured: [UInt32: NotchMenuBarOccupancy] = [:]
+            var failed: [UInt32: String] = [:]
             for screen in screens {
-                measured[screen.displayID] = NotchIslandProbe.measure(
+                let result = NotchIslandProbe.measureWithReason(
                     screen: screen, primaryHeight: primaryHeight, menuOwnerPID: menuOwner, ownPID: ownPID,
-                    windows: windows, ax: .live(deadline: Date().addingTimeInterval(NotchIslandProbe.budget)))
+                    windows: windows, ownMenuFrames: ownMenus[screen.displayID],
+                    ax: .live(deadline: Date().addingTimeInterval(NotchIslandProbe.budget)))
+                measured[screen.displayID] = result.occupancy
+                failed[screen.displayID] = result.failure
             }
             let result = measured
+            let reasons = failed
             await MainActor.run { [weak self] in
                 guard let self else { return }
                 self.isMeasuring = false
+                self.failures = reasons
                 if result != self.occupancy { self.occupancy = result }
                 if let next = self.pending {
                     self.pending = nil
                     self.measureNow(next)
                 }
             }
+        }
+    }
+
+    /// Rahmen der eigenen Menüs in der Menüleiste (Quartz). Zuerst die
+    /// Rahmen, die AppKit für Bedienungshilfen führt; liefert es keine
+    /// brauchbaren, aus den Titeln geschätzt.
+    static func ownMenuFrames(screen: NotchScreenInfo, primaryHeight: CGFloat) -> [CGRect] {
+        let items = (NSApp.mainMenu?.items ?? []).filter { !$0.isHidden }
+        let quartz = NotchFullscreenDetector.quartzFrame(fromCocoa: screen.frame, primaryHeight: primaryHeight)
+        let barHeight = NotchIslandGeometry.bodyTop(screen)
+        let exact = items.map { item -> CGRect in
+            let frame = item.accessibilityFrame()
+            return CGRect(x: frame.minX, y: primaryHeight - frame.maxY, width: frame.width, height: frame.height)
+        }
+        let plausible = !exact.isEmpty && exact.allSatisfy {
+            $0.width > 4 && $0.height > 4 && abs($0.minY - quartz.minY) <= barHeight
+                && $0.minX >= quartz.minX && $0.maxX <= quartz.maxX
+        }
+        if plausible { return exact }
+        let font = NSFont.menuBarFont(ofSize: 0)
+        let bold = NSFontManager.shared.convert(font, toHaveTrait: .boldFontMask)
+        return NotchIslandProbe.estimatedMenuFrames(
+            titles: items.map(\.title), screenQuartz: quartz, barHeight: barHeight
+        ) { title, isAppMenu in
+            (title as NSString).size(withAttributes: [.font: isAppMenu ? bold : font]).width
         }
     }
 }

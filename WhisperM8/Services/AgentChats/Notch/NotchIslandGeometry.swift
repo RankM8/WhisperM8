@@ -107,6 +107,9 @@ struct NotchIslandDictationCapsule: Equatable {
     var width: CGFloat
     /// Mitte der Kapsel gegenüber der Mitte der Kamera.
     var offset: CGFloat
+    /// Auf keiner Seite war Platz (oder es gab keine Messung): Die Kapsel
+    /// steht trotzdem da und kann einen Menütitel verdecken.
+    var isForced = false
 
     /// Rahmen in globalen Cocoa-Koordinaten.
     func frame(screen: NotchScreenInfo) -> CGRect {
@@ -285,11 +288,14 @@ enum NotchIslandGeometry {
     }
 
     /// Wo die Diktat-Kapsel steht: mit Zeit, wenn auf einer Seite Platz ist
-    /// (links zuerst), sonst nur die Wellenform, sonst gar nicht (`nil`: Das
-    /// Diktat hängt dann wie früher unter der Menüleiste, eine laufende
-    /// Aufnahme bleibt immer sichtbar). Ohne Messung erscheint die schmalste
-    /// Form links: Der Nutzer hat das Diktat selbst ausgelöst, es dauert
-    /// Sekunden, und ohne Anzeige wäre eine laufende Aufnahme unsichtbar.
+    /// (links zuerst), sonst nur die Wellenform auf der Seite mit Platz.
+    /// Ein Diktat steht an der Insel immer in der Menüleiste, nie darunter:
+    /// Ist auf keiner Seite Platz oder gibt es keine Messung, steht die
+    /// schmalste Form trotzdem neben der Insel (`isForced`), auf der Seite
+    /// mit mehr Platz bzw. ohne Messung links, notfalls über einem
+    /// Menütitel. Der Nutzer hat das Diktat selbst ausgelöst, es dauert
+    /// Sekunden, und eine laufende Aufnahme muss dort zu sehen sein, wo er
+    /// sie erwartet. `nil` nur ohne Kamera-Insel.
     static func dictationCapsule(
         screen: NotchScreenInfo, occupancy: NotchMenuBarOccupancy?, hasBadge: Bool = false,
         reserve: (leading: CGFloat, trailing: CGFloat)? = nil
@@ -297,14 +303,14 @@ enum NotchIslandGeometry {
         guard screen.hasIsland else { return nil }
         let reserve = reserve ?? dictationReserve(screen: screen, occupancy: occupancy)
         let badge = hasBadge ? dictationBadgeWidth : 0
-        func capsule(_ side: NotchIslandSide, clock: Bool) -> NotchIslandDictationCapsule {
+        func capsule(_ side: NotchIslandSide, clock: Bool, forced: Bool = false) -> NotchIslandDictationCapsule {
             let width = (clock ? dictationCompactWidth : dictationMinimalWidth) + badge
             let inner = screen.notchWidth / 2 + (side == .leading ? reserve.leading : reserve.trailing) + detachedGap
             return NotchIslandDictationCapsule(
                 side: side, showsClock: clock, width: width,
-                offset: (side == .leading ? -1 : 1) * (inner + width / 2))
+                offset: (side == .leading ? -1 : 1) * (inner + width / 2), isForced: forced)
         }
-        guard let occupancy else { return capsule(.leading, clock: false) }
+        guard let occupancy else { return capsule(.leading, clock: false, forced: true) }
         let free = freeSpace(screen: screen, occupancy: occupancy)
         for clock in [true, false] {
             for side in [NotchIslandSide.leading, .trailing] {
@@ -313,7 +319,9 @@ enum NotchIslandGeometry {
                 if (side == .leading ? free.leading : free.trailing) >= needed { return candidate }
             }
         }
-        return nil
+        // Nirgends Platz: dort, wo am wenigsten verdeckt wird.
+        let roomLeading = free.leading - reserve.leading, roomTrailing = free.trailing - reserve.trailing
+        return capsule(roomTrailing > roomLeading ? .trailing : .leading, clock: false, forced: true)
     }
 
     /// Durchmesser des abgesetzten Kreises: so hoch wie Apples Insel gerade ist.

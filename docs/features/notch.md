@@ -275,23 +275,24 @@ der Aussparung, gemessen). Sie steht dort von Anfang an, damit sie nicht
 springt, wenn der Hinweis erscheint; nach außen rückt sie nur, wenn die
 Messung eine noch breitere Insel zeigt, und bleibt dann für dieses Diktat dort.
 
-Ohne Berechtigung für Bedienungshilfen gibt es keine Messung. Die Aufnahme
-erscheint dann trotzdem, in der schmalsten Form links (nur die Wellenform, die
-Zeit steht aufgeklappt bei den Knöpfen): Der Nutzer hat das Diktat selbst
-ausgelöst, es dauert Sekunden, und eine laufende Aufnahme ohne Anzeige darf es
-nicht geben. In diesem einen Fall kann die Kapsel einen Menütitel verdecken
-und dort Klicks abfangen, wenn die Menüs der vorderen App bis dorthin reichen.
+**Ein Diktat geht an der Kamera-Insel nie unter die Menüleiste.** Mit Messung
+steht die Kapsel dort, wo Platz ist. Ist auf keiner Seite Platz, oder gibt es
+keine Messung (keine Berechtigung für Bedienungshilfen, Messung gescheitert
+oder noch nicht da), steht trotzdem die schmalste Form neben der Insel (nur
+die Wellenform; die Zeit steht aufgeklappt bei den Knöpfen): ohne Messung
+links, ohne Platz auf der Seite mit mehr Platz. In diesen Fällen kann die
+Kapsel einen Menütitel oder ein Statussymbol verdecken und dort Klicks
+abfangen. Das ist gewollt: Der Nutzer hat das Diktat selbst ausgelöst, es
+dauert Sekunden, und die Aufnahme soll dort stehen, wo er sie erwartet.
 
-Mit Berechtigung gilt: Die Kapsel steht nur dort, wo die Messung Platz belegt.
-Direkt nach einem App-Wechsel steht sie noch nach der alten Messung, bis die
-neue ankommt (einige Millisekunden). Fällt eine Nachmessung aus (die vordere
-App antwortet nicht), bleibt die Kapsel, wo die letzte gültige Messung sie
-hingestellt hat; reichen die Menüs der neuen App weiter, kann sie so lange
-einen Menütitel verdecken. Gibt es noch gar keine Messung (Statusanzeige
-aus), zeigt das Fenster bis zu 0,3 s nur die Insel und wartet auf sie; kommt
-keine, oder ist auf keiner Seite Platz, hängt das Diktat wie früher an einem
-Hals unter der Menüleiste. Während des Diktats wird bei jedem App- und
-Space-Wechsel neu gemessen, auch wenn die Statusanzeige ausgeschaltet ist.
+Fällt eine Nachmessung aus (die vordere App antwortet nicht), bleibt die
+Kapsel, wo die letzte gültige Messung sie hingestellt hat. Während des Diktats
+wird bei jedem App- und Space-Wechsel neu gemessen, auch wenn die
+Statusanzeige ausgeschaltet ist. Je Diktat schreibt die App einmal (0,6 s
+nach dem Beginn, also mit der frischen Messung) eine Zeile
+`island_dictation form=… reason=…` ins Log: in welcher Form es steht und
+warum (`measured`, `no_room`, `no_accessibility_permission`,
+`no_measurement(Grund)`), dazu den freien Platz je Seite.
 
 Die Knöpfe bleiben von selbst offen, solange ein Bildschirm-Clip läuft, damit
 sein Stopp-Knopf erreichbar ist. „Fertig“ steht aufgeklappt immer da, auch
@@ -402,7 +403,13 @@ Accessibility-Aufrufe) drei Dinge ab:
 
 - **Menüs der vorderen App:** die Rahmen der Einträge ihrer Menüleiste
   (`NSWorkspace.menuBarOwningApplication`), auch wenn sie rechts der Kamera
-  weiterlaufen.
+  weiterlaufen. Ist WhisperM8 selbst vorn, geht das nicht über diese
+  Schnittstelle: Ein Prozess bekommt seine eigene Menüleiste so nicht
+  gemeldet. Die eigenen Menüs kommen dann aus dem Prozess selbst
+  (`NotchIslandMonitor.ownMenuFrames`): die Rahmen, die AppKit für
+  Bedienungshilfen führt, und wenn die nicht brauchbar sind, aus den Titeln
+  geschätzt (Apple-Menü 34 pt, je Titel 22 pt Rand). Damit steht die
+  Ruhe-Anzeige auch dann in der Menüleiste, wenn WhisperM8 selbst vorn ist.
 - **Statussymbole:** Die Fensterliste (`CGWindowListCopyWindowInfo`) nennt
   den Prozess, dem die Insel gehört: Besitzer des obersten bildschirmbreiten
   Fensters an der Kamera. Dessen Fenster in Höhe der Menüleiste enthält die
@@ -811,14 +818,18 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   Apples Mikrofon-Hinweis; Stufen je nach Platz; schneidet bei keiner Lage
   einen gemessenen Rahmen und liegt nie über der Kamera; ohne Messung
   höchstens die Mindestbreite; rückt nur nach außen.
-  `IslandDictationCompactTests`: kompakt nur an der Insel mit Platz,
-  Schnellaktion und Controller darunter, Knöpfe nur auf Klick bzw. bei
-  laufendem Clip, Lage bleibt über ein Diktat stehen.
+  `IslandDictationCompactTests`: ohne Messung und ohne Platz trotzdem die
+  schmalste Kapsel, nie die Form unter der Menüleiste; Schnellaktion und
+  Controller darunter; Knöpfe nur auf Klick bzw. bei laufendem Clip; Zeit
+  immer sichtbar; ausgefallene Messung verschiebt nichts; Log-Zeile zur
+  Entscheidung; Klicks nur auf Kapsel und Knöpfen.
 - `NotchIslandProbeTests`: Messung mit einer Attrappe der
   Accessibility-Schicht: Menüs und Statussymbole als Rahmen, was Apples Insel
   zeigt, Prozess der Insel aus der Fensterliste (Mauszeiger und eigenes Fenster
-  zählen nicht), kein Ergebnis ohne Berechtigung oder ohne einen der Teile,
-  Frist; die Messung erzeugt kein systemweites Accessibility-Element.
+  zählen nicht), kein Ergebnis ohne Berechtigung oder ohne einen der Teile
+  (mit Grund), eigene Menüs aus dem Prozess statt über die Schnittstelle,
+  Schätzung aus den Titeln, Frist; die Messung erzeugt kein systemweites
+  Accessibility-Element.
 - `NotchConfigTests`: Standardwerte, Schalter und Kill-Switch.
 - `NotchPillPlacementTests`: welche Stellen bei Notch, externem Bildschirm und
   Agent-Chats-Fenster, gemerkte Lage hin und zurück, Begrenzung auf den
@@ -863,8 +874,8 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   `make snapshots ONLY=kamera-insel` zeigt die Anzeige an der Kamera-Insel
   (kompakt je Zustand, zweistellig und rechts der Kamera, minimal bei wenig
   Platz und neben Apples Insel mit Mikrofon, Hinweis, Fehler, Liste; Diktat
-  kompakt je Zustand, rechts, minimal, ohne Messung, aufgeklappt und in der
-  Ausweichform; Übergang, Controller); die Attrappe legt die Kamera-Kapsel wie macOS
+  kompakt je Zustand, rechts, minimal, ohne Messung, aufgeklappt, ohne Platz und als
+  Schnellaktion unter der Menüleiste; Übergang, Controller); die Attrappe legt die Kamera-Kapsel wie macOS
   über alles und zeigt Menüs und Statussymbole der Leiste.
   `make snapshots ONLY=pill-` zeigt die Diktat-Pille zum Vergleich. Die Attrappe zeigt Menüs und Statussymbole bis dicht an die
   Notch, damit man sieht, dass nichts verdeckt wird.
@@ -903,6 +914,8 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   bleibt zwischen Kapsel und Insel eine Lücke von rund 40 pt.
 - Aufgeklappt reicht das Diktat-Fenster über die Menüleiste um die Kamera;
   Klicks nimmt es nur auf Kapsel und Knöpfen an.
+- Ohne Messung oder ohne Platz steht die Diktat-Kapsel trotzdem neben der
+  Insel und kann dann einen Menütitel oder ein Statussymbol verdecken.
 - Der Hals ist je Seite 3 pt breiter als die Kamera-Insel. Auf heller
   Menüleiste sieht man diesen Rand.
 - Titeländerungen erscheinen erst mit dem nächsten Statuswechsel (oder sofort

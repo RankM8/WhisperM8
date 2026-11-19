@@ -36,14 +36,7 @@ struct RecordingPillView: View {
 
     /// Vereinte Pille im Übergang: das Ruhebild statt des Diktats (`nil` sonst).
     private var restLook: UnifiedPillRestLook? {
-        if controller.showsRestLook { return controller.restLook }
-        // Kamera-Insel: Die erste Messung steht noch aus. So lange nur die
-        // Insel selbst, wie im Ruhebild ohne Anzeige.
-        if controller.islandAwaitsMeasurement, case .island = controller.presentation,
-           controller.quickActionLabel == nil, controller.controllerTargetLabel == nil {
-            return .notchBand
-        }
-        return nil
+        controller.showsRestLook ? controller.restLook : nil
     }
 
     /// Voll-Stil ist permanent expandiert; Mini expandiert per Hover
@@ -89,7 +82,6 @@ struct RecordingPillView: View {
         .animation(reduceMotion ? nil : .pill, value: controller.showsRestLook)
         .animation(reduceMotion ? nil : .pill, value: controller.isIslandExpanded)
         .animation(reduceMotion ? nil : .pill, value: controller.usesIslandCompact)
-        .animation(reduceMotion ? nil : .pill, value: controller.islandAwaitsMeasurement)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(phase.accessibilityLabel)
     }
