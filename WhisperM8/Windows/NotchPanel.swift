@@ -76,13 +76,26 @@ final class NotchHostingView<Content: View>: NSHostingView<Content> {
     var unifiedPill = false
     /// Sichtbare Pille in SwiftUI-Koordinaten (oben links), `nil` = alles.
     var interactiveSwiftUIFrame: CGRect?
+    /// Kamera-Insel, große Form: Das Fenster ist um einen Rand größer als
+    /// die Form (und beim Schließen noch groß, während die Form schon die
+    /// Kapsel ist). Klicks nimmt es nur in diesem Rahmen an
+    /// (SwiftUI-Koordinaten, oben links); daneben gehört die Menüleiste
+    /// weiter den Menüs. `nil` in Ruhe: Das Fenster ist genau die Kapsel.
+    var islandHitFrame: CGRect?
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard unifiedPill, let frame = interactiveSwiftUIFrame else { return super.hitTest(point) }
-        let local = convert(point, from: superview)
-        let topLeft = CGPoint(x: local.x, y: isFlipped ? local.y : bounds.height - local.y)
-        guard frame.insetBy(dx: -2, dy: -2).contains(topLeft) else { return nil }
+        guard takesClick(at: convert(point, from: superview)) else { return nil }
         return super.hitTest(point)
+    }
+
+    /// Ob ein Punkt (Koordinaten dieser Ansicht) in der Klickfläche liegt.
+    func takesClick(at local: NSPoint) -> Bool {
+        let topLeft = CGPoint(x: local.x, y: isFlipped ? local.y : bounds.height - local.y)
+        if let islandHitFrame, !islandHitFrame.contains(topLeft) { return false }
+        if unifiedPill, let frame = interactiveSwiftUIFrame, !frame.insetBy(dx: -2, dy: -2).contains(topLeft) {
+            return false
+        }
+        return true
     }
 
     private var pressStart: CGPoint?

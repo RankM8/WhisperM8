@@ -3,9 +3,10 @@ import SwiftUI
 import XCTest
 @testable import WhisperM8
 
-/// ENTWURF (19.11.2026), nur Vorschau: die aufgeklappte Anzeige an der
-/// Kamera-Insel als EINE Form ohne Hals, wie Apples eigene aufgeklappte
-/// Insel. Die echte Anzeige ist unverändert, bis der Entwurf abgenommen ist.
+/// ENTWURF (19.11.2026), nur Vorschau: die Controller-Insel an der
+/// Kamera-Insel als große Form (Paket 2, noch nicht gebaut). Hinweis, Liste
+/// und Diktat sind gebaut; ihre Bilder stammen aus den echten Ansichten
+/// (`UISnapshotGallery+NotchIsland.swift`, `make snapshots ONLY=kamera-insel`).
 ///
 /// Maße nach Apples Insel auf einem MacBook Pro mit Kamera-Insel (gemessen
 /// am Bildschirmfoto von „Now Playing“, macOS 27.2.1): 286 × 152 pt, 6 pt
@@ -200,47 +201,6 @@ extension UISnapshotGallery {
         }
     }
 
-    fileprivate struct LargeRow: View {
-        let color: Color
-        var diamond = false
-        let title: String
-        let detail: String
-        let state: String
-        var highlighted = false
-        var selected = false
-
-        var body: some View {
-            HStack(spacing: 12) {
-                LargeDot(color: color, diamond: diamond)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(verbatim: title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Large.text)
-                    Text(verbatim: detail).font(.system(size: 12.5)).foregroundStyle(Large.secondary)
-                }
-                .lineLimit(1)
-                Spacer(minLength: 8)
-                Text(verbatim: state).font(.system(size: 12.5)).foregroundStyle(Large.tertiary)
-            }
-            .padding(.horizontal, 14)
-            .frame(height: 56)
-            .background {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(selected ? Color.white.opacity(0.16) : (highlighted ? Large.amber.opacity(0.13) : Color.clear))
-            }
-            .overlay {
-                if selected {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Color.white.opacity(0.7), lineWidth: 2)
-                }
-            }
-        }
-    }
-
-    fileprivate static func sectionTitle(_ text: String) -> some View {
-        Text(verbatim: text.uppercased())
-            .font(.system(size: 11.5, weight: .semibold)).tracking(0.7).foregroundStyle(Large.tertiary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.leading, 14).padding(.top, 10).padding(.bottom, 2)
-    }
-
     /// Hinweise zur Bedienung mit dem Controller: Zeichen der Taste, Wort.
     fileprivate static func padHint(_ glyph: String, _ word: String) -> some View {
         HStack(spacing: 6) {
@@ -249,83 +209,6 @@ extension UISnapshotGallery {
                 .frame(width: 22, height: 22).background { Circle().fill(Large.field) }
             Text(verbatim: word).font(.system(size: 12.5)).foregroundStyle(Large.secondary)
         }
-    }
-
-    fileprivate static func roundButton(_ symbol: String, fill: Color, tint: Color = .white, size: CGFloat = 44) -> some View {
-        Image(systemName: symbol)
-            .font(.system(size: size * 0.4, weight: .semibold)).foregroundStyle(tint)
-            .frame(width: size, height: size).background { Circle().fill(fill) }
-    }
-
-    // MARK: Inhalte
-
-    @ViewBuilder
-    fileprivate static var listContent: some View {
-        VStack(spacing: 2) {
-            sectionTitle("Needs you")
-            LargeRow(color: Large.amber, diamond: true, title: "Chat A", detail: "Approval: Bash", state: "Waiting · 2 min", highlighted: true)
-            sectionTitle("Working")
-            LargeRow(color: Large.green, title: "Chat B", detail: "› writing reply", state: "Working · 5 min")
-            LargeRow(color: Large.green, title: "Chat C", detail: "› Edit Store.swift", state: "Working · 1 min")
-            sectionTitle("Just finished")
-            LargeRow(color: Large.tertiary, title: "Chat D", detail: "All findings addressed.", state: "Ready · 4 min ago")
-            Spacer(minLength: 6)
-            HStack {
-                Label { Text(verbatim: "Turn off") } icon: { Image(systemName: "power") }
-                Spacer()
-                Text(verbatim: "Esc closes")
-            }
-            .font(.system(size: 12)).foregroundStyle(Large.tertiary).padding(.horizontal, 14)
-        }
-    }
-
-    @ViewBuilder
-    fileprivate static var alertContent: some View {
-        HStack(spacing: 12) {
-            LargeDot(color: Large.amber, diamond: true, size: 12)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(verbatim: "Chat A").font(.system(size: 16, weight: .semibold)).foregroundStyle(Large.text)
-                Text(verbatim: "Approval: Bash").font(.system(size: 13)).foregroundStyle(Large.secondary)
-            }
-            Spacer()
-            Text(verbatim: "waiting for you").font(.system(size: 13.5, weight: .semibold)).foregroundStyle(Large.amber)
-        }
-        .padding(.horizontal, 6)
-    }
-
-    @ViewBuilder
-    fileprivate static var dictationContent: some View {
-        VStack(spacing: 16) {
-            HStack(spacing: 14) {
-                HStack(spacing: 4) {
-                    ForEach(Array([10, 18, 26, 34, 22, 30, 38, 24, 14, 28, 36, 20, 12, 24, 32, 18, 10, 22, 30, 16].enumerated()), id: \.offset) { index, height in
-                        Capsule().fill(index % 5 == 2 ? Large.amber : Large.green).frame(width: 4, height: CGFloat(height))
-                    }
-                }
-                .frame(maxWidth: .infinity, minHeight: 40)
-                Text(verbatim: "00:27")
-                    .font(.system(size: 24, weight: .medium, design: .monospaced)).foregroundStyle(Large.text)
-            }
-            HStack(spacing: 10) {
-                HStack(spacing: 6) {
-                    Text(verbatim: "Fast").font(.system(size: 14, weight: .semibold))
-                    Image(systemName: "chevron.down").font(.system(size: 10, weight: .bold))
-                }
-                .foregroundStyle(Large.text).padding(.horizontal, 16).frame(height: 44)
-                .background { Capsule().fill(Large.field) }
-                HStack(spacing: 6) {
-                    Image(systemName: "text.alignleft").font(.system(size: 12, weight: .semibold))
-                    Text(verbatim: "Context").font(.system(size: 14, weight: .medium))
-                }
-                .foregroundStyle(Large.secondary).padding(.horizontal, 16).frame(height: 44)
-                .background { Capsule().fill(Large.field) }
-                roundButton("camera.viewfinder", fill: Large.field, tint: Large.secondary)
-                Spacer(minLength: 0)
-                roundButton("xmark", fill: Color.white.opacity(0.16))
-                roundButton("checkmark", fill: Large.green, tint: .black)
-            }
-        }
-        .padding(.top, 6)
     }
 
     /// Controller: große Felder in zwei Spalten, die Auswahl klar umrandet,
@@ -396,47 +279,20 @@ extension UISnapshotGallery {
 
     // MARK: Fixtures
 
-    fileprivate enum LargeKind { case list, alert, dictation, controller }
-
-    fileprivate static func largeFixture(
-        _ name: String, _ kind: LargeKind, apple: AppleIsland, progress: CGFloat = 1
-    ) -> Fixture {
-        let shape: (width: CGFloat, height: CGFloat)
-        switch kind {
-        case .list: shape = (420, 392)
-        case .alert: shape = (380, 108)
-        case .dictation: shape = (420, 178)
-        case .controller: shape = (460, 334)
-        }
-        let size = CGSize(width: 900, height: max(200, shape.height + 70))
+    fileprivate static func controllerFixture(_ name: String, apple: AppleIsland) -> Fixture {
+        let shape = CGSize(width: 460, height: 334)
+        let size = CGSize(width: 900, height: shape.height + 70)
         return Fixture(name: "insel-gross-\(name)", size: size) {
             AnyView(LargeDesk(size: size, apple: apple) {
-                LargeShell(width: shape.width, height: shape.height, apple: apple, progress: progress) {
-                    // Kopf links: die Zähler, wie bisher über der Liste.
+                LargeShell(width: shape.width, height: shape.height, apple: apple) {
                     HStack(spacing: 12) {
                         counter(Large.amber, 1, diamond: true)
                         counter(Large.green, 2)
                     }
                 } trailing: {
-                    switch kind {
-                    case .list, .alert:
-                        HStack(spacing: 5) {
-                            Image(systemName: "checkmark").font(.system(size: 10, weight: .bold))
-                            Text(verbatim: "1").font(.system(size: 14, weight: .semibold)).monospacedDigit()
-                        }
-                        .foregroundStyle(Large.secondary)
-                    case .dictation:
-                        Text(verbatim: "Recording").font(.system(size: 13, weight: .medium)).foregroundStyle(Large.secondary)
-                    case .controller:
-                        Image(systemName: "gamecontroller.fill").font(.system(size: 14)).foregroundStyle(Large.secondary)
-                    }
+                    Image(systemName: "gamecontroller.fill").font(.system(size: 14)).foregroundStyle(Large.secondary)
                 } content: {
-                    switch kind {
-                    case .list: listContent
-                    case .alert: alertContent
-                    case .dictation: dictationContent
-                    case .controller: controllerContent
-                    }
+                    controllerContent
                 }
             })
         }
@@ -445,17 +301,8 @@ extension UISnapshotGallery {
     @MainActor
     static func islandLargeFixtures() -> [Fixture] {
         [
-            largeFixture("liste", .list, apple: .empty),
-            largeFixture("liste-musik", .list, apple: .music),
-            largeFixture("hinweis", .alert, apple: .empty),
-            largeFixture("hinweis-musik", .alert, apple: .music),
-            largeFixture("diktat", .dictation, apple: .microphone),
-            largeFixture("controller", .controller, apple: .empty),
-            largeFixture("controller-musik", .controller, apple: .music),
-            // Animation in drei Stufen: Apples Insel, halb offen, ganz offen.
-            largeFixture("animation-1-klein", .list, apple: .music, progress: 0),
-            largeFixture("animation-2-halb", .list, apple: .music, progress: 0.5),
-            largeFixture("animation-3-gross", .list, apple: .music, progress: 1),
+            controllerFixture("controller", apple: .empty),
+            controllerFixture("controller-musik", apple: .music),
         ]
     }
 }

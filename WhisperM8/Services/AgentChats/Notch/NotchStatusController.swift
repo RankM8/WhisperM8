@@ -143,6 +143,13 @@ final class NotchSlot {
     /// Kamera-Insel: Die Anzeige steht gerade in der Menüleiste (kompakt
     /// oder minimal); dann wird regelmäßig nachgemessen.
     var showsIslandInBar = false
+    /// Kamera-Insel: die offene große Form (Hinweis oder Liste), `nil` in Ruhe.
+    var islandLargeForm: NotchIslandLargeForm?
+    /// Kamera-Insel: Die große Form zieht sich gerade auf die Kapsel zurück.
+    var islandLargeClosing = false
+    /// Das nächste Zeichnen setzt Wert und Rahmen ohne Animation (die große
+    /// Form ist gerade zugegangen, das Fenster wird wieder die Kapsel).
+    var snapsNextRender = false
 
     init(kind: NotchPlacement.Kind) {
         self.kind = kind
@@ -394,6 +401,10 @@ final class NotchStatusController {
             slot.dragOrigin = nil
             slot.lastIslandSignal = nil
             slot.showsIslandInBar = false
+            slot.islandLargeForm = nil
+            slot.islandLargeClosing = false
+            slot.snapsNextRender = false
+            slot.host?.islandHitFrame = nil
             slot.shrinkTask?.cancel()
             slot.shrinkTask = nil
             slot.panel?.orderOut(nil)
@@ -434,6 +445,13 @@ final class NotchStatusController {
             show(alert: fired)
             // Beim Diktat verbreitert sich die Pille dort nicht; danach einmal.
             if config.unified, dictationDisplayID != nil { alertDuringDictation = fired }
+        }
+        // Hinweis in der großen Form an der Kamera-Insel: zweite Zeile mit
+        // dem, worauf dieser eine Chat wartet (ein Wert aus dem Speicher,
+        // kein Beobachter).
+        if !isExpanded, let alert, alert.kind == .awaitingInput,
+           let index = inputs.firstIndex(where: { $0.id == alert.sessionID }) {
+            inputs[index].activity = activityStore.activity(for: alert.sessionID)
         }
 
         scheduleExpiry(current)
@@ -493,7 +511,7 @@ final class NotchStatusController {
     func hoverChanged(_ hovering: Bool, kind: NotchPlacement.Kind = .notch) {
         isHovering = hovering
         hoverTask?.cancel()
-        guard config.expandOnHover else { return }
+        guard Self.expandsOnHover(setting: config.expandOnHover, screen: slots[kind]?.screen) else { return }
         if hovering, !isExpanded {
             hoverTask = Task { [weak self] in
                 try? await Task.sleep(for: .milliseconds(350))
@@ -509,10 +527,19 @@ final class NotchStatusController {
         }
     }
 
+    /// Öffnet Darüberfahren die Liste? An einer Kamera-Insel nie, auch mit
+    /// der Einstellung: Dort ist die Liste die große Form, die Menüs neben
+    /// der Kamera verdeckt, und die geht nur auf einen Klick auf (bzw. kurz
+    /// beim Hinweis). Wer nach einem Menü neben der Kapsel greift, hätte
+    /// sonst plötzlich die Form darüber.
+    nonisolated static func expandsOnHover(setting: Bool, screen: NotchScreenInfo?) -> Bool {
+        setting && screen?.hasIsland != true
+    }
+
     private func expand(_ kind: NotchPlacement.Kind, byHover: Bool) {
         guard config.isActive, !isExpanded else { return }
-        // Kamera-Insel: vor dem Aufklappen nachmessen, der Hals steht dann
-        // sicher neben keinem Menü.
+        // Kamera-Insel: vor dem Aufklappen nachmessen (Breite von Apples
+        // Insel für die Kopfzeile, Lage der Kapsel für danach).
         if let screen = slots[kind]?.screen, screen.hasIsland { NotchIslandMonitor.shared.measure([screen]) }
         expandedKind = kind
         expandedByHover = byHover

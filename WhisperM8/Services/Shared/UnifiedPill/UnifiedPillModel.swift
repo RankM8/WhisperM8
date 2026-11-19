@@ -201,15 +201,22 @@ enum UnifiedPillGeometry {
     /// Pille hängt mittig unter der Aussparung. Kein Rand oben (das Band
     /// liegt in der Menüleiste), unten und seitlich der übliche Rand.
     ///
-    /// An einer Kamera-Insel beginnt das Fenster an der Oberkante der Kapsel
-    /// (sie schwebt unter der Bildschirmkante) und reicht um den Hals bis
-    /// unter die Menüleiste.
+    /// An einer Kamera-Insel beginnt das Fenster an der Oberkante der
+    /// großen Form (knapp über der Kapsel, die unter der Bildschirmkante
+    /// schwebt). Es fasst beides: die Zeile am Hals unter der Menüleiste
+    /// (Schnellaktion, Controller) und die aufgeklappte große Form des
+    /// Diktats samt Rand für ihre Bewegung. So geht die Form ohne
+    /// Fensterwechsel auf; Klicks nimmt das Fenster nur auf dem an, was
+    /// gerade sichtbar ist.
     static func notchDictationPanelFrame(screen: NotchScreenInfo, panelWidth: CGFloat) -> CGRect {
         if screen.hasIsland {
             let band = NotchIslandGeometry.band(screen: screen)
-            let height = band.neckHeight + PillMetrics.height + shadowMargin
+            let large = NotchIslandLargeGeometry.form(screen: screen, kind: .dictation)
+            let height = max(
+                band.topGap + band.neckHeight + PillMetrics.height + shadowMargin,
+                large.size.height + NotchIslandLargeGeometry.overshootMargin)
             return CGRect(
-                x: screen.notchCenterX - panelWidth / 2, y: NotchIslandGeometry.windowTop(screen) - height,
+                x: screen.notchCenterX - panelWidth / 2, y: NotchIslandLargeGeometry.windowTop(screen) - height,
                 width: panelWidth, height: height)
         }
         let height = screen.safeAreaTop + PillMetrics.height + shadowMargin

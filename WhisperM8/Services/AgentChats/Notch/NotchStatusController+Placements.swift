@@ -78,7 +78,10 @@ extension NotchStatusController {
         // erscheint die Anzeige nur, wenn etwas los ist. Vereint macht die
         // Notch dem Diktat Platz, das dann selbst dort hängt.
         guard !slot.isFullscreenHidden, !isDictationShown(on: screen) else { return hide(slot) }
-        if let island, !expandedHere, alert == nil, island.presentation == .hidden {
+        // Hinweis und Liste an der Insel: die große Form.
+        if let island, renderIslandLarge(
+            slot, screen: screen, island: island, rows: rows, summary: summary, sections: sections) { return }
+        if let island, island.presentation == .hidden {
             return retractIsland(slot, screen: screen)
         }
         guard isPill || NotchStatusModel.isVisible(summary: summary, isExpanded: expandedHere, alert: alert) else {
@@ -110,9 +113,11 @@ extension NotchStatusController {
             slot.lastDisplay = display
             // VoiceOver: Das Fenster nennt, was die Anzeige zeigt.
             panel.setAccessibilityLabel(display.accessibilitySummary)
-            if let island, island.band.detachedFrame == nil, !wasVisible, !display.hasIslandBody,
-               !slot.returnsFromDictation,
-               !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            if slot.snapsNextRender {
+                setDisplayWithoutAnimation(display, on: slot)
+            } else if let island, island.band.detachedFrame == nil, !wasVisible,
+                      !slot.returnsFromDictation,
+                      !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
                 growIsland(slot, screen: screen, to: display)
             } else {
                 setDisplay(display, on: slot, wasVisible: wasVisible)
@@ -122,7 +127,7 @@ extension NotchStatusController {
         // Während des Ziehens bestimmt die Maus die Lage.
         if frame != slot.lastFrame, slot.dragOrigin == nil {
             slot.lastFrame = frame
-            if wasVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            if wasVisible, !slot.snapsNextRender, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
                 // Über den Animator: `setFrame(_:display:animate:)` hielte den
                 // Main Thread für die ganze Animation fest.
                 NSAnimationContext.runAnimationGroup { context in
@@ -136,6 +141,7 @@ extension NotchStatusController {
         }
         if !wasVisible { panel.orderFrontRegardless() }
         slot.returnsFromDictation = false
+        slot.snapsNextRender = false
     }
 
     /// Notch: Band in der Aussparung. Kamera-Insel: die Kapsel um die Kamera
@@ -153,9 +159,7 @@ extension NotchStatusController {
     /// Stufe und Band der Anzeige an der Insel aus Zählern und letzter
     /// Messung. Ändert sich, was gezeigt werden soll, wird neu gemessen
     /// (kein eigener Beobachter; die Antwort zeichnet bei Bedarf neu).
-    func islandState(
-        _ slot: NotchSlot, screen: NotchScreenInfo, summary: NotchSummary
-    ) -> (presentation: NotchIslandPresentation, band: NotchIslandBand) {
+    func islandState(_ slot: NotchSlot, screen: NotchScreenInfo, summary: NotchSummary) -> IslandState {
         let signal = NotchIslandSignal(summary: summary)
         if slot.lastIslandSignal != signal {
             slot.lastIslandSignal = signal
@@ -185,7 +189,7 @@ extension NotchStatusController {
     /// Nichts mehr zu zeigen: Die Flügel ziehen sich in die Insel zurück,
     /// dann geht das Fenster.
     private func retractIsland(_ slot: NotchSlot, screen: NotchScreenInfo) {
-        guard let panel = slot.panel, panel.isVisible, var display = slot.lastDisplay, !display.hasIslandBody,
+        guard let panel = slot.panel, panel.isVisible, var display = slot.lastDisplay,
               case .island(let shown) = display.style, shown.detachedFrame == nil,
               !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion else {
             // Schon im Rückzug: laufen lassen.
@@ -205,6 +209,10 @@ extension NotchStatusController {
 
     func hide(_ slot: NotchSlot) {
         slot.showsIslandInBar = false
+        slot.islandLargeForm = nil
+        slot.islandLargeClosing = false
+        slot.snapsNextRender = false
+        slot.host?.islandHitFrame = nil
         slot.lastDisplay = nil
         slot.dragOrigin = nil
         slot.shrinkTask?.cancel()

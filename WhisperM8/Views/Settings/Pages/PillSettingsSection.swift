@@ -44,7 +44,7 @@ struct PillSettingsSection: View {
 
                     SettingsToggleRow(
                         title: "Open the list on hover",
-                        subtitle: "In addition to clicking, only while you are not dictating.",
+                        subtitle: "In addition to clicking, only while you are not dictating. Not at a camera island: there the list opens on a click only.",
                         isOn: $expandOnHover
                     )
                 }

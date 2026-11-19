@@ -167,4 +167,67 @@ final class UnifiedPillRestSnapshotTests: XCTestCase {
         XCTAssertTrue(controller.slots[.pill]!.returnsFromDictation)
         XCTAssertFalse(controller.slots[.notch]!.returnsFromDictation)
     }
+
+    // MARK: Kamera-Insel
+
+    private var islandScreen: NotchScreenInfo {
+        NotchScreenInfo(
+            displayID: 7, frame: CGRect(x: 0, y: 0, width: 1736, height: 1133),
+            visibleFrame: CGRect(x: 0, y: 0, width: 1736, height: 1088),
+            safeAreaTop: 40, auxiliaryLeftWidth: 838.5, auxiliaryRightWidth: 838.5, isBuiltIn: true)
+    }
+
+    /// An der Kamera-Insel ist das Ruhebild die Kapsel mit Zeichen und Zahl,
+    /// auch wenn gerade ein Hinweis als große Form dasteht: Das Diktat
+    /// beginnt und endet an der Kapsel.
+    func testIslandRestLookIsTheCapsuleEvenDuringAnAlert() throws {
+        let waiting = input(.awaitingInput)
+        let controller = makeController([waiting, input(.working)])
+        controller.cachedPlacements = [NotchPlacement(kind: .notch, screen: islandScreen)]
+        controller.config.unified = true
+        controller.islandOccupancy[7] = NotchMenuBarOccupancy(frames: [])
+        let calm = try XCTUnwrap(controller.restSnapshot(onDisplay: 7))
+        guard case .island(let summary, let band) = calm.look else { return XCTFail("\(calm.look)") }
+        XCTAssertEqual(summary.waiting, 1)
+        XCTAssertTrue(band.hasLeadingContent && band.showsValue, "kompakt: Zeichen und Zahl links der Kamera")
+        XCTAssertEqual(calm.look.rowHeight, 0)
+        controller.alert = NotchAlert(sessionID: waiting.id, title: "Chat", kind: .awaitingInput)
+        XCTAssertEqual(controller.restSnapshot(onDisplay: 7), calm)
+        // Ohne Messung steht in Ruhe nichts in der Menüleiste: kein Ruhebild.
+        controller.islandOccupancy = [:]
+        XCTAssertNil(controller.restSnapshot(onDisplay: 7))
+    }
+
+    /// Ein Hinweis, der als große Form dasteht, geht mit dem Diktat weg. An
+    /// der Insel wird er danach nachgeholt; an Notch und Pille trägt ihn das
+    /// Ruhebild wie bisher mit.
+    func testAlertShownAtTheIslandIsReplayedAfterTheDictation() {
+        let alert = NotchAlert(sessionID: UUID(), title: "Chat", kind: .awaitingInput)
+        let island = makeController()
+        island.cachedPlacements = [NotchPlacement(kind: .notch, screen: islandScreen)]
+        island.config.isActive = false  // ohne Fenster: nichts zeichnen
+        island.alert = alert
+        island.dictationChanged(to: 7)
+        XCTAssertEqual(island.alertDuringDictation, alert)
+
+        let notch = makeController()
+        notch.config.isActive = false
+        notch.alert = alert
+        notch.dictationChanged(to: notchScreen.displayID)
+        XCTAssertNil(notch.alertDuringDictation)
+    }
+
+    /// Werden die Fenster abgebaut, während die große Form zugeht, bleibt
+    /// kein Merker stehen, an dem die Anzeige danach hängen bliebe.
+    func testDismantlingPanelsClearsTheLargeForm() throws {
+        let controller = makeController()
+        let slot = try XCTUnwrap(controller.slots[.notch])
+        slot.islandLargeForm = NotchIslandLargeGeometry.form(screen: islandScreen, kind: .alert)
+        slot.islandLargeClosing = true
+        slot.snapsNextRender = true
+        controller.dismantlePanels()
+        XCTAssertNil(slot.islandLargeForm)
+        XCTAssertFalse(slot.islandLargeClosing)
+        XCTAssertFalse(slot.snapsNextRender)
+    }
 }

@@ -51,7 +51,8 @@ struct RecordingPillView: View {
     private var showsGrip: Bool { !controller.presentation.isNotch }
 
     /// Kamera-Insel: kompakte Kapsel in der Menüleiste statt der Zeile unter
-    /// ihr. Im Übergang zeigt das Fenster das Ruhebild wie bisher.
+    /// ihr (`IslandDictationView`, aufgeklappt die große Form). Im Übergang
+    /// zeigt das Fenster das Ruhebild wie bisher.
     private var compactCapsule: NotchIslandDictationCapsule? {
         guard restLook == nil, controller.usesIslandCompact else { return nil }
         return controller.islandCapsule
@@ -62,10 +63,13 @@ struct RecordingPillView: View {
         // beide da, die äußeren Modifier sehen trotzdem eine Ansicht.
         ZStack(alignment: .top) {
             if let capsule = compactCapsule, case .island(let band) = controller.presentation {
-                islandCompact(capsule, band: band)
+                IslandDictationView(controller: controller, capsule: capsule, band: band)
                     .transition(.opacity)
             } else {
+                // Das Fenster beginnt an der Insel auf Höhe der großen Form,
+                // etwas über der Kapsel.
                 pill
+                    .padding(.top, controller.presentation.islandTopGap)
                     .transition(.opacity)
             }
         }
@@ -80,7 +84,6 @@ struct RecordingPillView: View {
         // Übergang aus der ruhenden Pille und zurück: dieselbe Kurve, nur die
         // Breite (an der Notch die Höhe der Zeile) gleitet.
         .animation(reduceMotion ? nil : .pill, value: controller.showsRestLook)
-        .animation(reduceMotion ? nil : .pill, value: controller.isIslandExpanded)
         .animation(reduceMotion ? nil : .pill, value: controller.usesIslandCompact)
         .accessibilityElement(children: .contain)
         .accessibilityLabel(phase.accessibilityLabel)
@@ -108,99 +111,6 @@ struct RecordingPillView: View {
         .modifier(PillChrome(
             presentation: controller.presentation, bottomRadius: restLook?.isNotch == true ? 11 : 18,
             restLook: restLook))
-    }
-
-    // MARK: Kamera-Insel, kompakt
-
-    /// Die Aufnahme als eigene kleine Kapsel in der Menüleiste neben der
-    /// Insel: Wellenform (Bewegung und Farbe tragen den Zustand, wie in der
-    /// Pille) und Zeit; ist es eng, nur die Wellenform. Ein Klick klappt die
-    /// Bedienknöpfe unter der Menüleiste auf. Die Ansicht reicht symmetrisch
-    /// um die Kamera (ihre Mittellinie), die Kapsel steht an ihrem Rand;
-    /// Klicks nimmt das Fenster nur auf Kapsel und Knöpfen an.
-    private func islandCompact(_ capsule: NotchIslandDictationCapsule, band: NotchIslandBand) -> some View {
-        let extent = abs(capsule.offset) + capsule.width / 2
-        return VStack(spacing: band.neckHeight - band.capsuleHeight + 5) {
-            Button(action: controller.toggleIslandExpanded) {
-                HStack(spacing: 0) {
-                    if let badge = controller.statusBadge {
-                        // Wartende Chats bzw. Fehler als kleines Zeichen; die
-                        // Zahl steht aufgeklappt bei den Knöpfen.
-                        NotchStatusDot(status: badge.waiting > 0 ? .awaitingInput : .errored, palette: .notch, size: 8)
-                            .frame(width: NotchIslandGeometry.dictationBadgeWidth, alignment: .trailing)
-                            .transition(.opacity)
-                    }
-                    PillCoreView(
-                        levelModel: controller.levelModel, phase: phase,
-                        isClipping: controller.isScreenClipRecording, reduceMotion: reduceMotion)
-                        .scaleEffect(0.8)
-                        .frame(width: 38, height: 24)
-                        .padding(.leading, 5)
-                    if capsule.showsClock {
-                        PillCompactClock(clockModel: controller.clockModel)
-                            .frame(maxWidth: .infinity)
-                            .padding(.trailing, 4)
-                    } else {
-                        Spacer(minLength: 0)
-                    }
-                }
-                .frame(width: capsule.width, height: band.capsuleHeight)
-                .background { Capsule().fill(Color.black) }
-                .contentShape(Capsule())
-            }
-            .buttonStyle(.plain)
-            .help(phase.statusLabel(postProcessingStatusText: controller.postProcessingStatusText) ?? "Recording")
-            .accessibilityLabel(phase.accessibilityLabel)
-            .accessibilityHint(controller.showsIslandControls ? Text("Hides the dictation controls") : Text("Shows the dictation controls"))
-            .frame(width: 2 * extent, alignment: capsule.side == .leading ? .leading : .trailing)
-
-            if controller.showsIslandControls {
-                HStack(spacing: 0) { islandControls }
-                    .padding(.horizontal, PillMetrics.horizontalPadding)
-                    .frame(height: PillMetrics.height)
-                    .background { Capsule().fill(Color.black) }
-                    .background { islandPart("controls") }
-                    .transition(.opacity)
-            }
-        }
-    }
-
-    private func islandPart(_ key: String) -> some View {
-        GeometryReader { geometry in
-            Color.clear
-                .onAppear { controller.reportIslandPart(key, geometry.frame(in: .global)) }
-                .onChange(of: geometry.frame(in: .global)) { _, frame in controller.reportIslandPart(key, frame) }
-                .onDisappear { controller.reportIslandPart(key, nil) }
-        }
-    }
-
-    /// Alles, was die Pille außer Wellenform und Zeit zeigt: wartende Chats
-    /// mit Zahl, Bildschirmfoto und Clip, Ausgabemodus, Kontext, fertig und
-    /// abbrechen.
-    @ViewBuilder
-    private var islandControls: some View {
-        if let badge = controller.statusBadge {
-            DictationStatusBadgeView(badge: badge)
-            PillSeparator()
-        }
-        PillCameraButton(controller: controller)
-        PillScreenClipButton(controller: controller)
-            .padding(.trailing, 2)
-        modeChip
-            .padding(.trailing, 5)
-        PillContextChip(controller: controller)
-            .padding(.trailing, 5)
-        // Die schmale Kapsel zeigt die Zeit nicht: dann steht sie hier.
-        if controller.islandControlsShowClock {
-            PillClockView(clockModel: controller.clockModel)
-        }
-        PillSeparator()
-        // Wer die Knöpfe aufklappt, will sie alle sehen: „fertig“ steht hier
-        // unabhängig von der Einstellung, die es in der Pille ausblendet.
-        if phase == .recording {
-            PillConfirmButton(action: controller.stopAndTranscribe)
-        }
-        PillCancelButton(phase: phase, controller: controller)
     }
 
     /// Das Diktat selbst (Mini, Voll, Schnellaktion).
@@ -400,7 +310,7 @@ private struct PillChrome: ViewModifier {
     private func island(content: Content, band: NotchIslandBand) -> some View {
         var drawn = band
         var summary: NotchSummary?
-        if case .island(let restSummary, _, let restBand, _) = restLook {
+        if case .island(let restSummary, let restBand) = restLook {
             drawn = restBand
             summary = restSummary
         }
@@ -631,7 +541,7 @@ private struct PillClockView: View {
 }
 
 /// Zeit in der kompakten Kapsel an der Kamera-Insel.
-private struct PillCompactClock: View {
+struct PillCompactClock: View {
     @ObservedObject var clockModel: OverlayClockModel
 
     var body: some View {
@@ -665,10 +575,12 @@ private struct PillTargetLabel: View {
 
 // MARK: - Mode-Chip
 
-private struct PillOutputModeChip: View {
+struct PillOutputModeChip: View {
     let modes: [OutputMode]
     let selectedMode: OutputMode
     let isDisabled: Bool
+    /// Große Form an der Kamera-Insel: 44 pt hoch, größere Schrift.
+    var large = false
     let action: (OutputMode) -> Void
 
     var body: some View {
@@ -688,15 +600,15 @@ private struct PillOutputModeChip: View {
         } label: {
             HStack(spacing: 4) {
                 Text(selectedMode.displayShortLabel)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: large ? 14 : 12, weight: large ? .semibold : .medium))
                     .lineLimit(1)
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 8, weight: .semibold))
+                    .font(.system(size: large ? 10 : 8, weight: .semibold))
                     .opacity(0.6)
             }
             .foregroundStyle(isDisabled ? Color.secondary.opacity(0.7) : Color.primary)
-            .padding(.horizontal, 10)
-            .frame(height: PillMetrics.chipHeight)
+            .padding(.horizontal, large ? 16 : 10)
+            .frame(height: large ? NotchIslandLargeGeometry.controlSize : PillMetrics.chipHeight)
             // Bewusst KEIN .frame(min/maxWidth:): der würde auf das Angebot
             // expandieren statt auf Inhaltsbreite — der Chip wäre immer
             // maximal breit. Text nimmt seine ideale Breite; bei echtem
@@ -715,28 +627,33 @@ private struct PillOutputModeChip: View {
 
 // MARK: - Kontext-Chip
 
-private struct PillContextChip: View {
+struct PillContextChip: View {
     @ObservedObject var controller: OverlayController
+    /// Große Form an der Kamera-Insel: 44 pt hoch, größere Schrift.
+    var large = false
+
+    /// Zuschlag auf die Schriftgrößen in der großen Form.
+    private var bump: CGFloat { large ? 2 : 0 }
 
     var body: some View {
         Menu {
             ContextMenuContent(controller: controller)
         } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: large ? 5 : 4) {
                 if controller.isScreenClipRecording {
                     // Laufender Screen-Clip: rotes Record-Icon vorne im Chip
                     // (das Blinken übernimmt der Clip-Button rechts).
                     Image(systemName: "record.circle")
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 11 + bump, weight: .semibold))
                         .foregroundStyle(OverlayPalette.clip)
                 }
 
                 if segments.isEmpty {
                     Image(systemName: "text.badge.xmark")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: 10 + bump, weight: .semibold))
                         .opacity(0.7)
                     Text("No Ctx")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 12 + bump, weight: .medium))
                         .lineLimit(1)
                 } else {
                     // Icon-Segmente mit „+" verbunden — Chat, Text, Shots,
@@ -745,15 +662,15 @@ private struct PillContextChip: View {
                     ForEach(Array(segments.enumerated()), id: \.element.systemImage) { index, segment in
                         if index > 0 {
                             Text("+")
-                                .font(.system(size: 11, weight: .medium))
+                                .font(.system(size: 11 + bump, weight: .medium))
                                 .foregroundStyle(Color.primary.opacity(0.35))
                         }
                         HStack(spacing: 2.5) {
                             Image(systemName: segment.systemImage)
-                                .font(.system(size: 11, weight: .semibold))
+                                .font(.system(size: 11 + bump, weight: .semibold))
                             if let count = segment.count {
                                 Text("\(count)")
-                                    .font(.system(size: 11.5, weight: .medium))
+                                    .font(.system(size: 11.5 + bump, weight: .medium))
                                     .monospacedDigit()
                             }
                         }
@@ -762,8 +679,8 @@ private struct PillContextChip: View {
                 }
             }
             .foregroundStyle(hasContext ? OverlayPalette.recording : Color.secondary.opacity(0.75))
-            .padding(.horizontal, 10)
-            .frame(height: PillMetrics.chipHeight)
+            .padding(.horizontal, large ? 16 : 10)
+            .frame(height: large ? NotchIslandLargeGeometry.controlSize : PillMetrics.chipHeight)
             .background {
                 Capsule().fill(Color.primary.opacity(0.08))
             }
@@ -802,17 +719,18 @@ private struct PillVisualContextButtons: View {
 
 /// Interaktiver Bereichs-Screenshot — eigenständig, damit Mini ihn in die
 /// links aufklappende Hover-Gruppe stecken kann.
-private struct PillCameraButton: View {
+struct PillCameraButton: View {
     @ObservedObject var controller: OverlayController
+    /// Große Form an der Kamera-Insel: rundes Feld mit 44 pt.
+    var large = false
 
     var body: some View {
         Button {
             controller.captureScreenshot()
         } label: {
             Image(systemName: "camera.viewfinder")
-                .font(.system(size: 12, weight: .semibold))
-                .frame(width: PillMetrics.iconButtonSize, height: PillMetrics.iconButtonSize)
-                .contentShape(Circle())
+                .font(.system(size: large ? 17 : 12, weight: .semibold))
+                .pillIconButtonFrame(large: large)
         }
         .buttonStyle(.plain)
         .foregroundStyle(isVisualContextEnabled ? Color.secondary : Color.secondary.opacity(0.45))
@@ -828,8 +746,10 @@ private struct PillCameraButton: View {
 
 /// Screen-Clip Start/Stop — eigenständig, weil das Stop-Icon bei laufendem
 /// Clip auch in der kollabierten Mini-Pill sichtbar bleibt.
-private struct PillScreenClipButton: View {
+struct PillScreenClipButton: View {
     @ObservedObject var controller: OverlayController
+    /// Große Form an der Kamera-Insel: rundes Feld mit 44 pt.
+    var large = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isBlinkDimmed = false
 
@@ -843,10 +763,9 @@ private struct PillScreenClipButton: View {
             }
         } label: {
             Image(systemName: controller.isScreenClipRecording ? "stop.circle.fill" : "record.circle")
-                .font(.system(size: 13, weight: .semibold))
-                .frame(width: PillMetrics.iconButtonSize, height: PillMetrics.iconButtonSize)
-                .contentShape(Circle())
+                .font(.system(size: large ? 18 : 13, weight: .semibold))
                 .opacity(isBlinkDimmed ? 0.4 : 1)
+                .pillIconButtonFrame(large: large)
         }
         .buttonStyle(.plain)
         .foregroundStyle(
@@ -886,6 +805,22 @@ private struct PillScreenClipButton: View {
     }
 }
 
+extension View {
+    /// Rahmen eines runden Symbol-Knopfs: 26 pt in der Pille, in der großen
+    /// Form an der Kamera-Insel ein gefülltes Feld mit 44 pt.
+    @ViewBuilder
+    func pillIconButtonFrame(large: Bool) -> some View {
+        if large {
+            frame(width: NotchIslandLargeGeometry.controlSize, height: NotchIslandLargeGeometry.controlSize)
+                .background { Circle().fill(Color.primary.opacity(0.09)) }
+                .contentShape(Circle())
+        } else {
+            frame(width: PillMetrics.iconButtonSize, height: PillMetrics.iconButtonSize)
+                .contentShape(Circle())
+        }
+    }
+}
+
 // MARK: - Separator, ✓ und ✕
 
 private struct PillSeparator: View {
@@ -899,16 +834,27 @@ private struct PillSeparator: View {
 }
 
 /// ✓ — bewusst dezent: gleiche Familie wie ✕, nur einen Hauch präsenter.
-private struct PillConfirmButton: View {
+/// In der großen Form an der Kamera-Insel ein grünes Feld mit 44 pt.
+struct PillConfirmButton: View {
+    var large = false
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 16))
-                .foregroundStyle(Color.primary.opacity(0.75))
-                .frame(width: PillMetrics.iconButtonSize, height: PillMetrics.iconButtonSize)
-                .contentShape(Circle())
+            if large {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 17, weight: .bold))
+                    .foregroundStyle(Color.black.opacity(0.85))
+                    .frame(width: NotchIslandLargeGeometry.controlSize, height: NotchIslandLargeGeometry.controlSize)
+                    .background { Circle().fill(OverlayPalette.recording) }
+                    .contentShape(Circle())
+            } else {
+                Image(systemName: "checkmark.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(Color.primary.opacity(0.75))
+                    .frame(width: PillMetrics.iconButtonSize, height: PillMetrics.iconButtonSize)
+                    .contentShape(Circle())
+            }
         }
         .buttonStyle(.plain)
         .help("Aufnahme beenden & transkribieren")
@@ -917,9 +863,11 @@ private struct PillConfirmButton: View {
 }
 
 /// Ein ✕, drei Semantiken — Tooltip und Aktion wechseln mit der Phase.
-private struct PillCancelButton: View {
+/// In der großen Form an der Kamera-Insel ein Feld mit 44 pt.
+struct PillCancelButton: View {
     let phase: OverlayPhase
     @ObservedObject var controller: OverlayController
+    var large = false
 
     var body: some View {
         Button {
@@ -932,11 +880,20 @@ private struct PillCancelButton: View {
                 controller.cancelPostProcessing()
             }
         } label: {
-            Image(systemName: "xmark.circle.fill")
-                .font(.system(size: 16))
-                .foregroundStyle(.secondary.opacity(0.7))
-                .frame(width: PillMetrics.iconButtonSize, height: PillMetrics.iconButtonSize)
-                .contentShape(Circle())
+            if large {
+                Image(systemName: "xmark")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Color.white.opacity(0.9))
+                    .frame(width: NotchIslandLargeGeometry.controlSize, height: NotchIslandLargeGeometry.controlSize)
+                    .background { Circle().fill(Color.white.opacity(0.16)) }
+                    .contentShape(Circle())
+            } else {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 16))
+                    .foregroundStyle(.secondary.opacity(0.7))
+                    .frame(width: PillMetrics.iconButtonSize, height: PillMetrics.iconButtonSize)
+                    .contentShape(Circle())
+            }
         }
         .buttonStyle(.plain)
         .help(phase.cancelHelp)
