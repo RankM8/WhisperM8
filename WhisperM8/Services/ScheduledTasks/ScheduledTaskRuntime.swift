@@ -140,7 +140,9 @@ extension ScheduledTaskScheduler.Environment {
             baseEnvironment: {
                 var env = LoginShellEnvironment.shared.processEnvironment()
                 env.merge(AppInstance.childEnvironmentOverrides) { _, new in new }
-                env.merge(ClaudePluginBootstrap.launchEnvironment()) { _, new in new }
+                // Nur das WhisperM8-Plugin, kein vom Nutzer gesetzter Plugin-Ordner:
+                // dessen Skills und Hooks gingen an der Bereinigung vorbei (Paket 4).
+                env.merge(ClaudePluginBootstrap.launchEnvironment(includingInherited: false)) { _, new in new }
                 env["NO_COLOR"] = "1"
                 return env
             },
@@ -172,7 +174,15 @@ extension ScheduledTaskScheduler.Environment {
                     Task { @MainActor in ScheduledTasksOverviewModel.shared.reload() }
                 }
             },
-            notifyFailure: { notice in ScheduledTaskNotifications.post(notice) }
+            notifyFailure: { notice in ScheduledTaskNotifications.post(notice) },
+            prepareRunConfig: { task, runDirectory in
+                let profiles = ClaudeAccountProfiles()
+                return try ScheduledTaskRunConfigBuilder.prepare(
+                    task: task,
+                    sources: .init(configDirectory: profiles.configDir(forProfile: task.account),
+                                   claudeJSON: profiles.claudeJSONURL(forProfile: task.account)),
+                    runDirectory: runDirectory)
+            }
         )
     }
 }

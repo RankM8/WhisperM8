@@ -26754,16 +26754,6 @@
         }
       }
     },
-    "Only the tools you list. Permissions from the account’s settings.json still apply, except for what stays blocked.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nur die Werkzeuge, die du nennst. Freigaben aus der settings.json des Kontos gelten zusätzlich, außer für das, was gesperrt bleibt."
-          }
-        }
-      }
-    },
     "Create": {
       "localizations": {
         "de": {
@@ -27184,16 +27174,6 @@
         }
       }
     },
-    "Bash, web, MCP and the tools that reach other sessions, the cloud or other folders (SendMessage, ListAgents, RemoteTrigger, CronCreate, CronDelete, PushNotification, DesignSync, EnterWorktree, ExitWorktree) stay blocked, even if the account allows them in its settings. Naming one opens it: Bash(…) also lets the account’s own Bash permissions apply, an mcp__… entry loads all of the account’s MCP servers.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Bash, Web, MCP und die Werkzeuge, die andere Sitzungen, die Cloud oder andere Ordner erreichen (SendMessage, ListAgents, RemoteTrigger, CronCreate, CronDelete, PushNotification, DesignSync, EnterWorktree, ExitWorktree), bleiben gesperrt, auch wenn das Konto sie in seinen Einstellungen erlaubt. Wer eines nennt, öffnet es: Bash(…) lässt auch die Bash-Freigaben des Kontos gelten, ein mcp__…-Eintrag lädt alle MCP-Server des Kontos."
-          }
-        }
-      }
-    },
     "Name, prompt, folder, account and schedule are required.": {
       "localizations": {
         "de": {
@@ -27560,6 +27540,56 @@
           "stringUnit": {
             "state": "translated",
             "value": "⌘⌥-Klick auf einen Linear-Link öffnet immer die Linear-App, ohne Browser-Tab. „In Linear öffnen“ im Ticket-Board und am Controller öffnet ebenfalls die Linear-App, bei Auswahl „Browser“ den Browser. Ohne Linear-App öffnet alles wie bisher im Browser."
+          }
+        }
+      }
+    },
+    "Permissions from the account’s settings.json do not apply to runs, nor do those of the project or the allowed-tools of a skill. A run may do exactly what this task allows.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Freigaben aus der settings.json des Kontos gelten für Läufe nicht, ebenso wenig die des Projekts oder die allowed-tools eines Skills. Ein Lauf darf genau das, was diese Aufgabe freigibt."
+          }
+        }
+      }
+    },
+    "Bash, web, MCP and the tools that reach other sessions, the cloud or other folders (SendMessage, ListAgents, RemoteTrigger, CronCreate, CronDelete, PushNotification, DesignSync, EnterWorktree, ExitWorktree) stay blocked unless you name them here. An mcp__… entry loads only that MCP server. Paths: a leading / means the project folder, //… an absolute path, ~/… the home folder; for writing use Edit(…).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bash, Web, MCP und die Werkzeuge, die andere Sitzungen, die Cloud oder andere Ordner erreichen (SendMessage, ListAgents, RemoteTrigger, CronCreate, CronDelete, PushNotification, DesignSync, EnterWorktree, ExitWorktree), bleiben gesperrt, solange du sie hier nicht nennst. Ein mcp__…-Eintrag lädt nur diesen MCP-Server. Pfade: ein / vorn meint den Projektordner, //… einen absoluten Pfad, ~/… den Home-Ordner; zum Schreiben Edit(…) nehmen."
+          }
+        }
+      }
+    },
+    "Only the tools you list, nothing else.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur die Werkzeuge, die du nennst, sonst nichts."
+          }
+        }
+      }
+    },
+    "“%@” means a path inside the project folder: a leading “/” starts at the project folder. For an absolute path write “//…”, for the home folder “~/…”.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@“ meint einen Pfad im Projektordner: Ein „/“ vorn beginnt im Projektordner. Für einen absoluten Pfad „//…“ schreiben, für den Home-Ordner „~/…“."
+          }
+        }
+      }
+    },
+    "“%@” never applies: Claude checks writing against Edit rules. Edit(…) also covers Write.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„%@“ greift nie: Schreiben prüft Claude gegen Edit-Regeln. Edit(…) deckt auch Write."
           }
         }
       }

@@ -1,6 +1,6 @@
 ---
-status: aktiv (Paket 1 Kern und Kommandozeile, Paket 2 Ansicht, Paket 3 Meldungen und Chat; Labs, ab Werk aus)
-updated: 2026-11-17
+status: aktiv (Paket 1 Kern und Kommandozeile, Paket 2 Ansicht, Paket 3 Meldungen und Chat, Paket 4 nur Freigaben der Aufgabe; Labs, ab Werk aus)
+updated: 2026-11-20
 ---
 
 # Geplante Aufgaben
@@ -12,8 +12,9 @@ Entwurf der Ansicht: [`../design/geplante-aufgaben.html`](../design/geplante-auf
 
 Stand (WM8-110): Kern, Starter, Nachholen, Kommandozeile `whisperm8 schedule`, Schalter unter
 Einstellungen › Labs › Scheduled tasks (Paket 1); Abschnitt „Geplant“ in der Seitenleiste, Detail und Blatt zum
-Anlegen (Paket 2); Mitteilung bei Fehlschlag, Login-Warnung, „Mitlesen“ und Archiv (Paket 3). Die Übernahme der
-PM-Analyse (Paket 4) fehlt noch.
+Anlegen (Paket 2); Mitteilung bei Fehlschlag, Login-Warnung, „Mitlesen“ und Archiv (Paket 3); ein Lauf darf nur, was
+die Aufgabe freigibt (Paket 4). Die bisherigen launchd-Läufe sind als pausierte Aufgaben angelegt; eingeschaltet
+werden sie erst mit Paket 4 in main.
 
 ## Wann ein Lauf startet
 
@@ -53,9 +54,12 @@ Gestartet wird `/bin/sh` mit einem festen Skript, das `claude` aufruft und danac
 
 ```
 claude -p "<Auftrag>" --output-format json --session-id <uuid> --name "<Aufgabe> · <Datum>" \
+       --setting-sources "" --settings <lauf>/claude-config/settings.json \
+       --plugin-dir <lauf>/claude-config/plugins --append-system-prompt-file <lauf>/claude-config/context.md \
        --disallowedTools Bash Monitor WebFetch WebSearch "mcp__*" "Edit(/.claude/**)" "Edit(/.git/**)" \
-                         "Edit(/.mcp.json)" --strict-mcp-config \
-       --permission-mode dontAsk --allowedTools <Werkzeuge…>
+                         "Edit(/.mcp.json)" … \
+       --strict-mcp-config [--mcp-config <lauf>/claude-config/mcp.json] \
+       --permission-mode dontAsk --allowedTools <Werkzeuge…> "Read(//<lauf>/claude-config/plugins/**)"
 ```
 
 - Eigene Sitzung und Prozessgruppe (`POSIX_SPAWN_SETSID`), stdin `/dev/null`, stdout nach `result.json`, stderr
@@ -75,7 +79,8 @@ claude -p "<Auftrag>" --output-format json --session-id <uuid> --name "<Aufgabe>
 Ein `-p`-Lauf kann nicht nachfragen. `--permission-mode dontAsk` verweigert alles, was nicht erlaubt ist; Claude
 meldet das in `permission_denials`, und der Lauf gilt als „geklappt mit Hinweis“.
 
-Erlaubt wird per `--allowedTools`:
+**Ein Lauf darf genau das, was die Aufgabe freigibt** (Entscheidung Giuliano 17.11.2026, Paket 4). Erlaubt wird nur
+per `--allowedTools`:
 
 | `--access` | Werkzeuge |
 |---|---|
@@ -83,34 +88,89 @@ Erlaubt wird per `--allowedTools`:
 | `read-only` | `Read`, `Glob`, `Grep`, `Skill` |
 | `custom` | nur die mit `--allow` genannten |
 
-Freigaben aus der `settings.json` des Kontos gelten zusätzlich (dort stehen etwa `Bash(git:*)`), ebenso
-`allowed-tools` eines Skills. Damit Bash, Web und MCP trotzdem nur per ausdrücklicher Freigabe je Aufgabe gehen
-(Entscheidung 17.11.2026), sperrt jeder Lauf diese Familien:
+Dazu kommt `Read` im eigenen Plugin-Ordner des Laufs, sofern die Aufgabe `Skill` erlaubt (Skills, siehe unten).
+
+#### Keine Freigaben aus Einstellungsdateien
+
+Claude Code hat keinen Schalter, der nur die Freigaben einer Einstellungsdatei abschaltet. Gemessen mit Claude Code
+2.1.329 (`--permission-mode dontAsk`, freigegeben nur `Bash(echo:*)`): Mit den bisherigen Optionen liefen `touch`,
+`mkdir`, `cp` und `chmod` trotzdem, über Freigaben aus `~/.claude/settings.json`, `.claude/settings.json` und
+`.claude/settings.local.json` des Projekts. Mit `--setting-sources ""` lief nur `echo`, die vier anderen standen in
+`permission_denials`.
+
+Ohne Einstellungsquellen fehlt aber mehr als die Freigaben: Skills aus `~/.claude/skills`, die CLAUDE.md von Konto
+und Projekt, Plugins, `env`, Sprache und `cleanupPeriodDays` (ohne den räumt Claude alte Verläufe nach 30 Tagen).
+Deshalb legt der Planer vor jedem Start `<lauf>/claude-config/` an (`ScheduledTaskRunConfigBuilder`) und gibt das
+zurück, was keine Freigabe ist:
+
+| Datei | Option | Inhalt |
+|---|---|---|
+| `settings.json` | `--settings` | `settings.json` des Kontos ohne `permissions`, `hooks` (ein `PreToolUse`-Hook kann freigeben) und `enabledPlugins`; eine Sandbox bleibt, aber mit `autoAllowBashIfSandboxed: false` (sonst gäbe sie jeden Bash-Befehl frei) |
+| `plugins/account`, `plugins/project` | `--plugin-dir` | Skills des Kontos und aus `.claude/skills` des Projekts als Plugins, je Skill ein Symlink |
+| `context.md` | `--append-system-prompt-file` | CLAUDE.md des Kontos, `CLAUDE.md`, `.claude/CLAUDE.md` und `CLAUDE.local.md` des Projekts |
+| `mcp.json` | `--mcp-config` | nur die MCP-Server, deren Werkzeuge die Aufgabe nennt |
+
+Der Wrapper löscht `claude-config/`, sobald `claude` endet: Die Kopie der Einstellungen (`env`) und die
+MCP-Konfiguration können Schlüssel enthalten. Lässt sich der Ordner nicht anlegen oder ist die `settings.json` des
+Kontos da, aber nicht lesbar, startet der Lauf nicht („Start schlug fehl“): Ohne `cleanupPeriodDays` räumte Claude
+alte Verläufe weg. Startet ein Lauf nicht, löscht der Planer den Ordner gleich; bricht er ab (Mac neu gestartet),
+bleibt er (0700/0600) bis zum Archivieren und geht nicht mit ins Archiv.
+
+- **Skills** heißen im Lauf `account:<name>` bzw. `project:<name>`; `/pm-analyse` am Anfang des Auftrags und „Lade
+  den Skill pm-analyse“ finden sie trotzdem (gemessen). Ein Skill mit `allowed-tools` oder `hooks` im Kopf bekommt
+  eine bereinigte Kopie seiner SKILL.md, der Rest sind Symlinks: Gemessen gab `allowed-tools: Bash(mkdir:*)` eines
+  Skills `mkdir` frei, obwohl die Aufgabe nur `echo` erlaubte. Steht danach im Kopf noch irgendwo `allowed-tools`
+  oder `hooks` (etwa eingerückt), lädt der Lauf den Skill nicht (`run_skill_skipped` im Log). Claude nennt einem
+  Skill den Symlink-Pfad im Lauf als Ordner; eine Leseregel auf den echten Skill-Ordner greift dort nicht
+  (gemessen). Deshalb erlaubt ein Lauf mit `Skill` das Lesen im eigenen Plugin-Ordner. Eigene Agents
+  (`~/.claude/agents`) und Befehle (`~/.claude/commands`) fehlen im Lauf, Plugins des Kontos auch (ihre Skills und
+  Befehle bringen eigene `allowed-tools`, Hooks und Werkzeug-Server mit). Das Plugin `whisperm8` lädt über die
+  Umgebung, ohne vom Nutzer gesetzte weitere `CLAUDE_CODE_PLUGIN_DIRS`; seine Skills tragen keine Freigaben
+  (Test).
+- **MCP:** `--strict-mcp-config` immer. Nennt die Aufgabe `mcp__<server>__…`, kommt nur dieser Server aus der
+  `.claude.json` des Kontos in `mcp.json` (Projekt-Eintrag `projects[<ordner>].mcpServers` vor Konto,
+  `mcpServers`). Server aus Plugins, aus `.mcp.json` und claude.ai-Verbindungen lädt ein Lauf nicht; nennt die
+  Aufgabe einen, steht `run_mcp_servers_missing` im Log. Logins der Server gelten weiter (gemessen: drei
+  HTTP-Server, einer mit OAuth-Login, zwei mit `headersHelper`, alle verbunden).
+- **CLAUDE.md:** als angehängter Systemprompt, `@`-Importe darin löst Claude dabei nicht auf. Es fehlen
+  CLAUDE.md übergeordneter Ordner und `.claude/rules/`.
+
+Zusätzlich sperrt jeder Lauf diese Familien, solange die Aufgabe sie nicht nennt:
 
 | Familie | Sperre | aufgehoben durch |
 |---|---|---|
 | Befehle | `--disallowedTools Bash` | `--allow Bash` oder `--allow "Bash(…)"` |
 | Befehle im Hintergrund | `Monitor` | `--allow Monitor` oder eine Bash-Freigabe |
 | Web | `WebFetch`, `WebSearch` | `--allow WebFetch` bzw. `--allow WebSearch` |
-| MCP | `mcp__*` und `--strict-mcp-config` (lädt keinen MCP-Server) | irgendein `--allow mcp__…` |
+| MCP | `mcp__*` | irgendein `--allow mcp__…`; die Werkzeuge des Plugins `whisperm8` (`mcp__whisperm8__*`) bleiben dann trotzdem zu, solange die Aufgabe sie nicht nennt |
 | Wege nach außen | `SendMessage`, `ListAgents` (andere lokale Claude-Sitzungen, die Bash haben), `RemoteTrigger` (Cloud-Routinen), `CronCreate`, `CronDelete`, `PushNotification`, `DesignSync`, `EnterWorktree`, `ExitWorktree` (anderer Arbeitsordner verschöbe die Schreibregeln) | je Werkzeug `--allow <Name>`; `Agent` und `Workflow` bleiben offen, Subagents erben die Sperren |
 
-Eine Sperre schlägt jede Freigabe, auch die des Kontos und die eines Skills. Ist eine Familie per `--allow`
-offen, gelten für sie auch die Freigaben des Kontos: `--allow "Bash(whisperm8 tickets *)"` erlaubt also
-zusätzlich alles, was die `settings.json` an Bash freigibt, und eine MCP-Freigabe lädt alle MCP-Server des Kontos.
-`--strict-mcp-config` hält auch dann, wenn eine ältere Claude-Version das Muster `mcp__*` nicht kennt.
+Eine Sperre schlägt jede Freigabe. Ohne Freigaben aus Einstellungen wären die meisten Sperren nicht mehr nötig; sie
+bleiben als zweite Hürde, etwa gegen Werkzeuge, die ein Plugin selbst anmeldet.
+
+#### Regeln schreiben (gemessen mit 2.1.329)
+
+- **Pfade:** Ein `/` vorn hängt bei CLI-Freigaben am Projektordner: `Read(/Users/…/**)` greift für
+  `/Users/…` nicht. Absolut heißt `//Users/…`, im Home-Ordner `~/…`. Pfade mit Leerzeichen gehen.
+- **Schreiben** prüft Claude gegen Edit-Regeln: `Edit(//pfad/**)` erlaubt auch Write, `Write(//pfad/**)` greift nie.
+- `--allow`, Blatt und Planer lehnen beides ab (`ruleProblem`): Pfadregeln mit einem `/` vor `Users`, `Volumes`
+  oder `private` (andere Namen wie `tmp` oder `var` gibt es oft auch im Projekt), und jedes `Write(…)`. Schon gespeicherte Aufgaben prüft erst die nächste
+  Änderung; „Fortsetzen“ prüft nicht.
+- **Bash-Präfixe** wie `Bash(python3 -I /pfad/daten.py:*)` greifen mit absolutem Pfad; der Befehl muss genau so
+  beginnen (`python3 /pfad/daten.py` ohne `-I` braucht eine eigene Regel, ebenso `~/…` statt des vollen Pfads).
+- **Lesende Befehle** wie `pwd`, `date` und `whoami` erlaubt Claude Code selbst, sobald Bash nicht gesperrt ist;
+  `ls /` außerhalb des Projektordners nicht.
 
 Was die Stufen wirklich heißen:
 
 - **Lesen ist nicht auf den Projektordner begrenzt.** Ein nacktes `Read` (ebenso `Glob`, `Grep`) liest die ganze
   Platte, soweit der Nutzer sie lesen darf; ein Lauf mit Auftrag aus fremder Quelle könnte also Dateien außerhalb
   des Projekts lesen. Ins Netz bringt er sie ohne Bash, Web und MCP nicht.
-- **Schreiben** geht nur im Projektordner: `Edit(/**)` deckt Edit und Write, eine Regel mit führendem `/` hängt bei
-  CLI-Optionen am Startordner (Claude-Code-Doku „permissions“, „Where a pattern anchors“). Echt gemessen ist das
-  noch nicht (Handtest am Ticket).
+- **Schreiben** geht nur im Projektordner: `Edit(/**)` deckt Edit und Write, gemessen: Write im Startordner lief,
+  daneben nicht.
 - **Nie schreibbar**, in jeder Stufe und gegen jede Freigabe: `.claude/`, `.git/` und `.mcp.json` im
-  Projektordner. Dort stünden Hooks, `settings.local.json`, Git-Hooks und MCP-Server, die der nächste
-  unbeaufsichtigte Lauf ausführte — an der Bash-Sperre vorbei. Edit-Regeln gelten auch für Write.
+  Projektordner. Dort stünden Hooks, `settings.local.json`, Git-Hooks und MCP-Server, die ein späterer Chat im
+  Ordner ausführte — an der Bash-Sperre vorbei. Edit-Regeln gelten auch für Write.
 - **`read-only` ist nur lesend, solange Bash gesperrt ist.** Mit `--allow "Bash(…)"` kann ein Befehl schreiben.
 
 ## Dateien
@@ -121,6 +181,7 @@ Was die Stufen wirklich heißen:
   scheduled-tasks/scheduler.lock
   scheduled-tasks/runs/<Aufgaben-ID>/<Lauf-ID>/
     run.json      Start-Eintrag der App (Sitzung, Auslöser, Termin, PID, Startzeit, Grund bei „nicht gestartet“)
+    claude-config/  Einstellungen, Skills, CLAUDE.md und MCP-Server des Laufs (Paket 4), löscht der Lauf am Ende
     result.json   Ausgabe von claude -p --output-format json (schreibt der Lauf)
     stderr.log
     exit          „<Exit-Code> <Ende in Unix-Sekunden>“, schreibt der Lauf als Letztes
@@ -301,13 +362,21 @@ Notch und Insel zählen ihn dagegen als „arbeitet“ bzw. „fertig“ mit (di
   Datei-Abfrage, bei neuen Nachrichten das Lesen des Datei-Endes (höchstens 512 KB) und der Neubau des Texts,
   beides abseits des Main Threads.
 - Mitteilung: eine je fehlgeschlagenem Lauf.
-- Je Lauf: ein `claude auth status` (rund eine Sekunde) und der Lauf selbst. Ein `claude -p`-Lauf zählt gegen das
-  Nutzungslimit des Kontos; der kleinste gemessene kostete rechnerisch 0,48 $ (Plan, Teil 1b).
+- Je Lauf: ein `claude auth status` (rund eine Sekunde), das Anlegen von `claude-config/` (eine `settings.json`
+  lesen und schreiben, je Skill ein Symlink, bei MCP die `.claude.json` des Kontos lesen; Millisekunden) und der
+  Lauf selbst. Ein Lauf lädt nur die genannten MCP-Server statt aller des Kontos und keine Plugins; er startet
+  dadurch eher schneller. Ein `claude -p`-Lauf zählt gegen das Nutzungslimit des Kontos; der kleinste gemessene
+  kostete rechnerisch 0,48 $ (Plan, Teil 1b).
 
 ## Offen für spätere Pakete
 
 - Auswahl „Skill oder Text“ aus dem Entwurf fehlt im Blatt; der Auftrag ist ein Textfeld, das beides nimmt.
 - „Lauf abbrechen“ aus dem Entwurf (Kasten „Arbeitet“) ist nicht gebaut.
-- Übernahme der PM-Analyse und „Nur Freigaben der Aufgabe“ (Entscheidung Giuliano 17.11.2026: Konto-Freigaben
-  gelten für Läufe nicht mehr): Paket 4. Der launchd-Eintrag der PM-Analyse bleibt bis dahin unberührt.
+- Übernahme der launchd-Läufe (PM-Analyse morgens und abends, ein täglicher Auswertungslauf): als pausierte Aufgaben
+  angelegt. Ihre Freigaben stammen aus den launchd-Skripten und brauchen vor dem Einschalten neue Pfadregeln
+  (`//…` oder `~/…` statt `/Users/…`, `Edit` statt `Write`, siehe „Regeln schreiben“); unter launchd fiel das
+  nicht auf, weil das Konto `Read(//**)` und den Modus `auto` mitbrachte. Die launchd-Einträge bleiben bis zum
+  Umschalten unberührt.
+- Ein Lauf kennt keine eigenen Agents, Befehle und Plugins des Kontos und keine MCP-Server aus Plugins,
+  `.mcp.json` oder claude.ai. Braucht eine Aufgabe das, wäre der nächste Schritt eine Auswahl je Aufgabe.
 - Probelauf mit Kosten: Versucht ein Workflow-Agent `SendMessage`, obwohl der Lauf es sperrt?

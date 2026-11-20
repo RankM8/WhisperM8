@@ -23,10 +23,12 @@ enum ScheduleCLICommand {
     <aufgabe>: Name, ID oder ID-Anfang (mindestens 4 Zeichen).
     Zeitplan: täglich 07:00 · werktags 07:00, 22:30 · wöchentlich mo, mi 08:00 · stündlich :15
     Rechte ab Werk (--access project): lesen (Read gilt für die ganze Platte, nicht nur den Ordner) und im
-    Projektordner schreiben: Read, Glob, Grep, Edit(/**), Skill. Bash, WebFetch, WebSearch und alle MCP-Werkzeuge
-    sind gesperrt, auch wenn das Konto sie in seiner settings.json erlaubt. Eine Familie geht nur ausdrücklich
-    auf: --allow "Bash(whisperm8 tickets *)" öffnet Bash (dann gelten auch die Bash-Freigaben des Kontos),
-    --allow mcp__linear__get_issue öffnet MCP (dann lädt der Lauf die MCP-Server des Kontos).
+    Projektordner schreiben: Read, Glob, Grep, Edit(/**), Skill. Ein Lauf darf nur, was die Aufgabe freigibt:
+    Freigaben aus der settings.json des Kontos oder des Projekts und allowed-tools von Skills gelten nicht.
+    Bash, WebFetch, WebSearch und alle MCP-Werkzeuge sind gesperrt und gehen nur ausdrücklich auf:
+    --allow "Bash(whisperm8 tickets *)" öffnet diese Befehle (dazu lesende wie pwd, die Claude Code selbst
+    erlaubt), --allow mcp__linear__get_issue lädt nur
+    den MCP-Server linear. Pfade: „/“ vorn = Projektordner, „//…“ absolut, „~/…“ Home; Schreiben über Edit(…).
     Ebenso gesperrt, offen nur einzeln per --allow: SendMessage, ListAgents (andere lokale Sitzungen),
     RemoteTrigger (Cloud-Routinen), CronCreate, CronDelete, PushNotification, DesignSync,
     EnterWorktree, ExitWorktree (anderer Arbeitsordner).

@@ -35,6 +35,14 @@ actor ScheduledTaskScheduler {
         var watchExit: (Int32, @escaping @Sendable () -> Void) -> Void
         /// Ein Lauf ist fehlgeschlagen (Paket 3): Mitteilung.
         var notifyFailure: (ScheduledTaskFailureNotice) -> Void = { _ in }
+        /// Legt Einstellungen, Skills, CLAUDE.md und MCP-Server des Laufs im
+        /// Lauf-Ordner an (Paket 4, `ScheduledTaskRunConfigBuilder`). Ab Werk
+        /// nur der Pfad der Einstellungen, ohne Dateien (Tests).
+        var prepareRunConfig: (_ task: ScheduledTask, _ runDirectory: URL) throws -> ScheduledTaskRunConfig = { _, runDirectory in
+            ScheduledTaskRunConfig(settingsFile: runDirectory
+                .appendingPathComponent(ScheduledTaskRunConfigBuilder.folderName)
+                .appendingPathComponent("settings.json").path)
+        }
     }
 
     /// Fehler des Planers als Fälle (Prüfung WM8-110, K4): Die CLI bekommt
@@ -350,6 +358,8 @@ actor ScheduledTaskScheduler {
             record.message = message
             record.sessionID = nil
             try? env.store.writeRecord(record, in: runDirectory)
+            try? FileManager.default.removeItem(
+                at: runDirectory.appendingPathComponent(ScheduledTaskRunConfigBuilder.folderName, isDirectory: true))
             Logger.scheduledTasks.info("run_not_started task=\(task.shortID, privacy: .public) reason=\(reason.rawValue, privacy: .public)")
             // Von Hand gestartet: Ansicht und CLI melden es sofort selbst.
             if trigger != .manual, let notice = ScheduledTaskFailureNotice(
@@ -381,11 +391,17 @@ actor ScheduledTaskScheduler {
         for key in ScheduledTaskLauncher.inheritedChatEnvironmentKeys { environment.removeValue(forKey: key) }
         environment[ScheduledTaskLauncher.taskIDEnvironmentKey] = task.id.uuidString.lowercased()
         environment[ScheduledTaskLauncher.runIDEnvironmentKey] = runID
+        let config: ScheduledTaskRunConfig
+        do {
+            config = try env.prepareRunConfig(task, runDirectory)
+        } catch {
+            return notStarted(.launchFailed, "Einstellungen für den Lauf ließen sich nicht anlegen: \(error.localizedDescription)")
+        }
         let name = env.supportsNativeName() ? ScheduledTaskLauncher.sessionName(taskName: task.name, date: now) : nil
         let plan = ScheduledTaskLauncher.SpawnPlan(
             claudePath: claudePath,
             claudeArguments: ScheduledTaskLauncher.claudeArguments(
-                prompt: task.prompt, sessionID: sessionID, name: name, permissions: task.permissions),
+                prompt: task.prompt, sessionID: sessionID, name: name, permissions: task.permissions, config: config),
             environment: environment, workingDirectory: task.directory, runDirectory: runDirectory)
         let pid: Int32
         do {
@@ -548,6 +564,7 @@ enum ScheduledTaskValidation {
         if task.permissions.access == .custom, task.permissions.allowedTools.isEmpty {
             return .customListEmpty
         }
+        if let problem = ScheduledTaskPermissions.ruleProblem(in: task.permissions.extraTools) { return problem }
         if !ScheduledTask.runArchiveDayChoices.contains(task.runArchiveDays) {
             return .invalidArchiveDays
         }
@@ -572,6 +589,10 @@ enum ScheduledTaskValidationProblem: Equatable {
     case toolStartsWithDash
     case customListEmpty
     case invalidArchiveDays
+    /// `Read(/Users/…)`: ein `/` vorn hängt am Projektordner.
+    case pathRuleAnchoredAtProject(String)
+    /// `Write(…)` greift nie, Schreiben prüft Claude gegen Edit-Regeln.
+    case writeRuleNeverMatches(String)
 
     /// Deutsch für die CLI, wie ihre übrigen Texte.
     var cliText: String {
@@ -591,6 +612,10 @@ enum ScheduledTaskValidationProblem: Equatable {
         case .toolStartsWithDash: return "Ein erlaubtes Werkzeug darf nicht mit „-“ beginnen (Claude läse es als Option)."
         case .customListEmpty: return "Eigene Liste braucht mindestens ein Werkzeug (--allow)."
         case .invalidArchiveDays: return "Alte Läufe gehen nach 14 oder 7 Tagen ins Archiv oder nie (--archive-runs 14|7|never)."
+        case .pathRuleAnchoredAtProject(let rule):
+            return "„\(rule)“ meint einen Pfad im Projektordner: Ein „/“ vorn hängt am Startordner. Absolut: „//…“, im Home-Ordner: „~/…“."
+        case .writeRuleNeverMatches(let rule):
+            return "„\(rule)“ greift nie: Schreiben prüft Claude gegen Edit-Regeln. Edit(…) deckt auch Write."
         }
     }
 }
