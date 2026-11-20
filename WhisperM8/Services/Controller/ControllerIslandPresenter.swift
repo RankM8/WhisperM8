@@ -158,14 +158,6 @@ final class ControllerIslandPresenter: ControllerIslandPresenting {
         // Ohne Notch wächst die Insel aus der Pille, an ihrer gemerkten Lage.
         let stored = screen.hasNotch ? nil : AppPreferences.shared.notchPillPositions[screen.pillStorageKey]
         let visiblePill = screen.hasNotch ? nil : NotchStatusController.shared.visiblePillCenter(onDisplay: screen.displayID)
-        // Kamera-Insel: Die Kopfzeile richtet sich nach der letzten Messung
-        // (wie breit Apples Insel gerade ist). Die Notch-Anzeige misst zu
-        // ihren Ereignissen; nur wenn es noch keinen Stand gibt (Anzeige
-        // aus), hier einmal anfordern. Die Antwort wirkt beim nächsten
-        // Zeichnen (kein Beobachter).
-        if screen.hasIsland, NotchIslandMonitor.shared.occupancy[screen.displayID] == nil {
-            NotchIslandMonitor.shared.measure([screen])
-        }
         let display = ControllerIslandDisplay(
             style: ControllerIslandGeometry.style(
                 for: screen, occupancy: NotchIslandMonitor.shared.occupancy[screen.displayID]),
@@ -173,6 +165,16 @@ final class ControllerIslandPresenter: ControllerIslandPresenting {
             opensUpward: ControllerIslandGeometry.opensUpward(screen: screen, stored: stored, visiblePill: visiblePill))
         let panel = ensurePanel()
         let wasShown = panel.isVisible && viewModel.revealed
+        // Kamera-Insel: Die Kopfzeile richtet sich nach der letzten Messung
+        // (wie breit Apples Insel gerade ist). Die Notch-Anzeige misst zu
+        // ihren Ereignissen; gibt es noch keinen Stand (Anzeige aus), hier
+        // einmal je Öffnen anfordern, nie bei jedem Zeichnen während des
+        // Haltens. Die Antwort wirkt beim nächsten Zeichnen (kein Beobachter).
+        if Self.shouldMeasure(
+            hasIsland: screen.hasIsland, wasShown: wasShown,
+            hasMeasurement: NotchIslandMonitor.shared.occupancy[screen.displayID] != nil) {
+            NotchIslandMonitor.shared.measure([screen])
+        }
         generation += 1
         if viewModel.display != display { viewModel.display = display }
         let frame = ControllerIslandGeometry.panelFrame(
@@ -228,6 +230,10 @@ final class ControllerIslandPresenter: ControllerIslandPresenting {
             Logger.controller.info(
                 "controller_island_shown layer=\(layer, privacy: .public) style=\(style, privacy: .public) display=\(screen.displayID, privacy: .public) frame=\(NSStringFromRect(frame), privacy: .public) screen=\(NSStringFromRect(screen.frame), privacy: .public) isVisible=\(panel.isVisible, privacy: .public) occluded=\(!visible, privacy: .public) activeSpace=\(panel.isOnActiveSpace, privacy: .public) revealed=\(self.viewModel.revealed, privacy: .public)")
         }
+    }
+
+    nonisolated static func shouldMeasure(hasIsland: Bool, wasShown: Bool, hasMeasurement: Bool) -> Bool {
+        hasIsland && !wasShown && !hasMeasurement
     }
 
     func columns(onDisplay screenDisplayID: UInt32?) -> Int {

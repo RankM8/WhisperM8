@@ -98,8 +98,19 @@ extension ControllerActionDispatcher {
     }
 
     func present() {
-        guard let islandState, islandState.revealed else { return }
-        island.show(islandState.model, screenDisplayID: islandState.screenDisplayID)
+        guard var state = islandState, state.revealed else { return }
+        // Die Spalten folgen dem Bildschirm, auf dem die Insel gerade
+        // wirklich steht: Fällt er weg (Deckel zu), zeigt das Fenster sie
+        // woanders als Liste, und das Steuerkreuz rechnet dann auch so.
+        if var whereTo = state.model.whereTo {
+            let columns = island.columns(onDisplay: state.screenDisplayID)
+            if whereTo.columns != columns {
+                whereTo.setColumns(columns)
+                state.model.content = .whereTo(whereTo)
+                islandState = state
+            }
+        }
+        island.show(state.model, screenDisplayID: state.screenDisplayID)
     }
 
     /// Baut die Insel aus dem Zustand des Fensters, auf das der Controller

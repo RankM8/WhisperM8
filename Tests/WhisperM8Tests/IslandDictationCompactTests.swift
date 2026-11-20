@@ -44,7 +44,6 @@ final class IslandDictationCompactTests: XCTestCase {
         let quick = controller()
         quick.quickActionLabel = "Correcting…"
         XCTAssertTrue(quick.usesIslandCompact)
-        XCTAssertTrue(quick.islandShowsQuickAction)
         XCTAssertFalse(quick.showsIslandLargeForm)
         quick.toggleIslandExpanded()
         XCTAssertFalse(quick.isIslandExpanded, "eine Schnellaktion klappt nicht auf")
@@ -105,7 +104,12 @@ final class IslandDictationCompactTests: XCTestCase {
         controller.toggleIslandExpanded()
         controller.captureScreenshot()
         XCTAssertFalse(controller.showsIslandLargeForm)
-        // Neues Diktat per Controller: wieder offen.
+        // Bildschirmwechsel im selben Diktat (das Fenster baut neu auf): bleibt zu.
+        controller.beginIslandDictation(on: screen)
+        XCTAssertFalse(controller.showsIslandLargeForm, "zugeklappt bleibt zugeklappt")
+        // Diktat zu Ende, das nächste per Controller beginnt wieder offen.
+        controller.tearDownUnified(keepingWindow: true)
+        controller.controllerTargetLabel = "Chat A"
         controller.beginIslandDictation(on: screen)
         XCTAssertTrue(controller.showsIslandLargeForm)
         controller.tearDownUnified()

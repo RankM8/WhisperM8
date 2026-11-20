@@ -167,6 +167,23 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
         XCTAssertEqual(window.selected, chats[2], "Loslassen wechselt zur Kachel")
     }
 
+    /// Fällt der Bildschirm mit der Kamera-Insel weg, während die Insel
+    /// offen ist (Deckel zu), zeigt das Fenster sie woanders als Liste; das
+    /// Steuerkreuz rechnet ab dem nächsten Zeichnen ebenfalls einspaltig.
+    func testColumnsFollowTheScreenWhileOpen() {
+        island.columnCount = 2
+        press(.l2, at: 0)
+        tick(0.3)
+        XCTAssertEqual(whereTo?.columns, 2)
+        island.columnCount = 1
+        feed(.stick(.left, x: 0, y: -1), at: 0.5)
+        XCTAssertEqual(whereTo?.columns, 1)
+        feed(.stick(.left, x: 0, y: 0), at: 0.6)
+        feed(.stick(.left, x: 0, y: -1), at: 0.7)
+        XCTAssertEqual(whereTo?.chats.selected?.id, chats[3], "jetzt ein Eintrag je Schritt")
+        release(.l2, at: 1.0)
+    }
+
     /// Ohne Kamera-Insel bleibt es die Liste: links/rechts wechselt sofort
     /// den Reiter, hoch/runter geht einen Eintrag weiter.
     func testListElsewhereKeepsOneColumn() {

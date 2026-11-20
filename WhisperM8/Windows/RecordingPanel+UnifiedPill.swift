@@ -215,10 +215,6 @@ extension OverlayController {
         return true
     }
 
-    /// Die Kapsel zeigt eine Schnellaktion (Zeichen, Beschriftung, ✕) statt
-    /// der Aufnahme. Sie klappt nicht auf: Es gibt nichts zu bedienen.
-    var islandShowsQuickAction: Bool { usesIslandCompact && quickActionLabel != nil }
-
     /// Die große Form mit den Bedienknöpfen ist offen: per Klick auf die
     /// Kapsel, oder von selbst bei einer Aufnahme per Controller (Ziel-Chat
     /// und Modus müssen ohne Klick sichtbar sein). Offen darf sie Menüs
@@ -327,7 +323,10 @@ extension OverlayController {
     /// Messung neu angefordert.
     func beginIslandDictation(on screen: NotchScreenInfo) {
         setIslandExpanded(false)
-        if islandFormDismissed { islandFormDismissed = false }
+        // `islandFormDismissed` bleibt: Nach einem Bildschirmwechsel baut
+        // dasselbe Diktat sein Fenster neu auf, und eine zugeklappte Form
+        // soll dann nicht wieder aufspringen. Zurückgesetzt wird am Ende
+        // des Diktats (`tearDownUnified`).
         islandReserve = nil
         islandOccupancy = nil
         // `islandViewFrame` bleibt: Die Ansicht meldet ihren Rahmen schon beim
@@ -607,8 +606,10 @@ extension OverlayController {
         unifiedGeneration += 1
         badgeCancellable = nil
         islandCancellables.removeAll()
-        // Mit dem Diktat geht auch die große Form zu.
+        // Mit dem Diktat geht auch die große Form zu; das nächste per
+        // Controller beginnt wieder offen.
         setIslandExpanded(false)
+        if islandFormDismissed { islandFormDismissed = false }
         // Ein Diktat, das vor der Frist endet, bekommt seine Log-Zeile hier.
         logIslandDecision()
         islandDecisionTask?.cancel()

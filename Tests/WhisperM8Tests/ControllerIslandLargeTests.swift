@@ -103,6 +103,42 @@ final class ControllerIslandLargeTests: XCTestCase {
         XCTAssertEqual(state.chats.firstVisibleIndex, 0)
     }
 
+    /// Ungerade Anzahl über sechs: Aus der letzten, halben Reihe hoch und
+    /// wieder runter rückt die Liste nicht, solange die Reihe der Markierung
+    /// sichtbar ist (kein Springen um eine Reihe).
+    func testOddCountDoesNotJumpWhenLeavingTheLastRow() {
+        for count in [7, 9, 11] {
+            var (state, ids) = state(count)
+            while state.chats.selected?.id != ids[count - 1] { state.moveRow(1) }
+            let bottom = state.chats.firstVisibleIndex
+            XCTAssertEqual(bottom, ((count + 1) / 2 - 3) * 2, "\(count): die letzten drei Reihen")
+            XCTAssertEqual(state.chats.visibleRows.last?.id, ids[count - 1])
+            state.moveRow(-1)
+            XCTAssertEqual(state.chats.firstVisibleIndex, bottom, "\(count): hoch in eine sichtbare Reihe rückt nichts")
+            state.moveRow(-1)
+            XCTAssertEqual(state.chats.firstVisibleIndex, bottom, "\(count)")
+            state.moveRow(1); state.moveRow(1)
+            XCTAssertEqual(state.chats.firstVisibleIndex, bottom, "\(count): und zurück")
+            XCTAssertEqual(state.chats.selected?.id, ids[count - 1])
+            state.moveRow(-1); state.moveRow(-1); state.moveRow(-1)
+            XCTAssertEqual(state.chats.firstVisibleIndex, bottom - 2, "\(count): erst über der obersten sichtbaren Reihe eine Reihe weiter")
+        }
+        // Einspaltig rechnet weiter in Einträgen.
+        var (list, ids) = state(9, columns: 1)
+        for _ in 0..<8 { list.moveRow(1) }
+        XCTAssertEqual(list.chats.firstVisibleIndex, 3)
+        XCTAssertEqual(list.chats.selected?.id, ids[8])
+    }
+
+    /// Gemessen wird für die Kopfzeile nur beim Öffnen und nur, wenn es noch
+    /// keinen Stand gibt: nie bei jedem Zeichnen während des Haltens.
+    func testMeasuresOnlyOnOpenWithoutAMeasurement() {
+        XCTAssertTrue(ControllerIslandPresenter.shouldMeasure(hasIsland: true, wasShown: false, hasMeasurement: false))
+        XCTAssertFalse(ControllerIslandPresenter.shouldMeasure(hasIsland: true, wasShown: true, hasMeasurement: false))
+        XCTAssertFalse(ControllerIslandPresenter.shouldMeasure(hasIsland: true, wasShown: false, hasMeasurement: true))
+        XCTAssertFalse(ControllerIslandPresenter.shouldMeasure(hasIsland: false, wasShown: false, hasMeasurement: false))
+    }
+
     /// Tastatur: Tab, ⇧Tab und ↓/↑ gehen in Lesereihenfolge durch die
     /// Kacheln; ←/→ wechseln sofort den Reiter (wie die Fußzeile sagt), auch
     /// aus der linken Spalte, und die Spalten bleiben dabei.

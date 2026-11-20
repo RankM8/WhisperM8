@@ -158,16 +158,23 @@ struct ControllerIslandList<Row: Identifiable & Equatable & Sendable>: Equatable
             return
         }
         let maxRows = Self.maxVisibleRows
-        if index < firstVisibleIndex { firstVisibleIndex = index }
-        if index >= firstVisibleIndex + maxRows { firstVisibleIndex = index - maxRows + 1 }
-        firstVisibleIndex = max(0, min(firstVisibleIndex, max(0, rows.count - maxRows)))
-        guard columns > 1 else { return }
-        // Kacheln: Das Fenster beginnt an einem Reihenanfang und rückt
-        // reihenweise.
-        if firstVisibleIndex % columns != 0 {
-            let start = firstVisibleIndex - firstVisibleIndex % columns
-            firstVisibleIndex = index >= start + maxRows ? start + columns : start
+        guard columns > 1 else {
+            if index < firstVisibleIndex { firstVisibleIndex = index }
+            if index >= firstVisibleIndex + maxRows { firstVisibleIndex = index - maxRows + 1 }
+            firstVisibleIndex = max(0, min(firstVisibleIndex, max(0, rows.count - maxRows)))
+            return
         }
+        // Kacheln: in Reihen rechnen. Das Fenster beginnt an einem
+        // Reihenanfang und rückt nur, wenn die Reihe der Markierung nicht
+        // mehr darin liegt; die letzte, halbe Reihe zählt als ganze (sonst
+        // spränge die Liste beim Hochgehen aus ihr um eine Reihe).
+        let visibleRows = max(1, maxRows / columns)
+        let totalRows = (rows.count + columns - 1) / columns
+        let selectedRow = index / columns
+        var firstRow = firstVisibleIndex / columns
+        if selectedRow < firstRow { firstRow = selectedRow }
+        if selectedRow >= firstRow + visibleRows { firstRow = selectedRow - visibleRows + 1 }
+        firstVisibleIndex = max(0, min(firstRow, totalRows - visibleRows)) * columns
     }
 }
 
