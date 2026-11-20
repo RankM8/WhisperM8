@@ -80,6 +80,9 @@ extension ControllerActionDispatcher {
             return keyboardRejected()
         }
         keyboardMarkerMoved()
+        // Auch mit Kacheln (Kamera-Insel): ←/→ wechseln per Tastatur sofort
+        // den Reiter, wie die Fußzeile es sagt; durch die Kacheln gehen Tab
+        // und ↓/↑ in Lesereihenfolge.
         updateKeyboardWhereTo { $0.switchTabForKeyboard(step) }
     }
 

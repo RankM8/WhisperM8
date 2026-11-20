@@ -483,6 +483,113 @@ final class NotchIslandGeometryTests: XCTestCase {
         XCTAssertEqual(layout.frame.maxY, screen.frame.maxY - 6 * 1.18, accuracy: 0.01)
     }
 
+    // MARK: Schnellaktion
+
+    /// Die Kapsel einer Schnellaktion steht links neben der Insel, wenn dort
+    /// Platz ist, sonst rechts; sie schneidet dann keinen gemessenen Rahmen
+    /// und liegt nie über der Kamera oder unter Apples Insel. Ohne Platz
+    /// oder ohne Messung steht sie trotzdem da (die Beschriftung muss
+    /// lesbar sein) und meldet das.
+    func testQuickActionCapsuleSitsBesideTheIsland() throws {
+        let screen = islandScreen()
+        let width: CGFloat = 150
+        let roomy = try XCTUnwrap(NotchIslandGeometry.quickActionCapsule(
+            screen: screen, occupancy: roomyBar(screen), contentWidth: width))
+        XCTAssertEqual(roomy.side, .leading)
+        XCTAssertFalse(roomy.isForced)
+        let frame = roomy.frame(screen: screen)
+        XCTAssertEqual(frame.maxX, 838.5 - 3 - 6, accuracy: 0.001, "6 pt neben dem Rand um die Kamera")
+        XCTAssertEqual(frame.width, width)
+        XCTAssertEqual(frame.height, 32)
+
+        // Apples Insel zeigt Musik: Abstand zu ihr.
+        var music = roomyBar(screen)
+        music.systemIsland = 802...945
+        let beside = try XCTUnwrap(NotchIslandGeometry.quickActionCapsule(screen: screen, occupancy: music, contentWidth: width))
+        XCTAssertEqual(beside.frame(screen: screen).maxX, 802 - 6, accuracy: 0.001)
+
+        // Menüs reichen heran: rechts.
+        let crowded = NotchMenuBarOccupancy(frames: [barItem(screen, from: 10, to: 800), barItem(screen, from: 1300, to: 1716)])
+        let right = try XCTUnwrap(NotchIslandGeometry.quickActionCapsule(screen: screen, occupancy: crowded, contentWidth: width))
+        XCTAssertEqual(right.side, .trailing)
+        XCTAssertFalse(right.isForced)
+        for item in crowded.frames { XCTAssertFalse(right.frame(screen: screen).intersects(item)) }
+
+        // Nirgends Platz bzw. keine Messung: trotzdem da, als erzwungen gemeldet.
+        let full = NotchMenuBarOccupancy(frames: [barItem(screen, from: 10, to: 800), barItem(screen, from: 930, to: 1716)])
+        XCTAssertEqual(NotchIslandGeometry.quickActionCapsule(screen: screen, occupancy: full, contentWidth: width)?.isForced, true)
+        let blind = try XCTUnwrap(NotchIslandGeometry.quickActionCapsule(screen: screen, occupancy: nil, contentWidth: width))
+        XCTAssertTrue(blind.isForced)
+        XCTAssertEqual(blind.side, .leading)
+        // Notch und ohne Aussparung: keine Kapsel, dort bleibt die Pille bzw. die Zeile unter der Notch.
+        XCTAssertNil(NotchIslandGeometry.quickActionCapsule(screen: notchScreen(), occupancy: nil, contentWidth: width))
+        XCTAssertNil(NotchIslandGeometry.quickActionCapsule(screen: plainScreen, occupancy: nil, contentWidth: width))
+    }
+
+    /// Eine sehr lange Beschriftung macht die Kapsel nur so breit, wie das
+    /// Fenster des Diktats reicht: Sie bleibt ganz im Fenster (✕ erreichbar),
+    /// der Text wird gekürzt. Das Fenster ist an der Insel breiter als sonst.
+    func testLongQuickActionLabelStaysInsideTheWindow() throws {
+        let screen = islandScreen()
+        XCTAssertEqual(UnifiedPillGeometry.notchDictationPanelWidth(screen: screen), 1100)
+        XCTAssertEqual(
+            UnifiedPillGeometry.notchDictationPanelWidth(screen: notchScreen()), OverlayFrameResolver.panelSize.width,
+            "an der Notch unverändert")
+        XCTAssertEqual(UnifiedPillGeometry.notchDictationPanelWidth(screen: islandScreen(scale: 0.5)), 868, "nie breiter als der Bildschirm")
+        let extent = UnifiedPillGeometry.islandCapsuleMaxExtent(screen: screen)
+        XCTAssertEqual(extent, 550 - 24)
+        let panel = UnifiedPillGeometry.notchDictationPanelFrame(
+            screen: screen, panelWidth: UnifiedPillGeometry.notchDictationPanelWidth(screen: screen))
+        XCTAssertTrue(screen.frame.contains(panel))
+
+        var music = roomyBar(screen)
+        music.systemIsland = 802...945
+        for occupancy in [nil, roomyBar(screen), music,
+                          NotchMenuBarOccupancy(frames: [barItem(screen, from: 10, to: 800), barItem(screen, from: 1300, to: 1716)])] {
+            for width in [120, 455, 900, 5000] as [CGFloat] {
+                let capsule = try XCTUnwrap(NotchIslandGeometry.quickActionCapsule(
+                    screen: screen, occupancy: occupancy, contentWidth: width, maxExtent: extent))
+                let frame = capsule.frame(screen: screen)
+                XCTAssertGreaterThanOrEqual(frame.minX, panel.minX + 24 - 0.001, "\(width)")
+                XCTAssertLessThanOrEqual(frame.maxX, panel.maxX - 24 + 0.001, "\(width)")
+                XCTAssertLessThanOrEqual(capsule.width, width)
+                XCTAssertGreaterThanOrEqual(capsule.width, min(width, NotchIslandGeometry.quickActionMinWidth))
+                // Die Ansicht reicht symmetrisch um die Kamera bis zum äußeren Rand der Kapsel.
+                XCTAssertLessThanOrEqual(abs(capsule.offset) + capsule.width / 2, extent + 0.001)
+            }
+        }
+        // Ein Hinweis von rund 455 pt passt links ganz hinein.
+        let hint = try XCTUnwrap(NotchIslandGeometry.quickActionCapsule(
+            screen: screen, occupancy: roomyBar(screen), contentWidth: 455, maxExtent: extent))
+        XCTAssertEqual(hint.width, 455)
+    }
+
+    /// Bei keiner Lage von Menüs und Statussymbolen schneidet eine nicht
+    /// erzwungene Kapsel einen gemessenen Rahmen.
+    func testQuickActionCapsuleNeverCutsMeasuredFramesUnlessForced() {
+        let screen = islandScreen()
+        let cutoutMinX = screen.notchCenterX - screen.notchWidth / 2, cutoutMaxX = screen.notchCenterX + screen.notchWidth / 2
+        for leftGap in stride(from: CGFloat(0), through: 260, by: 13) {
+            for rightGap in stride(from: CGFloat(0), through: 260, by: 13) {
+                for system in [nil, 802...945] as [ClosedRange<CGFloat>?] {
+                    var occupancy = NotchMenuBarOccupancy(frames: [
+                        barItem(screen, from: 10, to: cutoutMinX - leftGap),
+                        barItem(screen, from: cutoutMaxX + rightGap, to: screen.frame.width - 20),
+                    ])
+                    occupancy.systemIsland = system
+                    guard let capsule = NotchIslandGeometry.quickActionCapsule(
+                        screen: screen, occupancy: occupancy, contentWidth: 140), !capsule.isForced else { continue }
+                    let frame = capsule.frame(screen: screen)
+                    for item in occupancy.frames { XCTAssertFalse(frame.intersects(item), "\(leftGap) \(rightGap)") }
+                    XCTAssertFalse(frame.intersects(CGRect(x: cutoutMinX, y: frame.minY, width: screen.notchWidth, height: 32)))
+                    if let system {
+                        XCTAssertTrue(frame.maxX <= system.lowerBound || frame.minX >= system.upperBound)
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: Notch und Bildschirm ohne Aussparung bleiben, wie sie waren
 
     func testNotchLayoutIsUnchanged() {
@@ -501,6 +608,10 @@ final class NotchIslandGeometryTests: XCTestCase {
         XCTAssertEqual(NotchStatusController.displayStyle(screen: notchScreen()), .notch(width: 185, height: 38))
         let island = NotchStatusController.displayStyle(screen: islandScreen())
         XCTAssertEqual(island, .island(NotchIslandGeometry.band(screen: islandScreen())))
+        // Die Controller-Insel ist dort die große Form.
+        XCTAssertTrue(ControllerIslandDisplay(
+            style: ControllerIslandGeometry.style(for: islandScreen()),
+            model: ControllerIslandModel(target: ControllerIslandTarget(), content: .writing(ControllerWritingSlots(state: nil)))).isLarge)
         let display = NotchDisplay(style: island, summary: .empty, alert: nil, isExpanded: false, sections: [])
         XCTAssertTrue(display.isNotch)
         XCTAssertEqual(display.bandHeight, 32, "Ruhe: nur die Kapsel")
@@ -535,12 +646,17 @@ final class NotchIslandGeometryTests: XCTestCase {
         XCTAssertEqual(placement, .notch(islandScreen()))
     }
 
-    func testControllerIslandHangsFromTheCapsule() {
+    /// Die Controller-Insel beginnt an der Kamera-Insel auf Höhe der großen
+    /// Form (6 pt), auf die Kamera zentriert; ihre Kopfzeile lässt Apples
+    /// Insel Platz.
+    func testControllerIslandIsTheLargeFormAtTheIsland() {
         let screen = islandScreen()
         let style = ControllerIslandGeometry.style(for: screen)
-        XCTAssertEqual(style, .island(NotchIslandGeometry.band(screen: screen)))
+        XCTAssertEqual(style, .island(
+            NotchIslandGeometry.band(screen: screen),
+            header: NotchIslandLargeHeaderMetrics(height: 42, slotLeading: 40.5, slotTrailing: 40.5)))
         let frame = ControllerIslandGeometry.frame(screen: screen, bodySize: CGSize(width: 440, height: 200))
-        XCTAssertEqual(frame.maxY, screen.frame.maxY - 8)
+        XCTAssertEqual(frame.maxY, screen.frame.maxY - 6)
         XCTAssertEqual(frame.midX, screen.notchCenterX, accuracy: 0.001)
         XCTAssertEqual(ControllerIslandGeometry.panelFrame(screen: screen, bodySize: CGSize(width: 440, height: 200)), frame)
         // Notch unverändert: bündig an der Oberkante.

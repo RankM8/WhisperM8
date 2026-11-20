@@ -246,7 +246,7 @@ ohne Ebene. R2 diktiert auf jeder Ebene (unter L2 heißt R2 „hin und diktieren
 | | Rechter Stick ▲ ▼ | einen Bildschirm blättern im selben Chat, mit Wiederholung beim Halten (WM8-116, siehe „Scrollen“); schließt die Dynamic Island wie ein Schnellbefehl. Kein Chatwechsel |
 | L2 Wohin | (halten) | die Liste steht sofort da, die Markierung auf dem aktuellen Eintrag; der vorige Ort trägt „vorher“ (siehe unten) |
 | | Stick/Steuerkreuz hoch/runter | Markierung bewegen (mit Wiederholung) |
-| | links/rechts | Reiter „Chats“ / „Workspaces & Projekte“; die Markierung beginnt dort wieder auf dem aktuellen Eintrag |
+| | links/rechts | Reiter „Chats“ / „Workspaces & Projekte“; die Markierung beginnt dort wieder auf dem aktuellen Eintrag. An einer Kamera-Insel stehen die Einträge als Kacheln in zwei Spalten: Dort geht links/rechts zuerst zur Nachbar-Kachel der Reihe und wechselt erst am Rand der Reihe den Reiter (siehe „Große Form an der Kamera-Insel“) |
 | | Loslassen, Kreuz | nach einer Bewegung zum markierten Eintrag wechseln. Ohne Bewegung (Markierung auf dem aktuellen Eintrag) passiert nichts. Loslassen wechselt nur, solange der Chat die Eingaben hat; startet währenddessen eine Aufnahme per Hotkey oder geht ein Dialog oder Sheet auf, schließt es nur die Dynamic Island |
 | | Kreis | abbrechen, nichts passiert |
 | | Dreieck | zum nächsten wartenden Chat, reihum (derselbe Weg wie ⌃⌥Tab); schließt die Dynamic Island |
@@ -337,8 +337,8 @@ Fokus, auf der du dort zuletzt warst (gemerkt beim Verlassen, nur für den laufe
 einmal aufgebaut, danach nur ein- und ausgeblendet. Sie erscheint auf dem Bildschirm des
 Agent-Chats-Fensters, auf dem der Controller wirkt — unabhängig von der Bildschirmwahl der
 Notch-Anzeige. Mit Notch wächst sie als schwarzes Band in Notch-Breite mit Körper darunter
-(`NotchHangingShape`). An einer Kamera-Insel (Dynamic Island der Hardware) hängt sie an einem Hals um
-die Kamera unter der Menüleiste ([notch.md](notch.md), Abschnitt „Kamera-Insel“). Ohne Notch wächst sie aus der Pille der Notch-Anzeige, die dort immer steht
+(`NotchHangingShape`). An einer Kamera-Insel (Dynamic Island der Hardware) ist sie die große Form um
+die Kamera (siehe unten „Große Form an der Kamera-Insel“ und [notch.md](notch.md), Abschnitt „Kamera-Insel“). Ohne Notch wächst sie aus der Pille der Notch-Anzeige, die dort immer steht
 (siehe [notch.md](notch.md)): genau an ihrer Stelle (ist sie sichtbar, zählt ihr tatsächlicher
 Mittelpunkt, auch bei automatisch ausgeblendeter Menüleiste), im dunklen Glas der Diktat-Pille
 (`PillGlassBackground`, gleicher Rand und Schatten), immer dunkel. Sitzt die Pille in der oberen
@@ -353,6 +353,37 @@ nur sie, nicht die Notch-Anzeige): an der Notch in der Aussparung, sonst an der 
 Pille (ohne Menüleiste oben am Bildschirmrand). Eine Bewegung beim Öffnen, eine beim Schließen
 (0,25 s, bei „Bewegung reduzieren“ keine), sonst nichts in Bewegung. Maus oder Tastatur schließen sie
 für das laufende Halten.
+
+**Große Form an der Kamera-Insel (seit 20.11.2026).** Auf einem MacBook Pro mit Kamera-Insel ist die
+Dynamic Island des Controllers EINE schwarze Fläche um die Kamera, wie Hinweis, Liste und Diktat dort
+(`ControllerIslandView+Large.swift`, Maße in `NotchIslandLargeGeometry`): 36 pt Ecken, auf die Kamera
+zentriert, Oberkante auf Höhe von Apples Insel, mindestens 460 pt breit (Rauten und Limits-Karte
+704 pt), so hoch wie ihr Inhalt. Kein Hals, kein Kasten darunter. Solange sie offen ist, verdeckt sie
+Menüs und Statussymbole neben der Kamera; sie steht nur, solange L1, R1 oder L2 gehalten wird.
+
+- **Kopfzeile** auf Höhe der Kamera: links die Taste und die Ebene, rechts das Ziel (Chat, Zähler,
+  Konto). Die Mitte bleibt Apples Insel, so breit, wie die Messung der Notch-Anzeige sie zeigt (beim
+  Aufgehen einmal angefordert, falls es noch keine gibt; ohne Messung ihre Breite in Ruhe).
+- **Wohin:** die Einträge jedes Reiters als Kacheln in zwei Spalten (58 pt hoch, Titel 14,5 pt), drei
+  Reihen sichtbar, darunter „+ n weitere“. Die Markierung ist hell gefüllt und kräftig umrandet. Das
+  Steuerkreuz bewegt in beide Richtungen: hoch/runter eine Reihe in derselben Spalte, links/rechts zur
+  Nachbar-Kachel der Reihe. Erst am Rand der Reihe wechselt links/rechts den Reiter (aus der linken
+  Spalte nach links ein Druck wie bisher, nach rechts zwei). Kein Umlauf; die Liste rückt reihenweise.
+  Die Fußzeile sagt es: „▲▼◀▶ wählen“, „◀▶ am Rand: Reiter“. Loslassen, Kreuz, Kreis, Dreieck, Viereck
+  und R2 wirken wie überall. Reihenfolge und Start der Markierung sind dieselben wie in der Liste
+  (aktueller Eintrag, „vorher“ gleich dahinter): Steht der aktuelle Eintrag links, ist der vorige Ort
+  ein Schritt nach rechts; steht er rechts, liegt der vorige Ort links in der nächsten Reihe.
+- **Schreiben:** die sieben Tasten als große Felder in zwei Spalten (44 pt), was gerade nicht geht,
+  gedimmt; Hinweise darunter.
+- **Schnellbefehle, Limits-Karte, Tastatur (⌥Tab):** derselbe Inhalt wie an der Notch, in der großen
+  Form. Per Tastatur gehen Tab und die Pfeile hoch/runter in Lesereihenfolge durch die Kacheln, die
+  Pfeile links/rechts wechseln wie bisher sofort den Reiter (so steht es in der Fußzeile).
+- **Bewegung:** dieselbe Federbewegung wie die anderen großen Formen dort, aus der Kapsel um die Kamera
+  und zurück; bei „Bewegung reduzieren“ keine.
+
+Das Modell kennt dafür die Zahl der Spalten (`ControllerWhereToState.columns`, vom Fenster beim Öffnen
+gesetzt: 2 an einer Kamera-Insel, sonst 1). An Notch und Pille ist alles wie zuvor: eine Liste, ◀▶
+wechselt sofort den Reiter.
 
 Mit der vereinten Pille (siehe [notch.md](notch.md)) ist die Pille, aus der die Dynamic Island wächst,
 dieselbe wie die Diktat-Pille; die Dynamic Island hat dort Vorrang vor allem anderen. Ihr Aussehen (Glas,
@@ -900,6 +931,8 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
 - `swift test --filter ChatPlace` und `--filter AgentWindowStorePlaceHistory` — Zurück mit L2 (Orte,
   Kachel je Workspace, geschlossene Ziele, je Fenster); `--filter ControllerWorkspacePicker` die
   Markierung von „Wohin“ (Start auf dem aktuellen Eintrag, „vorher“, Projekte, Reiterwechsel);
+  `--filter ControllerIslandLarge` die große Form an der Kamera-Insel (Kacheln: Steuerkreuz in beide
+  Richtungen, Reiterwechsel am Rand, reihenweises Rücken, eine Spalte an Notch und Pille unverändert);
   `--filter ControllerLimits` Limits-Karte, App-Raute und Konto eines Chats im Kern sowie den
   `AccountLimitsStore` (Fehlschläge behalten den letzten Stand); `--filter StayAwake` auch die stille
   Prüfung der Freigabe ohne Seitenleiste;
@@ -927,7 +960,8 @@ lesen ihn nicht. Die Zeilen der Liste werden nur im Ereignis-Pfad berechnet.
   vorigen Ort, Workspaces, mit
   Notch-Zählern; Schreiben, Schreiben in der Shell; Schnellbefehle, bei Rückfrage, wenn der Chat
   arbeitet; als Pille Chats, Schnellbefehle, Shell; Pille oben mit Dynamic Island nach unten, Pille unten
-  mit Dynamic Island nach oben); `ONLY=controller-insel-paket` das Insel-Paket (zwei Rauten an der Notch und als
+  mit Dynamic Island nach oben); `ONLY=kamera-insel-controller` die große Form an der Kamera-Insel je
+  Ebene (Kacheln je Reiter, Schreiben, Schnellbefehle, Limits, Tastatur, zu); `ONLY=controller-insel-paket` das Insel-Paket (zwei Rauten an der Notch und als
   Pille, Chat arbeitet, Diktat, Bestätigung von Glocke und Wach bleiben, fehlende Freigabe, Limits-Karte (auch während eines Diktats ohne „✕ aktualisieren“)
   und viele Konten mit Fehlerzeilen als Pille, „Wohin“ mit Markierung auf dem aktuellen Chat und „vorher“,
   Reiter „Workspaces & Projekte“ mit der Markierung auf dem vorigen Projekt gleich unter dem aktuellen

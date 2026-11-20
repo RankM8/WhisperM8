@@ -16,7 +16,7 @@ extension UISnapshotGallery {
     private static let islandMenuBar: CGFloat = 45
     private static let islandSafeTop: CGFloat = 40
 
-    private static func islandScreen(_ size: CGSize) -> NotchScreenInfo {
+    static func islandScreen(_ size: CGSize) -> NotchScreenInfo {
         let height = max(600, size.height)
         let side = (size.width - islandCutout.width) / 2
         return NotchScreenInfo(
@@ -54,7 +54,7 @@ extension UISnapshotGallery {
     /// die Kamera), Statussymbole rechts ab 150 pt vor dem Rand (`tight`:
     /// eines schon 40 pt neben der Kamera). `microphone`: Apples Insel zeigt
     /// den Mikrofon-Hinweis (gemessen 111,5 pt breit).
-    private static func islandOccupancy(
+    static func islandOccupancy(
         _ size: CGSize, crowded: Bool = false, tight: Bool = false, microphone: Bool = false, statusGap: CGFloat? = nil,
         music: Bool = false
     ) -> NotchMenuBarOccupancy {
@@ -79,7 +79,7 @@ extension UISnapshotGallery {
     }
 
     /// Schreibtisch mit Menüleiste; die Kamera-Kapsel liegt über dem Inhalt.
-    private struct IslandDesk<Content: View>: View {
+    struct IslandDesk<Content: View>: View {
         @Environment(\.colorScheme) private var scheme
         let size: CGSize
         /// Menüs reichen bis an die Kamera.
@@ -249,10 +249,18 @@ extension UISnapshotGallery {
             let band = NotchIslandGeometry.band(screen: screen, occupancy: occupancy)
             let controller = morphController(notch: .island(band), rest: rest)
             configure(controller)
-            controller.islandCapsule = NotchIslandGeometry.dictationCapsule(
-                screen: screen, occupancy: measured ? occupancy : nil, hasBadge: controller.statusBadge != nil)
+            if let label = controller.quickActionLabel {
+                controller.islandCapsule = NotchIslandGeometry.quickActionCapsule(
+                    screen: screen, occupancy: measured ? occupancy : nil,
+                    contentWidth: OverlayController.quickActionCapsuleWidth(label: label, isHint: controller.isQuickActionHint),
+                    maxExtent: size.width / 2 - 24)
+            } else {
+                controller.islandCapsule = NotchIslandGeometry.dictationCapsule(
+                    screen: screen, occupancy: measured ? occupancy : nil, hasBadge: controller.statusBadge != nil)
+            }
             controller.islandDictationForm = NotchIslandLargeGeometry.form(
-                screen: screen, kind: .dictation, occupancy: measured ? occupancy : nil,
+                screen: screen, kind: controller.controllerTargetLabel == nil ? .dictation : .dictationWithTarget,
+                occupancy: measured ? occupancy : nil,
                 reserve: NotchIslandGeometry.dictationReserve(screen: screen, occupancy: measured ? occupancy : nil))
             // Das Fenster des Diktats beginnt auf Höhe der großen Form.
             return AnyView(IslandDesk(size: size, crowded: crowded, tight: tight, microphone: microphone) {
@@ -292,22 +300,6 @@ extension UISnapshotGallery {
                 screen: islandScreen(wide), occupancy: islandOccupancy(wide), presentation: .compact(.leading)))
         let manyWorking = (0..<12).map { islandInput("Job \($0)", .working, since: Double($0)) }
         let done = [islandInput("Tab-Switcher Review", .idle, since: 60, turnAgo: 60)]
-
-        let controllerSize = CGSize(width: 720, height: 300)
-        let controllerIsland = Fixture(name: "kamera-insel-controller", size: controllerSize) {
-            let screen = islandScreen(controllerSize)
-            let model = ControllerIslandModel(
-                target: ControllerIslandTarget(title: "Controller Insel", status: .idle),
-                content: .writing(ControllerWritingSlots(state: ControllerChatState(status: .idle, profile: .claude))))
-            let display = ControllerIslandDisplay(
-                style: ControllerIslandGeometry.style(for: screen), model: model,
-                counts: ControllerIslandCounts(working: 2, waiting: 1))
-            return AnyView(IslandDesk(size: controllerSize) {
-                ControllerIslandView(display: display)
-                    .frame(maxWidth: .infinity, alignment: .top)
-                    .padding(.top, NotchIslandGeometry.topInset(screen))
-            })
-        }
 
         return [
             // Kompakt: Zeichen und Zahl zusammen links der Kamera.
@@ -383,16 +375,40 @@ extension UISnapshotGallery {
                 $0.levelModel.level = 0.45
                 $0.statusBadge = DictationStatusBadge(waiting: 1, errored: 0)
             },
-            // Schnellaktion: weiter unter der Menüleiste (zeigt Text).
-            islandDictation("schnellaktion", size: wide, microphone: false) {
-                $0.quickActionLabel = "Correct"
+            // Schnellaktion: Kapsel mit Zeichen und Beschriftung neben der
+            // Insel (läuft kurz, will nichts: kompakt nach Apples Muster).
+            islandDictation("schnellaktion", size: wide) {
+                $0.isPostProcessing = true
+                $0.quickActionLabel = "Correcting…"
+            },
+            islandDictation("schnellaktion-hinweis", size: wide) {
+                $0.quickActionLabel = "Select text first"
+                $0.isQuickActionHint = true
+            },
+            islandDictation("schnellaktion-rechts", size: wide, crowded: true) {
+                $0.isPostProcessing = true
+                $0.quickActionLabel = "Correcting…"
+            },
+            // Langer Hinweis: Die Kapsel wird so breit wie nötig (höchstens wie das Fenster).
+            islandDictation("schnellaktion-lang", size: CGSize(width: 1100, height: 130)) {
+                $0.quickActionLabel = "Not writable here. The result is on the clipboard."
+                $0.isQuickActionHint = true
+            },
+            islandDictation("schnellaktion-ohne-messung", size: wide, measured: false) {
+                $0.isPostProcessing = true
+                $0.quickActionLabel = "Correcting…"
+            },
+            // Aufnahme per Controller: die große Form steht von selbst offen,
+            // Ziel-Chat und Modus sind ohne Klick zu sehen.
+            islandDictation("diktat-controller", size: CGSize(width: 960, height: 260), microphone: true) {
+                $0.levelModel.level = 0.45
+                $0.controllerTargetLabel = "Chat A"
             },
             // Übergang: Ruhebild (Kapsel mit Zeichen und Zahl), Mitte, und aus
             // der leeren Insel, wenn an ihr nichts los ist.
             islandDictation("uebergang-ruhe", size: wide, rest: wideRest),
             islandDictation("uebergang-mitte", size: wide, rest: wideRest, midway: true),
             islandDictation("uebergang-leer", size: wide, rest: .notchBand),
-            controllerIsland,
         ]
     }
 }

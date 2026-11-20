@@ -9,6 +9,9 @@ enum NotchIslandLargeKind: Equatable {
     case list(rowCount: Int, sectionCount: Int)
     /// Diktat mit Bedienknöpfen (Klick auf die Diktat-Kapsel).
     case dictation
+    /// Aufnahme per Controller: dazu eine Zeile mit dem Ziel-Chat. Sie steht
+    /// von selbst offen, weil Ziel und Modus ohne Klick sichtbar sein müssen.
+    case dictationWithTarget
 }
 
 /// Die aufgeklappte Anzeige an einer Kamera-Insel: EINE schwarze Fläche mit
@@ -34,6 +37,14 @@ struct NotchIslandLargeForm: Equatable {
     var listHeight: CGFloat = 0
 
     var size: CGSize { frame.size }
+}
+
+/// Kopfzeile einer großen Form, deren Höhe sich aus ihrem Inhalt ergibt
+/// (Controller-Insel): Höhe der Zeile und der Platz für Apples Insel.
+struct NotchIslandLargeHeaderMetrics: Equatable {
+    var height: CGFloat
+    var slotLeading: CGFloat
+    var slotTrailing: CGFloat
 }
 
 /// Umriss der Form in ihren eigenen Koordinaten: Mitte gegenüber der Mitte
@@ -77,6 +88,12 @@ enum NotchIslandLargeGeometry {
     static let cornerRadius: CGFloat = 36
     /// Innenabstand links und rechts.
     static let padding: CGFloat = 18
+    /// Innenabstand der Kopfzeile links und rechts. Größer als `padding`:
+    /// Die Kopfzeile liegt in der Zeile der runden oberen Ecken (36 pt);
+    /// mit 18 pt säße ihr Inhalt in der Rundung und wirkte an den Rand
+    /// gequetscht. Mit 28 pt steht er so weit von der Kante weg wie vom
+    /// oberen Rand.
+    static let headerInset: CGFloat = 28
     static let bottomPadding: CGFloat = 16
     /// Luft unter Apples Insel, bevor eigener Inhalt beginnt.
     static let headerGap: CGFloat = 8
@@ -88,6 +105,8 @@ enum NotchIslandLargeGeometry {
     static let alertHeight: CGFloat = 108
     static let dictationWidth: CGFloat = 420
     static let dictationHeight: CGFloat = 178
+    /// Zeile „→ Ziel-Chat“ bei der Aufnahme per Controller.
+    static let dictationTargetRowHeight: CGFloat = 28
 
     static let rowHeight: CGFloat = 56
     static let sectionHeaderHeight: CGFloat = 28
@@ -147,6 +166,13 @@ enum NotchIslandLargeGeometry {
         return (leading + slotMargin, trailing + slotMargin)
     }
 
+    /// Kopfzeile für eine Form, deren Höhe der Inhalt bestimmt.
+    static func header(screen: NotchScreenInfo, occupancy: NotchMenuBarOccupancy?) -> NotchIslandLargeHeaderMetrics {
+        let slot = slot(screen: screen, occupancy: occupancy)
+        return NotchIslandLargeHeaderMetrics(
+            height: headerHeight(screen), slotLeading: slot.leading, slotTrailing: slot.trailing)
+    }
+
     /// Höhe aller Zeilen und Zwischentitel einer Liste, ohne Begrenzung.
     static func listContentHeight(rowCount: Int, sectionCount: Int) -> CGFloat {
         guard rowCount > 0 else { return emptyListHeight }
@@ -172,6 +198,9 @@ enum NotchIslandLargeGeometry {
         case .dictation:
             width = dictationWidth
             height = dictationHeight
+        case .dictationWithTarget:
+            width = dictationWidth
+            height = dictationHeight + dictationTargetRowHeight
         case .list(let rows, let sections):
             width = listWidth
             let chrome = header + footerHeight + bottomPadding

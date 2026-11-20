@@ -98,8 +98,19 @@ extension ControllerActionDispatcher {
     }
 
     func present() {
-        guard let islandState, islandState.revealed else { return }
-        island.show(islandState.model, screenDisplayID: islandState.screenDisplayID)
+        guard var state = islandState, state.revealed else { return }
+        // Die Spalten folgen dem Bildschirm, auf dem die Insel gerade
+        // wirklich steht: Fällt er weg (Deckel zu), zeigt das Fenster sie
+        // woanders als Liste, und das Steuerkreuz rechnet dann auch so.
+        if var whereTo = state.model.whereTo {
+            let columns = island.columns(onDisplay: state.screenDisplayID)
+            if whereTo.columns != columns {
+                whereTo.setColumns(columns)
+                state.model.content = .whereTo(whereTo)
+                islandState = state
+            }
+        }
+        island.show(state.model, screenDisplayID: state.screenDisplayID)
     }
 
     /// Baut die Insel aus dem Zustand des Fensters, auf das der Controller
@@ -167,6 +178,8 @@ extension ControllerActionDispatcher {
                 workspaces: chats.workspaceChoices(of: windowID), gridActive: window.isGridActive,
                 previous: previous, tickets: chats.ticketBoards(of: windowID))
             whereTo.reopenTitle = closedChats.nextTitle()
+            // Große Form an der Kamera-Insel: Kacheln in zwei Spalten.
+            whereTo.setColumns(island.columns(onDisplay: window.screenDisplayID))
             content = .whereTo(whereTo)
         }
         return ControllerIslandSession(
@@ -220,15 +233,16 @@ extension ControllerActionDispatcher {
 
     func moveInWhereTo(_ step: Int) {
         guard ensureIsland(.whereTo), var state = islandState, var whereTo = state.model.whereTo else { return }
-        whereTo.move(step)
+        whereTo.moveRow(step)
         state.model.content = .whereTo(whereTo)
         islandState = state
         present()
     }
 
     func switchWhereToTab(_ step: Int) {
+        // Mit Kacheln (Kamera-Insel) erst die Nachbar-Kachel, am Rand der Reihe der Reiter.
         guard ensureIsland(.whereTo), var state = islandState, var whereTo = state.model.whereTo,
-              whereTo.switchTab(step) else { return }
+              whereTo.moveSideways(step) else { return }
         state.model.content = .whereTo(whereTo)
         islandState = state
         present()

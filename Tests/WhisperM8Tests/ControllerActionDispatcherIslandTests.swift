@@ -146,6 +146,55 @@ final class ControllerActionDispatcherIslandTests: XCTestCase {
         XCTAssertFalse(island.isVisible)
     }
 
+    /// Große Form an der Kamera-Insel (das Fenster meldet zwei Spalten):
+    /// hoch/runter eine Reihe, links/rechts erst die Nachbar-Kachel, am Rand
+    /// der Reihe der Reiter. Loslassen wechselt zur markierten Kachel.
+    func testTilesAtACameraIslandMoveInBothDirections() {
+        island.columnCount = 2
+        press(.l2, at: 0)
+        tick(0.3)
+        XCTAssertEqual(whereTo?.columns, 2)
+        // Der aktuelle Chat ist der zweite der Liste: rechte Spalte, erste Reihe.
+        XCTAssertEqual(whereTo?.chats.selected?.id, chats[1])
+        feed(.stick(.left, x: 0, y: -1), at: 0.5)
+        XCTAssertEqual(whereTo?.chats.selected?.id, chats[3], "runter: dieselbe Spalte, nächste Reihe")
+        feed(.stick(.left, x: 0, y: 0), at: 0.6)
+        feed(.stick(.left, x: -1, y: 0), at: 0.7)
+        XCTAssertEqual(whereTo?.chats.selected?.id, chats[2], "links: Nachbar-Kachel, kein Reiterwechsel")
+        XCTAssertEqual(whereTo?.tab, .chats)
+        feed(.stick(.left, x: 0, y: 0), at: 0.8)
+        release(.l2, at: 1.0)
+        XCTAssertEqual(window.selected, chats[2], "Loslassen wechselt zur Kachel")
+    }
+
+    /// Fällt der Bildschirm mit der Kamera-Insel weg, während die Insel
+    /// offen ist (Deckel zu), zeigt das Fenster sie woanders als Liste; das
+    /// Steuerkreuz rechnet ab dem nächsten Zeichnen ebenfalls einspaltig.
+    func testColumnsFollowTheScreenWhileOpen() {
+        island.columnCount = 2
+        press(.l2, at: 0)
+        tick(0.3)
+        XCTAssertEqual(whereTo?.columns, 2)
+        island.columnCount = 1
+        feed(.stick(.left, x: 0, y: -1), at: 0.5)
+        XCTAssertEqual(whereTo?.columns, 1)
+        feed(.stick(.left, x: 0, y: 0), at: 0.6)
+        feed(.stick(.left, x: 0, y: -1), at: 0.7)
+        XCTAssertEqual(whereTo?.chats.selected?.id, chats[3], "jetzt ein Eintrag je Schritt")
+        release(.l2, at: 1.0)
+    }
+
+    /// Ohne Kamera-Insel bleibt es die Liste: links/rechts wechselt sofort
+    /// den Reiter, hoch/runter geht einen Eintrag weiter.
+    func testListElsewhereKeepsOneColumn() {
+        press(.l2, at: 0)
+        tick(0.3)
+        XCTAssertEqual(whereTo?.columns, 1)
+        feed(.stick(.left, x: 0, y: -1), at: 0.5)
+        XCTAssertEqual(whereTo?.chats.selected?.id, chats[2])
+        release(.l2, at: 0.8)
+    }
+
     /// Insel-Paket: Halten zeigt die Markierung auf dem aktuellen Chat;
     /// Loslassen ohne Bewegung tut nichts. Der vorige Chat ist einen Schritt
     /// entfernt und geht dann denselben Weg wie Tippen.

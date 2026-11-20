@@ -105,7 +105,7 @@ extension ControllerIslandView {
             }
             .font(.system(size: 11))
             .foregroundStyle(palette.secondary)
-            .padding(.horizontal, 14)
+            .padding(.horizontal, footerInset)
             .padding(.top, 7)
             .padding(.bottom, 11)
             .frame(maxWidth: .infinity, alignment: .center)

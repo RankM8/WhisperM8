@@ -1,6 +1,6 @@
 ---
 status: umgesetzt, wartet auf make-dev-QA; vereinte Pille neu (12.11.2026, Kill-Switch unifiedPillEnabled), Übergang ins Diktat ohne Sprung; Kamera-Insel (Dynamic Island) seit 18.11.2026, aufgeklappt als große Form seit 19.11.2026
-stand: 2026-11-19
+stand: 2026-11-20
 feature: Statusanzeige an der Notch und vereinte Pille
 ---
 
@@ -255,7 +255,9 @@ groß: eine schwarze Fläche um die Kamera, ohne Hals und ohne Kasten darunter.
 | Expandiert: Liste | Ein Klick auf die Kapsel (oder der Hotkey) macht die Insel zur großen Form mit der Liste (420 pt breit): große Zeilen (56 pt, Titel 15 pt), oben die Zähler. Klick daneben, Klick auf die Kopfzeile oder Esc schließt |
 | Diktat, kompakt | Die laufende Aufnahme steht als eigene kleine Kapsel in der Menüleiste links neben der Insel: Wellenform (Bewegung und Farbe tragen den Zustand: Aufnahme, Transkription, Nachbearbeitung) und Zeit, gleiche Höhe wie die Insel, 96 pt breit. Warten Chats oder gibt es Fehler, steht davor ein kleines Zeichen. Reichen die Menüs heran, steht die Kapsel rechts; ist es für die Zeit zu eng, zeigt sie nur die Wellenform (48 pt) |
 | Diktat, aufgeklappt | Ein Klick auf die Kapsel lässt sie selbst zur großen Form um die Kamera wachsen (420 × 178 pt); eine zweite Wellenform daneben gibt es nicht. Oben wartende Chats mit Zahl und der Zustand in Worten, darunter breite Wellenform, Zeit, Bildschirmfoto und Clip, dann Ausgabemodus, Kontext, abbrechen und fertig, alle Knöpfe 44 pt groß. Ein Klick auf Kopfzeile oder Wellenform oder ein Klick daneben klappt sie zu. Fertig und Abbrechen gehen wie immer auch per Hotkey und Esc |
-| Dynamic Island des Controllers | Hängt am Hals wie bisher, zu ist sie nur die Kapsel um die Kamera (die große Form für sie ist entworfen, noch nicht gebaut) |
+| Aufnahme per Controller | Steht von selbst in der großen Form (420 × 206 pt): Ziel-Chat („→ Chat“) und Ausgabemodus müssen ohne Klick sichtbar sein. Sonst wie das aufgeklappte Diktat: Ein Klick auf Kopfzeile oder Wellenform, ein Bildschirmfoto oder der Start eines Clips klappt sie zur Kapsel zu, ein Klick auf die Kapsel öffnet sie wieder |
+| Schnellaktion | Eigene Kapsel in der Menüleiste neben der Insel: Zeichen im Puls der Nachbearbeitung, die Beschriftung („Korrigiere…“) und ✕ zum Abbrechen; als Hinweis („Erst Text markieren“) ein ruhiges Symbol ohne ✕. So breit wie ihr Text, links der Insel, sonst rechts. Sie klappt nicht auf |
+| Dynamic Island des Controllers | Die große Form um die Kamera (mindestens 460 pt breit, so hoch wie ihr Inhalt), solange L1, R1 oder L2 gehalten ist: Kopfzeile mit Taste und Ebene links, Ziel rechts; „Wohin“ als Kacheln in zwei Spalten, „Schreiben“ als große Felder. Zu ist sie nur die Kapsel um die Kamera. Einzelheiten: [controller.md](controller.md) |
 
 Im Vollbild ist die Anzeige wie bisher ausgeblendet, Diktat und Controller
 erscheinen trotzdem.
@@ -298,7 +300,8 @@ wird bei jedem App- und Space-Wechsel neu gemessen, auch wenn die
 Statusanzeige ausgeschaltet ist. Je Diktat schreibt die App einmal (0,6 s
 nach dem Beginn, also mit der frischen Messung) eine Zeile
 `island_dictation form=… reason=…` ins Log: in welcher Form es steht und
-warum (`measured`, `no_room`, `no_accessibility_permission`,
+warum (`form=compact`, `minimal`, bei einer Schnellaktion `label`, per
+Controller `large`; `measured`, `no_room`, `no_accessibility_permission`,
 `no_measurement(Grund)`), dazu den freien Platz je Seite.
 
 Die große Form geht nur per Klick auf, nie von selbst, auch nicht bei einem
@@ -307,9 +310,30 @@ den Bildschirm zeigen, die Form geht dafür zu. Die Kapsel zeigt den laufenden C
 öffnet sie wieder zum Stoppen. „Fertig“ steht aufgeklappt immer da, auch wenn
 die Einstellung es in der Pille ausblendet.
 
-Zwei Fälle hängen weiter unter der Menüleiste, weil sie Text zeigen bzw. ohne
-Maus bedient werden: Schnellaktionen (Beschriftung und Hinweise) und die
-Aufnahme per Controller (Ziel-Chat und Modus müssen ohne Klick sichtbar sein).
+**Nichts hängt an der Kamera-Insel mehr unter der Menüleiste** (seit
+20.11.2026). Früher taten das zwei Fälle, weil sie Text zeigen bzw. ohne Maus
+bedient werden:
+
+- **Schnellaktion** (Korrigieren ohne Diktat, Hinweise): eine Kapsel mit
+  Zeichen und Beschriftung neben der Insel, nicht die große Form. Nach Apples
+  Muster für Live Activities ist ein kurzer Vorgang, der läuft und nichts von
+  einem will, die kompakte Darstellung; aufgeklappt wird nur, was jemand
+  bedienen will oder was kurz Aufmerksamkeit braucht. Eine Schnellaktion
+  dauert ein, zwei Sekunden und hat genau einen Knopf (✕), der in die Kapsel
+  passt; eine 420 pt breite Form über den Menüs wäre dafür zu viel. Ist auf
+  keiner Seite Platz für die Beschriftung oder gibt es keine Messung, steht
+  die Kapsel trotzdem da (ohne Messung links, sonst auf der Seite mit mehr
+  Platz) und kann einen Menütitel verdecken: Die Beschriftung muss lesbar
+  sein, der Nutzer hat die Aktion selbst ausgelöst (dieselbe Abwägung wie
+  beim Diktat). Das Mikrofon läuft dabei nicht; die Kapsel hält nur Abstand
+  zu dem, was Apples Insel gerade zeigt. Eine sehr lange Beschriftung (etwa
+  der Hinweis, dass ein Feld nicht beschreibbar ist) macht die Kapsel
+  höchstens so breit, wie das Fenster des Diktats reicht (rund 480 pt neben
+  der Kamera); was darüber hinausgeht, wird gekürzt, der ganze Text steht im
+  Tooltip. Das Fenster ist an der Insel dafür 1.100 pt breit statt 608.
+- **Aufnahme per Controller:** die große Form des Diktats, von selbst offen,
+  mit einer Zeile für den Ziel-Chat. Was der Controller öffnet, darf wie ein
+  Klick Menüs neben der Kamera verdecken, solange es offen ist.
 
 Frühere Fassungen: alle Zähler fest neben der Kamera ohne Messung, das
 verdeckte Menüs; danach nur ein Hals um die Kamera mit den Zählern in einer
@@ -326,8 +350,9 @@ Hinweis, Liste und aufgeklapptes Diktat sind EINE schwarze Fläche ohne Hals,
 wie Apples aufgeklappte Insel: Sie wächst aus der Insel in Breite und Höhe,
 ist auf die Kamera zentriert und beginnt auf Höhe der Insel
 (`NotchIslandLargeGeometry`, `NotchIslandLargeStatusView`,
-`IslandDictationView`). Für die Dynamic Island des Controllers gibt es bisher
-nur den Entwurf (`make snapshots ONLY=insel-gross`).
+`IslandDictationView`). Seit 20.11.2026 ist auch die Dynamic Island des
+Controllers dort diese Form (`ControllerIslandView+Large.swift`,
+[controller.md](controller.md)).
 
 Apples aufgeklappte Insel auf einem MacBook Pro mit Kamera-Insel (macOS 27.2.1):
 
@@ -348,7 +373,9 @@ So ist es gebaut:
   420 × 178 pt (Apples „Now Playing“: 286). Die Liste scrollt ab 420 pt Höhe
   und bevor sie unten aus dem Bildschirm ragt; auf einem schmalen Bildschirm
   wird die Form schmaler statt über den Rand zu reichen.
-- **Kopfzeile (42 pt):** Apples Insel liegt immer über unseren Fenstern. Was
+- **Kopfzeile (42 pt):** links und rechts 28 pt Rand statt der sonst 18 pt,
+  weil sie in der Zeile der runden oberen Ecken liegt und ihr Inhalt sonst
+  in der Rundung säße. Apples Insel liegt immer über unseren Fenstern. Was
   sie zeigt (Musik, Mikrofon-Hinweis), steht deshalb oben in der Mitte der
   Form; die Kopfzeile lässt ihr so viel Platz, wie die Messung zeigt (in Ruhe
   ihre 65 pt, beim Diktat von Anfang an den Platz des Mikrofon-Hinweises).
@@ -595,7 +622,8 @@ große Form offen ist; zugeklappt zeichnet wie bisher nur der kleine Kern.
 Solange die große Form des Diktats offen ist, hört ein Beobachter auf
 Mausklicks neben ihr (zum Schließen); er wird beim Zuklappen entfernt. Das
 Fenster des Diktats ist an der Insel höher als bisher (194 statt 101 pt,
-durchsichtig); Klicks nimmt es weiter nur auf dem Sichtbaren an, und dem
+durchsichtig) und seit 20.11.2026 breiter (1.100 statt 608 pt, für lange
+Beschriftungen einer Schnellaktion); Klicks nimmt es weiter nur auf dem Sichtbaren an, und dem
 Mauszeiger folgt es nur über der Kapsel bzw. der offenen Form (nicht über der
 ganzen Ansicht um die Kamera, sonst wertete jede Fahrt durch die Menüleiste
 die Pille neu aus).
@@ -932,7 +960,8 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   bei keiner Lage von Menüs und Statussymbolen einen gemessenen Rahmen, auch
   nicht mit Hinweis oder Liste; neben Apples aktiver Insel ein abgesetzter
   Kreis und ein Hals in ihrer Breite; Hinweis und Liste als eine Form um die
-  Kamera; Diktat-Fenster auf Höhe der großen Form, Controller-Insel an der Kapsel; Vollbild mit
+  Kamera; Diktat-Fenster auf Höhe der großen Form, Controller-Insel als große Form;
+  Kapsel der Schnellaktion (Seite, Abstand zu Apples Insel, schneidet nicht erzwungen keinen gemessenen Rahmen); Vollbild mit
   beiden Kanten; Form als Kapsel bzw. Hals mit Körper; Notch-Rahmen,
   Notch-Form und Vollbild an der Notch unverändert.
 - `NotchIslandLargeGeometryTests`: große Form je Inhalt (zentriert auf die
@@ -956,8 +985,10 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   einen gemessenen Rahmen und liegt nie über der Kamera; ohne Messung
   höchstens die Mindestbreite; rückt nur nach außen.
   `IslandDictationCompactTests`: ohne Messung und ohne Platz trotzdem die
-  schmalste Kapsel, nie die Form unter der Menüleiste; Schnellaktion und
-  Controller darunter; große Form nur auf Klick, nie von selbst, und sie geht
+  schmalste Kapsel, nie die Form unter der Menüleiste; Schnellaktion als
+  Kapsel in der Breite ihrer Beschriftung, Aufnahme per Controller von selbst
+  in der großen Form (auch wenn das Ziel erst nach dem Fenster kommt); ein
+  Diktat per Hotkey zeigt die große Form nur auf Klick, und sie geht
   zu, wenn ein Clip startet, ein Bildschirmfoto beginnt oder das Diktat endet;
   Fläche fürs Darüberfahren nur Kapsel bzw. Form; ihre Kopfzeile folgt der
   Messung; ausgefallene Messung verschiebt nichts; Log-Zeile zur Entscheidung;
@@ -1017,11 +1048,13 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   große Form, auch mit Musik in Apples Insel, mit Tastatur-Auswahl, lang und
   leer, dazu die Bewegung in drei Standbildern; Diktat kompakt je Zustand,
   rechts, minimal, ohne Messung, ohne Platz, aufgeklappt als große Form (auch
-  laut, bei der Transkription und mit laufendem Clip) und als Schnellaktion
-  unter der Menüleiste; Übergang, Controller); die Attrappe legt die Kamera-Kapsel wie macOS
+  laut, bei der Transkription und mit laufendem Clip), per Controller mit
+  Ziel-Chat, und die Schnellaktion als Kapsel (läuft, Hinweis, rechts, ohne
+  Messung); Übergang; die Controller-Insel als große Form je Ebene
+  (`kamera-insel-controller-…`: Wohin mit Kacheln je Reiter, bewegt, weiter
+  unten, mit Zählern, mit Musik, per Tastatur; Schreiben; Schnellbefehle;
+  Limits; zu)); die Attrappe legt die Kamera-Kapsel wie macOS
   über alles und zeigt Menüs und Statussymbole der Leiste.
-  `make snapshots ONLY=insel-gross` zeigt den Entwurf der Controller-Insel
-  als große Form (noch nicht gebaut).
   `make snapshots ONLY=pill-` zeigt die Diktat-Pille zum Vergleich. Die Attrappe zeigt Menüs und Statussymbole bis dicht an die
   Notch, damit man sieht, dass nichts verdeckt wird.
 
@@ -1078,8 +1111,14 @@ Gestoppte Chats, archivierte Chats und Subagent-Jobs erscheinen nicht.
   bzw. der offenen großen Form an.
 - Ohne Messung oder ohne Platz steht die Diktat-Kapsel trotzdem neben der
   Insel und kann dann einen Menütitel oder ein Statussymbol verdecken.
-- Der Hals ist je Seite 3 pt breiter als die Kamera-Insel. Auf heller
-  Menüleiste sieht man diesen Rand.
+- Die Kapsel um die Kamera ist je Seite 3 pt breiter als die Kamera-Insel.
+  Auf heller Menüleiste sieht man diesen Rand.
+- Die Kapsel einer Schnellaktion kann ohne Platz oder ohne Messung einen
+  Menütitel verdecken (ein, zwei Sekunden).
+- Bei einer Aufnahme per Controller steht die große Form offen und verdeckt
+  so lange Menüs neben der Kamera, bis sie per Klick zugeklappt wird oder die
+  Aufnahme endet. Ein Klick daneben schließt sie nur, wenn sie per Klick
+  geöffnet wurde.
 - Titeländerungen erscheinen erst mit dem nächsten Statuswechsel (oder sofort
   bei offener Liste); die Anzeige beobachtet den Workspace nicht.
 - „In Screenshots und Bildschirmfreigabe ausblenden“ ist kein sicherer Schutz:

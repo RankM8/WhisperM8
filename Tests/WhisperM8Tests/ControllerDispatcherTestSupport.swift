@@ -245,6 +245,10 @@ final class ControllerIslandSpy: ControllerIslandPresenting {
     private(set) var screens: [UInt32?] = []
     private(set) var hideCount = 0
     var isVisible = false
+    /// Spalten, die das Fenster meldet (2: große Form an der Kamera-Insel).
+    var columnCount = 1
+
+    func columns(onDisplay screenDisplayID: UInt32?) -> Int { columnCount }
 
     func show(_ model: ControllerIslandModel, screenDisplayID: UInt32?) {
         shown.append(model)

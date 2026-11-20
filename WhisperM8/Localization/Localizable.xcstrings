@@ -2561,6 +2561,16 @@
         }
       }
     },
+    "at the edge: tabs": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "am Rand: Reiter"
+          }
+        }
+      }
+    },
     "Audio Ducking": {
       "localizations": {
         "de": {
@@ -5787,6 +5797,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "Steuerkreuz: Pfeiltasten in jedem laufenden Chat, auch in Subagenten- und Workflow-Ansichten; in der App bewegst du dich mit dem linken Stick"
+          }
+        }
+      }
+    },
+    "Dictation target: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diktat-Ziel: %@"
           }
         }
       }

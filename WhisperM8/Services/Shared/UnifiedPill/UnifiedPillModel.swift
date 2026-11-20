@@ -197,21 +197,39 @@ enum UnifiedPillGeometry {
         return y <= panelHeight - shadowMargin && y >= panelHeight - shadowMargin - header
     }
 
+    /// Breite des Diktat-Fensters an Notch bzw. Kamera-Insel. An der Insel
+    /// breiter (höchstens 1.100 pt, nie breiter als der Bildschirm): Die
+    /// Kapseln stehen dort neben der Kamera in der Menüleiste. Das Fenster
+    /// ist durchsichtig und nimmt Klicks nur auf dem Sichtbaren an.
+    static func notchDictationPanelWidth(screen: NotchScreenInfo) -> CGFloat {
+        guard screen.hasIsland else { return OverlayFrameResolver.panelSize.width }
+        return max(OverlayFrameResolver.panelSize.width, min(islandPanelWidth, screen.frame.width))
+    }
+
+    static let islandPanelWidth: CGFloat = 1100
+
+    /// So weit reicht der Inhalt des Diktat-Fensters an der Insel je Seite
+    /// ab der Mitte der Kamera (Fensterbreite ohne Schattenrand).
+    static func islandCapsuleMaxExtent(screen: NotchScreenInfo) -> CGFloat {
+        notchDictationPanelWidth(screen: screen) / 2 - shadowMargin
+    }
+
     /// Fenster des Diktats an der Notch: oben bündig mit dem Bildschirm, die
     /// Pille hängt mittig unter der Aussparung. Kein Rand oben (das Band
     /// liegt in der Menüleiste), unten und seitlich der übliche Rand.
     ///
     /// An einer Kamera-Insel beginnt das Fenster an der Oberkante der
     /// großen Form (knapp über der Kapsel, die unter der Bildschirmkante
-    /// schwebt). Es fasst beides: die Zeile am Hals unter der Menüleiste
-    /// (Schnellaktion, Controller) und die aufgeklappte große Form des
-    /// Diktats samt Rand für ihre Bewegung. So geht die Form ohne
-    /// Fensterwechsel auf; Klicks nimmt das Fenster nur auf dem an, was
-    /// gerade sichtbar ist.
+    /// schwebt). Es fasst die aufgeklappte große Form des Diktats (per
+    /// Controller mit der Zeile für den Ziel-Chat) samt Rand für ihre
+    /// Bewegung und ist breiter als sonst (`notchDictationPanelWidth`),
+    /// damit auch eine lange Beschriftung einer Schnellaktion neben der
+    /// Insel Platz hat. So geht die Form ohne Fensterwechsel auf; Klicks
+    /// nimmt das Fenster nur auf dem an, was gerade sichtbar ist.
     static func notchDictationPanelFrame(screen: NotchScreenInfo, panelWidth: CGFloat) -> CGRect {
         if screen.hasIsland {
             let band = NotchIslandGeometry.band(screen: screen)
-            let large = NotchIslandLargeGeometry.form(screen: screen, kind: .dictation)
+            let large = NotchIslandLargeGeometry.form(screen: screen, kind: .dictationWithTarget)
             let height = max(
                 band.topGap + band.neckHeight + PillMetrics.height + shadowMargin,
                 large.size.height + NotchIslandLargeGeometry.overshootMargin)

@@ -1,12 +1,14 @@
 import SwiftUI
 
-/// Diktat an der Kamera-Insel. Zugeklappt eine kleine Kapsel in der
+/// Diktat und Schnellaktion an der Kamera-Insel. Zugeklappt eine kleine Kapsel in der
 /// Menüleiste neben der Insel: Wellenform (Bewegung und Farbe tragen den
 /// Zustand, wie in der Pille) und Zeit; ist es eng, nur die Wellenform. Ein
 /// Klick klappt sie zur großen Form auf (`NotchIslandLargeGeometry`): Die
 /// Kapsel selbst wächst zur Fläche um die Kamera, es gibt keine zweite
 /// Wellenform daneben. Ein Klick auf Kopf oder Wellenform, ein Klick daneben
-/// oder das Ende des Diktats klappt sie wieder zu.
+/// oder das Ende des Diktats klappt sie wieder zu. Bei einer Aufnahme per
+/// Controller steht die große Form von selbst offen (mit Ziel-Chat); eine
+/// Schnellaktion ist eine Kapsel mit Beschriftung und klappt nicht auf.
 ///
 /// Die Ansicht reicht symmetrisch um die Kamera (ihre Mittellinie) und
 /// beginnt an der Oberkante der großen Form; Klicks nimmt das Fenster nur
@@ -20,9 +22,10 @@ struct IslandDictationView: View {
 
     private var phase: OverlayPhase { controller.phase }
 
-    /// Offen nur mit Maßen für die große Form (ohne Bildschirm keine).
+    /// Offen per Klick, bei einer Aufnahme per Controller von selbst; nur
+    /// mit Maßen für die große Form (ohne Bildschirm keine).
     private var openForm: NotchIslandLargeForm? {
-        controller.isIslandExpanded ? controller.islandDictationForm : nil
+        controller.showsIslandLargeForm ? controller.islandDictationForm : nil
     }
 
     var body: some View {
@@ -39,10 +42,16 @@ struct IslandDictationView: View {
                     .frame(width: form.size.width, height: form.size.height, alignment: .top)
                     .transition(contentTransition)
             } else {
-                capsuleButton
-                    .frame(width: capsule.width, height: band.capsuleHeight)
-                    .offset(x: capsule.offset, y: band.topGap)
-                    .transition(contentTransition)
+                Group {
+                    if let label = controller.quickActionLabel {
+                        quickActionCapsule(label)
+                    } else {
+                        capsuleButton
+                    }
+                }
+                .frame(width: capsule.width, height: band.capsuleHeight)
+                .offset(x: capsule.offset, y: band.topGap)
+                .transition(contentTransition)
             }
         }
         .frame(
@@ -58,6 +67,56 @@ struct IslandDictationView: View {
         .asymmetric(
             insertion: .opacity.animation(NotchIslandLargeMotion.contentInAnimation(reduceMotion: reduceMotion)),
             removal: .opacity.animation(NotchIslandLargeMotion.contentOut))
+    }
+
+    /// Schnellaktion: Zeichen im Puls der Nachbearbeitung, die Beschriftung
+    /// („Korrigiere…“) und ✕ zum Abbrechen; als Hinweis („Erst Text
+    /// markieren“) ein ruhiges Symbol und kein ✕. Wie in der Pille, nur in
+    /// der Kapsel neben der Insel.
+    private func quickActionCapsule(_ label: String) -> some View {
+        HStack(spacing: 0) {
+            if controller.isQuickActionHint {
+                Image(systemName: "text.cursor")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Color.white.opacity(0.7))
+                    .frame(width: 38, height: 24)
+                    .padding(.leading, 5)
+            } else {
+                PillCoreView(
+                    levelModel: controller.levelModel, phase: .improving, isClipping: false, reduceMotion: reduceMotion)
+                    .scaleEffect(0.8)
+                    .frame(width: 38, height: 24)
+                    .padding(.leading, 5)
+            }
+            // Passt die Beschriftung nicht ins Fenster, wird sie gekürzt
+            // (die Kapsel ist dann schon so breit wie möglich); der ganze
+            // Text steht als Tooltip und für VoiceOver bereit.
+            Text(verbatim: label)
+                .font(.system(size: OverlayController.quickActionLabelSize, weight: .medium))
+                .foregroundStyle(Color.white.opacity(0.94))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .padding(.leading, 7)
+                .help(label)
+                .accessibilityLabel(Text(verbatim: label))
+            Spacer(minLength: 0)
+            if !controller.isQuickActionHint {
+                Button(action: controller.cancelPostProcessing) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(Color.white.opacity(0.85))
+                        .frame(
+                            width: OverlayController.quickActionCancelSize, height: OverlayController.quickActionCancelSize)
+                        .background { Circle().fill(Color.white.opacity(0.16)) }
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help(String(localized: "Cancel. The selection stays as it is (Esc)"))
+                .accessibilityLabel(OverlayPhase.improving.cancelAccessibilityLabel)
+                .padding(.trailing, 5)
+            }
+        }
+        .frame(width: capsule.width, height: band.capsuleHeight)
     }
 
     private var capsuleButton: some View {
@@ -116,6 +175,18 @@ struct IslandDictationLargeContent: View {
             .accessibilityLabel(phase.accessibilityLabel)
             .accessibilityHint(Text("Hides the dictation controls"))
 
+            if let target = controller.controllerTargetLabel {
+                // Aufnahme per Controller: wohin der Text geht, ohne Klick sichtbar.
+                Text(verbatim: "→ \(target)")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(NotchPalette.notch.text)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, NotchIslandLargeGeometry.padding + 2)
+                    .frame(height: NotchIslandLargeGeometry.dictationTargetRowHeight, alignment: .bottom)
+                    .accessibilityLabel(Text("Dictation target: \(target)"))
+            }
             VStack(spacing: 18) {
                 HStack(spacing: 12) {
                     Button(action: controller.toggleIslandExpanded) {

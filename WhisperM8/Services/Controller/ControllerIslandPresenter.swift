@@ -39,7 +39,11 @@ private struct ControllerIslandMeasureView: View {
 
 /// Lage der Insel in globalen Cocoa-Koordinaten. Pur, damit ohne Bildschirm
 /// testbar: Mit Notch liegt oben das Band genau in der Aussparung und der
-/// Körper hängt mittig darunter (wie `NotchGeometry.layout`); ohne Notch
+/// Körper hängt mittig darunter (wie `NotchGeometry.layout`); an einer
+/// Kamera-Insel ist sie die große Form um die Kamera, ab der Oberkante, an
+/// der auch Hinweis, Liste und Diktat beginnen (`NotchIslandLargeGeometry`).
+/// Sie darf dort Menüs und Statussymbole neben der Kamera verdecken, solange
+/// sie offen ist: Sie geht nur auf, solange eine Taste gehalten wird. Ohne Notch
 /// wächst die Insel aus der Pille der Notch-Anzeige — an ihrer gemerkten
 /// Lage, nach unten oder (untere Bildschirmhälfte) nach oben, immer ganz auf
 /// dem Bildschirm (`NotchPillPlacement`).
@@ -68,8 +72,8 @@ enum ControllerIslandGeometry {
             let centered = screen.notchCenterX - bodySize.width / 2
             let x = max(screen.frame.minX, min(centered, screen.frame.maxX - bodySize.width))
             // An einer Kamera-Insel beginnt das Fenster an der Oberkante der
-            // Kapsel, nicht an der Bildschirmkante.
-            let top = screen.hasIsland ? NotchIslandGeometry.windowTop(screen) : screen.frame.maxY
+            // großen Form (knapp über der Kapsel), nicht an der Bildschirmkante.
+            let top = screen.hasIsland ? NotchIslandLargeGeometry.windowTop(screen) : screen.frame.maxY
             return CGRect(
                 x: x, y: top - bodySize.height,
                 width: bodySize.width, height: bodySize.height)
@@ -93,12 +97,24 @@ enum ControllerIslandGeometry {
         return screen.hasNotch ? visible : visible.insetBy(dx: -shadowMargin, dy: -shadowMargin)
     }
 
-    static func style(for screen: NotchScreenInfo) -> ControllerIslandDisplay.Style {
+    /// `occupancy`: letzte Messung der Menüleiste; aus ihr kommt, wie viel
+    /// Platz die Kopfzeile Apples Insel lässt (ohne Messung ihre Breite in Ruhe).
+    static func style(
+        for screen: NotchScreenInfo, occupancy: NotchMenuBarOccupancy? = nil
+    ) -> ControllerIslandDisplay.Style {
         switch screen.cutout {
         case .none: return .pill
         case .notch: return .notch(width: screen.notchWidth, height: screen.safeAreaTop)
-        case .island: return .island(NotchIslandGeometry.band(screen: screen))
+        case .island:
+            return .island(
+                NotchIslandGeometry.band(screen: screen),
+                header: NotchIslandLargeGeometry.header(screen: screen, occupancy: occupancy))
         }
+    }
+
+    /// Kacheln in zwei Spalten nur in der großen Form an der Kamera-Insel.
+    static func columns(for screen: NotchScreenInfo?) -> Int {
+        screen?.hasIsland == true ? 2 : 1
     }
 }
 
@@ -143,10 +159,22 @@ final class ControllerIslandPresenter: ControllerIslandPresenting {
         let stored = screen.hasNotch ? nil : AppPreferences.shared.notchPillPositions[screen.pillStorageKey]
         let visiblePill = screen.hasNotch ? nil : NotchStatusController.shared.visiblePillCenter(onDisplay: screen.displayID)
         let display = ControllerIslandDisplay(
-            style: ControllerIslandGeometry.style(for: screen), model: model, counts: counts,
+            style: ControllerIslandGeometry.style(
+                for: screen, occupancy: NotchIslandMonitor.shared.occupancy[screen.displayID]),
+            model: model, counts: counts,
             opensUpward: ControllerIslandGeometry.opensUpward(screen: screen, stored: stored, visiblePill: visiblePill))
         let panel = ensurePanel()
         let wasShown = panel.isVisible && viewModel.revealed
+        // Kamera-Insel: Die Kopfzeile richtet sich nach der letzten Messung
+        // (wie breit Apples Insel gerade ist). Die Notch-Anzeige misst zu
+        // ihren Ereignissen; gibt es noch keinen Stand (Anzeige aus), hier
+        // einmal je Öffnen anfordern, nie bei jedem Zeichnen während des
+        // Haltens. Die Antwort wirkt beim nächsten Zeichnen (kein Beobachter).
+        if Self.shouldMeasure(
+            hasIsland: screen.hasIsland, wasShown: wasShown,
+            hasMeasurement: NotchIslandMonitor.shared.occupancy[screen.displayID] != nil) {
+            NotchIslandMonitor.shared.measure([screen])
+        }
         generation += 1
         if viewModel.display != display { viewModel.display = display }
         let frame = ControllerIslandGeometry.panelFrame(
@@ -177,7 +205,12 @@ final class ControllerIslandPresenter: ControllerIslandPresenting {
         // Ausgangszustand und es gäbe keine Bewegung.
         DispatchQueue.main.async { [weak self] in
             guard let self, self.viewModel.display != nil else { return }
-            withAnimation(.timingCurve(0.2, 0.9, 0.25, 1.05, duration: Self.animationDuration)) {
+            // Große Form an der Kamera-Insel: dieselbe Federbewegung wie
+            // Hinweis, Liste und Diktat dort.
+            let animation = screen.hasIsland
+                ? NotchIslandLargeMotion.shape
+                : Animation.timingCurve(0.2, 0.9, 0.25, 1.05, duration: Self.animationDuration)
+            withAnimation(animation) {
                 self.viewModel.revealed = true
             }
         }
@@ -197,6 +230,14 @@ final class ControllerIslandPresenter: ControllerIslandPresenting {
             Logger.controller.info(
                 "controller_island_shown layer=\(layer, privacy: .public) style=\(style, privacy: .public) display=\(screen.displayID, privacy: .public) frame=\(NSStringFromRect(frame), privacy: .public) screen=\(NSStringFromRect(screen.frame), privacy: .public) isVisible=\(panel.isVisible, privacy: .public) occluded=\(!visible, privacy: .public) activeSpace=\(panel.isOnActiveSpace, privacy: .public) revealed=\(self.viewModel.revealed, privacy: .public)")
         }
+    }
+
+    nonisolated static func shouldMeasure(hasIsland: Bool, wasShown: Bool, hasMeasurement: Bool) -> Bool {
+        hasIsland && !wasShown && !hasMeasurement
+    }
+
+    func columns(onDisplay screenDisplayID: UInt32?) -> Int {
+        ControllerIslandGeometry.columns(for: Self.screen(displayID: screenDisplayID))
     }
 
     func hide() {

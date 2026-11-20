@@ -474,7 +474,11 @@ class OverlayController: ObservableObject {
     @Published var showModePickerInMiniOverlay: Bool = true
     /// Ziel einer Aufnahme per Controller („→ Titel des Chats“). Steht dann
     /// sichtbar in der Pill, samt Modus-Chip — ohne Hover. `nil` sonst.
-    @Published var controllerTargetLabel: String?
+    @Published var controllerTargetLabel: String? {
+        // Kamera-Insel: Mit Ziel steht die große Form von selbst offen
+        // (das Ziel kommt oft erst nach dem Aufbau des Fensters).
+        didSet { if oldValue != controllerTargetLabel { islandContentChanged() } }
+    }
     @Published var showConfirmButton: Bool = true
     @Published var selectedContext: SelectedContext = .empty
     @Published var contextBundle: TranscriptContextBundle = .empty
@@ -502,15 +506,17 @@ class OverlayController: ObservableObject {
     var badgeCancellable: AnyCancellable?
     /// Kamera-Insel: folgt der Breite von Apples Insel (`followSystemIsland`).
     var islandCancellables = Set<AnyCancellable>()
-    /// Kamera-Insel: Lage der kompakten Diktat-Kapsel in der Menüleiste.
-    /// `nil`: kein Platz (oder kein Insel-Bildschirm), das Diktat hängt dann
-    /// unter der Menüleiste.
+    /// Kamera-Insel: Lage der Kapsel in der Menüleiste neben der Insel
+    /// (Diktat oder Schnellaktion). `nil` nur ohne Insel-Bildschirm.
     @Published var islandCapsule: NotchIslandDictationCapsule?
     /// Kamera-Insel: Die große Form mit den Bedienknöpfen ist per Klick
     /// aufgeklappt (`setIslandExpanded`).
     @Published var isIslandExpanded = false
     /// Kamera-Insel: Maße der großen Form dieses Diktats (`nil` ohne Insel).
     @Published var islandDictationForm: NotchIslandLargeForm?
+    /// Kamera-Insel, Aufnahme per Controller: Die von selbst offene große
+    /// Form wurde vom Nutzer zugeklappt (`collapseIslandForm`).
+    @Published var islandFormDismissed = false
     /// Kamera-Insel: Beobachter für den Klick neben die offene große Form.
     var islandDismissMonitors: [Any] = []
     /// Kamera-Insel: Platz, den die Kapsel Apples Insel in diesem Diktat lässt
@@ -933,7 +939,7 @@ class OverlayController: ObservableObject {
         notePillAction()
         // Kamera-Insel: Die große Form geht vor der Auswahl zu, damit sie
         // nicht im Bild steht (wie beim Clip).
-        setIslandExpanded(false)
+        collapseIslandForm()
         onCaptureScreenshot?()
     }
 
@@ -942,7 +948,7 @@ class OverlayController: ObservableObject {
         // Kamera-Insel: Ein Clip nimmt den Bildschirm auf; die große Form
         // geht dafür zu (die Kapsel zeigt den Clip, ein Klick öffnet sie
         // wieder zum Stoppen).
-        if !isScreenClipRecording { setIslandExpanded(false) }
+        if !isScreenClipRecording { collapseIslandForm() }
         onToggleScreenClip?()
     }
 

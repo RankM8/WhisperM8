@@ -36,15 +36,110 @@ final class IslandDictationCompactTests: XCTestCase {
         XCTAssertFalse(pill.usesIslandCompact)
     }
 
-    /// Schnellaktion (Beschriftung) und Aufnahme per Controller (Ziel und
-    /// Modus ohne Klick sichtbar) hängen weiter unter der Menüleiste.
-    func testQuickActionAndControllerStayBelowTheMenuBar() {
+    /// Nichts hängt an der Insel mehr unter der Menüleiste: Die
+    /// Schnellaktion steht als Kapsel mit Beschriftung neben der Insel und
+    /// klappt nicht auf; die Aufnahme per Controller steht von selbst in der
+    /// großen Form (Ziel-Chat und Modus ohne Klick sichtbar).
+    func testQuickActionIsACapsuleAndControllerTheLargeForm() {
         let quick = controller()
-        quick.quickActionLabel = "Correct"
-        XCTAssertFalse(quick.usesIslandCompact)
+        quick.quickActionLabel = "Correcting…"
+        XCTAssertTrue(quick.usesIslandCompact)
+        XCTAssertFalse(quick.showsIslandLargeForm)
+        quick.toggleIslandExpanded()
+        XCTAssertFalse(quick.isIslandExpanded, "eine Schnellaktion klappt nicht auf")
+
         let pad = controller()
-        pad.controllerTargetLabel = "Release-Notizen"
-        XCTAssertFalse(pad.usesIslandCompact)
+        XCTAssertFalse(pad.showsIslandLargeForm)
+        pad.controllerTargetLabel = "Chat A"
+        XCTAssertTrue(pad.usesIslandCompact)
+        XCTAssertTrue(pad.showsIslandLargeForm, "ohne Klick offen")
+        XCTAssertFalse(pad.isIslandExpanded)
+        pad.controllerTargetLabel = nil
+        XCTAssertFalse(pad.showsIslandLargeForm, "ein Diktat per Hotkey klappt nie von selbst auf")
+    }
+
+    /// Mit Ziel bekommt die große Form eine Zeile mehr, und die Klickfläche
+    /// folgt, auch wenn das Ziel erst nach dem Aufbau des Fensters kommt.
+    func testControllerTargetOpensTheFormAfterTheWindowIsUp() {
+        let controller = controller(capsule: false)
+        controller.unifiedScreen = screen
+        controller.islandAXTrusted = { false }
+        controller.islandViewFrame = CGRect(x: 94, y: 0, width: 420, height: 34)
+        controller.beginIslandDictation(on: screen)
+        XCTAssertEqual(controller.islandInteractiveParts.first?.height, 32)
+        XCTAssertEqual(controller.islandDictationForm?.size.height, 178)
+        controller.controllerTargetLabel = "Chat A"
+        XCTAssertEqual(controller.islandDictationForm?.size.height, 178 + 28)
+        XCTAssertEqual(controller.islandInteractiveParts, [CGRect(x: 94, y: 0, width: 420, height: 206)])
+        XCTAssertEqual(controller.islandHoverFrame, CGRect(x: 94, y: 0, width: 420, height: 206))
+        // Das Fenster des Diktats fasst auch diese höhere Form.
+        let panel = UnifiedPillGeometry.notchDictationPanelFrame(screen: screen, panelWidth: 608)
+        XCTAssertGreaterThanOrEqual(panel.height, 206 + NotchIslandLargeGeometry.overshootMargin)
+        controller.tearDownUnified()
+    }
+
+    /// Die bei einer Aufnahme per Controller von selbst offene Form lässt
+    /// sich per Klick zuklappen (dann die Kapsel) und wieder öffnen; ein
+    /// Clip oder Bildschirmfoto klappt sie zu, damit sie nicht im Bild
+    /// steht. Das nächste Diktat beginnt wieder offen.
+    func testControllerFormCanBeCollapsedAndReopened() {
+        let controller = controller(capsule: false)
+        controller.unifiedScreen = screen
+        controller.islandAXTrusted = { false }
+        controller.islandViewFrame = CGRect(x: 94, y: 0, width: 420, height: 34)
+        controller.controllerTargetLabel = "Chat A"
+        controller.beginIslandDictation(on: screen)
+        XCTAssertTrue(controller.showsIslandLargeForm)
+        controller.toggleIslandExpanded()
+        XCTAssertFalse(controller.showsIslandLargeForm, "Klick auf Kopfzeile oder Wellenform klappt zu")
+        XCTAssertEqual(controller.islandInteractiveParts.first?.height, 32, "sofort wieder nur die Kapsel")
+        controller.toggleIslandExpanded()
+        XCTAssertTrue(controller.showsIslandLargeForm, "Klick auf die Kapsel öffnet wieder")
+        controller.collapseIslandForm()
+        XCTAssertFalse(controller.showsIslandLargeForm, "Klick daneben schließt die per Klick geöffnete Form")
+        XCTAssertFalse(controller.isIslandExpanded)
+        controller.toggleIslandExpanded()
+        controller.toggleScreenClip()
+        XCTAssertFalse(controller.showsIslandLargeForm, "Clip gestartet: nicht im Bild")
+        controller.toggleIslandExpanded()
+        controller.captureScreenshot()
+        XCTAssertFalse(controller.showsIslandLargeForm)
+        // Bildschirmwechsel im selben Diktat (das Fenster baut neu auf): bleibt zu.
+        controller.beginIslandDictation(on: screen)
+        XCTAssertFalse(controller.showsIslandLargeForm, "zugeklappt bleibt zugeklappt")
+        // Diktat zu Ende, das nächste per Controller beginnt wieder offen.
+        controller.tearDownUnified(keepingWindow: true)
+        controller.controllerTargetLabel = "Chat A"
+        controller.beginIslandDictation(on: screen)
+        XCTAssertTrue(controller.showsIslandLargeForm)
+        controller.tearDownUnified()
+    }
+
+    /// Schnellaktion: Die Kapsel ist so breit wie Zeichen, Beschriftung und
+    /// ✕; ein Hinweis ohne ✕ ist schmaler. Klicks nimmt das Fenster nur auf
+    /// ihr an.
+    func testQuickActionCapsuleFitsItsLabel() throws {
+        let short = OverlayController.quickActionCapsuleWidth(label: "Fix", isHint: false)
+        let long = OverlayController.quickActionCapsuleWidth(label: "Correcting the selection…", isHint: false)
+        XCTAssertGreaterThan(long, short + 80)
+        XCTAssertLessThan(
+            OverlayController.quickActionCapsuleWidth(label: "Fix", isHint: true), short, "Hinweis ohne ✕")
+        XCTAssertGreaterThan(short, 38 + 20)
+
+        let controller = controller(capsule: false)
+        controller.unifiedScreen = screen
+        controller.quickActionLabel = "Correcting…"
+        controller.islandViewFrame = CGRect(x: 0, y: 0, width: 608, height: 34)
+        controller.beginIslandDictation(on: screen)
+        controller.refreshIslandCapsule(occupancy: NotchMenuBarOccupancy(frames: []), animated: false)
+        let capsule = try XCTUnwrap(controller.islandCapsule)
+        XCTAssertEqual(capsule.width, OverlayController.quickActionCapsuleWidth(label: "Correcting…", isHint: false))
+        XCTAssertEqual(capsule.side, .leading)
+        XCTAssertFalse(capsule.isForced)
+        XCTAssertEqual(
+            controller.islandInteractiveParts,
+            [CGRect(x: 304 + capsule.offset - capsule.width / 2, y: 2, width: capsule.width, height: 32)])
+        controller.tearDownUnified()
     }
 
     /// Die große Form mit den Bedienknöpfen geht nur auf Klick auf, nie von
@@ -103,15 +198,16 @@ final class IslandDictationCompactTests: XCTestCase {
         XCTAssertEqual(controller.islandHoverFrame, CGRect(x: 94, y: 0, width: 420, height: 178))
         controller.toggleIslandExpanded()
         XCTAssertEqual(controller.islandHoverFrame?.width, capsule.width)
-        // Ruhebild, Schnellaktion: wieder die Ansicht als Ganzes.
-        controller.quickActionLabel = "Correct"
+        // Ruhebild des Übergangs: wieder die Ansicht als Ganzes.
+        controller.showsRestLook = true
         controller.refreshIslandInteractiveParts()
         XCTAssertNil(controller.islandHoverFrame)
+        controller.showsRestLook = false
         controller.tearDownUnified()
     }
 
-    /// Schnellaktion und Aufnahme per Controller haben keine große Form,
-    /// ebenso wenig ein Diktat ohne Maße dafür.
+    /// Eine Schnellaktion hat keine große Form, ebenso wenig ein Diktat
+    /// ohne Maße dafür.
     func testNoLargeFormOutsideTheCompactDictation() {
         let quick = controller()
         quick.isIslandExpanded = true
@@ -230,8 +326,9 @@ final class IslandDictationCompactTests: XCTestCase {
         crowded.systemIsland = 802...945
         let forced = try XCTUnwrap(NotchIslandGeometry.dictationCapsule(screen: screen, occupancy: crowded))
         XCTAssertEqual(line(forced, crowded), "island_dictation form=minimal side=leading reason=no_room free=28/32 system_island=802-945")
-        XCTAssertTrue(line(measured, free, quick: true).contains("form=below_menu_bar reason=quick_action"))
-        XCTAssertTrue(line(measured, free, pad: true).contains("form=below_menu_bar reason=controller"))
+        XCTAssertTrue(line(measured, free, quick: true).contains("form=label side=leading reason=measured"))
+        XCTAssertTrue(line(measured, free, pad: true).contains("form=large side=leading reason=measured"))
+        XCTAssertTrue(line(nil, free).contains("form=below_menu_bar reason=no_capsule"))
     }
 
     /// Die Zeit ist immer erreichbar: in der Kapsel, wenn Platz ist; die

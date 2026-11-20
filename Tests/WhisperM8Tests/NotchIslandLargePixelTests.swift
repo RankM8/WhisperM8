@@ -116,7 +116,7 @@ final class NotchIslandLargePixelTests: XCTestCase {
             guard let first = xs.first, let last = xs.last else { return nil }
             return first...last
         }
-        let padding = NotchIslandLargeGeometry.padding
+        let padding = NotchIslandLargeGeometry.headerInset
         let onlyTrailing = try render(
             NotchIslandLargeHeader(form: form) { EmptyView() } trailing: { marker }.background(Color.black),
             size: size, name: "kopf-rechts")
