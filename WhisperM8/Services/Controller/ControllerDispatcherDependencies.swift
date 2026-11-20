@@ -177,6 +177,13 @@ protocol ControllerIslandPresenting: AnyObject {
     /// - Parameter screenDisplayID: Bildschirm des Agent-Chats-Fensters.
     func show(_ model: ControllerIslandModel, screenDisplayID: UInt32?)
     func hide()
+    /// Spalten der Liste „Wohin“ auf diesem Bildschirm: 2 in der großen Form
+    /// an einer Kamera-Insel (Kacheln), sonst 1.
+    func columns(onDisplay screenDisplayID: UInt32?) -> Int
+}
+
+extension ControllerIslandPresenting {
+    func columns(onDisplay screenDisplayID: UInt32?) -> Int { 1 }
 }
 
 /// Fortschritt eines Haltens, als Start und Dauer: Die Anzeige läuft als eine

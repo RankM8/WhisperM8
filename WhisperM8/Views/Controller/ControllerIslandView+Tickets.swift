@@ -74,7 +74,7 @@ extension ControllerIslandView {
         .accessibilityElement(children: .combine)
     }
 
-    private func tag(_ text: String, strong: Bool) -> some View {
+    func tag(_ text: String, strong: Bool) -> some View {
         Text(verbatim: text)
             .font(.system(size: 11, weight: strong ? .semibold : .regular))
             .foregroundStyle(strong ? palette.markBorder : palette.tertiary)
@@ -85,17 +85,22 @@ extension ControllerIslandView {
     /// Board-Chat und steht deshalb gedimmt da.
     func ticketsFooter() -> some View {
         IslandFlow(spacing: 12, lineSpacing: 5) {
-            footItem("▲▼", String(localized: "select"))
-            footItem("◀▶", String(localized: "tabs"))
+            if display.isLarge {
+                footItem("▲▼◀▶", String(localized: "select"))
+                footItem("◀▶", String(localized: "at the edge: tabs"))
+            } else {
+                footItem("▲▼", String(localized: "select"))
+                footItem("◀▶", String(localized: "tabs"))
+            }
             footItem(ControllerButton.l2.glyph(family), String(localized: "release: open"), round: false)
             footItem(ControllerButton.cross.glyph(family), String(localized: "open"))
             footItem(ControllerButton.circle.glyph(family), String(localized: "cancel"))
             footItem(ControllerButton.r2.glyph(family), String(localized: "go + dictate (with board chat)"), round: false)
                 .opacity(0.45)
         }
-        .font(.system(size: 11))
+        .font(.system(size: footerFontSize))
         .foregroundStyle(palette.secondary)
-        .padding(.horizontal, 14)
+        .padding(.horizontal, footerInset)
         .padding(.top, 7)
         .padding(.bottom, 11)
         .frame(maxWidth: .infinity, alignment: .leading)

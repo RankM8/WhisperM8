@@ -15,10 +15,10 @@ enum NotchCutoutKind: Equatable {
 /// Band der Anzeige an einer Kamera-Insel, in Punkten: die schwarze Kapsel um
 /// die Kamera. Die Status-Anzeige verbreitert sie seitlich um Flügel für ein
 /// Zeichen und eine Zahl, wenn dort nachweislich Platz ist
-/// (`NotchIslandGeometry.presentation`). Schnellaktion, Aufnahme per
-/// Controller und Controller-Insel nutzen sie als schmalen Hals (Aussparung
-/// plus Rand) bis unter die Menüleiste. Hinweis, Liste und aufgeklapptes
-/// Diktat sind die große Form (`NotchIslandLargeGeometry`).
+/// (`NotchIslandGeometry.presentation`). Hinweis, Liste, aufgeklapptes
+/// Diktat und Controller-Insel sind die große Form
+/// (`NotchIslandLargeGeometry`), die aus dieser Kapsel wächst; unter der
+/// Menüleiste hängt an der Insel nichts mehr.
 struct NotchIslandBand: Equatable {
     /// Breite des Bands: die Aussparung plus beide Flügel.
     var width: CGFloat
@@ -328,6 +328,62 @@ enum NotchIslandGeometry {
         // Nirgends Platz: dort, wo am wenigsten verdeckt wird.
         let roomLeading = free.leading - reserve.leading, roomTrailing = free.trailing - reserve.trailing
         return capsule(roomTrailing > roomLeading ? .trailing : .leading, clock: false, forced: true)
+    }
+
+    // MARK: Schnellaktion
+
+    /// Schmalste Kapsel einer Schnellaktion: Zeichen, ein Rest Text, ✕.
+    static let quickActionMinWidth: CGFloat = 96
+
+    /// Kapsel einer Schnellaktion (Korrigieren ohne Diktat) in der
+    /// Menüleiste neben der Insel: Zeichen und Beschriftung, `contentWidth`
+    /// breit. Nach Apples Muster ist ein kurzer Vorgang, der nichts von
+    /// einem will, die kompakte Darstellung, nicht die aufgeklappte.
+    ///
+    /// Links der Insel, wenn dort Platz ist, sonst rechts. Das Mikrofon
+    /// läuft dabei nicht; die Kapsel hält nur Abstand zu dem, was Apples
+    /// Insel gerade zeigt. Ist auf keiner Seite Platz oder gibt es keine
+    /// Messung, steht sie trotzdem da (`isForced`), auf der Seite mit mehr
+    /// Platz bzw. ohne Messung links, und kann einen Menütitel verdecken:
+    /// Die Beschriftung muss lesbar sein, der Nutzer hat die Aktion selbst
+    /// ausgelöst, und sie dauert Sekunden (dieselbe Abwägung wie beim
+    /// Diktat). `nil` nur ohne Kamera-Insel.
+    ///
+    /// `maxExtent`: so weit reicht das Fenster des Diktats je Seite ab der
+    /// Mitte der Kamera. Eine längere Beschriftung macht die Kapsel nicht
+    /// breiter als das; ihr Text wird dann gekürzt, ✕ bleibt im Fenster.
+    static func quickActionCapsule(
+        screen: NotchScreenInfo, occupancy: NotchMenuBarOccupancy?, contentWidth: CGFloat,
+        maxExtent: CGFloat = .infinity
+    ) -> NotchIslandDictationCapsule? {
+        guard screen.hasIsland else { return nil }
+        let base = baseWings(screen: screen, occupancy: nil)
+        var reserve = (leading: base.leading, trailing: base.trailing)
+        if let system = occupancy?.systemIsland {
+            reserve.leading = max(reserve.leading, screen.notchCenterX - screen.notchWidth / 2 - system.lowerBound)
+            reserve.trailing = max(reserve.trailing, system.upperBound - (screen.notchCenterX + screen.notchWidth / 2))
+        }
+        func inner(_ side: NotchIslandSide) -> CGFloat {
+            screen.notchWidth / 2 + (side == .leading ? reserve.leading : reserve.trailing) + detachedGap
+        }
+        /// Breite auf dieser Seite: die des Inhalts, höchstens bis zum Rand des Fensters.
+        func width(_ side: NotchIslandSide) -> CGFloat {
+            max(quickActionMinWidth, min(contentWidth, maxExtent - inner(side)))
+        }
+        func capsule(_ side: NotchIslandSide, forced: Bool = false) -> NotchIslandDictationCapsule {
+            let width = width(side)
+            return NotchIslandDictationCapsule(
+                side: side, showsClock: false, width: width,
+                offset: (side == .leading ? -1 : 1) * (inner(side) + width / 2), isForced: forced)
+        }
+        guard let occupancy else { return capsule(.leading, forced: true) }
+        let free = freeSpace(screen: screen, occupancy: occupancy)
+        for side in [NotchIslandSide.leading, .trailing] {
+            let needed = inner(side) - screen.notchWidth / 2 + width(side) + menuClearance
+            if (side == .leading ? free.leading : free.trailing) >= needed { return capsule(side) }
+        }
+        let roomLeading = free.leading - reserve.leading, roomTrailing = free.trailing - reserve.trailing
+        return capsule(roomTrailing > roomLeading ? .trailing : .leading, forced: true)
     }
 
     /// Durchmesser des abgesetzten Kreises: so hoch wie Apples Insel gerade ist.

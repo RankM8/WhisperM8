@@ -70,6 +70,31 @@ struct ControllerIslandList<Row: Identifiable & Equatable & Sendable>: Equatable
     /// erste Stoß markiert dann die erste Zeile; bis dahin wechselt nichts.
     private(set) var selectedIndex: Int?
     private(set) var firstVisibleIndex = 0
+    /// Spalten der Anzeige: 1 als Liste (Notch, Pille), 2 als Kacheln (große
+    /// Form an der Kamera-Insel). Das sichtbare Fenster beginnt immer am
+    /// Anfang einer Reihe.
+    private(set) var columns = 1
+
+    mutating func setColumns(_ count: Int) {
+        columns = max(1, count)
+        scrollToSelection()
+    }
+
+    /// Spalte der Markierung (0 = links); `nil` ohne Markierung.
+    var selectedColumn: Int? { selectedIndex.map { $0 % columns } }
+
+    /// Einen Schritt zur Seite in derselben Reihe. `false`, wenn es dort
+    /// keinen Nachbarn gibt (Rand der Reihe, einspaltige Liste, keine
+    /// Markierung); dann bleibt alles, wie es ist.
+    @discardableResult
+    mutating func moveSideways(_ step: Int) -> Bool {
+        guard columns > 1, let index = selectedIndex else { return false }
+        let target = index + (step < 0 ? -1 : 1)
+        guard rows.indices.contains(target), target / columns == index / columns else { return false }
+        selectedIndex = target
+        scrollToSelection()
+        return true
+    }
 
     /// - Parameter startID: Eintrag, auf dem die Markierung beginnt (voriger
     ///   Ort oder der aktuelle). Steht er nicht in der Liste, gibt es noch
@@ -112,6 +137,21 @@ struct ControllerIslandList<Row: Identifiable & Equatable & Sendable>: Equatable
         scrollToSelection()
     }
 
+    /// Hoch/runter um eine Reihe: in der Liste ein Eintrag, in Kacheln
+    /// dieselbe Spalte der Nachbar-Reihe. Kein Umlauf. Endet die letzte
+    /// Reihe vor dieser Spalte, geht es auf ihren letzten Eintrag; ganz oben
+    /// und ganz unten bleibt die Markierung stehen.
+    mutating func moveRow(_ step: Int) {
+        guard columns > 1, let index = selectedIndex else { return move(step) }
+        let target = index + (step < 0 ? -columns : columns)
+        if rows.indices.contains(target) {
+            selectedIndex = target
+        } else if step > 0, index / columns < (rows.count - 1) / columns {
+            selectedIndex = rows.count - 1
+        }
+        scrollToSelection()
+    }
+
     private mutating func scrollToSelection() {
         guard let index = selectedIndex else {
             firstVisibleIndex = 0
@@ -121,6 +161,13 @@ struct ControllerIslandList<Row: Identifiable & Equatable & Sendable>: Equatable
         if index < firstVisibleIndex { firstVisibleIndex = index }
         if index >= firstVisibleIndex + maxRows { firstVisibleIndex = index - maxRows + 1 }
         firstVisibleIndex = max(0, min(firstVisibleIndex, max(0, rows.count - maxRows)))
+        guard columns > 1 else { return }
+        // Kacheln: Das Fenster beginnt an einem Reihenanfang und rückt
+        // reihenweise.
+        if firstVisibleIndex % columns != 0 {
+            let start = firstVisibleIndex - firstVisibleIndex % columns
+            firstVisibleIndex = index >= start + maxRows ? start + columns : start
+        }
     }
 }
 
@@ -236,13 +283,53 @@ struct ControllerWhereToState: Equatable, Sendable {
         }
     }
 
-    /// Hoch/runter im sichtbaren Reiter.
+    /// Ein Schritt vor oder zurück im sichtbaren Reiter, in Lesereihenfolge
+    /// (Tab und ⇧Tab der Tastatur; in der einspaltigen Liste dasselbe wie
+    /// hoch/runter).
     mutating func move(_ step: Int) {
         switch tab {
         case .chats: chats.move(step)
         case .workspaces: workspaces.move(step)
         case .tickets: tickets.move(step)
         }
+    }
+
+    /// Spalten der Anzeige (`ControllerIslandList.columns`): 2 in der großen
+    /// Form an der Kamera-Insel, sonst 1. Mit Kacheln bewegt das Steuerkreuz
+    /// in beide Richtungen: hoch/runter die Reihe, links/rechts die Spalte;
+    /// erst am Rand der Reihe wechselt links/rechts den Reiter.
+    var columns: Int { chats.columns }
+
+    mutating func setColumns(_ count: Int) {
+        chats.setColumns(count)
+        workspaces.setColumns(count)
+        tickets.setColumns(count)
+    }
+
+    /// Hoch/runter am Controller (Steuerkreuz, Stick): eine Reihe. Die
+    /// Tastatur geht mit Tab und ↓/↑ über `move` in Lesereihenfolge.
+    mutating func moveRow(_ step: Int) {
+        switch tab {
+        case .chats: chats.moveRow(step)
+        case .workspaces: workspaces.moveRow(step)
+        case .tickets: tickets.moveRow(step)
+        }
+    }
+
+    /// Links/rechts am Controller: mit Kacheln zuerst die Nachbar-Kachel der
+    /// Reihe; am Rand der Reihe (und in der einspaltigen Liste immer) der
+    /// Nachbar-Reiter. `false`, wenn sich nichts bewegt hat. Per Tastatur
+    /// wechseln ←/→ immer den Reiter (`switchTabForKeyboard`).
+    @discardableResult
+    mutating func moveSideways(_ step: Int) -> Bool {
+        let moved: Bool
+        switch tab {
+        case .chats: moved = chats.moveSideways(step)
+        case .workspaces: moved = workspaces.moveSideways(step)
+        case .tickets: moved = tickets.moveSideways(step)
+        }
+        if moved { return true }
+        return switchTab(step)
     }
 
     /// Die Reiter in ihrer Reihenfolge; „Tickets“ nur bei eingeschalteter
@@ -262,6 +349,7 @@ struct ControllerWhereToState: Equatable, Sendable {
         let target = index + (step < 0 ? -1 : 1)
         guard tabs.indices.contains(target) else { return false }
         tab = tabs[target]
+        let columns = columns
         switch tab {
         case .chats: chats = ControllerIslandList(rows: chats.rows, startID: currentChatID)
         case .workspaces:
@@ -269,6 +357,7 @@ struct ControllerWhereToState: Equatable, Sendable {
         case .tickets:
             tickets = ControllerIslandList(rows: tickets.rows, startID: tickets.rows.first(where: \.isHere)?.id)
         }
+        setColumns(columns)
         return true
     }
 

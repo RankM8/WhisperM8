@@ -78,28 +78,49 @@ struct NotchIslandLargeShape: Shape {
 /// liegt über unserem Fenster), links und rechts davon eigener Inhalt, auf
 /// Höhe der Insel.
 struct NotchIslandLargeHeader<Leading: View, Trailing: View>: View {
-    let form: NotchIslandLargeForm
+    let width: CGFloat
+    let metrics: NotchIslandLargeHeaderMetrics
     @ViewBuilder var leading: Leading
     @ViewBuilder var trailing: Trailing
 
+    init(
+        form: NotchIslandLargeForm, @ViewBuilder leading: () -> Leading, @ViewBuilder trailing: () -> Trailing
+    ) {
+        self.init(
+            width: form.size.width,
+            metrics: NotchIslandLargeHeaderMetrics(
+                height: form.headerHeight, slotLeading: form.slotLeading, slotTrailing: form.slotTrailing),
+            leading: leading, trailing: trailing)
+    }
+
+    init(
+        width: CGFloat, metrics: NotchIslandLargeHeaderMetrics,
+        @ViewBuilder leading: () -> Leading, @ViewBuilder trailing: () -> Trailing
+    ) {
+        self.width = width
+        self.metrics = metrics
+        self.leading = leading()
+        self.trailing = trailing()
+    }
+
     var body: some View {
-        let half = form.size.width / 2
+        let half = width / 2
         let padding = NotchIslandLargeGeometry.padding
         // Jede Seite hat ihre feste Breite, auch ohne Inhalt: Ein leerer
         // Inhalt (keine Zähler) nähme sonst keinen Platz ein, und die andere
         // Seite rutschte unter Apples Insel.
         HStack(spacing: 0) {
             Color.clear
-                .frame(width: max(0, half - padding - form.slotLeading))
+                .frame(width: max(0, half - padding - metrics.slotLeading))
                 .overlay(alignment: .leading) { leading }
-            Color.clear.frame(width: max(0, min(form.size.width - 2 * padding, form.slotLeading + form.slotTrailing)))
+            Color.clear.frame(width: max(0, min(width - 2 * padding, metrics.slotLeading + metrics.slotTrailing)))
             Color.clear
-                .frame(width: max(0, half - padding - form.slotTrailing))
+                .frame(width: max(0, half - padding - metrics.slotTrailing))
                 .overlay(alignment: .trailing) { trailing }
         }
         .lineLimit(1)
-        .frame(height: max(0, form.headerHeight - NotchIslandLargeGeometry.headerGap))
-        .frame(width: form.size.width, height: form.headerHeight, alignment: .top)
+        .frame(height: max(0, metrics.height - NotchIslandLargeGeometry.headerGap))
+        .frame(width: width, height: metrics.height, alignment: .top)
     }
 }
 

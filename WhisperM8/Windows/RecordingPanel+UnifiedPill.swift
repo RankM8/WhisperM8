@@ -15,8 +15,8 @@ enum OverlayPresentation: Equatable {
     case notch(width: CGFloat, height: CGFloat)
     /// Vereinte Pille an einer Kamera-Insel (Dynamic Island): Das Diktat
     /// steht als Kapsel in der Menüleiste neben der Insel
-    /// (`IslandDictationView`); Schnellaktion und Aufnahme per Controller
-    /// hängen an einem schmalen Hals um die Kamera unter der Menüleiste.
+    /// (`IslandDictationView`), eine Schnellaktion ebenso; aufgeklappt und
+    /// bei einer Aufnahme per Controller ist es die große Form um die Kamera.
     case island(NotchIslandBand)
 
     /// An der Hardware (Notch oder Kamera-Insel): schwarz, nicht verschiebbar.
@@ -150,7 +150,7 @@ extension OverlayController {
                 : .notch(width: screen.notchWidth, height: screen.safeAreaTop)
 
             let frame = UnifiedPillGeometry.notchDictationPanelFrame(
-                screen: screen, panelWidth: OverlayFrameResolver.panelSize.width)
+                screen: screen, panelWidth: UnifiedPillGeometry.notchDictationPanelWidth(screen: screen))
             panel = RecordingPanel(initialOrigin: frame.origin, size: frame.size)
             // Über der Menüleiste, damit das Band die Aussparung deckt; an der
             // Notch nichts zum Ziehen.
@@ -205,24 +205,71 @@ extension OverlayController {
 
     // MARK: Kamera-Insel, kompakt
 
-    /// An der Kamera-Insel steht das Diktat immer kompakt in der Menüleiste
-    /// (`IslandDictationView`), auch ohne Messung und ohne Platz. Ausnahmen, die Text
-    /// brauchen oder ohne Maus bedient werden: Schnellaktion (Beschriftung)
-    /// und Aufnahme per Controller (Ziel-Chat und Modus müssen ohne Klick
-    /// sichtbar sein). Sie hängen wie bisher unter der Menüleiste.
+    /// An der Kamera-Insel hängt nichts mehr an einem Hals unter der
+    /// Menüleiste (`IslandDictationView`): Das Diktat steht als Kapsel in
+    /// der Menüleiste neben der Insel, auch ohne Messung und ohne Platz;
+    /// eine Schnellaktion ebenso, mit Zeichen und Beschriftung; die Aufnahme
+    /// per Controller steht in der großen Form (`showsIslandLargeForm`).
     var usesIslandCompact: Bool {
         guard case .island = presentation, islandCapsule != nil else { return false }
-        return quickActionLabel == nil && controllerTargetLabel == nil
+        return true
     }
 
-    /// Die große Form mit den Bedienknöpfen ist offen. Sie geht nur per
-    /// Klick auf (sie verdeckt Menüs neben der Kamera), nie von selbst.
-    var showsIslandLargeForm: Bool { isIslandExpanded && islandDictationForm != nil && usesIslandCompact }
+    /// Die Kapsel zeigt eine Schnellaktion (Zeichen, Beschriftung, ✕) statt
+    /// der Aufnahme. Sie klappt nicht auf: Es gibt nichts zu bedienen.
+    var islandShowsQuickAction: Bool { usesIslandCompact && quickActionLabel != nil }
 
+    /// Die große Form mit den Bedienknöpfen ist offen: per Klick auf die
+    /// Kapsel, oder von selbst bei einer Aufnahme per Controller (Ziel-Chat
+    /// und Modus müssen ohne Klick sichtbar sein). Offen darf sie Menüs
+    /// neben der Kamera verdecken; ein Diktat per Hotkey klappt nie von
+    /// selbst auf.
+    var showsIslandLargeForm: Bool {
+        guard usesIslandCompact, islandDictationForm != nil, quickActionLabel == nil else { return false }
+        return isIslandExpanded || (controllerTargetLabel != nil && !islandFormDismissed)
+    }
+
+    /// Klick auf Kapsel, Kopfzeile oder Wellenform: auf bzw. zu. Das gilt
+    /// auch für die Form, die bei einer Aufnahme per Controller von selbst
+    /// offen steht: Wer sie zuklappt, hat die Kapsel, ein Klick darauf
+    /// öffnet sie wieder.
     func toggleIslandExpanded() {
-        guard !morph.isRetiring else { return }
-        setIslandExpanded(!isIslandExpanded)
+        guard !morph.isRetiring, quickActionLabel == nil else { return }
+        if showsIslandLargeForm {
+            collapseIslandForm()
+        } else {
+            if islandFormDismissed { islandFormDismissed = false }
+            if isIslandExpanded { refreshIslandInteractiveParts() } else { setIslandExpanded(true) }
+        }
     }
+
+    /// Die große Form geht auf Wunsch des Nutzers zu (Klick auf sie, Klick
+    /// daneben, Bildschirmfoto, Start eines Clips). Bei einer Aufnahme per
+    /// Controller bleibt sie dann zu, bis ein Klick auf die Kapsel sie
+    /// wieder öffnet.
+    func collapseIslandForm() {
+        if controllerTargetLabel != nil, !islandFormDismissed { islandFormDismissed = true }
+        if isIslandExpanded { setIslandExpanded(false) } else { refreshIslandInteractiveParts() }
+    }
+
+    /// Beschriftung der Schnellaktion oder Ziel des Controllers haben sich
+    /// geändert: Kapsel, Form und Trefferflächen neu bestimmen.
+    func islandContentChanged() {
+        guard case .island = presentation, unifiedScreen != nil else { return }
+        refreshIslandCapsule(occupancy: nil, animated: true)
+    }
+
+    /// Breite der Kapsel einer Schnellaktion: Zeichen (38 pt), Beschriftung
+    /// und, solange sie läuft, ✕ zum Abbrechen. Gemessen wird der Text hier
+    /// im Ereignispfad, nie in einem Body.
+    nonisolated static func quickActionCapsuleWidth(label: String, isHint: Bool) -> CGFloat {
+        let font = NSFont.systemFont(ofSize: quickActionLabelSize, weight: .medium)
+        let text = ceil((label as NSString).size(withAttributes: [.font: font]).width)
+        return 5 + 38 + 7 + text + (isHint ? 14 : 4 + quickActionCancelSize + 5)
+    }
+
+    nonisolated static let quickActionLabelSize: CGFloat = 12.5
+    nonisolated static let quickActionCancelSize: CGFloat = 22
 
     /// Auf- bzw. zuklappen. Offen schließt ein Klick neben der Form (auch
     /// in ein Menü oder eine andere App); die Menüleiste neben der Kapsel
@@ -243,7 +290,7 @@ extension OverlayController {
         guard presentsWindow else { return }
         let mask: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
         if let monitor = NSEvent.addGlobalMonitorForEvents(matching: mask, handler: { [weak self] _ in
-            Task { @MainActor in self?.setIslandExpanded(false) }
+            Task { @MainActor in self?.collapseIslandForm() }
         }) {
             islandDismissMonitors.append(monitor)
         }
@@ -252,7 +299,7 @@ extension OverlayController {
         if let monitor = NSEvent.addLocalMonitorForEvents(matching: mask, handler: { [weak self] event in
             if let self, Self.islandClickDismisses(
                 windowLevel: event.window?.level, isDictationPanel: event.window === self.panel) {
-                self.setIslandExpanded(false)
+                self.collapseIslandForm()
             }
             return event
         }) {
@@ -280,6 +327,7 @@ extension OverlayController {
     /// Messung neu angefordert.
     func beginIslandDictation(on screen: NotchScreenInfo) {
         setIslandExpanded(false)
+        if islandFormDismissed { islandFormDismissed = false }
         islandReserve = nil
         islandOccupancy = nil
         // `islandViewFrame` bleibt: Die Ansicht meldet ihren Rahmen schon beim
@@ -327,13 +375,23 @@ extension OverlayController {
             islandReserve = reserve
         }
         // Die große Form: Ihre Kopfzeile lässt Apples Mikrofon-Hinweis so
-        // viel Platz wie die Kapsel (auch bevor er gemessen ist).
+        // viel Platz wie die Kapsel (auch bevor er gemessen ist). Per
+        // Controller mit einer Zeile für den Ziel-Chat.
         let form = NotchIslandLargeGeometry.form(
-            screen: screen, kind: .dictation, occupancy: islandOccupancy,
+            screen: screen, kind: controllerTargetLabel == nil ? .dictation : .dictationWithTarget,
+            occupancy: islandOccupancy,
             reserve: reserve ?? NotchIslandGeometry.dictationReserve(screen: screen, occupancy: nil))
         if form != islandDictationForm { islandDictationForm = form }
-        let capsule = NotchIslandGeometry.dictationCapsule(
-            screen: screen, occupancy: islandOccupancy, hasBadge: statusBadge != nil, reserve: reserve)
+        let capsule: NotchIslandDictationCapsule?
+        if let label = quickActionLabel {
+            capsule = NotchIslandGeometry.quickActionCapsule(
+                screen: screen, occupancy: islandOccupancy,
+                contentWidth: Self.quickActionCapsuleWidth(label: label, isHint: isQuickActionHint),
+                maxExtent: UnifiedPillGeometry.islandCapsuleMaxExtent(screen: screen))
+        } else {
+            capsule = NotchIslandGeometry.dictationCapsule(
+                screen: screen, occupancy: islandOccupancy, hasBadge: statusBadge != nil, reserve: reserve)
+        }
         if capsule != islandCapsule {
             if animated {
                 withAnimation(.pill) { islandCapsule = capsule }
@@ -364,12 +422,9 @@ extension OverlayController {
         quickAction: Bool, controller: Bool, trusted: Bool, failure: String?
     ) -> String {
         let form: String
-        if quickAction {
-            form = "below_menu_bar reason=quick_action"
-        } else if controller {
-            form = "below_menu_bar reason=controller"
-        } else if let capsule {
-            let stage = capsule.showsClock ? "compact" : "minimal"
+        if let capsule {
+            // Schnellaktion: Kapsel mit Beschriftung. Controller: große Form.
+            let stage = quickAction ? "label" : controller ? "large" : capsule.showsClock ? "compact" : "minimal"
             let side = capsule.side == .leading ? "leading" : "trailing"
             let reason: String
             if occupancy == nil {

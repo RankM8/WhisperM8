@@ -6,9 +6,11 @@ struct ControllerIslandDisplay: Equatable {
     enum Style: Equatable {
         /// An der Notch: schwarz, das Band deckt genau die Aussparung.
         case notch(width: CGFloat, height: CGFloat)
-        /// An einer Kamera-Insel (Dynamic Island): schwarz, hängt an einem
-        /// schmalen Hals um die Kamera unter der Menüleiste.
-        case island(NotchIslandBand)
+        /// An einer Kamera-Insel (Dynamic Island): die große Form, eine
+        /// schwarze Fläche um die Kamera (`ControllerIslandView+Large.swift`).
+        /// Sie wächst aus der Kapsel um die Kamera (`NotchIslandBand`); die
+        /// Kopfzeile lässt Apples Insel die Mitte.
+        case island(NotchIslandBand, header: NotchIslandLargeHeaderMetrics)
         /// Ohne Notch: wächst aus der Pille der Notch-Anzeige, im dunklen
         /// Glas der Diktat-Pille.
         case pill
@@ -29,13 +31,19 @@ struct ControllerIslandDisplay: Equatable {
         return true
     }
 
-    /// Höhe des Bands über dem Körper (0 ohne Notch).
+    /// Höhe des Bands über dem Körper (0 ohne Notch und in der großen Form
+    /// an der Kamera-Insel: Dort ist die Zeile der Kamera die Kopfzeile).
     var bandHeight: CGFloat {
         switch style {
         case .notch(_, let height): return height
-        case .island(let band): return band.neckHeight
-        case .pill: return 0
+        case .island, .pill: return 0
         }
+    }
+
+    /// Große Form an der Kamera-Insel: größere Felder, Kacheln in zwei Spalten.
+    var isLarge: Bool {
+        if case .island = style { return true }
+        return false
     }
 
     /// Breite des Körpers je Zustand (Entwurf); an der Notch nie schmaler
@@ -50,9 +58,13 @@ struct ControllerIslandDisplay: Equatable {
         case .whereTo: width = Self.keyboardWidth(model) ?? 440
         }
         if case .notch(let notchWidth, _) = style { return max(width, notchWidth) }
-        if case .island(let band) = style { return max(width, band.width) }
+        // Große Form: mindestens 460 pt (zwei Spalten Kacheln, Kopfzeile
+        // links und rechts von Apples Insel).
+        if case .island = style { return max(width, Self.largeMinWidth) }
         return width
     }
+
+    static let largeMinWidth: CGFloat = 460
 
     /// Per Tastatur (WM8-104): mit Tastenzeile 520 pt wie im Entwurf, die
     /// Limits-Karte so breit wie unter R1, der Spickzettel schmal.
@@ -121,8 +133,13 @@ struct ControllerIslandView: View {
             if display.isNotch {
                 Color.clear.frame(height: display.bandHeight)
             }
-            header
-            content
+            if display.isLarge {
+                largeHeader
+                content.padding(.bottom, Self.largeBottomInset)
+            } else {
+                header
+                content
+            }
         }
         .frame(width: display.bodyWidth)
         .background { background }
@@ -146,16 +163,24 @@ struct ControllerIslandView: View {
         if case .notch(let width, let height) = display.style {
             return AnyShape(NotchHangingShape(bandWidth: width, bandHeight: height, bottomRadius: 20))
         }
-        if case .island(let band) = display.style {
-            return AnyShape(NotchHangingShape(
-                bandWidth: band.width, bandHeight: band.neckHeight, bottomRadius: 20, topRadius: band.topRadius))
+        if case .island = display.style {
+            return AnyShape(RoundedRectangle(cornerRadius: NotchIslandLargeGeometry.cornerRadius, style: .continuous))
         }
         return AnyShape(RoundedRectangle(cornerRadius: PillGlass.cornerRadius, style: .continuous))
     }
 
     /// Wächst aus der Notch (bzw. aus der Pille) und zieht sich dorthin
     /// zurück; aus einer Pille in der unteren Bildschirmhälfte nach oben.
+    @ViewBuilder
     private var reveal: some View {
+        if case .island(let band, _) = display.style {
+            largeReveal(band)
+        } else {
+            hangingReveal
+        }
+    }
+
+    private var hangingReveal: some View {
         GeometryReader { proxy in
             let collapsed = collapsedSize(in: proxy.size)
             RoundedRectangle(cornerRadius: revealed ? 0 : collapsed.height / 2, style: .continuous)
@@ -170,8 +195,8 @@ struct ControllerIslandView: View {
         switch display.style {
         case .notch(let width, let height):
             return CGSize(width: min(size.width, width), height: min(size.height, height + NotchGeometry.chinHeight))
-        case .island(let band):
-            // Zu: nur die Kapsel um die Kamera.
+        case .island(let band, _):
+            // Zu: nur die Kapsel um die Kamera (`largeReveal`).
             return CGSize(width: min(size.width, band.width), height: min(size.height, band.capsuleHeight))
         case .pill:
             return CGSize(width: min(size.width, NotchGeometry.pillIdleWidth),
@@ -181,7 +206,7 @@ struct ControllerIslandView: View {
 
     // MARK: Kopf
 
-    private var header: some View {
+    var header: some View {
         HStack(spacing: 8) {
             if display.model.input == .keyboard {
                 keyboardHeaderKeys
@@ -207,7 +232,7 @@ struct ControllerIslandView: View {
     }
 
     @ViewBuilder
-    private var headerTarget: some View {
+    var headerTarget: some View {
         // Die Zähler der Notch-Anzeige nur bei „Wohin“ (Entwurf, Zustand 8):
         // Schreiben und Schnellbefehle wirken auf einen Chat, der muss im
         // Kopf stehen.
@@ -272,17 +297,22 @@ struct ControllerIslandView: View {
         }
     }
 
+    @ViewBuilder
     private func writing(_ slots: ControllerWritingSlots) -> some View {
-        VStack(spacing: 0) {
-            IslandFlow {
-                ForEach(ControllerWritingSlots.Hint.allCases, id: \.self) { item in
-                    hint(item.button, item.label(slots), on: slots.isOn(item), glyph: item.glyph)
+        if display.isLarge {
+            largeWriting(slots)
+        } else {
+            VStack(spacing: 0) {
+                IslandFlow {
+                    ForEach(ControllerWritingSlots.Hint.allCases, id: \.self) { item in
+                        hint(item.button, item.label(slots), on: slots.isOn(item), glyph: item.glyph)
+                    }
                 }
+                .padding(.horizontal, 14)
+                .padding(.top, 2)
+                .padding(.bottom, 12)
+                if let note = slots.note { self.note(note.text(family)) }
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 2)
-            .padding(.bottom, 12)
-            if let note = slots.note { self.note(note.text(family)) }
         }
     }
 
@@ -291,6 +321,9 @@ struct ControllerIslandView: View {
     private func whereTo(_ state: ControllerWhereToState) -> some View {
         VStack(spacing: 0) {
             tabs(state)
+            if display.isLarge {
+                largeTiles(state)
+            } else {
             VStack(spacing: 0) {
                 switch state.tab {
                 case .chats:
@@ -317,6 +350,7 @@ struct ControllerIslandView: View {
             }
             .padding(.horizontal, 8)
             .padding(.bottom, 4)
+            }
             if let commands = display.model.keyboard, state.tab == .chats {
                 keyboardCommandRow(commands)
             }
@@ -360,7 +394,8 @@ struct ControllerIslandView: View {
     }
 
     private func tabs(_ state: ControllerWhereToState) -> some View {
-        HStack(spacing: 2) {
+        let large = display.isLarge
+        return HStack(spacing: 2) {
             tab(String(localized: "Chats"), on: state.tab == .chats)
             tab(String(localized: "Workspaces & Projects"), on: state.tab == .workspaces)
             if state.tabs.contains(.tickets) {
@@ -368,20 +403,25 @@ struct ControllerIslandView: View {
             }
         }
         .padding(2)
-        .background(palette.segment, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .padding(.horizontal, 12)
-        .padding(.bottom, 6)
+        .background(palette.segment, in: RoundedRectangle(cornerRadius: large ? 12 : 8, style: .continuous))
+        .padding(.horizontal, large ? NotchIslandLargeGeometry.padding : 12)
+        .padding(.bottom, large ? 10 : 6)
     }
 
     private func tab(_ title: String, on: Bool) -> some View {
-        Text(verbatim: title)
-            .font(.system(size: 11.5, weight: .semibold))
+        let large = display.isLarge
+        return Text(verbatim: title)
+            .font(.system(size: large ? 13 : 11.5, weight: .semibold))
             .foregroundStyle(on ? palette.text : palette.secondary)
+            .lineLimit(large ? 1 : nil)
+            // Drei Reiter in der großen Form: lieber etwas kleiner als abgeschnitten.
+            .minimumScaleFactor(large ? 0.85 : 1)
+            .padding(.horizontal, large ? 4 : 0)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 4)
+            .padding(.vertical, large ? 7 : 4)
             .background {
                 if on {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    RoundedRectangle(cornerRadius: large ? 10 : 6, style: .continuous)
                         .fill(palette.segmentOn)
                         .shadow(color: .black.opacity(display.isNotch ? 0 : 0.12), radius: 1, y: 1)
                 }
@@ -485,8 +525,14 @@ struct ControllerIslandView: View {
     /// Hinweiszeile mehr davor gibt.
     private func footer(_ tab: ControllerIslandTab, reopenTitle: String? = nil) -> some View {
         IslandFlow(spacing: 12, lineSpacing: 5) {
-            footItem("▲▼", String(localized: "select"))
-            footItem("◀▶", String(localized: "tabs"))
+            if display.isLarge {
+                // Kacheln: das Steuerkreuz bewegt in beide Richtungen.
+                footItem("▲▼◀▶", String(localized: "select"))
+                footItem("◀▶", String(localized: "at the edge: tabs"))
+            } else {
+                footItem("▲▼", String(localized: "select"))
+                footItem("◀▶", String(localized: "tabs"))
+            }
             footItem(ControllerButton.l2.glyph(family), String(localized: "release: switch"), round: false)
             footItem(ControllerButton.circle.glyph(family), String(localized: "cancel"))
             footItem(ControllerButton.triangle.glyph(family), String(localized: "next waiting"))
@@ -499,9 +545,9 @@ struct ControllerIslandView: View {
                      tab == .chats ? String(localized: "go + dictate") : String(localized: "dictate here"),
                      round: false)
         }
-        .font(.system(size: 11))
+        .font(.system(size: footerFontSize))
         .foregroundStyle(palette.secondary)
-        .padding(.horizontal, 14)
+        .padding(.horizontal, footerInset)
         .padding(.top, 7)
         .padding(.bottom, 11)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -531,11 +577,11 @@ struct ControllerIslandView: View {
 
     func note(_ text: String) -> some View {
         Text(verbatim: text)
-            .font(.system(size: 11))
+            .font(.system(size: display.isLarge ? 12.5 : 11))
             .foregroundStyle(palette.awaiting)
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
-            .padding(.horizontal, 14)
+            .padding(.horizontal, footerInset)
             .padding(.bottom, 12)
     }
 }
