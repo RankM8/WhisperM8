@@ -105,7 +105,7 @@ struct NotchIslandLargeHeader<Leading: View, Trailing: View>: View {
 
     var body: some View {
         let half = width / 2
-        let padding = NotchIslandLargeGeometry.padding
+        let padding = NotchIslandLargeGeometry.headerInset
         // Jede Seite hat ihre feste Breite, auch ohne Inhalt: Ein leerer
         // Inhalt (keine Zähler) nähme sonst keinen Platz ein, und die andere
         // Seite rutschte unter Apples Insel.

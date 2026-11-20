@@ -88,6 +88,12 @@ enum NotchIslandLargeGeometry {
     static let cornerRadius: CGFloat = 36
     /// Innenabstand links und rechts.
     static let padding: CGFloat = 18
+    /// Innenabstand der Kopfzeile links und rechts. Größer als `padding`:
+    /// Die Kopfzeile liegt in der Zeile der runden oberen Ecken (36 pt);
+    /// mit 18 pt säße ihr Inhalt in der Rundung und wirkte an den Rand
+    /// gequetscht. Mit 28 pt steht er so weit von der Kante weg wie vom
+    /// oberen Rand.
+    static let headerInset: CGFloat = 28
     static let bottomPadding: CGFloat = 16
     /// Luft unter Apples Insel, bevor eigener Inhalt beginnt.
     static let headerGap: CGFloat = 8

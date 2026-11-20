@@ -373,7 +373,9 @@ So ist es gebaut:
   420 × 178 pt (Apples „Now Playing“: 286). Die Liste scrollt ab 420 pt Höhe
   und bevor sie unten aus dem Bildschirm ragt; auf einem schmalen Bildschirm
   wird die Form schmaler statt über den Rand zu reichen.
-- **Kopfzeile (42 pt):** Apples Insel liegt immer über unseren Fenstern. Was
+- **Kopfzeile (42 pt):** links und rechts 28 pt Rand statt der sonst 18 pt,
+  weil sie in der Zeile der runden oberen Ecken liegt und ihr Inhalt sonst
+  in der Rundung säße. Apples Insel liegt immer über unseren Fenstern. Was
   sie zeigt (Musik, Mikrofon-Hinweis), steht deshalb oben in der Mitte der
   Form; die Kopfzeile lässt ihr so viel Platz, wie die Messung zeigt (in Ruhe
   ihre 65 pt, beim Diktat von Anfang an den Platz des Mikrofon-Hinweises).

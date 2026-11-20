@@ -125,7 +125,7 @@ final class NotchIslandLargeGeometryTests: XCTestCase {
         XCTAssertEqual(dictation.slotTrailing, 29.5 + 47.5 + 8, accuracy: 0.001)
         // Links und rechts davon bleibt Platz für eigene Zähler.
         for form in [dictation, NotchIslandLargeGeometry.form(screen: screen, kind: .alert, occupancy: music)] {
-            let padding = NotchIslandLargeGeometry.padding
+            let padding = NotchIslandLargeGeometry.headerInset
             XCTAssertGreaterThan(form.frame.width / 2 - padding - form.slotLeading, 70)
             XCTAssertGreaterThan(form.frame.width / 2 - padding - form.slotTrailing, 70)
         }
