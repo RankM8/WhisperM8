@@ -15,6 +15,9 @@ final class ScheduledTaskSchedulerTests: XCTestCase {
         var plans: [ScheduledTaskLauncher.SpawnPlan] = []
         var authCalls = 0
         var exitHandlers: [Int32: @Sendable () -> Void] = [:]
+        /// Paket 4: Fehler beim Anlegen der Lauf-Einstellungen.
+        var prepareError: Error?
+        var preparedRunDirectories: [URL] = []
 
         init(now: Date) { self.now = now }
     }
@@ -36,7 +39,7 @@ final class ScheduledTaskSchedulerTests: XCTestCase {
 
     private func makeScheduler(_ fake: Fake) -> (ScheduledTaskScheduler, ScheduledTaskStore) {
         let store = ScheduledTaskStore(root: root.appendingPathComponent("support", isDirectory: true))
-        let env = ScheduledTaskScheduler.Environment(
+        var env = ScheduledTaskScheduler.Environment(
             store: store,
             now: { fake.now },
             calendar: { ScheduledTaskCalendarTests.calendar },
@@ -69,6 +72,11 @@ final class ScheduledTaskSchedulerTests: XCTestCase {
             isProcessAlive: { pid, _ in fake.alivePIDs.contains(pid) },
             watchExit: { pid, handler in fake.exitHandlers[pid] = handler }
         )
+        env.prepareRunConfig = { _, runDirectory in
+            fake.preparedRunDirectories.append(runDirectory)
+            if let error = fake.prepareError { throw error }
+            return ScheduledTaskRunConfig(settingsFile: runDirectory.appendingPathComponent("claude-config/settings.json").path)
+        }
         return (ScheduledTaskScheduler(environment: env), store)
     }
 
@@ -111,6 +119,9 @@ final class ScheduledTaskSchedulerTests: XCTestCase {
         XCTAssertEqual(Array(args[(deny + 1)...(deny + 5)]), ["Bash", "Monitor", "WebFetch", "WebSearch", "mcp__*"],
                        "Bash, Web und MCP ab Werk gesperrt, auch gegen Freigaben aus settings.json")
         XCTAssertTrue(args.contains("--strict-mcp-config"))
+        XCTAssertEqual(args[args.firstIndex(of: "--setting-sources")! + 1], "", "Keine Einstellungsdatei, nur die Freigaben der Aufgabe")
+        let settings = args[args.firstIndex(of: "--settings")! + 1]
+        XCTAssertTrue(settings.hasSuffix("/claude-config/settings.json"), settings)
         let name = args[args.firstIndex(of: "--name")! + 1]
         XCTAssertTrue(name.hasPrefix("Abhängigkeiten prüfen · "), name)
 
@@ -122,6 +133,32 @@ final class ScheduledTaskSchedulerTests: XCTestCase {
         XCTAssertNotNil(record.pid)
         XCTAssertEqual(record.sessionID?.uuidString.lowercased(), args[args.firstIndex(of: "--session-id")! + 1])
         XCTAssertEqual(try store.load().tasks.first?.lastSlot, date("2026-11-17 07:00"))
+    }
+
+    /// Paket 4: Die Lauf-Einstellungen liegen im Ordner des Laufs; lassen sie
+    /// sich nicht anlegen, startet nichts (ohne sie gälten die Freigaben des Kontos).
+    func testRunConfigLivesInRunFolderAndFailureStopsTheStart() async throws {
+        let fake = Fake(now: date("2026-11-16 12:00"))
+        let (scheduler, store) = makeScheduler(fake)
+        await scheduler.start()
+        let task = try await scheduler.add(draft())
+
+        fake.now = date("2026-11-17 07:01")
+        await scheduler.evaluate(reason: "test")
+        let plan = try XCTUnwrap(fake.plans.first)
+        XCTAssertEqual(fake.preparedRunDirectories, [plan.runDirectory])
+        XCTAssertEqual(plan.claudeArguments[plan.claudeArguments.firstIndex(of: "--settings")! + 1],
+                       plan.runDirectory.appendingPathComponent("claude-config/settings.json").path)
+
+        fake.prepareError = ScheduledTaskRunConfigBuilder.BuildError(message: "Platte voll")
+        fake.alivePIDs.removeAll()
+        fake.now = date("2026-11-18 07:01")
+        await scheduler.evaluate(reason: "test")
+        XCTAssertEqual(fake.plans.count, 1, "Ohne Lauf-Einstellungen kein Start")
+        let record = try XCTUnwrap(store.recentRuns(for: task.id, limit: 1).first?.record)
+        XCTAssertEqual(record.notStarted, .launchFailed)
+        XCTAssertTrue(record.message?.contains("Platte voll") == true, record.message ?? "")
+        XCTAssertNil(record.sessionID)
     }
 
     func testCatchUpAfterSleepIsMarked() async throws {
@@ -427,10 +464,15 @@ final class ScheduledTaskSchedulerTests: XCTestCase {
         XCTAssertFalse(bash.allowsMCP)
 
         let mcp = ScheduledTaskPermissions(access: .projectWrite, extraTools: [" mcp__linear__get_issue", "WebSearch"])
-        XCTAssertEqual(mcp.disallowedTools, ["Bash", "Monitor", "WebFetch"] + protected)
+        XCTAssertEqual(mcp.disallowedTools, ["Bash", "Monitor", "WebFetch", "mcp__whisperm8__*"] + protected,
+                       "Mit MCP bleiben die Werkzeuge des eigenen Plugins zu")
+        XCTAssertFalse(ScheduledTaskPermissions(access: .custom, extraTools: ["mcp__whisperm8__board"])
+            .disallowedTools.contains("mcp__whisperm8__*"), "Ausdrücklich genannt: offen")
         XCTAssertTrue(mcp.allowsMCP)
-        let args = ScheduledTaskLauncher.claudeArguments(prompt: "x", sessionID: UUID(), name: nil, permissions: mcp)
-        XCTAssertFalse(args.contains("--strict-mcp-config"), "MCP freigegeben: Server des Kontos laden")
+        XCTAssertEqual(mcp.mcpServerNames, ["linear"])
+        let args = ScheduledTaskLauncher.claudeArguments(prompt: "x", sessionID: UUID(), name: nil, permissions: mcp,
+                                                         config: .probe)
+        XCTAssertTrue(args.contains("--strict-mcp-config"), "Auch mit MCP nur die Server der Aufgabe")
         XCTAssertFalse(args.contains("mcp__*"))
 
         let bashPrefix = ScheduledTaskPermissions(access: .custom, extraTools: ["BashOutput"])
@@ -450,7 +492,7 @@ final class ScheduledTaskSchedulerTests: XCTestCase {
         for permissions in [ScheduledTaskPermissions(access: .projectWrite), ScheduledTaskPermissions(access: .readOnly),
                             ScheduledTaskPermissions(access: .custom, extraTools: ["Read", "Bash", "mcp__x__y"])] {
             let args = ScheduledTaskLauncher.claudeArguments(prompt: "x", sessionID: UUID(), name: nil,
-                                                             permissions: permissions)
+                                                             permissions: permissions, config: .probe)
             let deny = args.firstIndex(of: "--disallowedTools")!
             let denied = Array(args[(deny + 1)...].prefix(while: { !$0.hasPrefix("--") }))
             for tool in outward {
@@ -473,7 +515,7 @@ final class ScheduledTaskSchedulerTests: XCTestCase {
         for permissions in [ScheduledTaskPermissions(access: .projectWrite),
                             ScheduledTaskPermissions(access: .custom, extraTools: ["Edit", "Write", "Bash"])] {
             let args = ScheduledTaskLauncher.claudeArguments(prompt: "x", sessionID: UUID(), name: nil,
-                                                             permissions: permissions)
+                                                             permissions: permissions, config: .probe)
             let deny = args.firstIndex(of: "--disallowedTools")!
             let denied = args[(deny + 1)...].prefix(while: { !$0.hasPrefix("--") })
             for path in ["Edit(/.claude/**)", "Edit(/.git/**)", "Edit(/.mcp.json)"] {

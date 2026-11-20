@@ -21,37 +21,45 @@ enum ScheduledTaskLauncher {
     static let taskIDEnvironmentKey = "WHISPERM8_SCHEDULED_TASK_ID"
     static let runIDEnvironmentKey = "WHISPERM8_SCHEDULED_RUN_ID"
 
-    /// Ruft `"$@"` auf und schreibt „<Code> <Ende>“ atomar nach `$1`.
-    /// Feste Pfade für `date` und `mv`, kein PATH-Lookup.
+    /// Ruft `"$@"` auf, löscht danach `claude-config/` im Lauf-Ordner (Kopie
+    /// der Einstellungen, MCP-Konfiguration; `ScheduledTaskRunConfigBuilder`)
+    /// und schreibt „<Code> <Ende>“ atomar nach `$1`. Feste Pfade für `rm`,
+    /// `date` und `mv`, kein PATH-Lookup.
     static let wrapperScript = """
     exitfile="$1"; shift
     "$@"
     code=$?
+    case "$exitfile" in /*/exit) /bin/rm -rf "${exitfile%/exit}/claude-config" ;; esac
     printf '%s %s\\n' "$code" "$(/bin/date +%s)" > "$exitfile.tmp" && /bin/mv -f "$exitfile.tmp" "$exitfile"
     exit "$code"
     """
 
     /// Argumente für `claude`. Der Auftrag steht direkt nach `-p` (wie im
-    /// launchd-Skript der PM-Analyse belegt). `--disallowedTools` und
-    /// `--allowedTools` sind variadisch und stehen deshalb hinten, getrennt
-    /// durch eine Option. Ohne MCP-Freigabe lädt der Lauf zusätzlich keinen
-    /// MCP-Server (`--strict-mcp-config` ohne `--mcp-config`) — das hält auch
-    /// dann, wenn eine ältere Claude-Version `mcp__*` nicht kennt.
-    static func claudeArguments(prompt: String, sessionID: UUID, name: String?, allowedTools: [String],
-                                disallowedTools: [String] = [], loadsMCPServers: Bool = true) -> [String] {
+    /// launchd-Skript der PM-Analyse belegt). `--disallowedTools`,
+    /// `--mcp-config` und `--allowedTools` sind variadisch; jede steht
+    /// deshalb vor einer weiteren Option oder ganz hinten.
+    ///
+    /// Nur die Freigaben der Aufgabe (Paket 4): `--setting-sources ""` lädt
+    /// keine Einstellungsdatei von Konto und Projekt, deren Freigaben sonst
+    /// zusätzlich gälten; was der Lauf davon braucht, kommt aus `config`.
+    /// `--strict-mcp-config` lädt nur die Server aus `config.mcpConfigFile`,
+    /// ohne Datei keinen — das hält auch dann, wenn eine ältere
+    /// Claude-Version `mcp__*` nicht kennt.
+    static func claudeArguments(prompt: String, sessionID: UUID, name: String?,
+                                permissions: ScheduledTaskPermissions, config: ScheduledTaskRunConfig) -> [String] {
         var args = ["-p", prompt, "--output-format", "json", "--session-id", sessionID.uuidString.lowercased()]
         if let name, !name.isEmpty { args += ["--name", name] }
-        if !disallowedTools.isEmpty { args += ["--disallowedTools"] + disallowedTools }
-        if !loadsMCPServers { args += ["--strict-mcp-config"] }
+        args += ["--setting-sources", "", "--settings", config.settingsFile]
+        if let plugins = config.pluginDirectory { args += ["--plugin-dir", plugins] }
+        if let context = config.contextFile { args += ["--append-system-prompt-file", context] }
+        let disallowed = permissions.disallowedTools
+        if !disallowed.isEmpty { args += ["--disallowedTools"] + disallowed }
+        args += ["--strict-mcp-config"]
+        if let mcp = config.mcpConfigFile { args += ["--mcp-config", mcp] }
         args += ["--permission-mode", "dontAsk"]
-        if !allowedTools.isEmpty { args += ["--allowedTools"] + allowedTools }
+        let allowed = permissions.allowedTools + config.extraAllowedTools(for: permissions)
+        if !allowed.isEmpty { args += ["--allowedTools"] + allowed }
         return args
-    }
-
-    static func claudeArguments(prompt: String, sessionID: UUID, name: String?,
-                                permissions: ScheduledTaskPermissions) -> [String] {
-        claudeArguments(prompt: prompt, sessionID: sessionID, name: name, allowedTools: permissions.allowedTools,
-                        disallowedTools: permissions.disallowedTools, loadsMCPServers: permissions.allowsMCP)
     }
 
     /// Kennungen eines Chats, die ein Lauf nie erben darf: Sonst spräche er

@@ -400,12 +400,14 @@ enum ClaudePluginBootstrap {
     /// Variable für einen Claude-Launch (siehe `AgentCommandBuilder`). Nur im
     /// echten App-Prozess: unter `swift test` läge sonst der Plugin-Ordner des
     /// Entwicklerrechners in jedem Launch-Test.
-    static func launchEnvironment(preferences: AppPreferences = .shared) -> [String: String] {
+    /// `includingInherited: false` für geplante Läufe: nur das eigene Plugin.
+    static func launchEnvironment(preferences: AppPreferences = .shared,
+                                  includingInherited: Bool = true) -> [String: String] {
         guard AppInstance.isAppBundleProcess else { return [:] }
         return WhisperM8ClaudePlugin.launchEnvironment(
             enabled: preferences.isClaudePluginEnabled,
             linkURL: WhisperM8ClaudePlugin.defaultRootDirectory().appendingPathComponent(WhisperM8ClaudePlugin.pluginName),
-            inherited: inheritedPluginDirectories()
+            inherited: includingInherited ? inheritedPluginDirectories() : nil
         )
     }
 

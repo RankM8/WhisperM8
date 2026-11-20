@@ -317,13 +317,14 @@ struct ScheduledTaskEditorSheet: View {
             .pickerStyle(.radioGroup)
 
             hint(accessHint)
+            hint("Permissions from the account’s settings.json do not apply to runs, nor do those of the project or the allowed-tools of a skill. A run may do exactly what this task allows.")
 
             HStack(spacing: 8) {
                 if form.access == .custom { Text("Allowed tools").font(.system(size: 12)) } else { Text("Also allow").font(.system(size: 12)) }
                 TextField("", text: $form.extraToolsText, prompt: Text(verbatim: "Bash(whisperm8 tickets *), mcp__linear__get_issue"))
                     .textFieldStyle(.roundedBorder)
             }
-            hint("Bash, web, MCP and the tools that reach other sessions, the cloud or other folders (SendMessage, ListAgents, RemoteTrigger, CronCreate, CronDelete, PushNotification, DesignSync, EnterWorktree, ExitWorktree) stay blocked, even if the account allows them in its settings. Naming one opens it: Bash(…) also lets the account’s own Bash permissions apply, an mcp__… entry loads all of the account’s MCP servers.")
+            hint("Bash, web, MCP and the tools that reach other sessions, the cloud or other folders (SendMessage, ListAgents, RemoteTrigger, CronCreate, CronDelete, PushNotification, DesignSync, EnterWorktree, ExitWorktree) stay blocked unless you name them here. An mcp__… entry loads only that MCP server. Paths: a leading / means the project folder, //… an absolute path, ~/… the home folder; for writing use Edit(…).")
         }
     }
 
@@ -334,7 +335,7 @@ struct ScheduledTaskEditorSheet: View {
         case .readOnly:
             return "Read, Glob, Grep and Skill. Reading covers the whole disk. Read only holds only while Bash stays blocked."
         case .custom:
-            return "Only the tools you list. Permissions from the account’s settings.json still apply, except for what stays blocked."
+            return "Only the tools you list, nothing else."
         }
     }
 

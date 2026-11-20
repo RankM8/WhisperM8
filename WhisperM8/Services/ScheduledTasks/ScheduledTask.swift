@@ -91,13 +91,15 @@ struct ScheduledTasksFile: Codable, Equatable {
 
 /// Was ein Lauf darf. Ein `-p`-Lauf kann nicht nachfragen; was nicht erlaubt
 /// ist, verweigert Claude (`--permission-mode dontAsk`) und meldet es in
-/// `permission_denials`. Freigaben aus der settings.json des Kontos gelten
-/// zusätzlich (etwa `Bash(git:*)`), ebenso `allowed-tools` eines Skills.
+/// `permission_denials`.
 ///
-/// Ab Werk (Entscheidung Giuliano 17.11.2026): lesen und im Projektordner
-/// schreiben. Bash, MCP und Web nur per ausdrücklicher Freigabe je Aufgabe —
-/// deshalb sperrt jeder Lauf diese Familien per `--disallowedTools`, solange
-/// `extraTools` sie nicht nennt. Eine Sperre schlägt jede Freigabe.
+/// Nur die Freigaben der Aufgabe (Entscheidung Giuliano 17.11.2026, Paket 4):
+/// Freigaben aus den Einstellungen von Konto und Projekt gelten nicht
+/// (`ScheduledTaskRunConfig`), `allowed-tools` und `hooks` im Kopf eines
+/// Skills ebenso wenig. Ab Werk: lesen und im Projektordner schreiben. Bash,
+/// MCP und Web nur per ausdrücklicher Freigabe je Aufgabe; jeder Lauf sperrt
+/// diese Familien zusätzlich per `--disallowedTools`, solange `extraTools`
+/// sie nicht nennt. Eine Sperre schlägt jede Freigabe.
 struct ScheduledTaskPermissions: Codable, Equatable {
     enum Access: String, Codable, CaseIterable {
         /// Lesen und im Projektordner schreiben.
@@ -171,6 +173,8 @@ struct ScheduledTaskPermissions: Codable, Equatable {
                              "DesignSync", "EnterWorktree", "ExitWorktree"]
     /// Sperrt die Werkzeuge aller MCP-Server (Claude Code ab 2.1.3xx).
     static let allMCPTools = "mcp__*"
+    /// Werkzeuge, die das Plugin `whisperm8` selbst anmeldet.
+    static let ownMCPPrefix = "mcp__whisperm8__"
 
     /// Nennt `extraTools` ein MCP-Werkzeug oder einen MCP-Server?
     var allowsMCP: Bool {
@@ -187,10 +191,44 @@ struct ScheduledTaskPermissions: Codable, Equatable {
         var result = Self.gatedFamilies.filter { family in
             family == "Monitor" ? !(names("Monitor") || names("Bash")) : !names(family)
         }
-        if !allowsMCP { result.append(Self.allMCPTools) }
-        // Immer, auch ohne Edit in der Liste: Freigaben des Kontos könnten
-        // Edit öffnen, und eine Sperre schlägt jede Freigabe.
+        if !allowsMCP {
+            result.append(Self.allMCPTools)
+        } else if !extras.contains(where: { $0.hasPrefix(Self.ownMCPPrefix) }) {
+            // Mit einer MCP-Freigabe fällt `mcp__*`; die Werkzeuge des eigenen
+            // Plugins (Zwischenablage-Verlauf, Board) bleiben trotzdem zu.
+            result.append(Self.ownMCPPrefix + "*")
+        }
+        // Immer, auch ohne Edit in der Liste: Eine eigene Liste oder ein
+        // breites Edit(…) könnte sie öffnen, und eine Sperre schlägt jede
+        // Freigabe.
         return result + Self.protectedPaths + Self.gatedTools.filter { !names($0) }
+    }
+
+    /// Oberste Ordner, die als Projektordner-Pfad unwahrscheinlich sind: Eine
+    /// Regel wie `Read(/Users/…)` meint fast sicher den absoluten Pfad, Claude
+    /// liest das führende `/` bei CLI-Freigaben aber als Projektordner. Nicht
+    /// `tmp`, `var` oder `Library`: Die gibt es oft auch im Projekt.
+    static let rootFolderNames: Set<String> = ["Users", "Volumes", "private"]
+    /// Werkzeuge mit Pfad-Regeln.
+    static let pathRuleTools = ["Read", "Edit", "Write", "Glob", "Grep", "NotebookEdit"]
+
+    /// Eine Regel, die nie greift (gemessen mit Claude Code 2.1.329):
+    /// `Write(…)` (Schreiben prüft Claude nur gegen Edit-Regeln) und
+    /// `Read(/Users/…)` mit einem `/` (hängt am Projektordner).
+    static func ruleProblem(in rules: [String]) -> ScheduledTaskValidationProblem? {
+        for raw in rules {
+            let rule = raw.trimmingCharacters(in: .whitespaces)
+            guard let open = rule.firstIndex(of: "("), rule.hasSuffix(")") else { continue }
+            let tool = String(rule[..<open])
+            guard pathRuleTools.contains(tool) else { continue }
+            let path = rule[rule.index(after: open)..<rule.index(before: rule.endIndex)]
+            if path.hasPrefix("/"), !path.hasPrefix("//"),
+               let first = path.dropFirst().split(separator: "/").first, rootFolderNames.contains(String(first)) {
+                return .pathRuleAnchoredAtProject(rule)
+            }
+            if tool == "Write" { return .writeRuleNeverMatches(rule) }
+        }
+        return nil
     }
 
     /// Kurzbeschreibung für die CLI.

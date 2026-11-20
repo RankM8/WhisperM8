@@ -168,6 +168,10 @@ struct ScheduledTaskStore {
             guard let created = Self.creationDate(ofRunNamed: directory.lastPathComponent), created < cutoff else { continue }
             if let files = readRun(at: directory), isActive(files) { continue }
             do {
+                // Abgebrochener Lauf: Kopie der Einstellungen und MCP-Konfiguration
+                // (können Schlüssel enthalten) nicht mit ins Archiv nehmen.
+                try? FileManager.default.removeItem(
+                    at: directory.appendingPathComponent(ScheduledTaskRunConfigBuilder.folderName, isDirectory: true))
                 try Self.ensureDirectory(archive)
                 try FileManager.default.moveItem(at: directory, to: Self.freeDestination(for: directory.lastPathComponent, in: archive))
                 moved += 1

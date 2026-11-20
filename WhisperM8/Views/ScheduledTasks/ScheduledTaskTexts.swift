@@ -364,6 +364,10 @@ enum ScheduledTaskTexts {
             return String(localized: "A tool must not start with “-” (Claude would read it as an option).")
         case .customListEmpty: return String(localized: "A custom list needs at least one tool.")
         case .invalidArchiveDays: return String(localized: "Old runs go to the archive after 14 or 7 days, or never.")
+        case .pathRuleAnchoredAtProject(let rule):
+            return String(localized: "“\(rule)” means a path inside the project folder: a leading “/” starts at the project folder. For an absolute path write “//…”, for the home folder “~/…”.")
+        case .writeRuleNeverMatches(let rule):
+            return String(localized: "“\(rule)” never applies: Claude checks writing against Edit rules. Edit(…) also covers Write.")
         }
     }
 

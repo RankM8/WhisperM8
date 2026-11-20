@@ -141,6 +141,7 @@ struct ScheduledTaskEditorForm: Equatable {
         if access == .custom, tools.isEmpty {
             return String(localized: "A custom list needs at least one tool.")
         }
+        if let problem = ScheduledTaskPermissions.ruleProblem(in: tools) { return ScheduledTaskTexts.problem(problem) }
         return nil
     }
 

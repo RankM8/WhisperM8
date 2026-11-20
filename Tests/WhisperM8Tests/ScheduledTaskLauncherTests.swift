@@ -107,20 +107,53 @@ final class ScheduledTaskLauncherTests: XCTestCase {
 
     func testClaudeArgumentsOrder() {
         let id = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
+        let config = ScheduledTaskRunConfig(settingsFile: "/lauf/claude-config/settings.json",
+                                            pluginDirectory: "/lauf/claude-config/plugins",
+                                            contextFile: "/lauf/claude-config/context.md",
+                                            mcpConfigFile: "/lauf/claude-config/mcp.json")
+        let permissions = ScheduledTaskPermissions(access: .custom, extraTools: ["Read", "Skill", "Bash(echo:*)", "mcp__linear__get_issue"])
         let args = ScheduledTaskLauncher.claudeArguments(prompt: "/pm-analyse Modus: morgen", sessionID: id,
-                                                         name: "Probe · 17.11.", allowedTools: ["Read", "Edit(/**)"])
+                                                         name: "Probe · 17.11.", permissions: permissions, config: config)
+        let protected = ScheduledTaskPermissions.protectedPaths + ScheduledTaskPermissions.gatedTools
         XCTAssertEqual(args, ["-p", "/pm-analyse Modus: morgen", "--output-format", "json",
                               "--session-id", "11111111-2222-3333-4444-555555555555", "--name", "Probe · 17.11.",
-                              "--permission-mode", "dontAsk", "--allowedTools", "Read", "Edit(/**)"])
-        XCTAssertFalse(ScheduledTaskLauncher.claudeArguments(prompt: "x", sessionID: id, name: nil, allowedTools: [])
-            .contains("--name"))
+                              "--setting-sources", "", "--settings", "/lauf/claude-config/settings.json",
+                              "--plugin-dir", "/lauf/claude-config/plugins",
+                              "--append-system-prompt-file", "/lauf/claude-config/context.md",
+                              "--disallowedTools", "WebFetch", "WebSearch", "mcp__whisperm8__*"] + protected + [
+                              "--strict-mcp-config", "--mcp-config", "/lauf/claude-config/mcp.json",
+                              "--permission-mode", "dontAsk",
+                              "--allowedTools", "Read", "Skill", "Bash(echo:*)", "mcp__linear__get_issue",
+                              "Read(//lauf/claude-config/plugins/**)"])
+        let bare = ScheduledTaskLauncher.claudeArguments(prompt: "x", sessionID: id, name: nil,
+                                                         permissions: .init(), config: .probe)
+        XCTAssertFalse(bare.contains("--name"))
+        XCTAssertFalse(bare.contains("--plugin-dir"))
+        XCTAssertFalse(bare.contains("--mcp-config"), "Ohne MCP-Freigabe kein Server")
+        XCTAssertTrue(bare.contains("--strict-mcp-config"))
+    }
+
+    /// Paket 4: Ohne Einstellungsquellen gelten nur die Freigaben der Aufgabe.
+    /// Das leere Argument nach `--setting-sources` ist Absicht.
+    func testRunsLoadNoSettingsFiles() {
+        let args = ScheduledTaskLauncher.claudeArguments(prompt: "x", sessionID: UUID(), name: nil,
+                                                         permissions: .init(), config: .probe)
+        let index = try? XCTUnwrap(args.firstIndex(of: "--setting-sources"))
+        XCTAssertEqual(index.map { args[$0 + 1] }, "")
+        XCTAssertEqual(args[args.firstIndex(of: "--settings")! + 1], ScheduledTaskRunConfig.probe.settingsFile)
+    }
+
+    func testWrapperRemovesRunConfigFolder() {
+        XCTAssertTrue(ScheduledTaskLauncher.wrapperScript.contains("/\(ScheduledTaskRunConfigBuilder.folderName)\""))
+        XCTAssertTrue(ScheduledTaskLauncher.wrapperScript.contains("/*/exit)"), "Nur bei einem absoluten Pfad auf exit")
     }
 
     func testDefaultPermissionsDenyBashWebAndMCP() {
         let id = UUID(uuidString: "11111111-2222-3333-4444-555555555555")!
         for access in [ScheduledTaskPermissions.Access.projectWrite, .readOnly] {
             let args = ScheduledTaskLauncher.claudeArguments(prompt: "/pm-analyse", sessionID: id, name: nil,
-                                                             permissions: ScheduledTaskPermissions(access: access))
+                                                             permissions: ScheduledTaskPermissions(access: access),
+                                                             config: .probe)
             let tail = Array(args.drop(while: { $0 != "--disallowedTools" }))
             XCTAssertEqual(Array(tail.prefix(21)), [
                 "--disallowedTools", "Bash", "Monitor", "WebFetch", "WebSearch", "mcp__*",
@@ -220,4 +253,9 @@ final class ScheduledTaskLauncherTests: XCTestCase {
         let mode = try FileManager.default.attributesOfItem(atPath: store.fileURL.path)[.posixPermissions] as? Int
         XCTAssertEqual(mode, 0o600)
     }
+}
+
+extension ScheduledTaskRunConfig {
+    /// Lauf-Einstellungen ohne Skills, CLAUDE.md und MCP.
+    static let probe = ScheduledTaskRunConfig(settingsFile: "/lauf/claude-config/settings.json")
 }
